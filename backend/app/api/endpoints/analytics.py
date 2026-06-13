@@ -311,6 +311,42 @@ _SLA_THRESHOLD_HOURS = {
     SeverityEnum.MODERATE: 12, SeverityEnum.MINOR: 24, SeverityEnum.UNKNOWN: 12,
 }
 
+# Operation health (Phase 3) — backend-authoritative RED / AMBER / GREEN, replacing
+# the Phase-2 client-side stand-in. AMBER thresholds:
+_REVIEW_BACKLOG_THRESHOLD = 20      # an op's review backlog above this → AMBER
+_NO_ACTIVITY_HOURS = 2              # no new report in an op for this long → AMBER
+
+
+def _compute_operation_health(*, now, sla_breaches, unattended_critical, escalating,
+                              needs_review, last_activity):
+    """Pure RED/AMBER/GREEN for ONE operation from already-computed scalars (no DB).
+
+    RED   = >=1 unattended critical (CRITICAL, open, not yet dispatched) OR any SLA breach.
+    AMBER = an escalating hotspot in the op, OR review backlog > threshold, OR no
+            activity for > _NO_ACTIVITY_HOURS.
+    GREEN = none of the above.
+    Returns (health, reason) — reason is the short human "why" shown on hover.
+    """
+    if unattended_critical or sla_breaches:
+        why = []
+        if unattended_critical:
+            why.append(f"{unattended_critical} unattended critical")
+        if sla_breaches:
+            why.append(f"{sla_breaches} SLA-breaching")
+        return "RED", " · ".join(why)
+    amber = []
+    if escalating:
+        amber.append(f"{escalating} escalating hotspot" + ("s" if escalating > 1 else ""))
+    if needs_review > _REVIEW_BACKLOG_THRESHOLD:
+        amber.append(f"review backlog {needs_review}")
+    if last_activity is not None:
+        age_h = (now - last_activity).total_seconds() / 3600.0
+        if age_h > _NO_ACTIVITY_HOURS:
+            amber.append(f"no activity {int(age_h)}h")
+    if amber:
+        return "AMBER", " · ".join(amber)
+    return "GREEN", "all clear"
+
 # Tiny in-process TTL cache, matching the dashboard poll cadence. Cleared on
 # every dev --reload and on process restart; fine for situational-awareness data.
 _SUMMARY_TTL_SECONDS = 30
@@ -518,11 +554,23 @@ def operational_summary(
     responders_active = 0
     escalating = 0
     try:
-        responders_active = int(db.query(func.count(BuildingResponder.id))
-            .filter(BuildingResponder.cleared_at.is_(None)).scalar() or 0)
-        hotspot_ids = [row[0] for row in db.query(Building.id)
-            .filter(Building.escalation_risk >= _ESCALATING_RISK_THRESHOLD,
-                    Building.state.notin_(_CLOSED_BUILDING_STATES)).all()]
+        # Operation-scoped when crisis_event_id is set — otherwise these two
+        # building/responder queries would leak GLOBAL counts into a per-op
+        # summary (responders not tied to the op, hotspots anywhere). Phase 3 fix.
+        _resp_q = db.query(func.count(BuildingResponder.id)).filter(
+            BuildingResponder.cleared_at.is_(None))
+        if crisis_event_id:
+            _resp_q = _resp_q.filter(BuildingResponder.crisis_event_id == crisis_event_id)
+        responders_active = int(_resp_q.scalar() or 0)
+        _hot_q = db.query(Building.id).filter(
+            Building.escalation_risk >= _ESCALATING_RISK_THRESHOLD,
+            Building.state.notin_(_CLOSED_BUILDING_STATES))
+        if crisis_event_id:
+            # only hotspots that actually have a report in this operation
+            _op_bldgs = (db.query(Report.building_id)
+                         .filter(*_scope, Report.building_id.isnot(None)).distinct())
+            _hot_q = _hot_q.filter(Building.id.in_(_op_bldgs))
+        hotspot_ids = [row[0] for row in _hot_q.all()]
         escalating = len(hotspot_ids)
         # underlying open reports on those hotspots — the secondary "N reports"
         # number so the landing card's count matches its click destination.

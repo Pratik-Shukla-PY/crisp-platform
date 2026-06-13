@@ -26,14 +26,19 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import and_, case, func as sa_func
+from sqlalchemy import and_, case, or_, func as sa_func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.core.deps import require_admin, require_analyst, require_viewer
 from app.models.report import (
     CrisisEvent, CrisisFormPack, CrisisFormPackVersion,
-    Report, ReportStatusEnum, SeverityEnum, BuildingResponder,
+    Report, ReportStatusEnum, SeverityEnum, ReviewerVerdictEnum,
+    BuildingResponder, Building,
+)
+from app.api.endpoints.analytics import (
+    _SLA_THRESHOLD_HOURS, _ESCALATING_RISK_THRESHOLD, _CLOSED_BUILDING_STATES,
+    _compute_operation_health,
 )
 from app.services.crisis_form_schema import validate_pack_schema
 from app.services.nearby_aggregator import haversine_km
@@ -160,6 +165,10 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
     /admin/crisis-forms/events routes."""
     now = datetime.now(timezone.utc)
     new_cut = now - timedelta(hours=24)
+    # Report rollup per op — ONE grouped query. The report-only Phase-3 health
+    # inputs (unattended_critical, sla_breaches, needs_review) fold in as SUM(CASE)
+    # columns; escalation + responders need their own joins (below) — joining them
+    # into this rollup would fan rows out and double-count the SUMs.
     rows = (
         db.query(
             CrisisEvent.id, CrisisEvent.name, CrisisEvent.crisis_type,
@@ -171,6 +180,21 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
             sa_func.coalesce(sa_func.sum(
                 case((Report.server_created_at >= new_cut, 1), else_=0)), 0).label("new_24h"),
             sa_func.max(Report.server_created_at).label("last_activity"),
+            # unattended critical = CRITICAL, open, not yet dispatched (report-level "attended" signal).
+            sa_func.coalesce(sa_func.sum(case((and_(
+                Report.severity == SeverityEnum.CRITICAL,
+                Report.status.notin_(_OPEN_REPORT_STATUSES_EXCLUDED),
+                Report.help_dispatched_at.is_(None)), 1), else_=0)), 0).label("unattended_critical"),
+            # SLA breaches — mirrors analytics sla_at_risk (per-severity thresholds).
+            sa_func.coalesce(sa_func.sum(case((and_(
+                Report.status == ReportStatusEnum.PENDING,
+                or_(*[and_(Report.severity == sev, Report.server_created_at < now - timedelta(hours=h))
+                      for sev, h in _SLA_THRESHOLD_HOURS.items()])), 1), else_=0)), 0).label("sla_breaches"),
+            # review backlog.
+            sa_func.coalesce(sa_func.sum(case((and_(
+                Report.reviewer_verdict == ReviewerVerdictEnum.NOT_REVIEWED.value,
+                Report.help_dispatched_at.is_(None),
+                Report.status != ReportStatusEnum.RESPONDING), 1), else_=0)), 0).label("needs_review"),
         )
         .outerjoin(Report, and_(
             Report.crisis_event_id == CrisisEvent.id,
@@ -180,15 +204,45 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
         .order_by(CrisisEvent.is_active.desc(), CrisisEvent.created_at.desc())
         .all()
     )
-    ops = [
-        OperationSummaryResponse(
+    # Escalating hotspots per op (Report⨝Building grouped — constant query count).
+    esc_by_op = {
+        row[0]: int(row[1] or 0)
+        for row in (db.query(Report.crisis_event_id,
+                        sa_func.count(sa_func.distinct(Report.building_id)))
+            .join(Building, Building.id == Report.building_id)
+            .filter(Report.crisis_event_id.isnot(None),
+                    Report.deletion_requested_at.is_(None),
+                    Report.status.notin_(_OPEN_REPORT_STATUSES_EXCLUDED),
+                    Building.escalation_risk >= _ESCALATING_RISK_THRESHOLD,
+                    Building.state.notin_(_CLOSED_BUILDING_STATES))
+            .group_by(Report.crisis_event_id).all())
+    }
+    # Active responders per op (Phase 3a: cleared_at IS NULL, crisis_event_id set).
+    resp_by_op = {
+        row[0]: int(row[1] or 0)
+        for row in (db.query(BuildingResponder.crisis_event_id,
+                        sa_func.count(BuildingResponder.id))
+            .filter(BuildingResponder.cleared_at.is_(None),
+                    BuildingResponder.crisis_event_id.isnot(None))
+            .group_by(BuildingResponder.crisis_event_id).all())
+    }
+    ops = []
+    for r in rows:
+        _unatt = int(r.unattended_critical or 0)
+        _sla = int(r.sla_breaches or 0)
+        _nr = int(r.needs_review or 0)
+        health, reason = _compute_operation_health(
+            now=now, sla_breaches=_sla, unattended_critical=_unatt,
+            escalating=esc_by_op.get(r.id, 0), needs_review=_nr, last_activity=r.last_activity)
+        ops.append(OperationSummaryResponse(
             id=r.id, name=r.name, crisis_type=r.crisis_type, status=r.status,
             is_active=bool(r.is_active), center_lat=r.center_lat, center_lng=r.center_lng,
             critical=int(r.critical or 0), new_24h=int(r.new_24h or 0), total=int(r.total or 0),
             last_activity=r.last_activity, is_cluster=False,
-        )
-        for r in rows
-    ]
+            health=health, health_reason=reason,
+            responders_active=resp_by_op.get(r.id, 0),
+            unattended_critical=_unatt, sla_breaches=_sla,
+        ))
     # Un-operationalised critical clusters: open-critical reports tied to NO
     # operation — surfaced as a single CTA row ("Launch operation here").
     orphan_critical = int(

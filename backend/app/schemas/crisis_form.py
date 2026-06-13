@@ -52,6 +52,12 @@ class OperationSummaryResponse(BaseModel):
     total: int = 0
     last_activity: Optional[datetime] = None
     is_cluster: bool = False
+    # Phase 3 — backend-authoritative health (replaces the client-side stand-in).
+    health: str = "GREEN"                       # RED | AMBER | GREEN
+    health_reason: Optional[str] = None         # short "why" for the hover
+    responders_active: int = 0                  # live responders attached to this op
+    unattended_critical: int = 0
+    sla_breaches: int = 0
 
 
 class CrisisEventResponse(BaseModel):
