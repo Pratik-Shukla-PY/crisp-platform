@@ -13,6 +13,8 @@ from typing import Optional, Dict
 
 import httpx
 
+from messaging_bot.crisis_forms_client import resolve_active_event_id
+
 logger = logging.getLogger(__name__)
 
 BACKEND_URL = os.getenv("CRISP_BACKEND_URL", "http://localhost:8000")
@@ -676,6 +678,16 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
 
     if session.has_location:
         meta["location"] = _location_payload(session)
+        # Operation linkage — Telegram shares a precise GPS location, so resolve
+        # the active crisis zone there and echo its event id. The backend treats
+        # this as a hint and re-derives authoritatively from the location, so a
+        # stale lookup can't mislabel; no active zone → absent → GLOBAL report.
+        # NOTE: only crisis_event_id is sent (NOT form_pack_id) — Telegram doesn't
+        # render the dynamic Stage 2/3 pack, so attaching a pack would 422 on its
+        # unanswered required fields.
+        _eid = await resolve_active_event_id(session.latitude, session.longitude)
+        if _eid:
+            meta["crisis_event_id"] = _eid
 
     try:
         async with httpx.AsyncClient(timeout=30) as c:

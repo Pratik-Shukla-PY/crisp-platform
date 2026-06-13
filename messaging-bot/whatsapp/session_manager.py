@@ -17,6 +17,8 @@ from typing import Optional, Dict
 
 import httpx
 
+from messaging_bot.crisis_forms_client import resolve_active_event_id
+
 logger = logging.getLogger(__name__)
 
 BACKEND_URL = os.getenv("CRISP_BACKEND_URL", "http://localhost:8000")
@@ -179,6 +181,15 @@ async def submit_report(session: SessionBuffer) -> Optional[str]:
             "device_longitude": session.longitude,
             "accuracy_meters": 50.0,
         }
+        # Operation linkage — WhatsApp shares a precise GPS location, so resolve
+        # the active crisis zone there and echo its event id. The backend treats
+        # it as a hint and re-derives authoritatively from the location; no active
+        # zone → absent → GLOBAL report. Only crisis_event_id is sent (NOT
+        # form_pack_id) — WhatsApp doesn't render the dynamic pack, so attaching
+        # one would 422 on its unanswered required fields.
+        _eid = await resolve_active_event_id(session.latitude, session.longitude)
+        if _eid:
+            meta["crisis_event_id"] = _eid
 
     try:
         from messaging_bot.chunked_uploader import upload_media_chunked, extract_b64_from_data_url
