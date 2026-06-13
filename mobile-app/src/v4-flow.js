@@ -2134,6 +2134,19 @@
         }));
         return out;
     }
+    // Does the active crisis-form pack already ask the debris question? A field
+    // that maps_to 'debris_clearing_needed' means the DEPLOYED form collects
+    // debris (the answer becomes report.debris_clearing_needed at submit, via the
+    // crisispack sub-step). When it does, the standalone REQUIRED debris card on
+    // the review surface is a duplicate — suppress it + skip its submit gate.
+    function _packCollectsDebris() {
+        const s = window.state || {};
+        const cp = s.crisisPack;
+        if (!cp || !cp.schema) return false;
+        return (cp.schema.sections || []).some((sec) =>
+            (sec.fields || []).some((f) => f && f.maps_to === 'debris_clearing_needed'));
+    }
+    window.__crispV4PackCollectsDebris = _packCollectsDebris;
     function _cpI18n(obj, fallback) {
         const lang = (window.state && window.state.lang) || 'en';
         if (obj && typeof obj === 'object') {
@@ -2923,6 +2936,9 @@
         function _renderDebrisCard() {
             const card = document.getElementById('v4-debris-card');
             if (!card) return;
+            // If the deployed crisis form already asks debris, don't ask again here.
+            if (_packCollectsDebris()) { card.style.display = 'none'; return; }
+            card.style.display = '';
             const v = _getState().debris_present;
             const yes = document.getElementById('v4-debris-yes');
             const no = document.getElementById('v4-debris-no');
@@ -3640,7 +3656,8 @@
             try { window.__crispGoToStage('stage-v4-classify'); } catch (_) {}
             return;
         }
-        if (_gateState.debris_present !== true && _gateState.debris_present !== false) {
+        if (!_packCollectsDebris()
+            && _gateState.debris_present !== true && _gateState.debris_present !== false) {
             if (typeof window.showToast === 'function') {
                 window.showToast(_tt('v4_submit_missing_debris',
                     'One required question left: is there debris to clear?'), 'warn');
