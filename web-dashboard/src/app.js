@@ -546,6 +546,33 @@ const QUEUES = {
             && (Date.now() - new Date(ensureUTC(r.server_created_at)).getTime()) > _QUEUE_STALE_HOURS * 3600e3,
         sort: 'oldest',
     },
+    // ── Action-based Command Center pipeline (Jun 2026). Mutually exclusive:
+    // active-ops wins if dispatched/responding; otherwise split by verdict.
+    // These mirror analytics.py counts (needs_review / needs_response /
+    // active_operations). The legacy keys above stay for back-compat.
+    'needs-review': {
+        label: 'Needs review', icon: '🔍',
+        desc: 'New reports awaiting a verdict — most overdue first',
+        pass: (r) => !_QUEUE_CLOSED.includes(r.status)
+            && (r.reviewer_verdict || 'NOT_REVIEWED') === 'NOT_REVIEWED'
+            && !r.help_dispatched_at && r.status !== 'RESPONDING',
+        sort: 'sla_breach',
+    },
+    'needs-response': {
+        label: 'Needs response', icon: '🚑',
+        desc: 'Verified real and awaiting responder dispatch — oldest first',
+        pass: (r) => !_QUEUE_CLOSED.includes(r.status)
+            && r.reviewer_verdict === 'ACCEPTED'
+            && !r.help_dispatched_at && r.status !== 'RESPONDING',
+        sort: 'oldest',
+    },
+    'active-ops': {
+        label: 'Active operations', icon: '🚁',
+        desc: 'Responders dispatched, en route or on-scene — monitor to completion',
+        pass: (r) => !_QUEUE_CLOSED.includes(r.status)
+            && (!!r.help_dispatched_at || r.status === 'RESPONDING'),
+        sort: 'oldest',
+    },
 };
 let _activeQueue = null;                 // queue key | null
 let _escalatingBuildingIds = null;       // Set<building_id> (escalating queue prefetch)
@@ -1641,6 +1668,10 @@ function _renderNotifications() {
         bell.classList.remove('has-new');
     }
 
+    // Notify the global shell (crisp-shell.js) so the Home "new incidents"
+    // alert + any other consumers stay in sync with this single source.
+    try { window.dispatchEvent(new CustomEvent('crisp:notif-change')); } catch (_e) {}
+
     // Render cards
     if (count === 0) {
         list.innerHTML = '<div class="notif-empty"><i class="fa-solid fa-check-circle"></i> No new incidents</div>';
@@ -1673,7 +1704,7 @@ window.dismissNotif = (id) => {
     _seenIds.add(id);
     _persistSeenIds();  // K.5.c — LRU cap + safe persist
     _renderNotifications();
-    selectReport(id);
+    window.openIncident(id);   // route-aware: works from Home / any overlay, not just Operations
     // Close panel if empty
     if (_unseenReports.length === 0) {
         const panel = document.getElementById('notif-panel');
@@ -1691,6 +1722,38 @@ window.clearAllNotifs = () => {
     if (panel) panel.style.display = 'none';
     _notifPanelOpen = false;
 };
+
+// Open an incident's detail panel from ANYWHERE. The notification bell now
+// lives in the global shell, so a click can arrive while the Operations view
+// is hidden (Home / Exports / any overlay). Route to Operations first, then
+// select once #view-incidents has mounted (brief rAF retry); if already there,
+// select immediately.
+window.openIncident = (id) => {
+    if (!id) return;
+    const onOps = (document.body.getAttribute('data-route') || '') === '/incidents';
+    if (onOps || !window.__crispRouter) {
+        if (typeof window.selectReport === 'function') window.selectReport(id);
+        return;
+    }
+    window.__crispRouter.navigate('/incidents');
+    let tries = 0;
+    const tick = () => {
+        const inc = document.getElementById('view-incidents');
+        if (inc && inc.style.display !== 'none' && typeof window.selectReport === 'function') {
+            window.selectReport(id);
+            return;
+        }
+        if (++tries < 30) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+};
+
+// Single source of truth for the shell's Home alert (unseen count + whether any
+// unseen incident is CRITICAL). Reads the same _unseenReports the bell uses.
+window.__crispNotifSummary = () => ({
+    count: _unseenReports.length,
+    critical: _unseenReports.some(n => String(n.severity).toUpperCase() === 'CRITICAL'),
+});
 
 // Close panel when clicking outside
 document.addEventListener('click', (e) => {

@@ -11,7 +11,7 @@
          empty in source; deploy pipeline patches with the real DSN
          (public-safe write-only key). -->
     <meta name="crisp-sentry-dsn" content="">
-    <meta name="crisp-release" content="crisp-dashboard@v37">
+    <meta name="crisp-release" content="crisp-dashboard@v44">
     <meta name="description" content="United Nations Crisis Response Intelligence System — hierarchical incident monitoring and strategic command center.">
     <meta name="theme-color" content="#7c3aed">
     <!-- May 2026 — favicon. SVG works in modern browsers (Chrome 80+,
@@ -301,6 +301,16 @@
                     </div>
                     <div class="notif-list" id="notif-list">
                         <div class="notif-empty">No new incidents</div>
+                    </div>
+                    <!-- Jun 2026 — notification deep-links. The bell now lives in
+                         the global shell (crisp-shell.js); these shortcuts route
+                         straight into the relevant operational queue from any
+                         page via the existing #/incidents;queue=<key> router. -->
+                    <div class="notif-panel-footer">
+                        <span class="notif-footer-label">Jump to queue</span>
+                        <button type="button" onclick="toggleNotifPanel();location.hash='#/incidents;queue=verification'" title="Reports awaiting a human review verdict"><i class="fa-solid fa-magnifying-glass"></i> Verification</button>
+                        <button type="button" onclick="toggleNotifPanel();location.hash='#/incidents;queue=critical'" title="Open CRITICAL-severity incidents"><i class="fa-solid fa-circle-exclamation"></i> Critical</button>
+                        <button type="button" onclick="toggleNotifPanel();location.hash='#/incidents;queue=sla-risk'" title="PENDING reports past their SLA response target"><i class="fa-solid fa-hourglass-half"></i> SLA</button>
                     </div>
                 </div>
             </div>
@@ -671,7 +681,7 @@
      Defines window.CRISP_TIERS{,BY_ID,LEGACY_ALIASES}; must load BEFORE
      app.js so the reporter_tier-badge renderer can read it synchronously. -->
 <script src="tier-config.js?v=1"></script>
-<script src="app.js?v=782"></script>
+<script src="app.js?v=784"></script>
 <script src="predictions.js?v=111"></script>
 <!-- Dynamic Crisis Forms admin panel (geo-scoped Stage 2/3 question packs).
      Self-contained + additive: injects an admin-only "Crisis Forms" item into
@@ -681,9 +691,14 @@
 <script src="cc-settings.js?v=4"></script>
 <script src="cc-exports.js?v=1"></script>
 <!-- Control Center landing (self-contained additive overlay; B7). -->
-<script src="cc-home.js?v=6"></script>
+<script src="cc-home.js?v=11"></script>
 <!-- Navigation hub: mandatory Control Center root + 4-module hash router (loaded last). -->
 <script src="router.js?v=2"></script>
+<!-- Unified Command Center shell: one persistent global nav bar on every
+     surface (brand · Home/Operations/Exports/Crisis Forms/Organisation/Users/
+     Account · re-parented LIVE badge + profile menu). Loaded after router.js so
+     window.__crispRouter exists. -->
+<script src="crisp-shell.js?v=5"></script>
 
 <!-- Offline status banner. Phase F image-reliability (May 2026): the
      banner now requires ≥ 3 consecutive fetch failures before lighting,

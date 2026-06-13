@@ -80,7 +80,7 @@
   const SEV_ORDER = ['CRITICAL', 'SEVERE', 'MODERATE', 'MINOR', 'UNKNOWN'];
 
   // Module-level handles (single landing instance).
-  let _map = null, _cluster = null, _poll = null;
+  let _map = null, _cluster = null, _poll = null, _mapRO = null;
 
   // ── styles ───────────────────────────────────────────────────────────────
   function injectStyles() {
@@ -93,6 +93,8 @@
     #cc-home-overlay.cc-home-open{display:block}
     .cc-wrap{max-width:1480px;margin:0 auto;padding:0 22px 40px;min-height:100%}
     .cc-num{font-variant-numeric:tabular-nums}
+    /* visually-hidden region heading (a11y; the visible identity is in the shell) */
+    .cc-vh{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
     /* sticky header block — identity row + primary nav stay pinned while the
        page scrolls. z-index must clear Leaflet's internal panes/controls
        (up to ~1000); the map card is additionally isolated below. Negative
@@ -136,6 +138,9 @@
     @media(max-width:1180px){.cc-kpis{grid-template-columns:repeat(4,1fr)}}
     @media(max-width:560px){.cc-kpis{grid-template-columns:repeat(2,1fr)}}
     .cc-kpi{background:#121A2A;border:1px solid #243149;border-radius:12px;padding:13px 14px;position:relative}
+    .cc-kpi[data-route]{cursor:pointer;transition:border-color .15s}
+    .cc-kpi[data-route]:hover{border-color:#418FDE}
+    .cc-kpi[data-route]:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
     .cc-kpi.crit{border-color:rgba(248,113,113,.45);background:linear-gradient(180deg,rgba(248,113,113,.08),#121A2A)}
     .cc-kpi .n{font-size:30px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
     .cc-kpi .l{font-size:11px;color:#8A99B5;margin-top:5px;text-transform:uppercase;letter-spacing:.04em}
@@ -150,15 +155,33 @@
     .cc-map-fallback{height:430px;display:grid;place-items:center;color:#8A99B5;font-size:13px}
     .cc-geo{font-size:11.5px;color:#8A99B5;padding:8px 6px 2px}
     .cc-geo strong{color:#cdd8ec;font-variant-numeric:tabular-nums}
-    /* attention queue */
-    .cc-att-row{display:flex;align-items:center;gap:11px;padding:11px 6px;border-top:1px solid #1d2942;cursor:pointer}
-    .cc-att-row:first-of-type{border-top:none}
-    .cc-att-row:hover{background:#16213a}
-    .cc-att-ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:13px;flex:none}
-    .cc-att-row .lab{flex:1;font-size:13px;color:#cdd8ec}
-    .cc-att-row .cnt{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
-    .cc-att-row .ar{color:#5C6B85;font-size:13px}
-    .cc-att-row.zero .cnt{color:#34D399}
+    /* Geo caption OVERLAYS the map's bottom instead of adding column height —
+       keeps the map card the same height as #cc-att (height-mismatch fix). */
+    #cc-map-card{position:relative}
+    #cc-map-card #cc-map-geo{position:absolute;left:16px;right:16px;bottom:16px;z-index:500;margin:0;
+      padding:5px 10px;background:rgba(11,18,32,.82);border:1px solid rgba(255,255,255,.08);border-radius:8px;
+      backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);pointer-events:none}
+    #cc-map-card #cc-map-geo:empty{display:none}
+    /* attention — 5 action rows, height-matched to the map card (#cc-map=430px),
+       no scroll. On narrow widths the body stacks single-column and rows take
+       their natural height. */
+    /* 448 = the map card's border-box: #cc-map(430) + 8+8 padding + 1+1 border.
+       Matching it makes the two cards align exactly (height-mismatch fix). */
+    #cc-att{display:flex;flex-direction:column;gap:8px;height:448px;padding:8px}
+    @media(max-width:1100px){#cc-att{height:auto}}
+    .cc-att-row{flex:1;min-height:56px;display:flex;align-items:center;gap:11px;padding:0 13px;cursor:pointer;
+      background:#121A2A;border:1px solid #243149;border-radius:11px}
+    .cc-att-row:hover{border-color:#418FDE;background:#16213a}
+    .cc-att-row:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
+    .cc-att-ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-size:15px;flex:none}
+    .cc-att-row .lab{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.2}
+    .cc-att-row .lab .l1{font-size:14px;font-weight:600;color:#E6EDF7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .cc-att-row .lab .l2{font-size:11.5px;color:#8A99B5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .cc-att-row .cnt-wrap{flex:none;text-align:right;display:flex;flex-direction:column;line-height:1.1;min-width:48px}
+    .cc-att-row .cnt{font-size:21px;font-weight:800;font-variant-numeric:tabular-nums}
+    .cc-att-row .cnt.ok{color:#34D399;font-size:19px}
+    .cc-att-row .cnt2{font-size:10.5px;color:#7d89a3;margin-top:1px}
+    .cc-att-row .ar{color:#5C6B85;font-size:15px;flex:none}
     /* ops intel grid */
     .cc-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
     @media(max-width:980px){.cc-grid3{grid-template-columns:1fr}}
@@ -246,25 +269,17 @@
     if (!token()) return;
     ensureOverlay();
     const ov = el('cc-home-overlay');
-    const user = currentUser();
-    const name = (user.full_name || user.email || '').split('@')[0] || 'operator';
-    const initial = (name[0] || 'U').toUpperCase();
-    const role = String(user.role || 'VIEWER').toUpperCase();
+    // Identity, live status, profile and the primary nav now live in the
+    // global Command Center shell (crisp-shell.js / #crisp-globalnav), shown on
+    // every surface. The landing keeps only its situational sub-header (org
+    // name + a local clock); the shell sits pinned above it.
     ov.innerHTML = `
       <div class="cc-wrap">
-        <div class="cc-stick" id="cc-stick">
-          <div class="cc-hd">
-            <div class="cc-logo" id="cc-home-logo">C</div>
-            <div><h1 class="ti" id="cc-home-orgname">Crisis Intelligence Center</h1>
-              <div class="su">Crisis Response Intelligence · Situation Room</div></div>
-            <div class="sp">
-              <span class="cc-live"><span class="cc-dot" id="cc-conn"></span><span id="cc-conn-t">—</span></span>
-              <span class="cc-clock" id="cc-clock">—</span>
-              <div class="cc-avatar" title="${esc(user.email || '')} · ${esc(role)}">${esc(initial)}</div>
-            </div>
-          </div>
-          <nav class="cc-nav" id="cc-nav" aria-label="Primary">${navHtml()}</nav>
-        </div>
+        <!-- Identity (org name) + clock + live + profile all live in the global
+             Command Center shell (crisp-shell.js) now — there is no separate
+             situational banner here (it used to float over the KPI cards). This
+             visually-hidden heading is the labelled region's H1 for a11y. -->
+        <h1 id="cc-home-heading" class="cc-vh">Crisis Intelligence Center</h1>
 
         <div class="cc-sec-t">Executive Situation Overview <span class="cc-stale" id="cc-sum-stale"></span></div>
         <div class="cc-kpis" id="cc-kpis">${kpiSkeleton()}</div>
@@ -272,7 +287,7 @@
         <div class="cc-body">
           <div>
             <div class="cc-sec-t">Global Crisis Snapshot</div>
-            <div class="cc-card" style="padding:8px"><div id="cc-map"></div><div id="cc-map-geo" class="cc-geo"></div></div>
+            <div class="cc-card" id="cc-map-card" style="padding:8px"><div id="cc-map"></div><div id="cc-map-geo" class="cc-geo"></div></div>
           </div>
           <div>
             <div class="cc-sec-t">Immediate Attention Required</div>
@@ -297,21 +312,7 @@
       </div>`;
     ov.classList.add('cc-home-open');
 
-    // Command-bar navigation. Two deep-link intents fix the old quick-action
-    // flaws: "Users" lands on the Users tab inside Account Settings (not the
-    // profile), and "Exports" opens the ops Tools → Export… menu on arrival
-    // instead of dropping the admin on a bare report list.
-    ov.querySelectorAll('#cc-nav button[data-route]').forEach((b) => b.addEventListener('click', () => {
-      if (b.hasAttribute('disabled')) return;
-      const intent = b.getAttribute('data-intent');
-      if (intent === 'users') window.__ccSettingsInitialTab = 'users';
-      go(b.getAttribute('data-route'));
-    }));
-    const homeBtn = el('cc-nav-home');
-    if (homeBtn) homeBtn.addEventListener('click', () => { try { ov.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_e) { ov.scrollTop = 0; } });
-
-    startClock();
-    loadOrg();
+    // Org branding + clock are rendered by the shell (crisp-shell.js) now.
     refreshAll();
     if (_poll) clearInterval(_poll);
     _poll = setInterval(() => { if (el('cc-home-overlay') && el('cc-home-overlay').classList.contains('cc-home-open')) refreshAll(); }, 30000);
@@ -327,29 +328,6 @@
 
   function kpiSkeleton() {
     return Array.from({ length: 8 }).map(() => `<div class="cc-kpi"><div class="n">—</div><div class="l">…</div></div>`).join('');
-  }
-
-  // Pinned command bar (replaces the old bottom "Quick Actions" section —
-  // navigation belongs in persistent chrome, not below the fold). Admin-gated
-  // items render disabled with an "admin" chip for other roles: visible-but-
-  // disabled keeps the permission model legible instead of features silently
-  // missing. "Operations" is the ONE ops entry point (the old header
-  // "Operations →" duplicate is gone).
-  function navHtml() {
-    const admin = isAdmin();
-    const b = (route, glyph, label, adminOnly, intent) =>
-      `<button data-route="${route}" ${intent ? `data-intent="${intent}"` : ''}
-         ${adminOnly && !admin ? 'disabled aria-disabled="true"' : ''}>
-         <span aria-hidden="true">${glyph}</span> ${esc(label)}${adminOnly && !admin ? `<span class="ad">admin</span>` : ''}</button>`;
-    return [
-      `<button class="on" id="cc-nav-home" aria-current="page"><span aria-hidden="true">🏠</span> Home</button>`,
-      b('/incidents', '🛰', 'Operations', false),
-      b('/exports', '⬇', 'Exports', false),
-      b('/reporting', '🧩', 'Crisis Forms', true),
-      b('/org', '🏛', 'Organisation', true),
-      b('/users', '👥', 'Users', true, 'users'),
-      b('/users', '👤', 'Account', false),
-    ].join('');
   }
 
   // ── data: org branding ──
@@ -399,48 +377,74 @@
   function renderKpis(b) {
     const c = b.counts || {};
     const d = b.deltas || {};
-    const t = b.timings || {};
-    const kpi = (n, l, opts) => `<div class="cc-kpi ${opts && opts.crit ? 'crit' : ''}">
-      <div class="n cc-num" ${opts && opts.color ? `style="color:${opts.color}"` : ''}>${n}</div>
-      <div class="l">${esc(l)}</div>${opts && opts.chip ? opts.chip : ''}</div>`;
+    // (n, label, route, opts) — every KPI tile deep-links to the matching
+    // queue so a count is never a dead end (Active/New/Resolved → the feed).
+    const kpi = (n, l, route, opts) => `<div class="cc-kpi ${opts && opts.crit ? 'crit' : ''}"` +
+      `${route ? ` data-route="${route}" role="link" tabindex="0" aria-label="${esc(l)} ${n} — open"` : ''}>` +
+      `<div class="n cc-num" ${opts && opts.color ? `style="color:${opts.color}"` : ''}>${n}</div>` +
+      `<div class="l">${esc(l)}</div>${opts && opts.chip ? opts.chip : ''}</div>`;
     const tiles = [
-      kpi(fmtNum(c.active), 'Active incidents'),
-      kpi(fmtNum(c.critical), 'Critical', { crit: c.critical > 0, color: c.critical > 0 ? SEV_COLOR.CRITICAL : '' }),
-      kpi(fmtNum(c.pending_verification), 'Pending verification'),
-      kpi(fmtNum(c.awaiting_triage), 'Awaiting triage'),
-      kpi(fmtNum(c.open_dispatch), 'Open dispatch'),
-      kpi(fmtNum(c.active_ops), 'Active operations'),
-      kpi(fmtNum(d.reports_24h), 'New (24h)', { chip: deltaChip(d.reports_24h, d.reports_prev_24h) }),
-      kpi(fmtNum(c.resolved_in_window), 'Resolved (24h)', { color: '#34D399' }),
+      kpi(fmtNum(c.active), 'Active incidents', '#/incidents'),
+      kpi(fmtNum(c.critical), 'Critical', '#/incidents;queue=critical', { crit: c.critical > 0, color: c.critical > 0 ? SEV_COLOR.CRITICAL : '' }),
+      kpi(fmtNum(c.pending_verification), 'Pending verification', '#/incidents;queue=verification'),
+      kpi(fmtNum(c.awaiting_triage), 'Awaiting triage', '#/incidents;queue=triage'),
+      kpi(fmtNum(c.open_dispatch), 'Open dispatch', '#/incidents;queue=dispatch'),
+      kpi(fmtNum(c.active_ops), 'Active operations', '#/incidents;queue=active-ops'),
+      kpi(fmtNum(d.reports_24h), 'New (24h)', '#/incidents', { chip: deltaChip(d.reports_24h, d.reports_prev_24h) }),
+      kpi(fmtNum(c.resolved_in_window), 'Resolved (24h)', '#/incidents', { color: '#34D399' }),
     ];
     const box = el('cc-kpis');
-    if (box) box.innerHTML = tiles.join('');
+    if (!box) return;
+    box.innerHTML = tiles.join('');
+    box.querySelectorAll('.cc-kpi[data-route]').forEach((tile) => {
+      const goRoute = () => { try { window.location.hash = tile.getAttribute('data-route'); } catch (_e) {} };
+      tile.addEventListener('click', goRoute);
+      tile.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goRoute(); } });
+    });
   }
 
+  // Jun 2026 — action-based Command Center model. FIVE cards, not seven:
+  //   • two SITUATIONAL alarms that count their real entity (critical
+  //     incidents, escalating hotspots) with the underlying report tally as a
+  //     secondary, and
+  //   • a three-stage MUTUALLY-EXCLUSIVE pipeline (Needs review → Needs
+  //     response → Active operations) where every open report sits in exactly
+  //     one stage.
+  // Each row still deep-links to its own filtered queue ('#/incidents;queue=…'
+  // — see QUEUES in app.js). Counts fall back to legacy fields so the cards
+  // still render if a stale backend hasn't shipped the new ones yet.
   function renderAttention(b) {
     const c = b.counts || {};
-    // Jun 2026 (routing audit) — each row deep-links into its OWN
-    // operational queue: '#/incidents;queue=<key>'. The ops view reads the
-    // segment, applies the matching predicate (same definition the badge
-    // count uses — see QUEUES in app.js) and shows a queue banner. The hash
-    // is written wholesale so no stale segments ride along.
-    const row = (glyph, color, label, n, queue) => {
+    const num = (v) => (v == null ? 0 : Number(v));
+    // (glyph, color, label, sublabel, primaryCount, secondaryHTML, queueKey)
+    const row = (glyph, color, label, sub, n, secondary, queue) => {
       const zero = !n;
       return `<div class="cc-att-row ${zero ? 'zero' : ''}" data-queue="${queue}" role="link" tabindex="0"
-        aria-label="${esc(label)} — open queue (${fmtNum(n)})">
+        aria-label="${esc(label)} — ${zero ? 'all clear' : fmtNum(n) + ', open queue'}">
         <div class="cc-att-ic" style="background:${color}22;color:${color}">${glyph}</div>
-        <div class="lab">${esc(label)}</div>
-        <div class="cnt cc-num" ${!zero ? `style="color:${color}"` : ''}>${fmtNum(n)}</div>
+        <div class="lab"><span class="l1">${esc(label)}</span><span class="l2">${esc(sub)}</span></div>
+        <div class="cnt-wrap">
+          ${zero
+            ? `<span class="cnt ok">✓</span><span class="cnt2" style="color:#34D399">all clear</span>`
+            : `<span class="cnt cc-num" style="color:${color}">${fmtNum(n)}</span>${secondary ? `<span class="cnt2">${secondary}</span>` : ''}`}
+        </div>
         <div class="ar">›</div></div>`;
     };
+    const overdue = num(c.sla_at_risk);
     const rows = [
-      row('🔴', SEV_COLOR.CRITICAL, 'Critical incidents', c.critical, 'critical'),
-      row('⏳', '#fb923c', 'SLA at-risk (severity targets)', c.sla_at_risk, 'sla-risk'),
-      row('⬆', '#fb923c', 'Escalating (risk ≥ 70)', c.escalating, 'escalating'),
-      row('🔍', '#418FDE', 'Pending verification', c.pending_verification, 'verification'),
-      row('📋', '#22d3ee', 'Awaiting triage', c.awaiting_triage, 'triage'),
-      row('🚑', '#2DD4BF', 'Dispatched, no arrival', c.open_dispatch, 'dispatch'),
-      row('⏱', '#a78bfa', 'Stale (open & unreviewed)', c.stale, 'stale'),
+      row('🔴', SEV_COLOR.CRITICAL, 'Critical incidents', 'Command attention',
+          num(c.critical_incidents != null ? c.critical_incidents : c.critical),
+          `${fmtNum(num(c.critical))} reports`, 'critical'),
+      row('🔍', '#418FDE', 'Needs review', 'Triage & verdict',
+          num(c.needs_review != null ? c.needs_review : c.awaiting_triage),
+          overdue ? `<span style="color:#f87171">${fmtNum(overdue)} overdue</span>` : '', 'needs-review'),
+      row('⬆', '#fb923c', 'Escalating hotspots', 'Developing fast',
+          num(c.escalating),
+          c.escalating_reports != null ? `${fmtNum(num(c.escalating_reports))} reports` : '', 'escalating'),
+      row('🚑', '#2DD4BF', 'Needs response', 'Confirmed · dispatch',
+          num(c.needs_response), '', 'needs-response'),
+      row('🚁', '#a78bfa', 'Active operations', 'En route + on-scene',
+          num(c.active_operations != null ? c.active_operations : c.active_ops), '', 'active-ops'),
     ];
     const box = el('cc-att');
     if (box) {
@@ -622,11 +626,37 @@
     if (!cont) return;
     if (typeof window.L === 'undefined' || !window.L.map) { mapFallback('Map library not loaded'); return; }
     try {
+      // openLanding() rebuilds the overlay's innerHTML on every Home visit, so a
+      // previously-created _map now points at a DETACHED #cc-map node. Tear it
+      // down and re-init against the live container — otherwise the singleton
+      // guard below skips initialisation and the new node stays blank. (Fixes
+      // "Operations → Home → map doesn't load".)
+      if (_map) {
+        let live = false;
+        try { live = !!(_map.getContainer && _map.getContainer() === cont); } catch (_) { live = false; }
+        if (!live) {
+          try { _map.remove(); } catch (_) {}
+          _map = null; _cluster = null;
+          if (_mapRO) { try { _mapRO.disconnect(); } catch (_) {} _mapRO = null; }
+        }
+      }
       if (!_map) {
         _map = window.L.map('cc-map', { zoomControl: true, attributionControl: false, worldCopyJump: true })
           .setView([15, 30], 2);
         window.L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 18 }).addTo(_map);
-        setTimeout(() => { try { _map.invalidateSize(); } catch (_) {} }, 120);
+        // First-paint hardening (fixes "map blank until refresh"): the overlay
+        // can still be mid-reflow when Leaflet samples the container, so it
+        // builds a 0-size tile grid. Recompute on ready AND whenever the
+        // container gains/changes a real size (overlay reveal · global-shell
+        // padding · window resize). invalidateSize only here — never re-fit on
+        // resize, so it can't hijack the operator's pan/zoom.
+        try { _map.whenReady(() => { try { _map.invalidateSize(); } catch (_) {} }); } catch (_) {}
+        try {
+          if (window.ResizeObserver) {
+            _mapRO = new ResizeObserver(() => { if (cont.clientHeight > 0) { try { _map.invalidateSize(); } catch (_) {} } });
+            _mapRO.observe(cont);
+          }
+        } catch (_) {}
       }
       if (_cluster) { try { _map.removeLayer(_cluster); } catch (_) {} _cluster = null; }
       const useCluster = window.L.markerClusterGroup;
@@ -644,7 +674,11 @@
         _cluster.addLayer(mk);
       });
       _map.addLayer(_cluster);
-      if (pts.length) { try { _map.fitBounds(pts, { padding: [30, 30], maxZoom: 8 }); } catch (_) {} }
+      const _fit = () => { try { _map.invalidateSize(); if (pts.length) _map.fitBounds(pts, { padding: [30, 30], maxZoom: 8 }); } catch (_) {} };
+      _fit();
+      // Re-run after the browser has laid out the (possibly just-revealed)
+      // container — two frames guarantees layout is settled on a cold load.
+      requestAnimationFrame(() => requestAnimationFrame(_fit));
     } catch (e) { mapFallback('Map render failed'); }
   }
 
@@ -681,7 +715,13 @@
     box.innerHTML = `<table class="cc-tbl"><thead><tr>
       <th>Type</th><th>Location</th><th>Severity</th><th>Verification</th><th>Status</th><th>Updated</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
-    box.querySelectorAll('tbody tr').forEach((tr) => tr.addEventListener('click', () => go('/incidents')));
+    // Deep-link the clicked report (route-aware: navigates to Operations then
+    // opens that incident's detail) — not the old generic '/incidents' feed.
+    box.querySelectorAll('tbody tr').forEach((tr) => tr.addEventListener('click', () => {
+      const id = tr.getAttribute('data-id');
+      if (id && typeof window.openIncident === 'function') window.openIncident(id);
+      else go('/incidents');
+    }));
   }
 
   // ── data: rule-based situation briefing (real aggregates, no LLM) ──
