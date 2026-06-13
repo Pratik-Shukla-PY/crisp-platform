@@ -3636,6 +3636,10 @@ window.__crispAcquireDrainLock = () => _acquireDrainLock();
 window.__crispReleaseDrainLock = () => _releaseDrainLock();
 window.__crispDrainLockKey = () => _DRAIN_LOCK_KEY;
 window.__crispStartRetryLoop = () => startRetryLoop(true);
+// B-E submit-decoupling contract — expose the blur-await gate so the
+// instant-return spec can assert its {timedOut, allDone} sentinel +
+// timeout budget directly, without driving a full photo-capture flow.
+window.__crispAwaitPendingBlur = (opts) => awaitPendingBlur(opts);
 // Wedge-recovery — expose the pure decision so the offline-false-wedge
 // regression suite can assert it across airplane/offline/reconnect/restart.
 window.__crispIsLoopWedged = (args) => _isLoopWedged(args);

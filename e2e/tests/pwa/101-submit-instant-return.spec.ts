@@ -23,8 +23,8 @@ test.describe('B-E — Submit decoupled from encode', () => {
     test('awaitPendingBlur() with no pending returns immediately', async ({ page }) => {
         await page.goto('/mobile-app/src/index.html');
         const result = await page.evaluate(async () => {
-            const fn = (window as any).awaitPendingBlur;
-            if (typeof fn !== 'function') return { error: 'awaitPendingBlur not on window' };
+            const fn = (window as any).__crispAwaitPendingBlur;
+            if (typeof fn !== 'function') return { error: '__crispAwaitPendingBlur not on window' };
             // Reset state.photoBlurPending
             (window as any).state = (window as any).state || {};
             (window as any).state.photoBlurPending = [];
@@ -44,8 +44,8 @@ test.describe('B-E — Submit decoupled from encode', () => {
     test('awaitPendingBlur() with stuck blur times out within budget', async ({ page }) => {
         await page.goto('/mobile-app/src/index.html');
         const result = await page.evaluate(async () => {
-            const fn = (window as any).awaitPendingBlur;
-            if (typeof fn !== 'function') return { error: 'awaitPendingBlur not on window' };
+            const fn = (window as any).__crispAwaitPendingBlur;
+            if (typeof fn !== 'function') return { error: '__crispAwaitPendingBlur not on window' };
             (window as any).state = (window as any).state || {};
             // Stuck promise — never resolves
             const stuckPromise = new Promise(() => {});
