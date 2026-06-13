@@ -1555,6 +1555,11 @@ export default function App() {
         form_pack_id: formPackId,
         form_pack_version: formPackVersion,
         form_data: formData,
+        // Echo the active-zone event id captured by the /active fetch
+        // (crisisPack.event_id). The server verifies it owns the answered pack
+        // and re-derives from location otherwise, so it's a hint not trusted
+        // blindly — this links the report to its operation. Null on default flow.
+        crisis_event_id: crisisPack?.event_id || null,
       };
 
       // Guaranteed-delivery — serialize variant payloads alongside the
