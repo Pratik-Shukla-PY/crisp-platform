@@ -308,8 +308,12 @@ class TestRetentionPolicy:
         assert row is not None and row.deletion_requested_at is None, \
             "a report under a LIVE crisis must never be retention-purged"
 
-    def test_ended_crisis_report_past_window_is_marked(
-            self, client, db, purge_device_hash):
+    def test_ended_crisis_report_past_window_is_marked_when_preserve_disabled(
+            self, client, db, purge_device_hash, monkeypatch):
+        # Legacy / opt-out path: with CRISP_PRESERVE_REPORTS_ON_CRISIS_CLOSE
+        # turned OFF, an ENDED-crisis report past the window is still marked
+        # for purge (anchored on the crisis close time, not creation).
+        monkeypatch.setattr(settings, "CRISP_PRESERVE_REPORTS_ON_CRISIS_CLOSE", False)
         report_id = _seed_report(client, f"{purge_device_hash}-ended", "ret-ended-crisis")
         crisis = CrisisEvent(
             name="Ended Flood", crisis_type="FLOOD", status="ENDED",
@@ -332,7 +336,51 @@ class TestRetentionPolicy:
         db.expire_all()
         row = db.query(Report).filter(Report.id == report_id).first()
         assert row.deletion_requested_at is not None, \
-            "report under a crisis ended > window ago must be marked"
+            "report under a crisis ended > window ago must be marked when preserve is off"
+
+    def test_ended_crisis_report_preserved_by_default(
+            self, client, db, purge_device_hash):
+        # Phase 1 default (CRISP_PRESERVE_REPORTS_ON_CRISIS_CLOSE=True): closing
+        # an operation is NON-DESTRUCTIVE. An ENDED-crisis report, even one whose
+        # crisis closed long past the retention window, must NOT be marked.
+        assert settings.CRISP_PRESERVE_REPORTS_ON_CRISIS_CLOSE is True, \
+            "Phase 1 ships with preserve-on-close ON by default"
+        report_id = _seed_report(client, f"{purge_device_hash}-ended", "ret-ended-preserved")
+        crisis = CrisisEvent(
+            name="Ended Flood", crisis_type="FLOOD", status="ENDED",
+            is_active=False, center_lat=12.97, center_lng=77.59, radius_km=30.0,
+            started_at=datetime.now(timezone.utc) - timedelta(days=500),
+            ended_at=datetime.now(timezone.utc) - timedelta(
+                days=settings.CRISP_RETENTION_AFTER_CLOSE_DAYS + 10),
+        )
+        db.add(crisis)
+        db.flush()
+        row = db.query(Report).filter(Report.id == report_id).first()
+        row.crisis_event_id = crisis.id
+        row.server_created_at = datetime.now(timezone.utc) - timedelta(days=2)
+        db.commit()
+
+        marked = _enforce_retention_policy(db)
+        db.expire_all()
+        row = db.query(Report).filter(Report.id == report_id).first()
+        assert row is not None, "ENDED-crisis report must survive the sweep"
+        assert row.deletion_requested_at is None, \
+            "an ENDED operation's reports must be preserved by default"
+
+    def test_standalone_cleanup_still_runs_when_preserve_enabled(
+            self, client, db, purge_device_hash):
+        # The preserve flag must NOT block standalone (no-crisis) cleanup —
+        # only the ENDED-crisis pathway is gated. Proves the gate isn't
+        # over-reaching into the time-window sweep for orphan reports.
+        assert settings.CRISP_PRESERVE_REPORTS_ON_CRISIS_CLOSE is True
+        report_id = _seed_report(client, f"{purge_device_hash}-off", "ret-standalone-preserve")
+        self._age_report(db, report_id, settings.CRISP_RETENTION_AFTER_CLOSE_DAYS + 5)
+        marked = _enforce_retention_policy(db)
+        assert marked >= 1
+        db.expire_all()
+        row = db.query(Report).filter(Report.id == report_id).first()
+        assert row.deletion_requested_at is not None, \
+            "standalone-report cleanup must still run regardless of the preserve flag"
 
     def test_retention_disabled_is_noop(self, client, db, purge_device_hash, monkeypatch):
         report_id = _seed_report(client, f"{purge_device_hash}-off", "ret-disabled")
