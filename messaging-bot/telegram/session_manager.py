@@ -847,7 +847,11 @@ async def update_report_location(session: TelegramSession) -> bool:
         return False
     try:
         async with httpx.AsyncClient(timeout=15) as c:
-            loc_data = _location_payload(session)
+            # Telegram shares a precise location → the edited point is authoritative.
+            # Ask the backend to RE-DERIVE the owning operation (crisis_event_id)
+            # from these coords via the same smallest-radius matcher, so a corrected
+            # pin re-homes the report (or clears the link when it leaves every zone).
+            loc_data = {**_location_payload(session), "reresolve_operation": True}
             r = await c.patch(
                 f"{BACKEND_URL}/api/v1/reports/{session.report_id}/location",
                 json=loc_data,

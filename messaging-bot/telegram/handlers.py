@@ -494,14 +494,23 @@ async def handle_update(update: dict):
 
     # ── CAPTURE everything first, regardless of step ──
     had_location_before = session.has_location
+    prev_lat, prev_lng = session.latitude, session.longitude
     had_evidence_before = session.has_evidence
     captured = await _capture_any_media(session, message)
 
-    # Resolve location name if just received
-    if session.has_location and not had_location_before:
+    # Resolve the place name when a pin is first received OR re-shared (a
+    # corrected pin). On a re-share the EDITED location is authoritative:
+    # update_report_location asks the backend to re-derive the owning operation
+    # from the new coords (reresolve_operation), and we confirm the re-match.
+    loc_is_new = session.has_location and not had_location_before
+    loc_changed = (session.has_location and had_location_before
+                   and (session.latitude != prev_lat or session.longitude != prev_lng))
+    if loc_is_new or loc_changed:
         await resolve_location_name(session)
         if session.report_id:
             await update_report_location(session)
+            if loc_changed:
+                await send_text(chat_id, t(session.lang, "loc_updated_reresolved"))
 
     # Phase 2: forward-geocode a typed place name when there's no GPS pin yet
     # and we're on the location step. Lets desktop / GPS-denied reporters set a

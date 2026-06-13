@@ -2931,6 +2931,16 @@ def update_report_location(report_id: str, loc_data: dict, db: Session = Depends
     AND by the dashboard's "pin correction" UI to let an analyst move the
     marker. Dashboard callers pass ``is_user_corrected: true`` so the row
     is clearly attributable to a human vs a geocoder.
+
+    Operation re-evaluation: when ``reresolve_operation: true`` is passed, the
+    EDITED location is treated as authoritative and the report's owning
+    operation (``crisis_event_id``) is RE-DERIVED from the new coords via the
+    SAME smallest-radius matcher /crisis-forms/active + intake use — so a
+    corrected pin re-homes the report to the operation containing it, or clears
+    the link when it leaves every active zone. Precise-GPS channels opt in
+    (Telegram / WhatsApp / dashboard pin-correction). AI/SMS/IVR backfill OMITS
+    the flag, so ``crisis_event_id`` is untouched — coarse text/audio geocoding
+    stays GLOBAL by design (no fake-matching).
     """
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
@@ -2957,6 +2967,14 @@ def update_report_location(report_id: str, loc_data: dict, db: Session = Depends
             device_location_name=loc_data.get("device_location_name"),
             is_user_corrected=bool(loc_data.get("is_user_corrected", False)),
         ))
+    # Re-evaluate operation assignment from the EDITED coords (opt-in).
+    if loc_data.get("reresolve_operation"):
+        from app.api.endpoints.crisis_forms import resolve_active_event
+        _lat = loc_data.get("latitude", report.location.latitude if report.location else None)
+        _lng = loc_data.get("longitude", report.location.longitude if report.location else None)
+        if _lat is not None and _lng is not None:
+            _match = resolve_active_event(db, _lat, _lng, datetime.now(timezone.utc))
+            report.crisis_event_id = _match[0].id if _match else None
     db.commit()
     db.refresh(report)
     logger.info(f"Report {report_id} location updated: {loc_data.get('device_location_name', 'coords only')}")
