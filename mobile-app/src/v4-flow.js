@@ -440,81 +440,118 @@
             if (locEditWrap) locEditWrap.setAttribute('hidden', '');
             _hideLocSuggestions();
         }
-        function _saveLocEdit() {
+        // Coordinate-bearing? (and never the {0,0} null-island sentinel).
+        function _hasCoords(p) {
+            return p && Number.isFinite(p.lat) && Number.isFinite(p.lng) && !(p.lat === 0 && p.lng === 0);
+        }
+        // Best coordinate-bearing match for a typed place name within a result
+        // list — exact name, then prefix either way, then word-prefix. Requires a
+        // NAME relationship so we never silently snap to an unrelated top result
+        // (wrong coords in a crisis app routes to the wrong operation).
+        function _bestSuggestionFor(name, list) {
+            if (!Array.isArray(list) || !list.length) return null;
+            const nl = String(name || '').toLowerCase().trim();
+            if (!nl) return null;
+            const nm = (p) => String(p.name || '').toLowerCase();
+            let m = list.find((p) => _hasCoords(p) && nm(p) === nl);
+            if (m) return m;
+            m = list.find((p) => _hasCoords(p) && (nm(p).startsWith(nl) || nl.startsWith(nm(p))));
+            if (m) return m;
+            m = list.find((p) => _hasCoords(p) && nm(p).split(/[\s,\-]+/).some((w) => w && (w.startsWith(nl) || nl.startsWith(w))));
+            return m || null;
+        }
+        // Online Nominatim resolve for a typed string → Promise<place|null>. Hard
+        // 3s timeout; never throws; fail-safe to null offline (searchRemote only
+        // calls back on success, so the timer covers the silent-fail path).
+        function _resolveRemoteCoords(name) {
+            return new Promise((resolve) => {
+                let settled = false;
+                const finish = (v) => { if (!settled) { settled = true; resolve(v); } };
+                const timer = setTimeout(() => finish(null), 3000);
+                try {
+                    const ps = (typeof placeSearch !== 'undefined') ? placeSearch
+                             : (typeof window !== 'undefined' && window.placeSearch) || null;
+                    if (!ps || typeof ps.searchRemote !== 'function') { clearTimeout(timer); return finish(null); }
+                    ps.searchRemote(name, (results) => { clearTimeout(timer); finish(_bestSuggestionFor(name, results || [])); });
+                } catch (_) { clearTimeout(timer); finish(null); }
+            });
+        }
+        async function _saveLocEdit() {
             if (!locEditInput) return;
             const name = locEditInput.value.trim();
-            if (name) {
-                const patch = {
-                    userLocationName: name,
-                    locationName: name,
+            if (!name) { _closeLocEdit(); return; }
+            const patch = { userLocationName: name, locationName: name };
+
+            // Resolve COORDINATES for the edited place so the edited location is
+            // authoritative for crisis-form / operation matching — not just a
+            // label. Priority: an explicit suggestion pick → the best name-match
+            // among the rendered suggestions / bundled+cached DB (instant) → an
+            // online Nominatim resolve (awaited, capped at 3s). A free-text edit
+            // that doesn't tap a suggestion now still re-homes the report.
+            let coords = null;
+            if (_locSelected && _locSelected.name === name && _hasCoords(_locSelected)) {
+                coords = _locSelected;
+            } else {
+                let local = [];
+                try {
+                    const ps = (typeof placeSearch !== 'undefined') ? placeSearch
+                             : (typeof window !== 'undefined' && window.placeSearch) || null;
+                    if (ps && typeof ps.search === 'function') local = ps.search(name) || [];
+                } catch (_) {}
+                coords = _bestSuggestionFor(name, _locSuggestions) || _bestSuggestionFor(name, local);
+                if (!coords && typeof navigator !== 'undefined' && navigator.onLine !== false) {
+                    if (locEditSaveBtn) locEditSaveBtn.disabled = true;
+                    coords = await _resolveRemoteCoords(name);
+                    if (locEditSaveBtn) locEditSaveBtn.disabled = false;
+                }
+            }
+
+            let _locationMoved = false;
+            if (_hasCoords(coords)) {
+                patch.location = {
+                    lat: coords.lat,
+                    lng: coords.lng,
+                    // Submit reads state.location.acc — write THAT key (not `accuracy`,
+                    // which nothing reads). 0 + is_user_corrected = "user-placed pin".
+                    acc: 0,
+                    source: 'user_corrected',
+                    // Edited place is AUTHORITATIVE (user-edited > GPS > device).
+                    is_user_corrected: true,
                 };
-                let _locationMoved = false;
-                // If the user picked a suggestion AND didn't edit the text
-                // after, also update lat/lng + the location object so the
-                // map + coords sub-line reflect the corrected place.
-                if (_locSelected && _locSelected.name === name &&
-                    Number.isFinite(_locSelected.lat) && Number.isFinite(_locSelected.lng)) {
-                    patch.location = {
-                        lat: _locSelected.lat,
-                        lng: _locSelected.lng,
-                        // The submit payload reads state.location.acc (app.js) — write
-                        // THAT key, not `accuracy` (a key nothing reads → every edited
-                        // location silently shipped accuracy_meters 0). 0 + the
-                        // is_user_corrected flag below = "user-placed pin", matching the
-                        // other user-corrected path (app.js selectPlace).
-                        acc: 0,
-                        source: 'user_corrected',
-                        // The edited place is now AUTHORITATIVE for matching
-                        // (priority: user-edited > GPS > device-fallback). The
-                        // submit payload reads this flag (app.js) so the report
-                        // ships latitude/longitude = edited, is_user_corrected=true.
-                        is_user_corrected: true,
-                    };
-                    _locationMoved = true;
-                }
-                _setState(patch);
-                _paintV4LocationPills();
-                // BUGFIX May 2026 — UNDP must-have #6 regression.
-                //
-                // Operator-reported: reporter physically in Electronic City
-                // changed the report's location to Panaji, Goa (~700 km away).
-                // The v4 Step-3 inline map updated its terrain but NO OSM
-                // building outlines appeared — the "Tap a building outline"
-                // instruction was moot, forcing free-text fallback and silently
-                // breaking UNDP must-have #6.
-                //
-                // Root cause: `_saveLocEdit` updated `state.location` but never
-                // told BuildingSelect to re-fetch buildings for the new bbox.
-                // The fullscreen picker had a workaround call site (app.js
-                // line 10374); the inline editor was missing the equivalent.
-                //
-                // Fix: dispatch a `crisp-location-changed` CustomEvent that
-                // BuildingSelect listens to, and as a defence-in-depth call
-                // `ensureMap` directly here. Either path repaints the
-                // building polygon overlay for the new lat/lng.
-                if (_locationMoved && patch.location) {
-                    try {
-                        document.dispatchEvent(new CustomEvent('crisp-location-changed', {
-                            detail: { lat: patch.location.lat, lng: patch.location.lng, source: 'user_corrected' },
-                        }));
-                    } catch (_) {}
-                    try {
-                        if (window.BuildingSelect && typeof window.BuildingSelect.ensureMap === 'function') {
-                            window.BuildingSelect.ensureMap(patch.location.lat, patch.location.lng).catch(() => {});
-                        }
-                    } catch (_) {}
-                    // AUTHORITATIVE RE-EVAL — the edited place re-runs crisis-form +
-                    // operation matching for the NEW coordinates (overriding the jitter
-                    // guard), drops the previous zone's stock answers, and toasts. The
-                    // backend re-derives crisis_event_id from these coords at intake too.
-                    // NOTE: _onLocationReeval is declared inside _refreshGps (a sibling
-                    // scope), so it is NOT a bare in-scope identifier here — call it via
-                    // the global it exports (assigned when _refreshGps runs on capture
-                    // entry, which always precedes this editor being openable).
-                    if (typeof window.__crispV4OnLocationReeval === 'function') {
-                        window.__crispV4OnLocationReeval(patch.location.lat, patch.location.lng);
+                _locationMoved = true;
+            }
+            _setState(patch);
+            _paintV4LocationPills();
+            if (_locationMoved && patch.location) {
+                // Repaint the building overlay for the new bbox (UNDP must-have #6 —
+                // BuildingSelect listens to crisp-location-changed; ensureMap is a
+                // defence-in-depth direct call).
+                try {
+                    document.dispatchEvent(new CustomEvent('crisp-location-changed', {
+                        detail: { lat: patch.location.lat, lng: patch.location.lng, source: 'user_corrected' },
+                    }));
+                } catch (_) {}
+                try {
+                    if (window.BuildingSelect && typeof window.BuildingSelect.ensureMap === 'function') {
+                        window.BuildingSelect.ensureMap(patch.location.lat, patch.location.lng).catch(() => {});
                     }
+                } catch (_) {}
+                // AUTHORITATIVE RE-EVAL — re-run crisis-form + operation matching for
+                // the NEW coords (overriding the jitter guard), drop the previous
+                // zone's stock answers, toast. _onLocationReeval lives in a sibling
+                // scope (_refreshGps) → call the global it exports.
+                if (typeof window.__crispV4OnLocationReeval === 'function') {
+                    window.__crispV4OnLocationReeval(patch.location.lat, patch.location.lng);
                 }
+            } else {
+                // Couldn't resolve coordinates → the map + crisis form still reflect
+                // the device GPS. Save the NAME (never {0,0}) and tell the user how to
+                // make the edited place authoritative.
+                const _K = 'v4_loc_saved_name_only';
+                const _EN = 'Saved the name only — tap a suggestion to update the map and crisis form.';
+                let msg = _EN;
+                try { const fn = window.t; if (typeof fn === 'function') { const v = fn(_K); if (v && v !== _K) msg = v; } } catch (_) {}
+                if (typeof window.showToast === 'function') window.showToast(msg, 3500);
             }
             _closeLocEdit();
         }
@@ -1242,7 +1279,7 @@
             retryGpsBtn.disabled = true;
             retryGpsBtn.setAttribute('aria-busy', 'true');
             try {
-                _refreshGps();
+                _refreshGps(true);   // user-initiated → a material move re-evals the crisis form
             } finally {
                 setTimeout(() => {
                     retryGpsBtn.disabled = false;
@@ -1895,7 +1932,12 @@
         } catch (_) {}
     });
 
-    function _refreshGps() {
+    // userInitiated = the reporter tapped the GPS-refresh button (vs an automatic
+    // capture-stage entry). Only a user-initiated MATERIAL move re-runs the
+    // authoritative re-eval (which clears the previous zone's answers + toasts) —
+    // an automatic re-fetch where the cached fix and the fresh fix differ by
+    // >110 m must NOT spuriously fire "crisis form refreshed" on stage entry.
+    function _refreshGps(userInitiated) {
         const text = document.getElementById('v4-meta-location-text');
         if (!text) return;
         // i18n the status strings.
@@ -2086,10 +2128,24 @@
 
         navigator.geolocation.getCurrentPosition((pos) => {
             const { latitude, longitude, accuracy } = pos.coords;
+            const _prev = _getState().location;
             _setState({ location: { lat: latitude, lng: longitude, acc: accuracy } });
             _writeCachedGps(latitude, longitude, accuracy);
             _paintV4LocationPills();
-            _maybeFetchCrisisPack({ lat: latitude, lng: longitude, acc: accuracy });
+            // A user-initiated GPS refresh that lands in a DIFFERENT ~110 m cell is a
+            // material move → authoritative re-eval (re-runs matching, clears the
+            // previous zone's stock answers, toasts). A same-spot refresh, a first
+            // fix (no prior), or any automatic entry just (re)fetches the pack — no
+            // answer loss, no spurious toast (the jitter guard makes it a no-op).
+            const _key = (l) => (l && Number.isFinite(l.lat) && Number.isFinite(l.lng))
+                ? (l.lat.toFixed(3) + ',' + l.lng.toFixed(3)) : null;
+            const _movedMaterially = !!_prev && _key(_prev) !== null
+                && _key(_prev) !== _key({ lat: latitude, lng: longitude });
+            if (userInitiated && _movedMaterially && typeof _onLocationReeval === 'function') {
+                _onLocationReeval(latitude, longitude);
+            } else {
+                _maybeFetchCrisisPack({ lat: latitude, lng: longitude, acc: accuracy });
+            }
             (async () => {
                 try {
                     if (typeof window.resolveLocationName === 'function') {
@@ -2861,7 +2917,15 @@
         // behaviour so the user can ALSO pick a building footprint.
         document.getElementById('v4-edit-location').addEventListener('click', () => {
             _ensureBuildingBoxInV4();
-            _refreshGps();
+            // User-initiated → if the GPS fix lands the reporter in a different
+            // ~110 m cell (they physically moved since capture), re-run the
+            // authoritative crisis-form / operation re-eval. The review stage has
+            // no place-search input (the typed-place editor lives on capture by
+            // design), so a different PLACE is changed there; here a material GPS
+            // move re-homes the report. (V3 selectPlace / #input-loc-search is dead
+            // in V4 — the element does not exist — and the backend re-derives
+            // crisis_event_id from the submitted coords regardless.)
+            _refreshGps(true);
             // Eager init in case the user taps before stage-entered fires.
             if (window.BuildingSelect && window.BuildingSelect.ensureMap) {
                 const loc = _getState().location;

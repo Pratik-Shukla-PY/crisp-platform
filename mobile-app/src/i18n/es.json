@@ -821,6 +821,7 @@
   "v4_submit_missing_classify": "Responda primero las preguntas obligatorias: daño, infraestructura y tipo de crisis.",
   "v4_submit_missing_debris": "Queda una pregunta obligatoria: ¿hay escombros que despejar?",
   "v4_location_pack_refreshed": "Ubicación actualizada. El formulario de crisis aplicable se ha actualizado según la nueva ubicación.",
+  "v4_loc_saved_name_only": "Se guardó solo el nombre — toca una sugerencia para actualizar el mapa y el formulario de crisis.",
   "undp_debris_label": "¿Escombros bloqueando la zona?",
   "undp_details_cta": "Añadir 4 detalles rápidos",
   "undp_details_cta_sub": "Ayuda a los rescatistas a priorizar",

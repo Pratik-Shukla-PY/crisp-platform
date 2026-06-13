@@ -812,6 +812,7 @@
   "v4_submit_missing_classify": "Lütfen önce zorunlu soruları yanıtlayın — hasar, altyapı ve kriz türü.",
   "v4_submit_missing_debris": "Bir zorunlu soru kaldı: temizlenmesi gereken moloz var mı?",
   "v4_location_pack_refreshed": "Konum güncellendi. Geçerli kriz formu yeni konuma göre yenilendi.",
+  "v4_loc_saved_name_only": "Yalnızca ad kaydedildi — haritayı ve kriz formunu güncellemek için bir öneriye dokunun.",
   "undp_debris_label": "Alanı tıkayan enkaz?",
   "undp_details_cta": "4 hızlı ayrıntı ekle",
   "undp_details_cta_sub": "Kurtarma önceliklendirmesine yardım eder",

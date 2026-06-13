@@ -787,6 +787,7 @@
   "v4_submit_missing_classify": "Please answer the required questions first — damage, infrastructure and crisis type.",
   "v4_submit_missing_debris": "One required question left: is there debris to clear?",
   "v4_location_pack_refreshed": "Location updated. Applicable crisis form has been refreshed based on the new location.",
+  "v4_loc_saved_name_only": "Saved the name only — tap a suggestion to update the map and crisis form.",
   "undp_debris_label": "Debris blocking the area?",
   "undp_details_cta": "Add 4 quick details",
   "undp_details_cta_sub": "Helps responders prioritise rescue",
