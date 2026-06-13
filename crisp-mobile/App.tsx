@@ -161,7 +161,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { detectNetworkTier, getAdaptiveConfig, getCurrentTier } from './services/networkAdaptive';
 import { getHistory, getImpactStats, markHistoryDeletionRequested, updateHistoryStatus, HistoryReport, getInFlightReports, QueuedReport, deleteReport as deleteQueuedReport, updateReportStatus } from './services/database';
 import { getDeviceStatusSince, deleteReportFromServer, getApiBase, getCrisisFormsActive } from './services/api';
-import { assembleCrisisForm, deriveSeverityFromDamage } from './services/crisisForm';
+import { assembleCrisisForm, deriveSeverityFromDamage, resolveCrisisPackSwap } from './services/crisisForm';
 import { blurFacesBase64, prewarm as prewarmPIIBlur } from './services/piiBlur';
 import { generateVariants, PhotoVariants, TIER_TO_RESOLUTION } from './services/imageVariants';
 import { swallow as telemetrySwallow } from './services/telemetry';
@@ -593,6 +593,12 @@ export default function App() {
   // hit, cache the pack + auto-set the canonical crisis_type when the zone's
   // type is a CrisisTypeEnum value; otherwise clear the pack.
   const crisisPackKeyRef = useRef<string | null>(null);
+  // Mirrors the PWA's state._crisisTypeAuto / pack-id tracking (v4-flow.js): so a
+  // GPS drift OUT of a zone (or INTO a different zone) can clear a zone-AUTO
+  // crisis_type without ever clobbering a HAND-PICKED one, and a pack swap drops
+  // the previous zone's stock answers.
+  const crisisTypeAutoRef = useRef<boolean>(false);
+  const crisisPackIdRef = useRef<string | null>(null);
   const maybeFetchCrisisPack = (loc: { lat: number; lng: number } | null) => {
     if (!UI_V4_ENABLED) return;   // V4-only feature — fully inert (no fetch, no crisis_type override) until activation (RNV4-P4)
     if (!loc || typeof loc.lat !== 'number' || typeof loc.lng !== 'number') return;
@@ -600,19 +606,19 @@ export default function App() {
     if (key === crisisPackKeyRef.current) return;
     crisisPackKeyRef.current = key;
     getCrisisFormsActive(loc.lat, loc.lng).then((data) => {
-      if (data && data.active && data.schema_json) {
-        setCrisisPack({
-          pack_id: data.pack_id, pack_version: data.pack_version,
-          event_id: data.event_id, crisis_type: data.crisis_type, schema: data.schema_json,
-        });
-        const CANON: Record<string, number> = {
-          EARTHQUAKE: 1, FLOOD: 1, TSUNAMI: 1, CYCLONE: 1, WILDFIRE: 1,
-          EXPLOSION: 1, CHEMICAL_INCIDENT: 1, CONFLICT: 1, CIVIL_UNREST: 1,
-        };
-        if (data.crisis_type && CANON[data.crisis_type]) setCrisisType(data.crisis_type);
-      } else {
-        setCrisisPack(null);
-      }
+      // Pure reducer decides the swap (mirrors the PWA's _maybeFetchCrisisPack):
+      // swap/clear the pack, drop the previous zone's answers on a pack change,
+      // and clear a zone-AUTO crisis_type once it no longer applies — never a
+      // hand-picked one. See services/crisisForm.ts (unit-tested).
+      const swap = resolveCrisisPackSwap(data, {
+        packId: crisisPackIdRef.current, wasAuto: crisisTypeAutoRef.current,
+      });
+      setCrisisPack(swap.pack);
+      crisisPackIdRef.current = swap.packId;
+      crisisTypeAutoRef.current = swap.auto;
+      if (swap.clearAnswers) setCrisisStockAnswers({});
+      if (swap.crisisTypeAction === 'set') setCrisisType(swap.crisisType);
+      else if (swap.crisisTypeAction === 'clear') setCrisisType(null);
     });
   };
   // Re-resolve the pack on every location change (GPS fix / refresh / user edit).
@@ -1450,6 +1456,7 @@ export default function App() {
     setLocation(null); setLocationName(''); setIsSending(false); setReportId('');
     // RNV4-P2 — clear crisis-pack state + geo-gate key so a new report re-resolves.
     setCrisisPack(null); setCrisisStockAnswers({}); crisisPackKeyRef.current = null;
+    crisisTypeAutoRef.current = false; crisisPackIdRef.current = null;
     // Phase 4 — reset the new service/needs/extra-photos state too.
     setElectricityStatus('UNKNOWN'); setWaterStatus('UNKNOWN'); setHealthStatus('UNKNOWN');
     setPressingNeeds([]); setExtraPhotos([]);
@@ -1856,7 +1863,12 @@ export default function App() {
             }
             setInfraType(v);
           }}
-          onSetCrisis={setCrisisType}
+          onSetCrisis={(v) => {
+            // A manual pick is authoritative — mark it non-auto so a later GPS
+            // drift out of / into a zone can't clear the user's choice.
+            crisisTypeAutoRef.current = false;
+            setCrisisType(v);
+          }}
           onSetInfraName={setInfraName}
           // RNV4-P3 — geo-scoped crisis pack. When active with renderable
           // fields, V4ClassifyScreen appends a 'crisispack' sub-step that

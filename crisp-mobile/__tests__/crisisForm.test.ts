@@ -10,6 +10,7 @@ import {
   crisisPackRequiredAnswered,
   crisisPackClassifyOrder,
   deriveSeverityFromDamage,
+  resolveCrisisPackSwap,
 } from '../services/crisisForm';
 
 describe('assembleCrisisForm (RNV4-P2 crisis-pack submit parity)', () => {
@@ -176,6 +177,60 @@ describe('crisisPackClassifyOrder (RNV4-P3 — dynamic sub-step order)', () => {
       crisis_type: 'FLOOD',
       schema: { sections: [{ fields: [{ key: 'crisis_type', type: 'single_select', maps_to: 'crisis_type' }] }] },
     } as any)).toEqual(['damage', 'infra']);
+  });
+});
+
+describe('resolveCrisisPackSwap (edited/moved location re-evaluates the pack)', () => {
+  const FLOOD = { active: true, pack_id: 'pk-flood', pack_version: 2, event_id: 'ev-F', crisis_type: 'FLOOD', schema_json: { sections: [] } };
+  const LANDSLIDE = { active: true, pack_id: 'pk-slide', pack_version: 1, event_id: 'ev-L', crisis_type: 'LANDSLIDE', schema_json: { sections: [] } };  // non-canonical type
+  const NONE = { active: false };
+
+  test('enter a canonical zone → set the auto type, load the pack, clear stale answers', () => {
+    const r = resolveCrisisPackSwap(FLOOD, { packId: null, wasAuto: false });
+    expect(r.pack!.pack_id).toBe('pk-flood');
+    expect(r.crisisTypeAction).toBe('set');
+    expect(r.crisisType).toBe('FLOOD');
+    expect(r.auto).toBe(true);
+    expect(r.clearAnswers).toBe(true);   // pack id changed (null → pk-flood)
+    expect(r.packId).toBe('pk-flood');
+  });
+
+  test('zone A → zone B (different pack) → swap pack + clear answers', () => {
+    const r = resolveCrisisPackSwap(LANDSLIDE, { packId: 'pk-flood', wasAuto: true });
+    expect(r.pack!.pack_id).toBe('pk-slide');
+    expect(r.clearAnswers).toBe(true);
+    // LANDSLIDE is non-canonical → the previously-auto FLOOD must be dropped.
+    expect(r.crisisTypeAction).toBe('clear');
+    expect(r.auto).toBe(false);
+  });
+
+  test('same pack re-resolved (no real change) → keep answers, keep auto type', () => {
+    const r = resolveCrisisPackSwap(FLOOD, { packId: 'pk-flood', wasAuto: true });
+    expect(r.clearAnswers).toBe(false);          // same pack id → answers preserved
+    expect(r.crisisTypeAction).toBe('set');      // FLOOD re-applied (idempotent)
+    expect(r.auto).toBe(true);
+  });
+
+  test('leave every zone after an AUTO type → clear pack AND clear the auto type', () => {
+    const r = resolveCrisisPackSwap(NONE, { packId: 'pk-flood', wasAuto: true });
+    expect(r.pack).toBeNull();
+    expect(r.packId).toBeNull();
+    expect(r.crisisTypeAction).toBe('clear');
+    expect(r.auto).toBe(false);
+  });
+
+  test('leave every zone after a HAND-PICKED type → clear pack but KEEP the type', () => {
+    const r = resolveCrisisPackSwap(NONE, { packId: null, wasAuto: false });
+    expect(r.pack).toBeNull();
+    expect(r.crisisTypeAction).toBe('keep');     // hand-picked crisis_type survives
+    expect(r.auto).toBe(false);
+  });
+
+  test('enter a non-canonical zone with a HAND-PICKED type → load pack, KEEP the type', () => {
+    const r = resolveCrisisPackSwap(LANDSLIDE, { packId: null, wasAuto: false });
+    expect(r.pack!.pack_id).toBe('pk-slide');
+    expect(r.crisisTypeAction).toBe('keep');     // never clobber a hand-picked type
+    expect(r.auto).toBe(false);
   });
 });
 

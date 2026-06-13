@@ -79,6 +79,71 @@ export function crisisPackClassifyOrder(crisisPack: CrisisPack | null | undefine
   return order;
 }
 
+/** GET /crisis-forms/active response (the geo-gate matcher's output). */
+export interface CrisisActiveResponse {
+  active?: boolean;
+  pack_id?: string;
+  pack_version?: number;
+  event_id?: string;
+  crisis_type?: string | null;
+  schema_json?: any;
+}
+
+/** How a location change should mutate the crisis-pack state. */
+export interface CrisisPackSwap {
+  /** The new crisisPack value (null when outside every zone). */
+  pack: CrisisPack | null;
+  /** Reset crisisStockAnswers? True when the pack id changed (prior answers stale). */
+  clearAnswers: boolean;
+  /** crisis_type action: apply the zone type, clear it, or leave it untouched. */
+  crisisTypeAction: 'set' | 'clear' | 'keep';
+  /** crisis_type to apply — meaningful only when crisisTypeAction === 'set'. */
+  crisisType: string | null;
+  /** Next value for the "crisis_type was zone-AUTO-applied" flag. */
+  auto: boolean;
+  /** Next value for the tracked pack id (drives clearAnswers next round). */
+  packId: string | null;
+}
+
+/**
+ * Decide how a /crisis-forms/active response changes the crisis-pack state when
+ * the device location moves (GPS drift / refresh). Mirror of the PWA's
+ * _maybeFetchCrisisPack swap logic (mobile-app/src/v4-flow.js): the server has
+ * already picked the smallest-radius zone; here we (a) swap or clear the pack,
+ * (b) drop the previous zone's stock answers when the pack id changes, and
+ * (c) clear a zone-AUTO crisis_type once it no longer applies WITHOUT ever
+ * clobbering a HAND-PICKED one (tracked by `wasAuto`). Pure — no React, no I/O.
+ */
+export function resolveCrisisPackSwap(
+  data: CrisisActiveResponse | null | undefined,
+  prev: { packId: string | null; wasAuto: boolean },
+): CrisisPackSwap {
+  if (data && data.active && data.schema_json) {
+    const packId = data.pack_id ?? null;
+    const pack: CrisisPack = {
+      pack_id: data.pack_id, pack_version: data.pack_version,
+      event_id: data.event_id, crisis_type: data.crisis_type, schema: data.schema_json,
+    };
+    const clearAnswers = packId !== prev.packId;
+    const t = data.crisis_type;
+    if (t && CANON_CRISIS_TYPES[t]) {
+      // Canonical zone type → auto-apply it (the chip step is skipped).
+      return { pack, clearAnswers, crisisTypeAction: 'set', crisisType: t, auto: true, packId };
+    }
+    // Non-canonical zone → drop a stale auto type from the previous zone; a
+    // hand-picked type (wasAuto=false) is left untouched.
+    if (prev.wasAuto) {
+      return { pack, clearAnswers, crisisTypeAction: 'clear', crisisType: null, auto: false, packId };
+    }
+    return { pack, clearAnswers, crisisTypeAction: 'keep', crisisType: null, auto: false, packId };
+  }
+  // Outside every zone → clear the pack + any auto-applied type; keep a hand-pick.
+  if (prev.wasAuto) {
+    return { pack: null, clearAnswers: false, crisisTypeAction: 'clear', crisisType: null, auto: false, packId: null };
+  }
+  return { pack: null, clearAnswers: false, crisisTypeAction: 'keep', crisisType: null, auto: false, packId: null };
+}
+
 /** True when every REQUIRED renderable field has a usable answer — gates the
  *  crisispack sub-step's Continue. Mirror of the PWA's _canAdvanceFrom('crisispack'). */
 export function crisisPackRequiredAnswered(fields: any[], answers: Record<string, any> | null | undefined): boolean {
