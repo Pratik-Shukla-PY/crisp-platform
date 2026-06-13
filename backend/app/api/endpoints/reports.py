@@ -2304,17 +2304,27 @@ def _enforce_retention_policy(db: Session, batch_limit: int = 1000) -> int:
     # Query 2 — reports tied to an ENDED crisis, anchored on the crisis's
     # close time (ended_at; fall back to updated_at if the operator ended it
     # without stamping a date).
-    ended_crisis = (
-        db.query(Report)
-        .join(CrisisEvent, Report.crisis_event_id == CrisisEvent.id)
-        .filter(
-            Report.deletion_requested_at.is_(None),
-            CrisisEvent.status == "ENDED",
-            sa_func.coalesce(CrisisEvent.ended_at, CrisisEvent.updated_at) <= cutoff_ts,
+    #
+    # Gated by CRISP_PRESERVE_REPORTS_ON_CRISIS_CLOSE (default True): an
+    # operation's reports must survive its closure — an ENDED crisis becomes a
+    # read-only historical record, not a delete trigger. With the flag set, this
+    # query is skipped entirely; only standalone (no-crisis) reports above are
+    # subject to the time-window sweep. Flip the flag to False to restore the
+    # legacy purge-on-close behaviour.
+    if getattr(settings, "CRISP_PRESERVE_REPORTS_ON_CRISIS_CLOSE", True):
+        ended_crisis = []
+    else:
+        ended_crisis = (
+            db.query(Report)
+            .join(CrisisEvent, Report.crisis_event_id == CrisisEvent.id)
+            .filter(
+                Report.deletion_requested_at.is_(None),
+                CrisisEvent.status == "ENDED",
+                sa_func.coalesce(CrisisEvent.ended_at, CrisisEvent.updated_at) <= cutoff_ts,
+            )
+            .limit(batch_limit)
+            .all()
         )
-        .limit(batch_limit)
-        .all()
-    )
 
     expired = {r.id: r for r in (standalone + ended_crisis)}.values()
     count = 0
@@ -2575,8 +2585,9 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
     # BEFORE any DB write (no orphan row). Unknown/unpublished pack → fail-safe:
     # crisis fields are dropped and the report is stored as a standard report.
     if meta_in.form_pack_id:
-        from app.models.report import CrisisFormPack, CrisisFormPackVersion
+        from app.models.report import CrisisFormPack, CrisisFormPackVersion, CrisisEvent
         from app.services.crisis_form_schema import validate_submission
+        from app.api.endpoints.crisis_forms import resolve_active_event
         pack_ver = None
         if meta_in.form_pack_version:
             pack_ver = (db.query(CrisisFormPackVersion)
@@ -2595,11 +2606,54 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
                 pack_ver.schema_json, meta_in.form_data or {}, meta_in.source.value)
             if _errs:
                 raise HTTPException(status_code=422, detail={"crisis_form_errors": _errs})
-            report_dict["crisis_event_id"] = meta_in.crisis_event_id
+            # Derive the owning CrisisEvent SERVER-SIDE — never blind-trust the
+            # client's crisis_event_id. A pack can be reused across events (no
+            # uniqueness on CrisisEvent.form_pack_id), so form_pack_id alone can't
+            # identify the event. Resolution order:
+            #   1. Verify the client-echoed event_id actually owns this pack — the
+            #      client got the (event, pack) pair atomically from /active, so a
+            #      cheap PK lookup + ownership check is authoritative.
+            #   2. Else re-resolve from the submitted location via the SAME matcher
+            #      /active uses (covers GPS chat channels that send only the pack,
+            #      and self-heals a stale /active cache), accepting only a match
+            #      whose pack equals the answered pack.
+            #   3. Else NULL — a validated form with no resolvable active owner
+            #      degrades to a standard report (multi-channel parity #1).
+            owning_event = None
+            if meta_in.crisis_event_id:
+                _ev = (db.query(CrisisEvent)
+                       .filter(CrisisEvent.id == meta_in.crisis_event_id).first())
+                if _ev and _ev.form_pack_id == meta_in.form_pack_id:
+                    owning_event = _ev
+            if owning_event is None and meta_in.location:
+                _lat = getattr(meta_in.location, "latitude", None)
+                _lng = getattr(meta_in.location, "longitude", None)
+                if _lat is not None and _lng is not None:
+                    _match = resolve_active_event(db, _lat, _lng, datetime.now(timezone.utc))
+                    if _match and _match[1].id == meta_in.form_pack_id:
+                        owning_event = _match[0]
+            report_dict["crisis_event_id"] = owning_event.id if owning_event else None
             report_dict["form_pack_id"] = meta_in.form_pack_id
             report_dict["form_pack_version"] = pack_ver.version
             report_dict["form_data"] = _fd or None
             report_dict.update(_fc)   # canonical column overrides (enum-guarded by the validator)
+    elif meta_in.crisis_event_id and meta_in.location:
+        # Operation linkage WITHOUT a form pack — for GPS-capable channels that
+        # resolve the active zone but don't render the dynamic Stage 2/3 pack
+        # (Telegram / WhatsApp share a precise location, call /crisis-forms/active,
+        # and echo the event id). They send NO form_pack_id, so no form validation
+        # runs (sending an unfilled pack would 422 on required fields). The server
+        # RE-DERIVES crisis_event_id from the submitted location — the client hint
+        # only opts the report in; location is authoritative. Channels that never
+        # resolve a zone (SMS / IVR — coarse text/audio geocoding, no fake-matching)
+        # omit the hint and stay GLOBAL (crisis_event_id NULL).
+        from app.api.endpoints.crisis_forms import resolve_active_event
+        _lat = getattr(meta_in.location, "latitude", None)
+        _lng = getattr(meta_in.location, "longitude", None)
+        if _lat is not None and _lng is not None:
+            _match = resolve_active_event(db, _lat, _lng, datetime.now(timezone.utc))
+            if _match:
+                report_dict["crisis_event_id"] = _match[0].id
 
     db_report = Report(
         **report_dict,

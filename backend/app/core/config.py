@@ -143,6 +143,14 @@ class Settings(BaseSettings):
     # Default = 365 days (crisis close + 1 year), per the privacy notice.
     CRISP_RETENTION_AFTER_CLOSE_DAYS: int = 365
 
+    # When True, reports tied to an ENDED crisis are NEVER auto-purged: closing
+    # an operation is non-destructive (the response record stays queryable for
+    # the operation's lifetime). Standalone-report cleanup and the 24h
+    # soft-delete-on-request grace are unaffected. Set False to restore the
+    # legacy "purge ENDED-crisis reports after CRISP_RETENTION_AFTER_CLOSE_DAYS"
+    # behaviour. Default True — an operation's history must survive its closure.
+    CRISP_PRESERVE_REPORTS_ON_CRISIS_CLOSE: bool = True
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

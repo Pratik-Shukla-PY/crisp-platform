@@ -47,27 +47,23 @@ public_router = APIRouter()   # /crisis-forms
 admin_router = APIRouter()    # /admin/crisis-forms
 
 
-# ── Public: which crisis form applies at this point, right now? ─────────────
-@public_router.get(
-    "/active",
-    response_model=ActiveCrisisFormResponse,
-    summary="Active crisis form pack for a lat/lng (public, cacheable)",
-)
-def active_crisis_form(
-    response: Response,
-    request: Request,
-    lat: float = Query(...),
-    lng: float = Query(...),
-    db: Session = Depends(get_db),
-):
-    """Returns the published pack of the first ACTIVE, in-window CrisisEvent whose
-    circle contains (lat,lng); else {active:false}. Clients call this after the
-    Stage-1 location fix and render the pack for Stage 2/3 — or fall back to the
-    default flow when inactive. 60 s cache + ETag (zones change rarely)."""
-    now = datetime.now(timezone.utc)
-    match = None
-    # Small set in practice (a handful of live crises); ordered newest-first so a
-    # more recent activation wins when zones overlap.
+def resolve_active_event(db: Session, lat: float, lng: float, now: datetime):
+    """Return (CrisisEvent, CrisisFormPack, CrisisFormPackVersion) for the
+    crisis whose circle contains (lat, lng) right now, or None.
+
+    Single source of truth for "which active crisis applies at this point" —
+    used both by the public `/active` endpoint (so clients render the right
+    Stage 2/3 pack) and by report intake (so the server can derive/verify
+    `report.crisis_event_id`). Keeping both callers on the same matcher means a
+    client's `/active` answer and the server's intake-time derivation can never
+    disagree.
+
+    Matching rule (unchanged): among `is_active` events, newest-activation-first
+    (a more recent activation wins when zones overlap); skip events with no pack,
+    not yet started, or already ended; the event's circle must contain the point
+    (haversine ≤ radius_km); the pack must be un-archived with a *published*
+    active version. First match wins.
+    """
     events = (db.query(CrisisEvent)
               .filter(CrisisEvent.is_active == True)  # noqa: E712
               .order_by(CrisisEvent.created_at.desc())
@@ -97,8 +93,29 @@ def active_crisis_form(
                    .first())
             if not ver:
                 continue
-            match = (ev, pack, ver)
-            break
+            return (ev, pack, ver)
+    return None
+
+
+# ── Public: which crisis form applies at this point, right now? ─────────────
+@public_router.get(
+    "/active",
+    response_model=ActiveCrisisFormResponse,
+    summary="Active crisis form pack for a lat/lng (public, cacheable)",
+)
+def active_crisis_form(
+    response: Response,
+    request: Request,
+    lat: float = Query(...),
+    lng: float = Query(...),
+    db: Session = Depends(get_db),
+):
+    """Returns the published pack of the first ACTIVE, in-window CrisisEvent whose
+    circle contains (lat,lng); else {active:false}. Clients call this after the
+    Stage-1 location fix and render the pack for Stage 2/3 — or fall back to the
+    default flow when inactive. 60 s cache + ETag (zones change rarely)."""
+    now = datetime.now(timezone.utc)
+    match = resolve_active_event(db, lat, lng, now)
 
     response.headers["Cache-Control"] = "public, max-age=60"
     if not match:
