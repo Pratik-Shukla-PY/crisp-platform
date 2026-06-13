@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import and_, case, or_, func as sa_func
+from sqlalchemy import and_, case, or_, nullslast, func as sa_func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -75,15 +75,18 @@ def resolve_active_event(db: Session, lat: float, lng: float, now: datetime):
     client's `/active` answer and the server's intake-time derivation can never
     disagree.
 
-    Matching rule (unchanged): among `is_active` events, newest-activation-first
-    (a more recent activation wins when zones overlap); skip events with no pack,
-    not yet started, or already ended; the event's circle must contain the point
-    (haversine ≤ radius_km); the pack must be un-archived with a *published*
-    active version. First match wins.
+    Matching rule: among `is_active` events, SMALLEST-RADIUS-first — the most
+    specific/precise zone wins when circles overlap (a tighter operation is the
+    better home for a point inside both); ties (equal radius) broken by newest
+    activation. Skip events with no pack, not yet started, or already ended; the
+    event's circle must contain the point (haversine ≤ radius_km); the pack must
+    be un-archived with a *published* active version. First qualifying match wins.
+    A radius-less event (NULL) sorts last and is un-matchable anyway (0 km).
     """
     events = (db.query(CrisisEvent)
               .filter(CrisisEvent.is_active == True)  # noqa: E712
-              .order_by(CrisisEvent.created_at.desc())
+              .order_by(nullslast(CrisisEvent.radius_km.asc()),
+                        CrisisEvent.created_at.desc())
               .all())
     for ev in events:
         if not ev.form_pack_id:
@@ -127,10 +130,12 @@ def active_crisis_form(
     lng: float = Query(...),
     db: Session = Depends(get_db),
 ):
-    """Returns the published pack of the first ACTIVE, in-window CrisisEvent whose
-    circle contains (lat,lng); else {active:false}. Clients call this after the
-    Stage-1 location fix and render the pack for Stage 2/3 — or fall back to the
-    default flow when inactive. 60 s cache + ETag (zones change rarely)."""
+    """Returns the published pack of the SMALLEST-RADIUS ACTIVE, in-window
+    CrisisEvent whose circle contains (lat,lng); else {active:false}. The most
+    specific overlapping zone wins. Clients call this after the Stage-1 location
+    fix (and re-call it when the reporter edits the location) and render the pack
+    for Stage 2/3 — or fall back to the default flow when inactive. 60 s cache +
+    ETag (zones change rarely)."""
     now = datetime.now(timezone.utc)
     match = resolve_active_event(db, lat, lng, now)
 
