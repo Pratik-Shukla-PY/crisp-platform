@@ -104,6 +104,8 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         const banner = page.locator('#cgn-context-banner');
         await expect(banner).toBeVisible();
         await expect(banner).toContainText('Bihar Floods');
+        // Symmetric scope chip flips to OP mode.
+        await expect(page.locator('#cgn-scope')).toContainText('OP', { timeout: 4000 });
         // 4 vitals from the scoped summary (Critical = 5).
         await expect(page.locator('.cco-vital.crit')).toContainText('5');
         await expect(page.locator('#cco-vitals')).toContainText('Needs review');
@@ -115,6 +117,8 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         await banner.locator('.cgn-cb-exit').click();
         await expect.poll(() => page.evaluate(() => location.hash)).not.toContain('/operations');
         await expect(page.locator('body')).not.toHaveClass(/crisp-op-scoped/);
+        // The scope chip returns to its affirmative GLOBAL state.
+        await expect(page.locator('#cgn-scope')).toContainText('GLOBAL', { timeout: 4000 });
     });
 
     test('operation context is ABSENT on global routes', async ({ page }) => {
@@ -126,6 +130,7 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         await page.waitForTimeout(500);
         await expect(page.locator('body')).not.toHaveClass(/crisp-op-scoped/);
         await expect(page.locator('#cgn-context-banner')).toBeHidden();
+        await expect(page.locator('#cgn-scope')).toContainText('GLOBAL');
     });
 
     test('Phase 3 — health dot + "why" come from the backend (no client heuristic)', async ({ page }) => {

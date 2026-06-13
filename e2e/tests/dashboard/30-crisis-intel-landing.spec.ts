@@ -82,19 +82,25 @@ test('Crisis Intelligence landing renders from the real summary contract, no run
     errors.length = 0;                      // isolate: only capture LANDING-induced errors
     await page.evaluate(() => (window as any).openControlCenter && (window as any).openControlCenter());
 
-    // §1 operations-first home: the Active Operations rail (primary, left)
-    // renders from /operations, incl. the un-operationalised critical cluster
-    // CTA; the map header badge folds in the critical + in-response counts.
-    // The old 8-tile Executive KPI strip is gone.
+    // §1 TWO-ZONE Command Center: ZONE A "Active Response" = the operations rail
+    // (renders from /operations incl. the un-operationalised critical cluster CTA);
+    // ZONE B "Global Monitoring" = global map + attention + analytics. The old
+    // map-header badge (which echoed the rail's active-ops count — the triple-count)
+    // and the 8-tile Executive KPI strip are both gone.
+    await expect(page.locator('.cc-zone-response')).toContainText('Active Response');
+    await expect(page.locator('.cc-zone-monitor')).toContainText('Global Monitoring');
     await expect(page.locator('#cc-ops-rail')).toContainText('Bihar Floods', { timeout: 6000 });
     await expect(page.locator('#cc-ops-rail')).toContainText('Launch operation here');
-    await expect(page.locator('#cc-map-badge')).toContainText(/critical/i);
-    await expect(page.locator('#cc-map-badge')).toContainText(/in response/i);
+    await expect(page.locator('#cc-map-badge')).toHaveCount(0);   // de-duped: no map badge echoing the rail
     await expect(page.locator('#cc-kpis')).toHaveCount(0);
-    // §3 attention queue (now the demoted "Global Attention" block).
+    // §3 attention queue (the "Global Attention" block). The terminal pipeline
+    // stage is now "In response" (a REPORT count), NOT "Active operations" (which
+    // is a CrisisEvent count and lives solely on the rail above — kills the conflation).
     await expect(page.locator('#cc-att')).toContainText('Critical incidents');
     await expect(page.locator('#cc-att')).toContainText('Needs review');
     await expect(page.locator('#cc-att')).toContainText('Escalating');
+    await expect(page.locator('#cc-att')).toContainText('In response');
+    await expect(page.locator('#cc-att')).not.toContainText('Active operations');
     // §2 Phase-2 client-side countries-impacted caption (Turf over world.json).
     await expect(page.locator('#cc-map-geo')).toContainText(/countries impacted/i, { timeout: 8000 });
     // §4 distributions rendered — and the bar FILLS actually paint (Jun 2026

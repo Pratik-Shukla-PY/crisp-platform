@@ -13,8 +13,9 @@
  * Opening an operation sets the app-wide operation scope (window.setOperationScope)
  * so the global Incidents feed + queues also scope to it; closing resets to global.
  *
- * Health dot (Phase 2 stand-in): critical>0 → red, new>0 → amber, else green.
- * Real health scoring (SLA + escalation + responders) is Phase 3.
+ * Health dot is BACKEND-AUTHORITATIVE (Phase 3): the /operations payload carries
+ * health = RED | AMBER | GREEN + a health_reason "why" (SLA breaches + unattended
+ * critical + escalation + review backlog + activity). No client heuristic.
  */
 (function () {
   'use strict';

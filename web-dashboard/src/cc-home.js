@@ -123,7 +123,6 @@
     .cc-hd .sp{margin-left:auto;display:flex;align-items:center;gap:14px}
     .cc-live{display:flex;align-items:center;gap:7px;font-size:12px;color:#8A99B5}
     .cc-dot{width:8px;height:8px;border-radius:50%}
-    .cc-clock{font-size:12px;color:#8A99B5;font-variant-numeric:tabular-nums}
     .cc-avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#418FDE,#22d3ee);
       color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px;flex:none}
     .cc-btn{border:1px solid #2C3A52;background:#1A2740;color:#cdd8ec;border-radius:8px;padding:7px 13px;
@@ -133,22 +132,15 @@
     /* section + cards */
     .cc-sec-t{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#8A99B5;margin:22px 2px 10px;display:flex;align-items:center;gap:8px}
     .cc-card{background:#121A2A;border:1px solid #243149;border-radius:12px;padding:15px}
-    /* KPI strip */
-    .cc-kpis{display:grid;grid-template-columns:repeat(8,1fr);gap:12px}
-    @media(max-width:1180px){.cc-kpis{grid-template-columns:repeat(4,1fr)}}
-    @media(max-width:560px){.cc-kpis{grid-template-columns:repeat(2,1fr)}}
-    .cc-kpi{background:#121A2A;border:1px solid #243149;border-radius:12px;padding:13px 14px;position:relative}
-    .cc-kpi[data-route]{cursor:pointer;transition:border-color .15s}
-    .cc-kpi[data-route]:hover{border-color:#418FDE}
-    .cc-kpi[data-route]:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
-    .cc-kpi.crit{border-color:rgba(248,113,113,.45);background:linear-gradient(180deg,rgba(248,113,113,.08),#121A2A)}
-    .cc-kpi .n{font-size:30px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
-    .cc-kpi .l{font-size:11px;color:#8A99B5;margin-top:5px;text-transform:uppercase;letter-spacing:.04em}
-    .cc-chip{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;margin-top:6px;padding:1px 6px;border-radius:20px}
-    /* body grid — operations rail (fixed, primary, left) ‖ global map (right).
-       Stacks rail → map on narrow; the Global Attention block follows below. */
-    .cc-body{display:grid;grid-template-columns:360px 1fr;gap:14px}
-    @media(max-width:1100px){.cc-body{grid-template-columns:1fr}}
+    /* ── two-zone bands: RESPONSE (operations) over MONITORING (global) ──
+       Each zone gets a band header; a faint rule + extra top-margin separates
+       "what I'm running" from "what I'm monitoring" (ICS COP vs IAP). */
+    .cc-zone-monitor{margin-top:26px;padding-top:6px;border-top:1px solid rgba(255,255,255,.06)}
+    .cc-band{font-size:13px;color:#E6EDF7;letter-spacing:.04em;margin:18px 2px 12px}
+    .cc-band .cc-band-sub{font-size:11px;font-weight:600;color:#7d89a3;text-transform:none;letter-spacing:0}
+    /* Active-operations rail is now the full-width primary RESPONSE surface;
+       the global map drops below into the MONITORING zone (was a side-by-side
+       grid that conflated the two). */
     /* active-operations rail */
     #cc-ops-rail{display:flex;flex-direction:column;gap:8px;max-height:540px;overflow-y:auto}
     .cc-op-row{display:flex;align-items:center;gap:11px;padding:11px 13px;background:#121A2A;border:1px solid #243149;border-radius:11px;cursor:pointer}
@@ -167,13 +159,6 @@
     .cc-op-row.cluster:hover{border-color:#f87171;background:#241416}
     .cc-op-row.cluster .cc-op-name{color:#fca5a5}
     .cc-op-ar{color:#5C6B85;font-size:15px;flex:none}
-    /* map header badge (critical + in-response counts harvested from summary) */
-    .cc-map-badge{position:absolute;left:16px;top:16px;z-index:500;display:flex;gap:8px;pointer-events:none}
-    .cc-map-badge span{font-size:11px;font-weight:700;padding:3px 9px;border-radius:8px;
-      background:rgba(11,18,32,.82);border:1px solid rgba(255,255,255,.08);
-      backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
-    .cc-map-badge .crit{color:#f87171}
-    .cc-map-badge:empty{display:none}
     /* isolation contains Leaflet's internal z-indexes (panes 200-700,
        controls 1000) inside the card so they can never paint over the
        sticky nav while scrolling. */
@@ -244,7 +229,6 @@
     /* quick actions */
     .cc-empty{color:#5C6B85;font-size:12.5px;padding:14px 4px;text-align:center}
     .cc-stale{font-size:10.5px;color:#7d89a3;margin-left:6px}
-    @media(prefers-reduced-motion:no-preference){.cc-kpi .n{transition:none}}
     `;
     const tag = document.createElement('style');
     tag.id = 'cc-home-styles';
@@ -308,41 +292,42 @@
              visually-hidden heading is the labelled region's H1 for a11y. -->
         <h1 id="cc-home-heading" class="cc-vh">Crisis Intelligence Center</h1>
 
-        <!-- Operations-first: the Active Operations rail is primary (left); the
-             global map is secondary (right). The old 8-tile Executive KPI strip
-             is gone — its critical + in-response counts fold into the map header
-             badge below. -->
-        <div class="cc-body">
-          <div>
-            <div class="cc-sec-t">Active Operations <span class="cc-stale" id="cc-sum-stale"></span></div>
-            <div id="cc-ops-rail"><div class="cc-empty">Loading operations…</div></div>
+        <!-- TWO-ZONE Global Command Center (ICS COP vs IAP):
+             ZONE A — ACTIVE RESPONSE: the operations you are RUNNING (the single
+               authoritative active-operations surface; no longer a count echoed
+               on the map badge + the attention row).
+             ZONE B — GLOBAL MONITORING: everything happening worldwide.
+             The old side-by-side ops|map row (which conflated the two) is split:
+             the rail is full-width in Zone A, the map drops full-width into Zone B. -->
+        <div class="cc-zone cc-zone-response">
+          <div class="cc-sec-t cc-band">⚡ Active Response <span class="cc-band-sub">— operations you are running</span> <span class="cc-stale" id="cc-sum-stale"></span></div>
+          <div id="cc-ops-rail"><div class="cc-empty">Loading operations…</div></div>
+        </div>
+
+        <div class="cc-zone cc-zone-monitor">
+          <div class="cc-sec-t cc-band">🌐 Global Monitoring <span class="cc-band-sub">— all incidents worldwide</span></div>
+          <div class="cc-card" id="cc-map-card" style="padding:8px">
+            <div id="cc-map"></div><div id="cc-map-geo" class="cc-geo"></div>
           </div>
-          <div>
-            <div class="cc-sec-t">Global Crisis Snapshot</div>
-            <div class="cc-card" id="cc-map-card" style="padding:8px">
-              <div class="cc-map-badge" id="cc-map-badge"></div>
-              <div id="cc-map"></div><div id="cc-map-geo" class="cc-geo"></div>
-            </div>
+
+          <div class="cc-sec-t">Global Attention</div>
+          <div class="cc-card" id="cc-att" style="padding:8px"><div class="cc-empty">Loading…</div></div>
+
+          <div class="cc-sec-t">Operational Intelligence</div>
+          <div class="cc-grid3">
+            <div class="cc-card"><div class="cc-sec-t" style="margin:0 0 8px">By severity</div><div id="cc-dist-sev"></div></div>
+            <div class="cc-card"><div class="cc-sec-t" style="margin:0 0 8px">By crisis type</div><div id="cc-dist-type"></div></div>
+            <div class="cc-card"><div class="cc-sec-t" style="margin:0 0 8px">Efficiency &amp; intake</div><div id="cc-eff"></div></div>
           </div>
+
+          <div class="cc-grid2" style="margin-top:14px">
+            <div><div class="cc-sec-t">Operational Impact</div><div class="cc-card" id="cc-impact"></div></div>
+            <div><div class="cc-sec-t">Situation Briefing</div><div class="cc-card" id="cc-brief"><div class="cc-empty">Analyzing…</div></div></div>
+          </div>
+
+          <div class="cc-sec-t">Recent Operational Activity</div>
+          <div class="cc-card" id="cc-activity" style="padding:6px 10px"><div class="cc-empty">Loading…</div></div>
         </div>
-
-        <div class="cc-sec-t">Global Attention</div>
-        <div class="cc-card" id="cc-att" style="padding:8px"><div class="cc-empty">Loading…</div></div>
-
-        <div class="cc-sec-t">Operational Intelligence</div>
-        <div class="cc-grid3">
-          <div class="cc-card"><div class="cc-sec-t" style="margin:0 0 8px">By severity</div><div id="cc-dist-sev"></div></div>
-          <div class="cc-card"><div class="cc-sec-t" style="margin:0 0 8px">By crisis type</div><div id="cc-dist-type"></div></div>
-          <div class="cc-card"><div class="cc-sec-t" style="margin:0 0 8px">Efficiency &amp; intake</div><div id="cc-eff"></div></div>
-        </div>
-
-        <div class="cc-grid2" style="margin-top:14px">
-          <div><div class="cc-sec-t">Operational Impact</div><div class="cc-card" id="cc-impact"></div></div>
-          <div><div class="cc-sec-t">Situation Briefing</div><div class="cc-card" id="cc-brief"><div class="cc-empty">Analyzing…</div></div></div>
-        </div>
-
-        <div class="cc-sec-t">Recent Operational Activity</div>
-        <div class="cc-card" id="cc-activity" style="padding:6px 10px"><div class="cc-empty">Loading…</div></div>
       </div>`;
     ov.classList.add('cc-home-open');
 
@@ -353,31 +338,11 @@
   }
 
   function refreshAll() {
-    setConn();
     loadSummary();
     loadOperations();
     loadFeed();
     loadSparkline();
     loadBriefing();
-  }
-
-  function kpiSkeleton() {
-    return Array.from({ length: 8 }).map(() => `<div class="cc-kpi"><div class="n">—</div><div class="l">…</div></div>`).join('');
-  }
-
-  // ── data: org branding ──
-  async function loadOrg() {
-    try {
-      const { body } = await jget('/config/');
-      const org = body && body.org;
-      if (!org) return;
-      const nm = el('cc-home-orgname');
-      if (nm && org.org_public_name) nm.textContent = org.org_public_name + ' · Crisis Intelligence';
-      if (org.org_logo_url) {
-        const lg = el('cc-home-logo');
-        if (lg) lg.innerHTML = `<img src="${esc(BACKEND_HOST + org.org_logo_url)}" alt="logo">`;
-      }
-    } catch (_) { /* defaults stand */ }
   }
 
   // ── data: summary (KPIs, distributions, impact) ──
@@ -386,7 +351,6 @@
     try {
       const { body } = await jget('/analytics/summary');
       _lastSummary = body;
-      renderMapBadge(body);
       renderAttention(body);
       renderDistributions(body);
       renderEfficiency(body);
@@ -398,44 +362,6 @@
       if (st) st.textContent = (String(e.message) === '401' || String(e.message) === '403')
         ? 'sign-in required' : 'data unavailable';
     }
-  }
-
-  function deltaChip(curr, prev) {
-    const d = (curr || 0) - (prev || 0);
-    if (!d) return `<div class="cc-chip" style="color:#5C6B85;background:#1d2942">— vs prev 24h</div>`;
-    const up = d > 0;
-    const col = up ? '#fb923c' : '#34D399';
-    const bg = up ? 'rgba(251,146,60,.14)' : 'rgba(52,211,153,.14)';
-    return `<div class="cc-chip" style="color:${col};background:${bg}">${up ? '▲' : '▼'} ${Math.abs(d)} vs prev 24h</div>`;
-  }
-
-  function renderKpis(b) {
-    const c = b.counts || {};
-    const d = b.deltas || {};
-    // (n, label, route, opts) — every KPI tile deep-links to the matching
-    // queue so a count is never a dead end (Active/New/Resolved → the feed).
-    const kpi = (n, l, route, opts) => `<div class="cc-kpi ${opts && opts.crit ? 'crit' : ''}"` +
-      `${route ? ` data-route="${route}" role="link" tabindex="0" aria-label="${esc(l)} ${n} — open"` : ''}>` +
-      `<div class="n cc-num" ${opts && opts.color ? `style="color:${opts.color}"` : ''}>${n}</div>` +
-      `<div class="l">${esc(l)}</div>${opts && opts.chip ? opts.chip : ''}</div>`;
-    const tiles = [
-      kpi(fmtNum(c.active), 'Active incidents', '#/incidents'),
-      kpi(fmtNum(c.critical), 'Critical', '#/incidents;queue=critical', { crit: c.critical > 0, color: c.critical > 0 ? SEV_COLOR.CRITICAL : '' }),
-      kpi(fmtNum(c.pending_verification), 'Pending verification', '#/incidents;queue=verification'),
-      kpi(fmtNum(c.awaiting_triage), 'Awaiting triage', '#/incidents;queue=triage'),
-      kpi(fmtNum(c.open_dispatch), 'Open dispatch', '#/incidents;queue=dispatch'),
-      kpi(fmtNum(c.active_ops), 'Active operations', '#/incidents;queue=active-ops'),
-      kpi(fmtNum(d.reports_24h), 'New (24h)', '#/incidents', { chip: deltaChip(d.reports_24h, d.reports_prev_24h) }),
-      kpi(fmtNum(c.resolved_in_window), 'Resolved (24h)', '#/incidents', { color: '#34D399' }),
-    ];
-    const box = el('cc-kpis');
-    if (!box) return;
-    box.innerHTML = tiles.join('');
-    box.querySelectorAll('.cc-kpi[data-route]').forEach((tile) => {
-      const goRoute = () => { try { window.location.hash = tile.getAttribute('data-route'); } catch (_e) {} };
-      tile.addEventListener('click', goRoute);
-      tile.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goRoute(); } });
-    });
   }
 
   // Jun 2026 — action-based Command Center model. FIVE cards, not seven:
@@ -478,7 +404,12 @@
           c.escalating_reports != null ? `${fmtNum(num(c.escalating_reports))} reports` : '', 'escalating'),
       row('🚑', '#2DD4BF', 'Needs response', 'Confirmed · dispatch',
           num(c.needs_response), '', 'needs-response'),
-      row('🚁', '#a78bfa', 'Active operations', 'En route + on-scene',
+      // Terminal pipeline stage = REPORTS currently being responded to (dispatched
+      // / RESPONDING). Labeled "In response" — NOT "Active operations", which is a
+      // CrisisEvent count and lives solely on the Active Operations rail above. The
+      // old label made one number (the rail) look like a different number (this
+      // report count) and read as a contradiction.
+      row('🚁', '#a78bfa', 'In response', 'Dispatched · on-scene',
           num(c.active_operations != null ? c.active_operations : c.active_ops), '', 'active-ops'),
     ];
     const box = el('cc-att');
@@ -550,15 +481,6 @@
       r.addEventListener('click', launch);
       r.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); launch(); } });
     });
-  }
-
-  function renderMapBadge(b) {
-    const box = el('cc-map-badge');
-    if (!box) return;
-    const c = (b && b.counts) || {};
-    const crit = c.critical_incidents != null ? c.critical_incidents : c.critical;
-    const ops = c.active_operations != null ? c.active_operations : c.active_ops;
-    box.innerHTML = `<span class="crit">🔴 ${fmtNum(crit || 0)} critical</span><span>🎯 ${fmtNum(ops || 0)} in response</span>`;
   }
 
   function barRows(obj, colorFn, max) {
@@ -867,35 +789,6 @@
     const stamp = s && s.generated_at ? ' · ' + timeAgo(s.generated_at) : '';
     box.innerHTML = cards.slice(0, 5).map((c) => `<div class="cc-brief ${c.cls}">
       <div class="h">${c.h}</div><div class="d">${c.d}</div><div class="s">${c.s}${stamp}</div></div>`).join('');
-  }
-
-  // ── header live bits ──
-  function setConn() {
-    const dot = el('cc-conn'), t = el('cc-conn-t');
-    const on = navigator.onLine;
-    if (dot) dot.style.background = on ? '#34D399' : '#f87171';
-    if (t) t.textContent = on ? 'Live' : 'Offline';
-  }
-  function startClock() {
-    const tick = () => {
-      const c = el('cc-clock');
-      if (!c) return;
-      const d = new Date();
-      // Operator-local time only (was a "12:34 UTC · 18:04" dual clock —
-      // local time everywhere, no UTC wall-clocks). The short timezone
-      // label ("IST", "GMT+5:30", …) keeps the clock unambiguous on
-      // cross-timezone screen-shares without surfacing UTC.
-      let tz = '';
-      try {
-        tz = (new Intl.DateTimeFormat([], { timeZoneName: 'short' })
-          .formatToParts(d).find((p) => p.type === 'timeZoneName') || {}).value || '';
-      } catch (_) { /* label is optional */ }
-      const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      c.textContent = tz ? `${time} ${tz}` : time;
-    };
-    tick();
-    if (window.__ccClock) clearInterval(window.__ccClock);
-    window.__ccClock = setInterval(tick, 30000);
   }
 
   // ── launcher (user-menu item) + boot ──

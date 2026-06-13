@@ -152,6 +152,14 @@
     .cgn-spacer{flex:1 1 auto;min-width:8px}
     /* right cluster — hosts the re-parented LIVE badge + user menu */
     .cgn-right{display:flex;align-items:center;gap:12px;flex:none}
+    /* scope chip — the AFFIRMATIVE mode indicator. GLOBAL by default; flips to
+       OP · {name} (op-colour) when an operation is open, so the operator always
+       knows their scope (op mode also has the banner + body class; global mode
+       previously had NO indicator — only the absence of the banner). */
+    .cgn-scope{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+      padding:3px 10px;border-radius:999px;border:1px solid #2C3A52;color:#9fb3d1;background:#141F35;
+      flex:none;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+    .cgn-scope.op{color:var(--op-color,#418FDE);border-color:var(--op-color,#418FDE);background:rgba(65,143,222,.12)}
     #${BAR_ID} .live-badge{margin:0}
     #${BAR_ID} #user-menu{flex:none}
     /* hamburger (mobile) */
@@ -496,22 +504,54 @@
     }
     return b;
   }
+  // Scope chip in #cgn-right — the symmetric GLOBAL/OP mode indicator. Lazily
+  // created + prepended so it sits leftmost in the right cluster; defaults to
+  // GLOBAL so global routes have an AFFIRMATIVE cue (not just the absence of the
+  // op banner). setOpContext/clearOpContext flip it.
+  function ensureScopeChip() {
+    let c = el('cgn-scope');
+    if (!c) {
+      c = document.createElement('span');
+      c.id = 'cgn-scope';
+      c.className = 'cgn-scope';
+      const right = el('cgn-right');
+      if (right) right.insertBefore(c, right.firstChild);
+      else { document.body.appendChild(c); }
+      setGlobalScope(c);
+    }
+    return c;
+  }
+  function setGlobalScope(c) {
+    c = c || ensureScopeChip();
+    c.classList.remove('op');
+    c.textContent = 'GLOBAL';
+    c.title = 'Global monitoring — all incidents worldwide';
+  }
+  function setOpScope(name) {
+    const c = ensureScopeChip();
+    c.classList.add('op');
+    c.textContent = 'OP · ' + (name || 'Operation');
+    c.title = 'Operation mode — ' + (name || 'Operation');
+  }
   function setOpContext(id, name, color) {
     const b = ensureContextBanner();
     document.body.style.setProperty('--op-color', color || '#418FDE');
     const crumb = b.querySelector('.cgn-cb-crumb');
     if (crumb) crumb.innerHTML = 'CRISP / Operations / <b>' + esc(name || 'Operation') + '</b>';
     document.body.classList.add('crisp-op-scoped');
+    setOpScope(name);
   }
   function clearOpContext() {
     document.body.classList.remove('crisp-op-scoped');
     document.body.style.removeProperty('--op-color');
+    setGlobalScope();
   }
 
   // ── boot ─────────────────────────────────────────────────────────────────
   function boot() {
     if (!token()) return;          // only the authed dashboard; login is a separate page
     buildBar();
+    try { ensureScopeChip(); } catch (_e) { /* chip is best-effort */ }
     watchRoute();
     loadOrg();
     startClock();
