@@ -62,6 +62,7 @@ test.describe('Dashboard — role-gated navigation (CC-IA)', () => {
         return {
           root: r.canRoute('/'), incidents: r.canRoute('/incidents'), users: r.canRoute('/users'),
           org: r.canRoute('/org'), reporting: r.canRoute('/reporting'),
+          operations: r.canRoute('/operations'), exports: r.canRoute('/exports'),
         };
       });
       expect(res.root).toBe(true);
@@ -69,6 +70,10 @@ test.describe('Dashboard — role-gated navigation (CC-IA)', () => {
       expect(res.users).toBe(true);
       expect(res.org).toBe(tc.org);
       expect(res.reporting).toBe(tc.reporting);
+      // The two routes the global/operation split is built on — allowed for ALL
+      // four roles (every role can run + export operations).
+      expect(res.operations).toBe(true);
+      expect(res.exports).toBe(true);
     });
   }
 

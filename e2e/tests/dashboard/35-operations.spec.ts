@@ -167,4 +167,39 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         // POST /operations/launch (stubbed) → navigate to the newly created operation.
         await expect.poll(() => page.evaluate(() => location.hash)).toContain('/operations/op-new');
     });
+
+    test('@smoke Export from an operation is SCOPED to that operation (crisis_event_id)', async ({ page }) => {
+        await boot(page);
+        const exportReqs: string[] = [];
+        page.on('request', (r) => { if (r.url().includes('/api/v1/exports/')) exportReqs.push(r.url()); });
+        await page.goto('index.html#/operations/op-a');
+        await page.waitForTimeout(900);
+        await page.locator('#cco-act-export').click();              // → opens the Export Center
+        await expect(page.locator('#cc-ex-overlay.cc-ex-open')).toBeVisible({ timeout: 4000 });
+        // The "this operation" indicator shows + every export request carries the op id.
+        await expect(page.locator('.cc-ex-opscope')).toBeVisible();
+        await expect.poll(() => exportReqs.some((u) => /crisis_event_id=op-a/.test(u)), { timeout: 4000 })
+            .toBe(true);
+        // Every DATA request (count/csv/…) carries the scope — none exports globally.
+        // (/exports/recent lists past export JOBS, not report data, so it's unscoped.)
+        const dataReqs = exportReqs.filter((u) => !/\/exports\/recent/.test(u));
+        expect(dataReqs.length).toBeGreaterThan(0);
+        expect(dataReqs.every((u) => /crisis_event_id=op-a/.test(u))).toBe(true);
+    });
+
+    test('@smoke operation scope does NOT leak into the global feed after leaving', async ({ page }) => {
+        await boot(page);
+        const reportReqs: string[] = [];
+        page.on('request', (r) => { const u = r.url(); if (/\/api\/v1\/reports\/?\?/.test(u)) reportReqs.push(u); });
+        await page.goto('index.html#/operations/op-a');
+        await page.waitForTimeout(900);
+        // In the operation, the scope is set + the feed is filtered to it.
+        expect(await page.evaluate(() => (window as any).getOperationScope())).toBe('op-a');
+        reportReqs.length = 0;
+        await page.evaluate(() => { location.hash = '#/incidents'; });
+        await page.waitForTimeout(900);
+        // Scope is cleared, and any subsequent global feed fetch is NOT scoped.
+        expect(await page.evaluate(() => (window as any).getOperationScope())).toBeNull();
+        expect(reportReqs.some((u) => /crisis_event_id/.test(u))).toBe(false);
+    });
 });

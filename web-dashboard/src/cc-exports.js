@@ -65,6 +65,8 @@
     @media(max-width:760px){.cc-ex-body{grid-template-columns:1fr}}
     .cc-ex-scope{padding:16px 18px;border-right:1px solid rgba(255,255,255,.07)}
     .cc-ex-sec{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5C6B85;margin:0 0 8px}
+    .cc-ex-opscope{font-size:11.5px;font-weight:600;color:#7db8ef;background:rgba(65,143,222,.12);
+      border:1px solid rgba(65,143,222,.3);border-radius:8px;padding:6px 10px;margin:0 0 10px}
     .cc-ex-radio{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #2C3A52;border-radius:9px;
       margin-bottom:6px;font-size:12.5px;color:#cdd8ec;cursor:pointer}
     .cc-ex-radio:hover{border-color:#418FDE}
@@ -103,24 +105,30 @@
 
   // ── scope → query params ───────────────────────────────────────────────────
   function scopeParams() {
-    const p = new URLSearchParams();
+    let p;
     if (S.scope === 'current' && typeof window._exportFilterParams === 'function') {
       // The ops view's live status+time filters (shared helper in app.js).
-      return window._exportFilterParams();
+      p = window._exportFilterParams();
+    } else {
+      p = new URLSearchParams();
+      if (S.scope === '24h') p.set('since', new Date(Date.now() - 24 * 3600e3).toISOString());
+      if (S.scope === '7d') p.set('since', new Date(Date.now() - 7 * 24 * 3600e3).toISOString());
+      if (S.scope === 'custom') {
+        if (S.since) p.set('since', new Date(S.since).toISOString());
+        if (S.until) p.set('until', new Date(S.until).toISOString());
+      }
     }
-    if (S.scope === '24h') p.set('since', new Date(Date.now() - 24 * 3600e3).toISOString());
-    if (S.scope === '7d') p.set('since', new Date(Date.now() - 7 * 24 * 3600e3).toISOString());
-    if (S.scope === 'custom') {
-      if (S.since) p.set('since', new Date(S.since).toISOString());
-      if (S.until) p.set('until', new Date(S.until).toISOString());
-    }
+    // Operation scope rides ALONG with the time scope: an export opened from an
+    // operation downloads THAT operation's reports (was missing → exported all).
+    if (S.crisisEventId && !p.has('crisis_event_id')) p.set('crisis_event_id', S.crisisEventId);
     return p;
   }
   function scopeLabel() {
-    return {
+    const base = {
       all: 'all data', current: 'current operations filters',
       '24h': 'last 24 hours', '7d': 'last 7 days', custom: 'custom range',
     }[S.scope] || S.scope;
+    return S.crisisEventId ? base + ' · this operation' : base;
   }
 
   // ── live record count ──────────────────────────────────────────────────────
@@ -254,6 +262,16 @@
   function openOverlay(fromRoute) {
     if (!token()) return;
     S.from = fromRoute || S.from || '/';
+    // Operation-scoped export: when opened from an operation dashboard, scope the
+    // download to that operation. The op id was stashed by cc-operations at click
+    // time (the global teardown clears the live op scope before we get here).
+    S.crisisEventId = null;
+    try {
+      if (S.from === '/operations' && window.__crispExportCtx && window.__crispExportCtx.crisis_event_id) {
+        S.crisisEventId = window.__crispExportCtx.crisis_event_id;
+      }
+    } catch (_e) {}
+    try { window.__crispExportCtx = null; } catch (_e) {}
     // "Current filters" only makes sense coming from the ops view.
     if (S.scope === 'current' && S.from !== '/incidents') S.scope = 'all';
     const ov = ensureOverlay();
@@ -268,7 +286,8 @@
         <div class="cc-ex-body">
           <div class="cc-ex-scope">
             <p class="cc-ex-sec">Scope</p>
-            ${radio('all', 'All data')}
+            ${S.crisisEventId ? '<div class="cc-ex-opscope">📍 This operation only — the scope below filters within it.</div>' : ''}
+            ${radio('all', S.crisisEventId ? 'All of this operation' : 'All data')}
             ${S.from === '/incidents' ? radio('current', 'Current filters (what I see)') : ''}
             ${radio('24h', 'Last 24 hours')}
             ${radio('7d', 'Last 7 days')}

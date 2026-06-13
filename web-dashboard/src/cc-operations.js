@@ -409,7 +409,14 @@
       v.addEventListener('click', () => go('#/incidents;queue=' + v.getAttribute('data-q')));
     });
     el('cco-act-feed').addEventListener('click', () => go('#/incidents'));
-    el('cco-act-export').addEventListener('click', () => navTo('/exports'));
+    el('cco-act-export').addEventListener('click', () => {
+      // Stash THIS operation's id so the Export Center scopes the download to it.
+      // The router's global hideAll() clears the live op scope (setOperationScope
+      // null) BEFORE /exports opens, so getOperationScope() is already null there —
+      // capture it at click time instead.
+      try { window.__crispExportCtx = { crisis_event_id: id }; } catch (_e) {}
+      navTo('/exports');
+    });
     el('cco-act-forms').addEventListener('click', () => navTo('/reporting'));
     el('cco-act-undo').addEventListener('click', () => { (window.unclaimOperation || function () {})(id); });
 
