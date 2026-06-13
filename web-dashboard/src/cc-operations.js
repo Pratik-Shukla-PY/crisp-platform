@@ -63,12 +63,10 @@
     CIVILUNREST: '#e879f9',
   };
   function opColor(op) { return TYPE_COLOR[String(op && op.crisis_type || '').toUpperCase()] || '#418FDE'; }
-  function healthOf(o) {
-    if ((o.critical || 0) > 0) return 'red';
-    if ((o.new_24h || 0) > 0) return 'amber';
-    return 'green';
-  }
-  const HEALTH_COLOR = { red: '#f87171', amber: '#fbbf24', green: '#4ade80' };
+  // Backend-authoritative health (Phase 3): the /operations payload carries
+  // health = RED | AMBER | GREEN + a health_reason "why".
+  const HEALTH_COLOR = { RED: '#f87171', AMBER: '#fbbf24', GREEN: '#4ade80' };
+  const healthColor = (o) => HEALTH_COLOR[o && o.health] || HEALTH_COLOR.GREEN;
   // Worst-first: critical desc, then new desc, then total desc.
   function worstFirst(a, b) {
     return (b.critical || 0) - (a.critical || 0)
@@ -127,6 +125,10 @@
       padding:6px 14px;color:#cdd8ec;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
     .cco-exit:hover{border-color:#418FDE;color:#fff}
     .cco-status{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:#1b2942;color:#9fb3d1}
+    .cco-health{width:11px;height:11px;border-radius:50%;flex:none;box-shadow:0 0 0 3px rgba(255,255,255,.06)}
+    .cco-resp{font-size:11.5px;color:#9fb3d1;white-space:nowrap}
+    .cco-undo{margin-left:auto;border-color:#7f1d1d !important;color:#fca5a5 !important}
+    .cco-undo:hover{border-color:#f87171 !important;color:#fff !important}
     /* vitals */
     .cco-vitals{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
     .cco-vital{background:#101a2e;border:1px solid #233149;border-radius:12px;padding:12px 14px;cursor:pointer}
@@ -211,10 +213,10 @@
           <div class="cco-op-counts"><div class="c crit"><b>${fmtNum(o.critical)}</b><span>Critical</span></div></div>
           <div class="cco-ar">›</div></div>`;
       }
-      const hc = HEALTH_COLOR[healthOf(o)];
+      const hc = healthColor(o);
       const typ = o.crisis_type ? titleCase(o.crisis_type) + ' · ' : '';
       return `<div class="cco-op" data-op="${esc(o.id)}" role="link" tabindex="0">
-        <span class="cco-dot" style="background:${hc}" title="${healthOf(o)}"></span>
+        <span class="cco-dot" style="background:${hc}" title="${esc(o.health_reason || o.health || '')}"></span>
         <div class="cco-op-main">
           <div class="cco-op-name">${esc(o.name)}</div>
           <div class="cco-op-meta">${esc(typ)}${esc(o.status || '')}${o.is_active ? '' : ' · inactive'} · upd ${timeAgo(o.last_activity)}</div>
@@ -232,9 +234,8 @@
       row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
     });
     host.querySelectorAll('[data-cluster]').forEach((row) => {
-      // "Launch operation here" → the crisis-forms / event builder (admin).
-      // Actual CrisisEvent creation (auto-claim) is Phase 3; here we deep-link.
-      const launch = () => navTo('/reporting');
+      // Phase 3 — real launch (create operation + bulk-claim the cluster), with undo.
+      const launch = () => { (window.launchOperationFromCluster || function () {})(); };
       row.addEventListener('click', launch);
       row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); launch(); } });
     });
@@ -271,8 +272,10 @@
 
     wrap.innerHTML = `
       <div class="cco-banner" style="--op-accent:${accent}">
+        <span class="cco-health" style="background:${healthColor(op)}" title="${esc(op.health_reason || op.health || '')}"></span>
         <div class="cco-bc">CRISP / Operations / <b>${esc(op.name)}</b></div>
         <span class="cco-status">${esc(op.status || (op.is_active ? 'ACTIVE' : '—'))}</span>
+        <span class="cco-resp">🚑 ${fmtNum(op.responders_active || 0)} responder${(op.responders_active || 0) === 1 ? '' : 's'}</span>
         <button class="cco-exit" id="cco-exit">← Exit to global</button>
       </div>
       <div class="cco-vitals" id="cco-vitals">
@@ -293,6 +296,7 @@
         <button class="cco-btn primary" id="cco-act-feed">Open full incident feed</button>
         <button class="cco-btn" id="cco-act-export">Export</button>
         <button class="cco-btn" id="cco-act-forms">Deploy form pack</button>
+        <button class="cco-btn cco-undo" id="cco-act-undo" title="Reverse the most recent cluster claim on this operation">↩ Undo claim</button>
       </div>`;
 
     const exit = () => navTo('/');
@@ -303,6 +307,7 @@
     el('cco-act-feed').addEventListener('click', () => go('#/incidents'));
     el('cco-act-export').addEventListener('click', () => navTo('/exports'));
     el('cco-act-forms').addEventListener('click', () => navTo('/reporting'));
+    el('cco-act-undo').addEventListener('click', () => { (window.unclaimOperation || function () {})(id); });
 
     renderWorklist(reports);
     renderOpMap(reports);

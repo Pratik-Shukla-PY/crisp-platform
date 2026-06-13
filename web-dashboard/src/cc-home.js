@@ -503,10 +503,9 @@
     }
   }
 
-  const _OP_HEALTH = { red: '#f87171', amber: '#fbbf24', green: '#34D399' };
-  // Phase-2 stand-in for health scoring (real scoring is Phase 3): critical →
-  // red, recent activity → amber, otherwise green.
-  const _opHealth = (o) => ((o.critical || 0) > 0 ? 'red' : ((o.new_24h || 0) > 0 ? 'amber' : 'green'));
+  // Backend-authoritative health (Phase 3): the /operations payload carries
+  // health = RED | AMBER | GREEN + a health_reason "why". No client heuristic.
+  const _OP_HEALTH = { RED: '#f87171', AMBER: '#fbbf24', GREEN: '#34D399' };
   const _opWorst = (a, b) => (b.critical || 0) - (a.critical || 0)
     || (b.new_24h || 0) - (a.new_24h || 0) || (b.total || 0) - (a.total || 0);
 
@@ -528,10 +527,10 @@
           <div class="cc-op-counts"><div class="c crit"><b>${fmtNum(o.critical)}</b><span>Critical</span></div></div>
           <div class="cc-op-ar">›</div></div>`;
       }
-      const hc = _OP_HEALTH[_opHealth(o)];
+      const hc = _OP_HEALTH[o.health] || _OP_HEALTH.GREEN;
       const typ = o.crisis_type ? titleCase(o.crisis_type) + ' · ' : '';
       return `<div class="cc-op-row" data-op="${esc(o.id)}" role="link" tabindex="0" aria-label="${esc(o.name)} — open operation">
-        <span class="cc-op-dot" style="background:${hc}" title="${_opHealth(o)}"></span>
+        <span class="cc-op-dot" style="background:${hc}" title="${esc(o.health_reason || o.health || '')}"></span>
         <div class="cc-op-body"><div class="cc-op-name">${esc(o.name)}</div>
           <div class="cc-op-meta">${esc(typ)}${esc(o.status || '')}${o.is_active ? '' : ' · inactive'} · upd ${timeAgo(o.last_activity)}</div></div>
         <div class="cc-op-counts">
@@ -546,7 +545,8 @@
       r.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
     });
     box.querySelectorAll('[data-cluster]').forEach((r) => {
-      const launch = () => { try { window.__crispRouter ? window.__crispRouter.navigate('/reporting') : (window.location.hash = '#/reporting'); } catch (_e) {} };
+      // Phase 3 — real launch (create operation + bulk-claim the cluster), with undo.
+      const launch = () => { try { (window.launchOperationFromCluster || function () {})(); } catch (_e) {} };
       r.addEventListener('click', launch);
       r.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); launch(); } });
     });

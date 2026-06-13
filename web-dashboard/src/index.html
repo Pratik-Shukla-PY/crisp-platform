@@ -11,7 +11,7 @@
          empty in source; deploy pipeline patches with the real DSN
          (public-safe write-only key). -->
     <meta name="crisp-sentry-dsn" content="">
-    <meta name="crisp-release" content="crisp-dashboard@v46">
+    <meta name="crisp-release" content="crisp-dashboard@v47">
     <meta name="description" content="United Nations Crisis Response Intelligence System — hierarchical incident monitoring and strategic command center.">
     <meta name="theme-color" content="#7c3aed">
     <!-- May 2026 — favicon. SVG works in modern browsers (Chrome 80+,
@@ -681,7 +681,7 @@
      Defines window.CRISP_TIERS{,BY_ID,LEGACY_ALIASES}; must load BEFORE
      app.js so the reporter_tier-badge renderer can read it synchronously. -->
 <script src="tier-config.js?v=1"></script>
-<script src="app.js?v=785"></script>
+<script src="app.js?v=786"></script>
 <script src="predictions.js?v=111"></script>
 <!-- Dynamic Crisis Forms admin panel (geo-scoped Stage 2/3 question packs).
      Self-contained + additive: injects an admin-only "Crisis Forms" item into
@@ -691,10 +691,10 @@
 <script src="cc-settings.js?v=4"></script>
 <script src="cc-exports.js?v=1"></script>
 <!-- Control Center landing (self-contained additive overlay; B7). -->
-<script src="cc-home.js?v=12"></script>
+<script src="cc-home.js?v=13"></script>
 <!-- Operations workspace: #/operations list + #/operations/{id} worklist dashboard
      (self-contained overlay; defines window.openOperations before the router runs). -->
-<script src="cc-operations.js?v=1"></script>
+<script src="cc-operations.js?v=2"></script>
 <!-- Navigation hub: mandatory Control Center root + hash router (loaded last). -->
 <script src="router.js?v=2"></script>
 <!-- Unified Command Center shell: one persistent global nav bar on every

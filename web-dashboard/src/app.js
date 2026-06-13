@@ -1220,6 +1220,42 @@ function showToast(msg, type = 'info') {
     setTimeout(() => toast.remove(), 3000);
 }
 
+// ── Operations Phase 3 — auto-claim write-path (launch + undo) ────────────────
+// Launch an operation from the un-operationalised critical cluster: the backend
+// creates a CrisisEvent + bulk-claims the open-critical, no-operation reports,
+// then we open it. Reversible via the operation dashboard's "Undo claim" button
+// (unclaimOperation), which un-sets crisis_event_id on exactly those reports.
+async function launchOperationFromCluster() {
+    const name = (window.prompt('Name this operation', 'Critical cluster') || '').trim();
+    if (!name) return;
+    try {
+        const res = await fetch(`${BACKEND_HOST}/api/v1/operations/launch`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) { showToast(body.detail || `Launch failed (${res.status})`, 'error'); return; }
+        const n = body.claimed_count || 0;
+        showToast(`Operation created · ${n} report${n === 1 ? '' : 's'} claimed`, 'success');
+        try { window.location.hash = '#/operations/' + encodeURIComponent(body.operation_id); } catch (_e) {}
+    } catch (_e) { showToast('Launch failed — network error', 'error'); }
+}
+window.launchOperationFromCluster = launchOperationFromCluster;
+
+async function unclaimOperation(opId) {
+    if (!opId) return;
+    try {
+        const res = await fetch(`${BACKEND_HOST}/api/v1/operations/${encodeURIComponent(opId)}/unclaim`,
+            { method: 'POST' });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) { showToast(body.detail || 'Nothing to undo', 'info'); return; }
+        const n = body.unclaimed_count || 0;
+        showToast(`Claim reversed · ${n} report${n === 1 ? '' : 's'} released`, 'success');
+        try { window.location.hash = '#/'; } catch (_e) {}
+    } catch (_e) { showToast('Undo failed — network error', 'error'); }
+}
+window.unclaimOperation = unclaimOperation;
+
 // ── Live Incident Notification System ────────────────────────────────────────
 
 // ══════════════════════════════════════════════════════════════════════
