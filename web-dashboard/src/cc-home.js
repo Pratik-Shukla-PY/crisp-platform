@@ -145,9 +145,35 @@
     .cc-kpi .n{font-size:30px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
     .cc-kpi .l{font-size:11px;color:#8A99B5;margin-top:5px;text-transform:uppercase;letter-spacing:.04em}
     .cc-chip{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;margin-top:6px;padding:1px 6px;border-radius:20px}
-    /* body grid */
-    .cc-body{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+    /* body grid — operations rail (fixed, primary, left) ‖ global map (right).
+       Stacks rail → map on narrow; the Global Attention block follows below. */
+    .cc-body{display:grid;grid-template-columns:360px 1fr;gap:14px}
     @media(max-width:1100px){.cc-body{grid-template-columns:1fr}}
+    /* active-operations rail */
+    #cc-ops-rail{display:flex;flex-direction:column;gap:8px;max-height:540px;overflow-y:auto}
+    .cc-op-row{display:flex;align-items:center;gap:11px;padding:11px 13px;background:#121A2A;border:1px solid #243149;border-radius:11px;cursor:pointer}
+    .cc-op-row:hover{border-color:#418FDE;background:#16213a}
+    .cc-op-row:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
+    .cc-op-dot{width:11px;height:11px;border-radius:50%;flex:none;box-shadow:0 0 0 3px rgba(255,255,255,.05)}
+    .cc-op-body{flex:1;min-width:0}
+    .cc-op-name{font-size:13.5px;font-weight:700;color:#E6EDF7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .cc-op-meta{font-size:11px;color:#8A99B5;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .cc-op-counts{display:flex;gap:10px;flex:none;text-align:center}
+    .cc-op-counts .c{display:flex;flex-direction:column;line-height:1.1}
+    .cc-op-counts .c b{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}
+    .cc-op-counts .c span{font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:#8A99B5}
+    .cc-op-counts .crit b{color:#f87171}
+    .cc-op-row.cluster{border-style:dashed;border-color:#7f1d1d;background:#1b1113}
+    .cc-op-row.cluster:hover{border-color:#f87171;background:#241416}
+    .cc-op-row.cluster .cc-op-name{color:#fca5a5}
+    .cc-op-ar{color:#5C6B85;font-size:15px;flex:none}
+    /* map header badge (critical + in-response counts harvested from summary) */
+    .cc-map-badge{position:absolute;left:16px;top:16px;z-index:500;display:flex;gap:8px;pointer-events:none}
+    .cc-map-badge span{font-size:11px;font-weight:700;padding:3px 9px;border-radius:8px;
+      background:rgba(11,18,32,.82);border:1px solid rgba(255,255,255,.08);
+      backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+    .cc-map-badge .crit{color:#f87171}
+    .cc-map-badge:empty{display:none}
     /* isolation contains Leaflet's internal z-indexes (panes 200-700,
        controls 1000) inside the card so they can never paint over the
        sticky nav while scrolling. */
@@ -167,8 +193,9 @@
        their natural height. */
     /* 448 = the map card's border-box: #cc-map(430) + 8+8 padding + 1+1 border.
        Matching it makes the two cards align exactly (height-mismatch fix). */
-    #cc-att{display:flex;flex-direction:column;gap:8px;height:448px;padding:8px}
-    @media(max-width:1100px){#cc-att{height:auto}}
+    /* Demoted to a full-width "Global Attention" block — responsive grid of the
+       5 action rows (no longer height-matched to the map, which moved columns). */
+    #cc-att{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px}
     .cc-att-row{flex:1;min-height:56px;display:flex;align-items:center;gap:11px;padding:0 13px;cursor:pointer;
       background:#121A2A;border:1px solid #243149;border-radius:11px}
     .cc-att-row:hover{border-color:#418FDE;background:#16213a}
@@ -281,19 +308,26 @@
              visually-hidden heading is the labelled region's H1 for a11y. -->
         <h1 id="cc-home-heading" class="cc-vh">Crisis Intelligence Center</h1>
 
-        <div class="cc-sec-t">Executive Situation Overview <span class="cc-stale" id="cc-sum-stale"></span></div>
-        <div class="cc-kpis" id="cc-kpis">${kpiSkeleton()}</div>
-
+        <!-- Operations-first: the Active Operations rail is primary (left); the
+             global map is secondary (right). The old 8-tile Executive KPI strip
+             is gone — its critical + in-response counts fold into the map header
+             badge below. -->
         <div class="cc-body">
           <div>
-            <div class="cc-sec-t">Global Crisis Snapshot</div>
-            <div class="cc-card" id="cc-map-card" style="padding:8px"><div id="cc-map"></div><div id="cc-map-geo" class="cc-geo"></div></div>
+            <div class="cc-sec-t">Active Operations <span class="cc-stale" id="cc-sum-stale"></span></div>
+            <div id="cc-ops-rail"><div class="cc-empty">Loading operations…</div></div>
           </div>
           <div>
-            <div class="cc-sec-t">Immediate Attention Required</div>
-            <div class="cc-card" id="cc-att"><div class="cc-empty">Loading…</div></div>
+            <div class="cc-sec-t">Global Crisis Snapshot</div>
+            <div class="cc-card" id="cc-map-card" style="padding:8px">
+              <div class="cc-map-badge" id="cc-map-badge"></div>
+              <div id="cc-map"></div><div id="cc-map-geo" class="cc-geo"></div>
+            </div>
           </div>
         </div>
+
+        <div class="cc-sec-t">Global Attention</div>
+        <div class="cc-card" id="cc-att" style="padding:8px"><div class="cc-empty">Loading…</div></div>
 
         <div class="cc-sec-t">Operational Intelligence</div>
         <div class="cc-grid3">
@@ -321,6 +355,7 @@
   function refreshAll() {
     setConn();
     loadSummary();
+    loadOperations();
     loadFeed();
     loadSparkline();
     loadBriefing();
@@ -351,7 +386,7 @@
     try {
       const { body } = await jget('/analytics/summary');
       _lastSummary = body;
-      renderKpis(body);
+      renderMapBadge(body);
       renderAttention(body);
       renderDistributions(body);
       renderEfficiency(body);
@@ -455,6 +490,75 @@
         r.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openQueue(r); } });
       });
     }
+  }
+
+  // ── operations rail (Phase 2 — operations-first home) ──────────────────────
+  async function loadOperations() {
+    try {
+      const { body } = await jget('/operations');
+      renderOpsRail(body);
+    } catch (_e) {
+      const box = el('cc-ops-rail');
+      if (box) box.innerHTML = `<div class="cc-empty">Could not load operations.</div>`;
+    }
+  }
+
+  const _OP_HEALTH = { red: '#f87171', amber: '#fbbf24', green: '#34D399' };
+  // Phase-2 stand-in for health scoring (real scoring is Phase 3): critical →
+  // red, recent activity → amber, otherwise green.
+  const _opHealth = (o) => ((o.critical || 0) > 0 ? 'red' : ((o.new_24h || 0) > 0 ? 'amber' : 'green'));
+  const _opWorst = (a, b) => (b.critical || 0) - (a.critical || 0)
+    || (b.new_24h || 0) - (a.new_24h || 0) || (b.total || 0) - (a.total || 0);
+
+  function renderOpsRail(ops) {
+    const box = el('cc-ops-rail');
+    if (!box) return;
+    const sorted = (ops || []).slice().sort(_opWorst);
+    if (!sorted.length) {
+      box.innerHTML = `<div class="cc-empty">No active operations. Active crisis events appear here.</div>`;
+      return;
+    }
+    box.innerHTML = sorted.map((o) => {
+      if (o.is_cluster) {
+        return `<div class="cc-op-row cluster" data-cluster="1" role="link" tabindex="0"
+            aria-label="Launch an operation for ${fmtNum(o.critical)} unassigned critical reports">
+          <span class="cc-op-dot" style="background:#f87171"></span>
+          <div class="cc-op-body"><div class="cc-op-name">${fmtNum(o.critical)} critical, no operation</div>
+            <div class="cc-op-meta">Launch operation here →</div></div>
+          <div class="cc-op-counts"><div class="c crit"><b>${fmtNum(o.critical)}</b><span>Critical</span></div></div>
+          <div class="cc-op-ar">›</div></div>`;
+      }
+      const hc = _OP_HEALTH[_opHealth(o)];
+      const typ = o.crisis_type ? titleCase(o.crisis_type) + ' · ' : '';
+      return `<div class="cc-op-row" data-op="${esc(o.id)}" role="link" tabindex="0" aria-label="${esc(o.name)} — open operation">
+        <span class="cc-op-dot" style="background:${hc}" title="${_opHealth(o)}"></span>
+        <div class="cc-op-body"><div class="cc-op-name">${esc(o.name)}</div>
+          <div class="cc-op-meta">${esc(typ)}${esc(o.status || '')}${o.is_active ? '' : ' · inactive'} · upd ${timeAgo(o.last_activity)}</div></div>
+        <div class="cc-op-counts">
+          <div class="c crit"><b>${fmtNum(o.critical)}</b><span>Crit</span></div>
+          <div class="c"><b>${fmtNum(o.new_24h)}</b><span>New</span></div>
+          <div class="c"><b>${fmtNum(o.total)}</b><span>Total</span></div>
+        </div><div class="cc-op-ar">›</div></div>`;
+    }).join('');
+    box.querySelectorAll('[data-op]').forEach((r) => {
+      const open = () => { try { window.location.hash = '#/operations/' + encodeURIComponent(r.getAttribute('data-op')); } catch (_e) {} };
+      r.addEventListener('click', open);
+      r.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    });
+    box.querySelectorAll('[data-cluster]').forEach((r) => {
+      const launch = () => { try { window.__crispRouter ? window.__crispRouter.navigate('/reporting') : (window.location.hash = '#/reporting'); } catch (_e) {} };
+      r.addEventListener('click', launch);
+      r.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); launch(); } });
+    });
+  }
+
+  function renderMapBadge(b) {
+    const box = el('cc-map-badge');
+    if (!box) return;
+    const c = (b && b.counts) || {};
+    const crit = c.critical_incidents != null ? c.critical_incidents : c.critical;
+    const ops = c.active_operations != null ? c.active_operations : c.active_ops;
+    box.innerHTML = `<span class="crit">🔴 ${fmtNum(crit || 0)} critical</span><span>🎯 ${fmtNum(ops || 0)} in response</span>`;
   }
 
   function barRows(obj, colorFn, max) {

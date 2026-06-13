@@ -213,6 +213,25 @@
     /* When the alert shows, push the Home content (and its sticky sub-header)
        down so nothing hides behind it. */
     body.crisp-has-globalnav.crisp-home-alert #cc-home-overlay{padding-top:calc(var(--gnav-h) + 42px)}
+
+    /* ── Operation context (Phase 2e — triple-cue safety on /operations/{id}) ── */
+    /* Cue 1: colored operation chrome — an accent underline on the global bar. */
+    body.crisp-has-globalnav.crisp-op-scoped #${BAR_ID}{
+      box-shadow:0 2px 0 var(--op-color,#418FDE),0 8px 24px rgba(0,0,0,.35)}
+    /* Cue 2+3: persistent context banner with breadcrumb + "Exit to global". */
+    #cgn-context-banner{position:fixed;top:var(--gnav-h);left:0;right:0;z-index:100000;display:none;
+      align-items:center;gap:12px;height:30px;padding:0 16px;font-size:12.5px;color:#E6EDF7;
+      background:rgba(11,18,32,.97);border-bottom:2px solid var(--op-color,#418FDE);
+      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+    body.crisp-op-scoped #cgn-context-banner{display:flex}
+    #cgn-context-banner .cgn-cb-dot{width:8px;height:8px;border-radius:50%;background:var(--op-color,#418FDE);flex:none}
+    #cgn-context-banner .cgn-cb-crumb{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9fb3d1}
+    #cgn-context-banner .cgn-cb-crumb b{color:#E6EDF7;font-weight:700}
+    #cgn-context-banner .cgn-cb-exit{background:#1b2942;border:1px solid #33476a;border-radius:7px;padding:4px 12px;
+      color:#dce6f5;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+    #cgn-context-banner .cgn-cb-exit:hover{border-color:var(--op-color,#418FDE);color:#fff}
+    /* Push the operation overlay below the banner while op-scoped. */
+    body.crisp-has-globalnav.crisp-op-scoped #cc-ops-overlay{padding-top:calc(var(--gnav-h) + 30px)}
     /* notification panel deep-link shortcuts (markup in index.html #notif-panel) */
     .notif-panel-footer{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:9px 12px;
       border-top:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.02)}
@@ -455,6 +474,40 @@
     updateHomeAlert();
   }
 
+  // ── Operation context (Phase 2e) — driven directly by cc-operations.js ─────
+  // We drive this via an explicit hook rather than inferring from data-route:
+  // the route stays '/operations' across /operations/A → /operations/B (same
+  // base), so the data-route MutationObserver wouldn't fire, and the operation
+  // name/colour aren't in the hash anyway. cc-operations calls setOpContext on
+  // open and clearOpContext on close / list / exit.
+  function ensureContextBanner() {
+    let b = el('cgn-context-banner');
+    if (!b) {
+      b = document.createElement('div');
+      b.id = 'cgn-context-banner';
+      b.innerHTML = '<span class="cgn-cb-dot"></span>'
+        + '<span class="cgn-cb-crumb"></span>'
+        + '<button class="cgn-cb-exit" type="button">Exit to global ✕</button>';
+      document.body.appendChild(b);
+      b.querySelector('.cgn-cb-exit').addEventListener('click', () => {
+        try { window.__crispRouter ? window.__crispRouter.navigate('/') : (location.hash = '#/'); }
+        catch (_e) { location.hash = '#/'; }
+      });
+    }
+    return b;
+  }
+  function setOpContext(id, name, color) {
+    const b = ensureContextBanner();
+    document.body.style.setProperty('--op-color', color || '#418FDE');
+    const crumb = b.querySelector('.cgn-cb-crumb');
+    if (crumb) crumb.innerHTML = 'CRISP / Operations / <b>' + esc(name || 'Operation') + '</b>';
+    document.body.classList.add('crisp-op-scoped');
+  }
+  function clearOpContext() {
+    document.body.classList.remove('crisp-op-scoped');
+    document.body.style.removeProperty('--op-color');
+  }
+
   // ── boot ─────────────────────────────────────────────────────────────────
   function boot() {
     if (!token()) return;          // only the authed dashboard; login is a separate page
@@ -483,5 +536,5 @@
   else boot();
 
   // public API (tests + manual triggers)
-  window.__crispShell = { buildBar, setActive, reparentChrome, navHtml };
+  window.__crispShell = { buildBar, setActive, reparentChrome, navHtml, setOpContext, clearOpContext };
 })();
