@@ -34,6 +34,14 @@ const REPORTS = [{
     infrastructure_type: 'HOSPITAL', reviewer_verdict: 'NOT_REVIEWED', server_created_at: NOW,
     location: { latitude: 25.6, longitude: 85.1, user_location_name: 'Patna, IN' },
 }];
+// P3 — the global map now consumes GET /reports/markers, which returns the FLAT
+// lean shape ({lat,lng,severity,...}) — NOT the rich {location:{…}} report shape.
+// Stub it explicitly so the test exercises the real marker contract.
+const MARKERS = [
+    { id: 'm1', lat: 25.6, lng: 85.1, severity: 'CRITICAL', status: 'PENDING', crisis_type: 'FLOOD', infrastructure_type: 'HOSPITAL', server_created_at: NOW },
+    { id: 'm2', lat: 26.1, lng: 91.7, severity: 'MODERATE', status: 'RESPONDING', crisis_type: 'EARTHQUAKE', infrastructure_type: 'ROAD', server_created_at: NOW },
+    { id: 'm3', lat: 19.0, lng: 72.8, severity: 'SEVERE', status: 'PENDING', crisis_type: 'FLOOD', infrastructure_type: 'RESIDENTIAL', server_created_at: NOW },
+];
 // Phase 2 — the /operations rollup feeding the ops-first home rail.
 const OPERATIONS = [
     {
@@ -71,6 +79,9 @@ test('Crisis Intelligence landing renders from the real summary contract, no run
         }
         if (u.includes('/config/')) return route.fulfill({ json: { org: { org_public_name: 'UNDP CRISP' } } });
         if (u.includes('/operations')) return route.fulfill({ json: OPERATIONS });
+        if (u.includes('/reports/markers')) {           // the global map's lean source (flat shape)
+            return route.fulfill({ status: 200, json: MARKERS });
+        }
         if (u.includes('/reports/')) {
             return route.fulfill({ status: 200, headers: { 'X-Total-Count': '137' }, json: REPORTS });
         }
@@ -103,6 +114,15 @@ test('Crisis Intelligence landing renders from the real summary contract, no run
     await expect(page.locator('#cc-att')).not.toContainText('Active operations');
     // §2 Phase-2 client-side countries-impacted caption (Turf over world.json).
     await expect(page.locator('#cc-map-geo')).toContainText(/countries impacted/i, { timeout: 8000 });
+    // The global map actually PLOTS markers from the lean /reports/markers feed
+    // (flat {lat,lng} shape). Leaflet renders circle markers as SVG paths /
+    // markercluster icons — at least one must paint (regression guard: the map
+    // showing the "Map data unavailable" fallback instead).
+    await expect.poll(
+        () => page.locator('#cc-map path.leaflet-interactive, #cc-map .leaflet-marker-icon').count(),
+        { timeout: 8000 },
+    ).toBeGreaterThan(0);
+    await expect(page.locator('#cc-map .cc-map-fallback')).toHaveCount(0);
     // §4 distributions rendered — and the bar FILLS actually paint (Jun 2026
     // regression: .cc-bar-fill was an inline <span>, so width/height were
     // ignored and every bar rendered as an empty track with no color).
