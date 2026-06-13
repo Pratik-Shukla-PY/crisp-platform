@@ -15,7 +15,11 @@
  *     photo has 3 variants; buttons update data-current-tier
  */
 import { test, expect, APIRequestContext } from '@playwright/test';
-import { ADMIN, cleanupTestReports } from '../helpers/api';
+import { ADMIN, cleanupTestReports, roleFromToken, ADMIN_ROLES } from '../helpers/api';
+
+const NEEDS_TESTING_FLAG =
+  'Backend not in CRISP_TESTING mode — /auth/register did not honor the admin role. '
+  + 'Run the e2e backend with `APP_ENV=dev CRISP_TESTING=1`.';
 
 async function seedReport(request: APIRequestContext, token: string, deviceHash: string): Promise<string> {
   const res = await request.post('http://localhost:8000/api/v1/reports/meta', {
@@ -86,13 +90,13 @@ test.describe('Reviewer workflow', () => {
     await cleanupTestReports(request, token);
   });
 
-  // SKIP RATIONALE (May 2026): same as 01-report-lifecycle.spec.ts — the
-  // test logs in via `ensureAdminAndLogin` but POST /auth/register ignores
-  // the role field, so the JWT is for a VIEWER. Backend correctly 403s on
-  // /reports/{id}/review. Production-side analysts are bootstrapped via
-  // the admin user setup path. Unskip once test infra grows a role-promotion
-  // hook behind CRISP_TESTING env flag.
-  test.fixme('Mark Accepted → report card shows green verdict chip', async ({ page }) => {
+  // Un-skipped (Jun 2026): /auth/register now HONORS the requested role when the
+  // backend runs with CRISP_TESTING=1 (double-gated on non-prod), so
+  // ensureAdminAndLogin (which already requests SUPER_ADMIN) yields an admin JWT
+  // and /reports/{id}/review no longer 403s. Run the e2e backend with
+  // `APP_ENV=dev CRISP_TESTING=1`.
+  test('Mark Accepted → report card shows green verdict chip', async ({ page }) => {
+    test.skip(!ADMIN_ROLES.includes(roleFromToken(token)), NEEDS_TESTING_FLAG);
     // Open the detail panel by clicking the feed card for this report.
     // Open the detail panel via the same global function the card's onclick
     // calls — there's no per-card ID attribute to CSS-select against.
@@ -118,8 +122,10 @@ test.describe('Reviewer workflow', () => {
     expect(body.reviewed_at).toBeTruthy();
   });
 
-  // Same skip rationale — /timestamps endpoint also requires ANALYST+.
-  test.fixme('Mark Dispatched + Arrived → response_time_seconds populates', async ({ page }) => {
+  // Un-skipped (Jun 2026) — same enabler: CRISP_TESTING role honor gives the
+  // harness an ANALYST+ JWT, so /timestamps no longer 403s.
+  test('Mark Dispatched + Arrived → response_time_seconds populates', async ({ page }) => {
+    test.skip(!ADMIN_ROLES.includes(roleFromToken(token)), NEEDS_TESTING_FLAG);
     // Open the detail panel via the same global function the card's onclick
     // calls — there's no per-card ID attribute to CSS-select against.
     await page.evaluate((id) => (window as any).selectReport(id), reportId);

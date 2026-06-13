@@ -44,6 +44,16 @@ OTP_MAX_ATTEMPTS = 5
 # (if they go through /register) continue to work unchanged.
 ALLOW_REGISTRATION = os.getenv("ALLOW_REGISTRATION", "true").lower() == "true"
 
+# Test-only: let /auth/register honor the requested role so the e2e harness can
+# mint an ANALYST/ADMIN (otherwise every test user is a VIEWER and the reviewer/
+# dispatch endpoints correctly 403). DOUBLE-GATED — only when CRISP_TESTING is set
+# AND APP_ENV is not production — so a stray flag can never enable self-service
+# privilege escalation on a real deployment. Off by default everywhere.
+_REGISTER_HONORS_ROLE = (
+    os.getenv("CRISP_TESTING", "").lower() in ("1", "true")
+    and os.getenv("APP_ENV", "").lower() != "production"
+)
+
 
 # ── Pydantic Schemas ──────────────────────────────────────────────────────────
 
@@ -199,12 +209,17 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
             raise HTTPException(status_code=400, detail=msg)
         pw_hash = hash_password(req.password)
 
-    # Create user
+    # New accounts are VIEWER by default. Only when the double-gated test flag is
+    # on (CRISP_TESTING + non-prod) is a valid requested role honored — so the e2e
+    # harness can create an ANALYST/ADMIN; prod stays VIEWER-only always.
+    _role = RoleEnum.VIEWER.value
+    if _REGISTER_HONORS_ROLE and req.role and req.role in {r.value for r in RoleEnum}:
+        _role = req.role
     user = User(
         email=req.email,
         password_hash=pw_hash,
         full_name=req.full_name,
-        role=RoleEnum.VIEWER.value,
+        role=_role,
         is_verified=False,
         gdpr_consent_at=datetime.now(timezone.utc),
     )

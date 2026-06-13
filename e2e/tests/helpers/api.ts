@@ -19,6 +19,22 @@ export const ADMIN = {
   full_name: 'E2E Admin',
 };
 
+/** Decode the `role` claim from a JWT access token (no signature check — test-only).
+ *  Lets a role-gated test skip GRACEFULLY (with a clear message) when the backend
+ *  isn't running with CRISP_TESTING=1, so /auth/register kept the user a VIEWER —
+ *  rather than failing later with a confusing 403 on /review or /timestamps. */
+export function roleFromToken(token: string): string {
+  try {
+    const json = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
+    return String(json.role || '').toUpperCase();
+  } catch (_e) {
+    return '';
+  }
+}
+
+/** Roles that can review / dispatch — anything below this skips the role-gated tests. */
+export const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN', 'ANALYST'];
+
 /** Idempotent: tries to register; if 409 (already exists) just logs in.
  *  Returns the access token — every further admin-scoped call should
  *  thread it through as a Bearer header. */

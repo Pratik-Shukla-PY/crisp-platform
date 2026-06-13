@@ -15,7 +15,11 @@
  * a silently-changed 200 → 400).
  */
 import { test, expect } from '@playwright/test';
-import { ADMIN } from '../helpers/api';
+import { ADMIN, roleFromToken, ADMIN_ROLES } from '../helpers/api';
+
+const NEEDS_TESTING_FLAG =
+  'Backend not in CRISP_TESTING mode — /auth/register did not honor the admin role. '
+  + 'Run the e2e backend with `APP_ENV=dev CRISP_TESTING=1`.';
 import * as crypto from 'crypto';
 
 const BACKEND = process.env.CRISP_BACKEND_URL || 'http://localhost:8000';
@@ -56,18 +60,14 @@ test.describe('Backend report lifecycle', () => {
     expect(res.status()).toBe(200);
   });
 
-  // SKIP RATIONALE (May 2026): the test path needs an ANALYST/ADMIN role
-  // to call /reports/{id}/review, but POST /auth/register silently ignores
-  // the `role` field for self-registration (security: nobody can self-elevate
-  // to SUPER_ADMIN). The test's `login()` helper registers + logs in but ends
-  // up with the default VIEWER role → /review returns 403. Production-side
-  // the feature works (operators are promoted manually via the admin user
-  // bootstrap path). To unskip this test, either expose a test-only
-  // role-promotion endpoint behind a CRISP_TESTING env flag, or seed an
-  // ADMIN user during the e2e setup step. Tracked separately as a test-infra
-  // task (not a regression in the recent K + L work).
-  test.fixme('end-to-end: meta → chunks → read → review → timestamps → delete', async ({ request }) => {
+  // Un-skipped (Jun 2026): the test-only role hook now exists — /auth/register
+  // HONORS the requested role when the backend runs CRISP_TESTING=1 (double-gated
+  // on non-prod; prod self-registration stays VIEWER-only). login() already
+  // requests SUPER_ADMIN, so /reports/{id}/review + /timestamps no longer 403.
+  // Run the e2e backend with `APP_ENV=dev CRISP_TESTING=1`.
+  test('end-to-end: meta → chunks → read → review → timestamps → delete', async ({ request }) => {
     const token = await login(request);
+    test.skip(!ADMIN_ROLES.includes(roleFromToken(token)), NEEDS_TESTING_FLAG);
     const headers = { Authorization: `Bearer ${token}` };
     const deviceHash = `E2E-DEVICE-${Date.now()}`;
 
@@ -174,8 +174,10 @@ test.describe('Backend report lifecycle', () => {
 
   // Same skip rationale as the end-to-end test above — /review requires
   // ANALYST/ADMIN and the test infra has no role-promotion path.
-  test.fixme('/reports/{id}/review rejects invalid verdict values', async ({ request }) => {
+  // Un-skipped (Jun 2026) — same CRISP_TESTING role hook gives /review an admin JWT.
+  test('/reports/{id}/review rejects invalid verdict values', async ({ request }) => {
     const token = await login(request);
+    test.skip(!ADMIN_ROLES.includes(roleFromToken(token)), NEEDS_TESTING_FLAG);
     const headers = { Authorization: `Bearer ${token}` };
     const deviceHash = `E2E-DEVICE-${Date.now()}-x`;
     const meta = await request.post(`${BACKEND}/api/v1/reports/meta`, {
