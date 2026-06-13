@@ -405,6 +405,8 @@ def assign_responder(
 
     r = BuildingResponder(
         building_id=building_id,
+        target_type="BUILDING",
+        org_type=(getattr(body, "org_type", None) or "OTHER"),
         assigned_by_user_id=user.id if hasattr(user, "id") else None,
         responder_name=body.responder_name,
         responder_org=body.responder_org,

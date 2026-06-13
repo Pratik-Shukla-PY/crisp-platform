@@ -1603,12 +1603,25 @@ class BuildingResponder(Base):
     __tablename__ = "building_responders"
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
+    # Phase 3 (Option B) — a responder targets EITHER a building (default;
+    # building_id set, target_type=BUILDING) OR an operation (crisis_event_id
+    # set, building_id NULL, target_type=OPERATION). building_id is therefore
+    # nullable now. No separate Team/Org entity: org_type is a bounded,
+    # app-validated vocabulary (mirrors BuildingEvent.event_kind, not a PG enum).
     building_id = Column(
         String(64),
         ForeignKey("buildings.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
+    crisis_event_id = Column(
+        String(36),
+        ForeignKey("crisis_events.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    target_type = Column(String(16), nullable=True)   # BUILDING | OPERATION (NULL legacy = BUILDING)
+    org_type = Column(String(16), nullable=True)      # GOV | NGO | VOLUNTEER | INTERNAL | OTHER
     assigned_by_user_id = Column(
         String(36),
         ForeignKey("users.id", ondelete="SET NULL"),

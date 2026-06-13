@@ -30,10 +30,10 @@ from sqlalchemy import and_, case, func as sa_func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.core.deps import require_admin, require_viewer
+from app.core.deps import require_admin, require_analyst, require_viewer
 from app.models.report import (
     CrisisEvent, CrisisFormPack, CrisisFormPackVersion,
-    Report, ReportStatusEnum, SeverityEnum,
+    Report, ReportStatusEnum, SeverityEnum, BuildingResponder,
 )
 from app.services.crisis_form_schema import validate_pack_schema
 from app.services.nearby_aggregator import haversine_km
@@ -44,6 +44,7 @@ from app.schemas.crisis_form import (
     PublishRequest, SchemaLintRequest, SchemaLintResponse,
     ActiveCrisisFormResponse, OperationSummaryResponse,
 )
+from app.schemas.building import ResponderCreate, ResponderResponse, ResponderUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +206,70 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
             critical=orphan_critical, total=orphan_critical,
         ))
     return ops
+
+
+# ── Operator: operation-level responders (Phase 3, Option B) ────────────────
+# Reuses the BuildingResponder table with target_type=OPERATION + crisis_event_id
+# (building_id NULL) — no separate Team/Org entity. Same assigned → dispatched →
+# arrived → cleared lifecycle as building responders; cleared_at IS NULL = active.
+@operations_router.get("/{event_id}/responders", response_model=List[ResponderResponse],
+                       summary="List responders assigned to an operation")
+def list_operation_responders(event_id: str, db: Session = Depends(get_db),
+                              _user=Depends(require_viewer)):
+    return (db.query(BuildingResponder)
+            .filter(BuildingResponder.crisis_event_id == event_id)
+            .order_by(BuildingResponder.assigned_at.desc())
+            .all())
+
+
+@operations_router.post("/{event_id}/responders", response_model=ResponderResponse,
+                        status_code=status.HTTP_201_CREATED,
+                        summary="Assign a responder to an operation")
+def assign_operation_responder(event_id: str, body: ResponderCreate,
+                               db: Session = Depends(get_db), user=Depends(require_analyst)):
+    ev = db.query(CrisisEvent).filter(CrisisEvent.id == event_id).first()
+    if not ev:
+        raise HTTPException(status_code=404, detail="Operation not found")
+    r = BuildingResponder(
+        building_id=None,
+        crisis_event_id=event_id,
+        target_type="OPERATION",
+        org_type=(body.org_type or "OTHER"),
+        assigned_by_user_id=getattr(user, "id", None),
+        responder_name=body.responder_name,
+        responder_org=body.responder_org,
+        responder_contact=body.responder_contact,
+        eta_minutes=body.eta_minutes,
+        notes=body.notes,
+    )
+    db.add(r); db.commit(); db.refresh(r)
+    logger.info(f"[Operation] responder assigned op={event_id[:8]} name={body.responder_name!r}")
+    return r
+
+
+@operations_router.patch("/{event_id}/responders/{responder_id}", response_model=ResponderResponse,
+                         summary="Advance an operation responder's lifecycle")
+def update_operation_responder(event_id: str, responder_id: str, body: ResponderUpdate,
+                               db: Session = Depends(get_db), _user=Depends(require_analyst)):
+    r = (db.query(BuildingResponder)
+         .filter(BuildingResponder.id == responder_id,
+                 BuildingResponder.crisis_event_id == event_id)
+         .first())
+    if not r:
+        raise HTTPException(status_code=404, detail="Responder not found")
+    now = datetime.now(timezone.utc)
+    if body.action == "dispatched":
+        r.dispatched_at = now
+    elif body.action == "arrived":
+        r.arrived_at = now
+    elif body.action == "cleared":
+        r.cleared_at = now
+    if body.eta_minutes is not None:
+        r.eta_minutes = body.eta_minutes
+    if getattr(body, "notes", None) is not None:
+        r.notes = body.notes
+    db.commit(); db.refresh(r)
+    return r
 
 
 # ── Admin: Crisis Events CRUD ───────────────────────────────────────────────

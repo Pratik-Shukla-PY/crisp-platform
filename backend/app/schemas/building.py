@@ -197,7 +197,10 @@ class ResponderResponse(BaseModel):
     """Single responder assignment for the console panel."""
     model_config = ConfigDict(from_attributes=True)
     id: str
-    building_id: str
+    building_id: Optional[str] = None          # NULL for OPERATION-target responders
+    crisis_event_id: Optional[str] = None      # the operation, for OPERATION-target rows
+    target_type: Optional[str] = None          # BUILDING | OPERATION
+    org_type: Optional[str] = None             # GOV | NGO | VOLUNTEER | INTERNAL | OTHER
     assigned_by_user_id: Optional[str] = None
     responder_name: str
     responder_org: Optional[str] = None
@@ -217,6 +220,9 @@ class ResponderCreate(BaseModel):
     responder_contact: Optional[str] = Field(None, max_length=200)
     eta_minutes: Optional[int] = Field(None, ge=0, le=10080)
     notes: Optional[str] = None
+    # Phase 3 — bounded org vocabulary (app-validated, not a Postgres enum).
+    org_type: Optional[str] = Field(
+        "OTHER", pattern="^(GOV|NGO|VOLUNTEER|INTERNAL|OTHER)$")
 
 
 class ResponderUpdate(BaseModel):
