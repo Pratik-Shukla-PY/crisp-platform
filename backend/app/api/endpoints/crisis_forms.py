@@ -22,15 +22,19 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy import and_, case, func as sa_func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.core.deps import require_admin
-from app.models.report import CrisisEvent, CrisisFormPack, CrisisFormPackVersion
+from app.core.deps import require_admin, require_viewer
+from app.models.report import (
+    CrisisEvent, CrisisFormPack, CrisisFormPackVersion,
+    Report, ReportStatusEnum, SeverityEnum,
+)
 from app.services.crisis_form_schema import validate_pack_schema
 from app.services.nearby_aggregator import haversine_km
 from app.schemas.crisis_form import (
@@ -38,13 +42,19 @@ from app.schemas.crisis_form import (
     CrisisFormPackCreate, CrisisFormPackUpdate, CrisisFormPackResponse,
     CrisisFormPackVersionCreate, CrisisFormPackVersionResponse,
     PublishRequest, SchemaLintRequest, SchemaLintResponse,
-    ActiveCrisisFormResponse,
+    ActiveCrisisFormResponse, OperationSummaryResponse,
 )
 
 logger = logging.getLogger(__name__)
 
-public_router = APIRouter()   # /crisis-forms
-admin_router = APIRouter()    # /admin/crisis-forms
+public_router = APIRouter()       # /crisis-forms
+admin_router = APIRouter()        # /admin/crisis-forms
+operations_router = APIRouter()   # /operations (operator-facing rollup)
+
+
+_OPEN_REPORT_STATUSES_EXCLUDED = [
+    ReportStatusEnum.RESOLVED, ReportStatusEnum.REJECTED, ReportStatusEnum.FALSE_ALARM,
+]
 
 
 def resolve_active_event(db: Session, lat: float, lng: float, now: datetime):
@@ -133,6 +143,68 @@ def active_crisis_form(
         active=True, event_id=ev.id, event_name=ev.name, crisis_type=ev.crisis_type,
         pack_id=pack.id, pack_version=ver.version, schema_json=ver.schema_json,
     )
+
+
+# ── Operator: operations list (CrisisEvents + per-event report rollup) ──────
+@operations_router.get("", response_model=List[OperationSummaryResponse],
+                       summary="List operations with per-event report rollups")
+@operations_router.get("/", response_model=List[OperationSummaryResponse], include_in_schema=False)
+def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)):
+    """Every CrisisEvent (operation) + its live report rollup
+    (Critical · New-24h · Total · last activity) in ONE grouped query — no N+1,
+    regardless of operation count (must-have #12) — active operations first.
+    Appends a synthetic row (id=None, is_cluster=True) counting
+    un-operationalised open-critical reports: the rail's "Launch operation here"
+    affordance. Operator-facing (require_viewer); editing stays on the admin
+    /admin/crisis-forms/events routes."""
+    now = datetime.now(timezone.utc)
+    new_cut = now - timedelta(hours=24)
+    rows = (
+        db.query(
+            CrisisEvent.id, CrisisEvent.name, CrisisEvent.crisis_type,
+            CrisisEvent.status, CrisisEvent.is_active,
+            CrisisEvent.center_lat, CrisisEvent.center_lng,
+            sa_func.count(Report.id).label("total"),
+            sa_func.coalesce(sa_func.sum(
+                case((Report.severity == SeverityEnum.CRITICAL, 1), else_=0)), 0).label("critical"),
+            sa_func.coalesce(sa_func.sum(
+                case((Report.server_created_at >= new_cut, 1), else_=0)), 0).label("new_24h"),
+            sa_func.max(Report.server_created_at).label("last_activity"),
+        )
+        .outerjoin(Report, and_(
+            Report.crisis_event_id == CrisisEvent.id,
+            Report.deletion_requested_at.is_(None),
+        ))
+        .group_by(CrisisEvent.id)
+        .order_by(CrisisEvent.is_active.desc(), CrisisEvent.created_at.desc())
+        .all()
+    )
+    ops = [
+        OperationSummaryResponse(
+            id=r.id, name=r.name, crisis_type=r.crisis_type, status=r.status,
+            is_active=bool(r.is_active), center_lat=r.center_lat, center_lng=r.center_lng,
+            critical=int(r.critical or 0), new_24h=int(r.new_24h or 0), total=int(r.total or 0),
+            last_activity=r.last_activity, is_cluster=False,
+        )
+        for r in rows
+    ]
+    # Un-operationalised critical clusters: open-critical reports tied to NO
+    # operation — surfaced as a single CTA row ("Launch operation here").
+    orphan_critical = int(
+        db.query(sa_func.count(Report.id))
+          .filter(
+              Report.deletion_requested_at.is_(None),
+              Report.crisis_event_id.is_(None),
+              Report.severity == SeverityEnum.CRITICAL,
+              Report.status.notin_(_OPEN_REPORT_STATUSES_EXCLUDED),
+          ).scalar() or 0
+    )
+    if orphan_critical:
+        ops.append(OperationSummaryResponse(
+            id=None, name="Unassigned critical reports", is_cluster=True,
+            critical=orphan_critical, total=orphan_critical,
+        ))
+    return ops
 
 
 # ── Admin: Crisis Events CRUD ───────────────────────────────────────────────

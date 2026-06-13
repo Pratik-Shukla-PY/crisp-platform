@@ -393,21 +393,30 @@ def operational_summary(
                               description="Window for 'resolved in window' (hours)"),
     stale_hours: int = Query(24, ge=1, le=720,
                              description="Age above which an open, unreviewed report is 'stale'"),
+    crisis_event_id: Optional[str] = Query(
+        None, description="Scope every count to a single operation (CrisisEvent id). "
+                          "Omit for the global situational summary."),
     db: Session = Depends(get_db),
     _user=Depends(require_viewer),
 ):
     now = datetime.now(timezone.utc)
-    cache_key = (window_hours, stale_hours)
+    # crisis_event_id MUST be part of the cache key — otherwise one operation's
+    # counts would be served for another (or for the global view).
+    cache_key = (window_hours, stale_hours, crisis_event_id or "_global_")
     hit = _summary_cache.get(cache_key)
     if hit and hit[0] > now:
         return hit[1]
 
+    # Operation scope: when set, EVERY report query below is constrained to this
+    # event. Spliced into _count automatically + into the handful of raw queries
+    # that bypass _count. Global view → empty list → no constraint.
+    _scope = [Report.crisis_event_id == crisis_event_id] if crisis_event_id else []
     not_deleted = Report.deletion_requested_at.is_(None)
     active = [not_deleted, Report.status.notin_(_CLOSED_STATUSES)]
     NOT_REVIEWED = ReviewerVerdictEnum.NOT_REVIEWED.value
 
     def _count(*filters) -> int:
-        return int(db.query(func.count(Report.id)).filter(*filters).scalar() or 0)
+        return int(db.query(func.count(Report.id)).filter(*_scope, *filters).scalar() or 0)
 
     window_cut = now - timedelta(hours=window_hours)
     stale_cut = now - timedelta(hours=stale_hours)
@@ -451,7 +460,7 @@ def operational_summary(
     _crit = [*active, Report.severity == SeverityEnum.CRITICAL]
     counts.critical_incidents = (
         int(db.query(func.count(func.distinct(Report.building_id)))
-            .filter(*_crit, Report.building_id.isnot(None)).scalar() or 0)
+            .filter(*_scope, *_crit, Report.building_id.isnot(None)).scalar() or 0)
         + _count(*_crit, Report.building_id.is_(None))
     )
 
@@ -459,14 +468,14 @@ def operational_summary(
     def _group(col) -> dict:
         out: dict = {}
         for val, n in (db.query(col, func.count(Report.id))
-                         .filter(*active).group_by(col).all()):
+                         .filter(*_scope, *active).group_by(col).all()):
             if val is not None:
                 out[_enum_name(val)] = int(n)
         return out
 
     by_status: dict = {}
     for val, n in (db.query(Report.status, func.count(Report.id))
-                     .filter(not_deleted).group_by(Report.status).all()):
+                     .filter(*_scope, not_deleted).group_by(Report.status).all()):
         if val is not None:
             by_status[_enum_name(val)] = int(n)
 
@@ -482,10 +491,10 @@ def operational_summary(
     # ── timings (computed at read time; mirrors response_time_seconds) ──
     avg_verif = (db.query(func.avg(func.extract(
         "epoch", Report.first_verified_at - Report.server_created_at)))
-        .filter(not_deleted, Report.first_verified_at.isnot(None)).scalar())
+        .filter(*_scope, not_deleted, Report.first_verified_at.isnot(None)).scalar())
     resp_end = func.coalesce(Report.help_arrived_at, Report.help_dispatched_at)
     avg_resp = (db.query(func.avg(func.extract("epoch", resp_end - Report.reviewed_at)))
-        .filter(not_deleted, Report.reviewed_at.isnot(None),
+        .filter(*_scope, not_deleted, Report.reviewed_at.isnot(None),
                 or_(Report.help_arrived_at.isnot(None),
                     Report.help_dispatched_at.isnot(None))).scalar())
     timings = SummaryTimings(
@@ -495,7 +504,7 @@ def operational_summary(
 
     # ── impact (real proxies only — see spec §4 for what is intentionally absent) ──
     lives = (db.query(func.coalesce(func.sum(Report.lives_impacted), 0))
-               .filter(*active).scalar()) or 0
+               .filter(*_scope, *active).scalar()) or 0
     service_disruptions: Optional[int] = None
     try:
         service_disruptions = _count(

@@ -5274,6 +5274,14 @@ def get_reports(
             "<2 KB on idle dashboards. Omit `since` for the initial full load."
         ),
     ),
+    crisis_event_id: Optional[str] = Query(
+        None,
+        description=(
+            "Scope the listing to a single operation (CrisisEvent id). When set, "
+            "only reports stamped with this crisis_event_id are returned and "
+            "X-Total-Count reflects the scoped total. Omit for the global feed."
+        ),
+    ),
     user=Depends(require_viewer),
     db: Session = Depends(get_db),
 ):
@@ -5309,6 +5317,12 @@ def get_reports(
     q = db.query(Report)
     if not include_deleted:
         q = q.filter(Report.deletion_requested_at == None)
+
+    # Operations Phase 2: scope the feed to one operation. Applied BEFORE the
+    # total-count scalar below so X-Total-Count reports the scoped total (the
+    # dashboard truncation banner would otherwise show the global count).
+    if crisis_event_id:
+        q = q.filter(Report.crisis_event_id == crisis_event_id)
 
     # Phase 3: delta filter. Match reports whose own row OR any of their
     # media rows has updated since `since`. Media is included because the

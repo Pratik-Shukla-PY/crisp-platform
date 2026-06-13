@@ -451,6 +451,12 @@ class Report(Base):
         Index("ix_reports_status_created",        "status",      "server_created_at"),
         Index("ix_reports_building_created",      "building_id", "server_created_at"),
         Index("ix_reports_device_created",        "device_id",   "server_created_at"),
+        # Operations Phase 2 — operation-scoped queries always constrain
+        # crisis_event_id together with status (worklist + active/closed
+        # rollups) or severity (per-op critical counts + worst-first sort).
+        # Mirrors migration 0048_crisis_event_indexes.
+        Index("ix_reports_crisis_event_status",   "crisis_event_id", "status"),
+        Index("ix_reports_crisis_event_severity", "crisis_event_id", "severity"),
     )
 
 

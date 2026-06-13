@@ -73,3 +73,6 @@ api_router.include_router(buildings.router,
 # at /api/v1/admin/crisis-forms/* (JWT + require_admin).
 api_router.include_router(crisis_forms.public_router, prefix="/crisis-forms", tags=["crisis-forms"])
 api_router.include_router(crisis_forms.admin_router, prefix="/admin/crisis-forms", tags=["crisis-forms"])
+# Operations rollup — operator-facing (require_viewer): the operations rail/list
+# reads /api/v1/operations for per-event Critical·New·Total counts in one query.
+api_router.include_router(crisis_forms.operations_router, prefix="/operations", tags=["operations"])

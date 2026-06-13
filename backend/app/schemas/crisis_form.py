@@ -34,6 +34,26 @@ class CrisisEventUpdate(BaseModel):
     status: Optional[str] = None
 
 
+# ── Operations list (operator-facing rollup; Phase 2) ──────────────────────
+class OperationSummaryResponse(BaseModel):
+    """One row in the operations rail/list: a CrisisEvent (operation) plus its
+    per-event report rollup. A synthetic row with id=None / is_cluster=True
+    represents un-operationalised critical reports ("Launch operation here")."""
+    model_config = ConfigDict(from_attributes=True)
+    id: Optional[str] = None
+    name: str
+    crisis_type: Optional[str] = None
+    status: Optional[str] = None
+    is_active: bool = False
+    center_lat: Optional[float] = None
+    center_lng: Optional[float] = None
+    critical: int = 0
+    new_24h: int = 0
+    total: int = 0
+    last_activity: Optional[datetime] = None
+    is_cluster: bool = False
+
+
 class CrisisEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
