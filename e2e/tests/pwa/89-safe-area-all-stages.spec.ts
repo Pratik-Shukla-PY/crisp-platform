@@ -4,7 +4,7 @@
  * REGRESSION GATE for the operator-reported "installed-PWA layout cuts
  * behind the iOS status bar on every page except home" bug.
  *
- * Root cause (see sw.js v225 comment + CLAUDE.md "Safe-area handling —
+ * Root cause (see sw.js v225 comment + the project invariants "Safe-area handling —
  * global pattern" invariant):
  *
  *   d4f1fad (May 17) added env(safe-area-inset-top) to .stage but the

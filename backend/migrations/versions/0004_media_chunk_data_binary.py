@@ -6,22 +6,22 @@ Create Date: 2026-04-21
 
 Why this exists
 ---------------
-April 2026 binary-chunk transport (Option A — discussion +
-`/Users/pks/.claude/plans/swirling-forging-raccoon.md` §5). The PWA and
+April 2026 binary-chunk transport (Option A - discussion +
+the design plan §5). The PWA and
 RN clients may now upload image/audio chunks as raw bytes via
 multipart/form-data to the new ``/reports/{id}/media/chunk-bin``
 endpoint, instead of base64-over-JSON to ``/reports/{id}/media/chunk``.
 
 Storage-layer change:
-  * ``media_chunks.data_binary``  — new ``LargeBinary`` column for raw
+  * ``media_chunks.data_binary``  - new ``LargeBinary`` column for raw
     bytes. ``NULL`` on every legacy row (they have ``data_b64`` populated).
-  * ``media_chunks.data_b64``     — relaxed to ``NULL``-able. Was
+  * ``media_chunks.data_b64``     - relaxed to ``NULL``-able. Was
     ``NOT NULL`` pre-April 2026.
   * ``chunk_has_one_payload`` CHECK constraint enforces the invariant
     that exactly one of ``data_b64`` / ``data_binary`` is populated.
 
 The assembly path in ``app.api.endpoints.reports`` reads whichever
-column holds the payload per row — mixed-format media rows (binary +
+column holds the payload per row - mixed-format media rows (binary +
 legacy base64 chunks for the same ``media_id``) are defensively handled
 but never produced by client logic.
 
@@ -53,7 +53,7 @@ def _has_column(table_name: str, column_name: str) -> bool:
 
 def _column_is_nullable(table_name: str, column_name: str) -> bool:
     """Return True if the column exists AND is already nullable.
-    Used to skip the relax-to-NULL alter_column when it's a no-op —
+    Used to skip the relax-to-NULL alter_column when it's a no-op -
     a gratuitous batch_alter_table on SQLite triggers a full table
     rebuild which can interact badly with other batch operations in
     the same migration."""
@@ -84,14 +84,14 @@ def _has_check_constraint(table_name: str, constraint_name: str) -> bool:
     except NotImplementedError:
         # Some dialects haven't implemented check-constraint introspection.
         # Return False so the migration attempts to add it; op.execute
-        # will no-op or error depending on the dialect — the surrounding
+        # will no-op or error depending on the dialect - the surrounding
         # try/except below catches it.
         pass
     return False
 
 
 def upgrade() -> None:
-    # 1. Add `data_binary` column if missing. Nullable by design —
+    # 1. Add `data_binary` column if missing. Nullable by design -
     #    legacy rows have `data_b64` populated and `data_binary` stays NULL.
     if not _has_column("media_chunks", "data_binary"):
         with op.batch_alter_table("media_chunks") as batch_op:
@@ -102,7 +102,7 @@ def upgrade() -> None:
     # 2. Relax data_b64 to NULL-able so binary-chunk rows can set it to NULL.
     #    batch_alter_table generates a table-rebuild on SQLite (a simple
     #    ALTER COLUMN on Postgres). Skip entirely when the column is
-    #    already nullable — avoids a gratuitous table rebuild that can
+    #    already nullable - avoids a gratuitous table rebuild that can
     #    interact badly with FK-reflection edge cases observed on
     #    create_all() synthesized schemas.
     if not _column_is_nullable("media_chunks", "data_b64"):
@@ -132,7 +132,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Drop the CHECK constraint first — can't drop the column while it's
+    # Drop the CHECK constraint first - can't drop the column while it's
     # referenced by a constraint on Postgres.
     if _has_check_constraint("media_chunks", "chunk_has_one_payload"):
         try:
@@ -142,7 +142,7 @@ def downgrade() -> None:
             pass
 
     # Restore data_b64 NOT NULL. Irreversible for any rows where it's
-    # actually NULL — those rows must be purged first or the downgrade
+    # actually NULL - those rows must be purged first or the downgrade
     # will abort. Leaving this as a manual-review failure rather than
     # silent data loss.
     with op.batch_alter_table("media_chunks") as batch_op:

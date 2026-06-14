@@ -1,11 +1,11 @@
 /**
- * CRISP i18n — 6 UN languages + Hindi, Portuguese, Swahili.
+ * CRISP i18n - 6 UN languages + Hindi, Portuguese, Swahili.
  * Auto-detects device locale, supports manual override.
  *
- * UNDP §3.1b (Apr 2026) — dense 232-key translation packs live in
+ * UNDP §3.1b (Apr 2026) - dense 232-key translation packs live in
  * `./i18n/{locale}.json` (shared format with the PWA at
  * `mobile-app/src/i18n/*.json`). Metro bundler inlines them at build
- * time via native JSON import, so there's no runtime network fetch —
+ * time via native JSON import, so there's no runtime network fetch -
  * the packs are available on first render, including fully offline.
  *
  * Precedence (highest wins): inline `translations` below →
@@ -20,11 +20,11 @@ import { I18nManager, NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // UNDP Appendix-1 dense packs. `as const` would widen Strings to
-// literal-string unions unnecessarily — leave the default `any` import.
-// May 2026 — RN ↔ PWA parity Phase 1 (i18n catch-up): expanded from
+// literal-string unions unnecessarily - leave the default `any` import.
+// May 2026 - RN ↔ PWA parity Phase 1 (i18n catch-up): expanded from
 // 6 (UN-official) → 22 locales to match the PWA. Build-time sync
 // from mobile-app/src/i18n/*.json runs via
-// scripts/sync-rn-i18n.sh — every JSON below is a copy of the PWA
+// scripts/sync-rn-i18n.sh - every JSON below is a copy of the PWA
 // canonical source, not hand-edited.
 import enJson from './i18n/en.json';
 import frJson from './i18n/fr.json';
@@ -86,15 +86,15 @@ const translations: Record<string, Strings> = {
     app_name: 'CRISP Crisis Report',
     consent_title: 'Your Privacy Matters',
     consent_desc: 'CRISP collects only data needed to help rescue teams:',
-    consent_loc: 'Location — GPS coordinates',
-    consent_photo: 'Photos — damage evidence',
-    consent_audio: 'Audio — voice descriptions',
+    consent_loc: 'Location - GPS coordinates',
+    consent_photo: 'Photos - damage evidence',
+    consent_audio: 'Audio - voice descriptions',
     consent_no_pii: 'No personal identity collected',
     consent_agree: 'I understand and consent',
-    // Apr 2026 UX rewrite — landing screen simplified. welcome_sub is now
+    // Apr 2026 UX rewrite - landing screen simplified. welcome_sub is now
     // a short, calm line (was a tutorial-style multi-line message).
     welcome_title: 'Report an Incident',
-    // Apr 2026 PR 3 — removed the "Tap the button" sub-copy; the big
+    // Apr 2026 PR 3 - removed the "Tap the button" sub-copy; the big
     // orange CTA communicates the primary action and the offline-hint
     // below it reassures users the tool works in low connectivity.
     welcome_sub: '',
@@ -105,7 +105,7 @@ const translations: Record<string, Strings> = {
     my_reports: 'My Reports',
     delete_all_my_reports: 'Delete all my reports',
     delete_all_note: "This removes every report you've sent from this device. Your data will be permanently deleted within 24 hours.",
-    // Apr 2026 "My Reports" spec — individual report management.
+    // Apr 2026 "My Reports" spec - individual report management.
     report_detail: 'Report', details_label: 'Details',
     delete_this_report: 'Delete this report', rejected_reason: 'Not valid',
     advanced: 'Advanced',
@@ -118,7 +118,7 @@ const translations: Record<string, Strings> = {
     browse: 'Browse',
     skip: 'Skip',
     next: 'Continue',
-    // Apr 2026 UX rewrite — low-literacy crisis copy. Parity with the PWA
+    // Apr 2026 UX rewrite - low-literacy crisis copy. Parity with the PWA
     // audio stage (mobile-app/src/index.html:202–244).
     audio_title: 'Tell us what happened',
     audio_sub: 'Speak or type:',
@@ -143,7 +143,7 @@ const translations: Record<string, Strings> = {
     damage_label: 'How bad?',
     send: 'SEND REPORT',
     sending: 'Sending...',
-    // PR 7 (Apr 2026): success screen warmed — "Thank you. Your report can
+    // PR 7 (Apr 2026): success screen warmed - "Thank you. Your report can
     // help save lives. We will keep you posted." + primary/secondary actions.
     // new_report kept for back-compat with downstream deep-link flows.
     success_title: 'Thank you.',
@@ -152,7 +152,7 @@ const translations: Record<string, Strings> = {
     add_another_report: 'Add another report',
     track_report: 'Track your report',
     queued: 'reports queued',
-    offline: 'Offline — will sync when connected',
+    offline: 'Offline - will sync when connected',
     sev_minor: 'Minor',
     sev_moderate: 'Moderate',
     sev_severe: 'Severe',
@@ -163,7 +163,7 @@ const translations: Record<string, Strings> = {
     type_water: 'Water',
     type_other: 'Other',
     lang_select: 'Language',
-    // Apr 2026 i18n-coverage sweep — every RN user-visible string that
+    // Apr 2026 i18n-coverage sweep - every RN user-visible string that
     // was previously hardcoded now has a key. Missing translations in
     // other locales fall through to English via the per-key t() chain.
     back: '← Back',
@@ -208,15 +208,15 @@ const translations: Record<string, Strings> = {
     sent: '✅ Sent',
     in_queue: '⏳ In queue',
     lives_saved_chip: '💚 Saved',
-    // Apr 2026 — review-screen location verify box (UNDP Appendix 1 footprint).
+    // Apr 2026 - review-screen location verify box (UNDP Appendix 1 footprint).
     loc_search_placeholder: 'Type a place name or landmark (optional)',
     loc_resolving: 'Resolving location…',
-    // Consent / privacy — additional keys used by <ConsentOverlay>.
+    // Consent / privacy - additional keys used by <ConsentOverlay>.
     consent_shared: 'Data shared only with crisis responders',
     consent_delete: 'You can request deletion anytime',
     consent_check: 'I understand and consent to sharing this data for crisis response',
     consent_accept: 'Accept & Continue',
-    // UNDP building-footprint picker — EN fallback in case a locale
+    // UNDP building-footprint picker - EN fallback in case a locale
     // hasn't been translated yet.
     building_select_title: 'Optional: pick the exact building',
     building_select_hint: 'Tap a building outline to mark it as damaged.',
@@ -334,11 +334,11 @@ const translations: Record<string, Strings> = {
  * Resolve the layered dict for a single locale code.
  *
  * Merge order (lowest precedence to highest):
- *   1. EN dense pack                 — baseline so any key exists somewhere.
- *   2. EXTRA_LANG[lang]              — PWA-shared regional minimal pack.
- *   3. UNDP_I18N_EXTRA[lang]         — PWA-shared Appendix-1 addenda.
- *   4. UNDP_JSON_PACKS[lang] dense   — definitive 232-key native-speaker QA pack.
- *   5. inline translations[lang]     — hand-tuned RN-only keys (`app_name`, etc.).
+ *   1. EN dense pack                 - baseline so any key exists somewhere.
+ *   2. EXTRA_LANG[lang]              - PWA-shared regional minimal pack.
+ *   3. UNDP_I18N_EXTRA[lang]         - PWA-shared Appendix-1 addenda.
+ *   4. UNDP_JSON_PACKS[lang] dense   - definitive 232-key native-speaker QA pack.
+ *   5. inline translations[lang]     - hand-tuned RN-only keys (`app_name`, etc.).
  *
  * Highest wins, so the inline RN-only strings always take priority over
  * the shared PWA material. Dense JSON wins over addenda because it's
@@ -355,7 +355,7 @@ function getDict(lang: string): Strings {
   return { ...en, ...extraRegional, ...undpAddenda, ...undpDense, ...inline } as Strings;
 }
 
-// UNDP §3.1b — materialise the merged dict for every known locale once
+// UNDP §3.1b - materialise the merged dict for every known locale once
 // at module-load time. Running this once (rather than at every
 // `setLanguage`) keeps `t()` O(1) and avoids re-merging on every
 // re-render. The universe of known codes is the union of every dict
@@ -384,7 +384,7 @@ export function detectLanguage(): string {
   }
 }
 
-// RTL locale set — matches the PWA's RTL_LANGS constant in mobile-app/src/app.js.
+// RTL locale set - matches the PWA's RTL_LANGS constant in mobile-app/src/app.js.
 // I18nManager controls the whole JS flexbox system; flipping `.isRTL` only
 // takes effect on the NEXT bundle load in React Native, so we persist the
 // decision + optionally reload in __DEV__ via DevSettings.reload().
@@ -392,7 +392,7 @@ const RTL_LANGS = new Set(['ar', 'ur', 'fa', 'he', 'ps', 'ku', 'sd', 'ug', 'yi']
 
 /**
  * Apply the text direction for a locale. Returns `true` if I18nManager
- * had to flip — in RN a flip requires a bundle reload to fully
+ * had to flip - in RN a flip requires a bundle reload to fully
  * re-layout the tree (React Native can't live-swap `isRTL`). Callers
  * can use the return value to surface an "Apps needs to restart"
  * notice to the user.
@@ -408,7 +408,7 @@ export function applyTextDirection(code: string): boolean {
     I18nManager.allowRTL(shouldBeRTL);
     I18nManager.forceRTL(shouldBeRTL);
   } catch {
-    // Some test environments don't expose I18nManager — treat as a no-op.
+    // Some test environments don't expose I18nManager - treat as a no-op.
     return false;
   }
   if (__DEV__) {
@@ -422,7 +422,7 @@ export function isRTLLocale(code: string): boolean {
 }
 
 /**
- * Boot-time language resolver — mirrors the PWA policy at app.js:2287.
+ * Boot-time language resolver - mirrors the PWA policy at app.js:2287.
  *
  *   1. If `crisp_lang_manual` is in AsyncStorage and points at a known
  *      locale, honour that. The user has previously expressed a choice.
@@ -440,7 +440,7 @@ export async function bootstrapLanguage(): Promise<string> {
       setLanguage(stored);
       return stored;
     }
-  } catch { /* AsyncStorage might be unavailable — fall through */ }
+  } catch { /* AsyncStorage might be unavailable - fall through */ }
   const detected = detectLanguage();
   setLanguage(detected);
   return detected;
@@ -468,13 +468,13 @@ export type LanguageOption = {
   code: string;
   label: string;
   flag: string;
-  /** True for UNDP-mandated UN official languages — rendered prominently
+  /** True for UNDP-mandated UN official languages - rendered prominently
    *  in the picker per §3.1 UX rewrite (larger flag glyph + dedicated
    *  section header). Parity with the PWA's `.lpf-un` tile treatment. */
   un: boolean;
 };
 
-/** UN official language codes — drive the `.un` flag on each emitted
+/** UN official language codes - drive the `.un` flag on each emitted
  *  LanguageOption and the picker's two-section layout. */
 const UN_LANG_CODES = new Set(['en', 'fr', 'es', 'ar', 'ru', 'zh']);
 

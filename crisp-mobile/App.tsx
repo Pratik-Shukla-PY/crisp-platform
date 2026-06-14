@@ -1,6 +1,6 @@
 /**
- * CRISP Mobile — Crisis Response Intelligence & Situation Platform
- * React Native Android App — Offline-first crisis reporting.
+ * CRISP Mobile - Crisis Response Intelligence & Situation Platform
+ * React Native Android App - Offline-first crisis reporting.
  *
  * Screen flow: Home → Photo → Audio → Review → Send → Success
  */
@@ -21,14 +21,14 @@ import BuildingFootprintPicker from './components/BuildingFootprintPicker';
 import IconTile from './components/IconTile';
 import { reviewReducer, type Page as ReviewPage } from './components/reviewReducer';
 
-// ── Sentry init (May 2026 audit fix — RN observability) ──────────────
+// ── Sentry init (May 2026 audit fix - RN observability) ──────────────
 //
 // CRISP product-readiness audit flagged "no Sentry on RN" as a
 // CRITICAL ops gap. Without crash + error reporting, field-testing
 // failures only surface if a user manually reports them.
 //
 // DSN is sourced from `EXPO_PUBLIC_SENTRY_DSN` (an Expo public env
-// var — visible to the bundle, which is OK because the DSN is a
+// var - visible to the bundle, which is OK because the DSN is a
 // write-only key by design). Empty/missing → Sentry stays inert
 // (e.g. local dev without a configured DSN).
 //
@@ -45,7 +45,7 @@ if (_SENTRY_DSN) {
       dsn: _SENTRY_DSN,
       release: _SENTRY_RELEASE,
       environment: __DEV__ ? 'dev' : 'prod',
-      tracesSampleRate: 0.05,                  // low — disaster zones, sparse bandwidth
+      tracesSampleRate: 0.05,                  // low - disaster zones, sparse bandwidth
       enableAutoSessionTracking: true,
       enableNativeCrashHandling: true,
       beforeSend: (event) => {
@@ -74,7 +74,7 @@ if (_SENTRY_DSN) {
       // Skip noise that's not actionable.
       ignoreErrors: [
         /Non-Error promise rejection captured/,
-        /Network request failed/,                  // offline state — handled by upload queue
+        /Network request failed/,                  // offline state - handled by upload queue
       ],
     });
     Sentry.setTag('surface', 'rn');
@@ -91,7 +91,7 @@ if (_SENTRY_DSN) {
 /**
  * Apr 2026 UI v2 rollout flag.
  *
- * Default ON — every new install boots into the 3-page review flow with
+ * Default ON - every new install boots into the 3-page review flow with
  * SVG icons, SafeAreaView wrapping, responsive padding, and the rest of
  * the audit fixes below. Setting `crisp_ui_v2` to literal `"off"` in
  * AsyncStorage reverts to the pre-v2 monolithic review screen so we can
@@ -99,7 +99,7 @@ if (_SENTRY_DSN) {
  *
  * Reasoning for default-on: the v2 flow is required for the 23 June UNDP
  * submission window, so we treat v1 as the escape hatch, not the baseline.
- * The flag is read ONCE at mount (no subscription) — we don't want the UI
+ * The flag is read ONCE at mount (no subscription) - we don't want the UI
  * to reshuffle mid-flow if someone flips the storage key from devtools.
  */
 async function readUiV2Flag(): Promise<boolean> {
@@ -112,7 +112,7 @@ async function readUiV2Flag(): Promise<boolean> {
 }
 
 /**
- * Phase B4 (Apr 2026) — UI v3 flag read. Same pattern as readUiV2Flag:
+ * Phase B4 (Apr 2026) - UI v3 flag read. Same pattern as readUiV2Flag:
  * default on, opt-out via AsyncStorage key `crisp_ui_v3` = 'off'.
  * Drives the 8-stage capture flow (home → where → infra → crisis
  * → extras → photo → audio → review → success). When off, the RN app
@@ -128,7 +128,7 @@ async function readUiV3Flag(): Promise<boolean> {
 }
 
 /**
- * Responsive padding helper — replaces the fixed `padding:24` pattern
+ * Responsive padding helper - replaces the fixed `padding:24` pattern
  * across the capture flow. At 360 px and above we stay at 24 px; on
  * smaller devices (280×480 low-end Android target) the padding scales
  * down to 6 % of viewport width so chip rows and button columns don't
@@ -148,7 +148,7 @@ import { initDatabase, enqueueReport, getQueueCount } from './services/database'
 import { processQueue } from './services/syncEngine';
 import { preCacheNearest as _bldgPreCacheNearest, type NearbyBuilding } from './services/buildingCache';
 const preCacheNearest = _bldgPreCacheNearest;
-// Phase 1 (Apr 2026 — Optional reporter login). Anonymous-first auth
+// Phase 1 (Apr 2026 - Optional reporter login). Anonymous-first auth
 // layer; imported lazily since the RN boot path mustn't block on auth.
 import * as AuthStore from './services/auth';
 import NetInfo from '@react-native-community/netinfo';
@@ -165,7 +165,7 @@ import { assembleCrisisForm, deriveSeverityFromDamage, resolveCrisisPackSwap } f
 import { blurFacesBase64, prewarm as prewarmPIIBlur } from './services/piiBlur';
 import { generateVariants, PhotoVariants, TIER_TO_RESOLUTION } from './services/imageVariants';
 import { swallow as telemetrySwallow } from './services/telemetry';
-// May 2026 — Phase 2 of RN ↔ PWA parity. New HomeScreen mirrors the
+// May 2026 - Phase 2 of RN ↔ PWA parity. New HomeScreen mirrors the
 // PWA's redesigned home stage (3-section flex, CTA-anchored,
 // quiet identity pill, channels grid). Replaces the old in-line
 // home block. See V4_PARITY_DEFERRED.md for the staged plan.
@@ -173,18 +173,18 @@ import HomeScreen from './screens/HomeScreen';
 // Phase 3 of RN ↔ PWA parity. V4CaptureScreen mirrors the PWA's
 // #stage-v4-capture (meta card + photo section + voice/text chips
 // + smart-contextual tips card + Continue). Gated behind
-// UI_V4_ENABLED — flag stays OFF until Phases 4 + 5 (classify +
+// UI_V4_ENABLED - flag stays OFF until Phases 4 + 5 (classify +
 // review) land, then it flips per the v4 roadmap.
 import V4CaptureScreen from './screens/V4CaptureScreen';
 // Phase 4 of RN ↔ PWA parity. V4ClassifyScreen mirrors the PWA's
-// #stage-v4-classify — 3 sub-views (damage / infra / crisis) on one
+// #stage-v4-classify - 3 sub-views (damage / infra / crisis) on one
 // screen with tile-tap 200ms auto-progress. Reanimated dep added in
 // Phase 0 is reserved for future polish; v1 uses RN's built-in
 // Animated for the scale pulse so it works under the existing
 // jest mock layer.
 import V4ClassifyScreen from './screens/V4ClassifyScreen';
 // Phase 5 of RN ↔ PWA parity. V4ReviewScreen mirrors the PWA's
-// #stage-v4-review — Step 3 of 3. Captured strip + summary card +
+// #stage-v4-review - Step 3 of 3. Captured strip + summary card +
 // building mount + voice/text drawer + UNDP details (debris /
 // service status / pressing needs) + Send button. This is the
 // App Store-submission gate per the v4 roadmap.
@@ -202,10 +202,10 @@ import RewardsScreen from './screens/RewardsScreen';
 // `review_incident` kept as an alias that redirects to `review_details` so any
 // lingering push-notification or URL scheme referring to it still lands on a
 // valid screen.
-// Apr 2026 "My Reports" spec — `report_detail` is a new full-screen view
+// Apr 2026 "My Reports" spec - `report_detail` is a new full-screen view
 // with photo / timeline / metadata / feedback + per-report delete. Parity
 // with PWA's stage-report-detail.
-// Phase B4 (Apr 2026 UI v3) — 4 new screen values for the 8-stage capture
+// Phase B4 (Apr 2026 UI v3) - 4 new screen values for the 8-stage capture
 // flow reorder (parity with PWA). Default ON via UI_V3_ENABLED below; flip
 // to 'off' in AsyncStorage key `crisp_ui_v3` to revert.
 //
@@ -215,22 +215,22 @@ import RewardsScreen from './screens/RewardsScreen';
 //   v2 path: home → photo → audio → review_details → review_confirm → success
 type Screen =
   | 'home'
-  | 'legacy_home'                                   // May 2026 — fallback for the pre-redesign home block; kept behind a flag for one-flag rollback
+  | 'legacy_home'                                   // May 2026 - fallback for the pre-redesign home block; kept behind a flag for one-flag rollback
   | 'where' | 'infra' | 'crisis' | 'extras'       // v3 additions
   | 'photo' | 'audio' | 'review_details' | 'review_confirm'
   | 'success' | 'history' | 'report_detail'
-  // Phase 1 (Apr 2026 — Optional reporter login) — off-flow screens.
+  // Phase 1 (Apr 2026 - Optional reporter login) - off-flow screens.
   | 'login' | 'settings'
-  // May 2026 — UI v4 parity (DEFERRED). Screen values are reserved
+  // May 2026 - UI v4 parity (DEFERRED). Screen values are reserved
   // here so the eventual port type-checks; the corresponding screen
   // components are tracked in crisp-mobile/V4_PARITY_DEFERRED.md.
-  // No v4 navigation calls today — the flag check below prevents
+  // No v4 navigation calls today - the flag check below prevents
   // routing to these stubs.
   | 'v4_landing' | 'v4_capture' | 'v4_classify' | 'v4_review'
-  // Phase 6 — Rewards page + Badge Studio share surface.
+  // Phase 6 - Rewards page + Badge Studio share surface.
   | 'v4_rewards';
 
-// June 2026 — v4 ACTIVATED (RNV4-P4). RN now mirrors the PWA's flagship
+// June 2026 - v4 ACTIVATED (RNV4-P4). RN now mirrors the PWA's flagship
 // V4 report flow: home → v4_capture → v4_classify → v4_review → success,
 // with geo-scoped crisis packs (RNV4-P0..P3). The legacy v3/v2 screens
 // stay in the tree but are unreachable while this is true (the start-report
@@ -241,11 +241,11 @@ const UI_V4_ENABLED = true;
 /**
  * Schedule heavy async work to run AFTER any user interaction (touch, scroll,
  * animation) has finished. InteractionManager.runAfterInteractions is React
- * Native's answer to the browser's requestIdleCallback — it ensures the JS
+ * Native's answer to the browser's requestIdleCallback - it ensures the JS
  * thread processes gestures first before yielding to background tasks.
  *
  * Capture-flow bug (Apr 2026): the PII blur + variant-generation pipeline
- * runs for 300–800 ms and — because JS is single-threaded — starves touch
+ * runs for 300–800 ms and - because JS is single-threaded - starves touch
  * events until it completes. Users reported the Next / shutter / Browse
  * buttons "doing nothing" immediately after a capture. Wrapping the
  * pipeline in runAfterInteractions fixes the perception of unresponsiveness
@@ -263,14 +263,14 @@ function _runAfterInteractions<T>(asyncFn: () => Promise<T>): Promise<T> {
 }
 
 // Per-incident photo cap (PWA/RN parity, see mobile-app/src/app.js).
-// 2 extras + 1 primary = 3 photos total — operator UX decision May 2026,
+// 2 extras + 1 primary = 3 photos total - operator UX decision May 2026,
 // reduced from 5. Guarded at every _ingestExtraFromUri call site so a
 // future code path can't accidentally bypass. Enforced on the client
-// AND on the server's chunked-upload ceiling — matches PWA behaviour.
+// AND on the server's chunked-upload ceiling - matches PWA behaviour.
 const MAX_EXTRA_PHOTOS = 2;
 const MAX_PHOTOS_TOTAL = MAX_EXTRA_PHOTOS + 1;   // main + extras
 
-// Throttle ref for the cap-reached Alert — prevents 10 popups when the user
+// Throttle ref for the cap-reached Alert - prevents 10 popups when the user
 // selects 10 photos from the gallery while already at cap. First trigger in a
 // 1200-ms window shows the alert; subsequent triggers skip it.
 let _lastCapAlertAt = 0;
@@ -299,21 +299,21 @@ function BadgeCard({ deviceHash }: { deviceHash: string }) {
 }
 
 /**
- * FlowProgress — Apr 2026 UX rewrite.
+ * FlowProgress - Apr 2026 UX rewrite.
  * Unified 4-step progress bar for the capture flow (Photo → Details → Review → Send).
  * Replaces per-screen step labels ("1/4", "2/4", …). Color-coded so the user
  * always knows where they are, what's done, what's left, and what's missing.
  *
- *   done     — green ✓  (step completed with required data)
- *   active   — accent ●  (currently on this step)
- *   missing  — red !    (past step with no required data)
- *   upcoming — grey ○    (future step)
+ *   done     - green ✓  (step completed with required data)
+ *   active   - accent ●  (currently on this step)
+ *   missing  - red !    (past step with no required data)
+ *   upcoming - grey ○    (future step)
  *
  * Parity with PWA's `#flow-progress` bar at mobile-app/src/index.html.
  */
 type StepState = 'done' | 'active' | 'missing' | 'upcoming';
 /**
- * HeartPulse — Apr 2026 PR 3.
+ * HeartPulse - Apr 2026 PR 3.
  * Pulsing red heart that draws the eye to the "Lives Saved" stat on
  * the home impact card. Parity with the PWA's CSS `@keyframes heart-pulse`
  * at `mobile-app/src/styles.css`. Native-side implementation uses the
@@ -348,7 +348,7 @@ function HeartPulse() {
 }
 
 /**
- * PR 7 (Apr 2026) — bigger, red-glowing heart for the success screen close.
+ * PR 7 (Apr 2026) - bigger, red-glowing heart for the success screen close.
  * Same 2-second scale/glow loop as PR 3's HeartPulse but red (heart emoji
  * 'as-is' rather than green-tinted) and sized to dominate the hero area.
  */
@@ -387,7 +387,7 @@ function FlowProgress({ step, have }: {
   const stateFor = (n: number): StepState => {
     if (n === step) return 'active';
     if (n < step) {
-      // Past step — green if required data exists, red if missing.
+      // Past step - green if required data exists, red if missing.
       if (n === 1) return have.photo ? 'done' : 'missing';
       if (n === 2) return have.details ? 'done' : 'missing';
       return 'done';
@@ -401,11 +401,11 @@ function FlowProgress({ step, have }: {
     upcoming: { bg: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.18)', fg: 'rgba(255,255,255,0.45)', glyph: '' },
   };
   const LABELS = ['Photo', 'Details', 'Review', 'Send'];
-  // PWA parity — 4px gradient bar showing overall completion, below the
+  // PWA parity - 4px gradient bar showing overall completion, below the
   // badge row. Fills 25/50/75/100% for steps 1..4. Mirrors PWA .progress-bar-container.
   const fillPct = step <= 1 ? 25 : step === 2 ? 50 : step === 3 ? 75 : 100;
   return (
-    <View accessibilityRole="progressbar" accessibilityLabel={`Step ${step} of 4 — ${LABELS[step - 1]}`}>
+    <View accessibilityRole="progressbar" accessibilityLabel={`Step ${step} of 4 - ${LABELS[step - 1]}`}>
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8 }}>
         {[1, 2, 3, 4].map((n, i) => {
           const st = stateFor(n);
@@ -438,7 +438,7 @@ function FlowProgress({ step, have }: {
           );
         })}
       </View>
-      {/* 4px gradient progress bar — PWA parity (.progress-bar-container).
+      {/* 4px gradient progress bar - PWA parity (.progress-bar-container).
           Uses a solid accent fill + a thin track. In RN the gradient
           effect is approximated with the accent color + reduced opacity
           on the remaining track, which reads the same on small screens. */}
@@ -458,14 +458,14 @@ function FlowProgress({ step, have }: {
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const [lang, setLang] = useState('en');
-  // Apr 2026 UI v2 flag — see readUiV2Flag() for rationale. Default true so
+  // Apr 2026 UI v2 flag - see readUiV2Flag() for rationale. Default true so
   // a missing storage key lands on the new flow; flip to 'off' to revert.
   const [uiV2, setUiV2] = useState<boolean>(true);
-  // Apr 2026 UI v3 flag — Phase B4 8-stage capture flow. See readUiV3Flag().
+  // Apr 2026 UI v3 flag - Phase B4 8-stage capture flow. See readUiV3Flag().
   const [uiV3, setUiV3] = useState<boolean>(true);
   // Apr 2026 UI v2: 3-page review split state. `reviewPage` drives the
   // sub-screen inside `review_details`; the old single-page review remains
-  // as the v1 fallback path when uiV2 is false. Starts at 1 — reset to 1
+  // as the v1 fallback path when uiV2 is false. Starts at 1 - reset to 1
   // on stage entry so a resumed draft doesn't flash page 2 before
   // the user re-orients.
   const [reviewPage, setReviewPage] = useState<ReviewPage>(1);
@@ -474,22 +474,22 @@ export default function App() {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [description, setDescription] = useState('');
-  // Phase B4 (Apr 2026 UI v3) — default to the first UNDP super-type
+  // Phase B4 (Apr 2026 UI v3) - default to the first UNDP super-type
   // chip (RESIDENTIAL). `ROAD` was the v2 default before the chip set
   // switched to UNDP Appendix-1 taxonomy. Backend accepts both enum
   // values so in-flight offline queues keep replaying cleanly.
-  // RNV4-P4 — null-first for the three USER-PICKED taxonomy fields. The v4
+  // RNV4-P4 - null-first for the three USER-PICKED taxonomy fields. The v4
   // classify flow forces the reporter to pick each one, so they're always set
   // before submit; resetting them to hardcoded values (the old
   // RESIDENTIAL/FLOOD/PARTIAL defaults) is the misclassification anti-pattern
-  // CLAUDE.md forbids ("reset is null-only"). severity is NOT user-picked — it's
-  // derived from the damage pick (deriveSeverityFromDamage) — so it keeps a
+  // the project invariants forbids ("reset is null-only"). severity is NOT user-picked - it's
+  // derived from the damage pick (deriveSeverityFromDamage) - so it keeps a
   // valid non-null default (sending severity:null would 422 + wedge the queue).
   const [infraType, setInfraType] = useState<string | null>(null);
   const [severity, setSeverity] = useState('MODERATE');
   const [crisisType, setCrisisType] = useState<string | null>(null);
   const [damageClass, setDamageClass] = useState<string | null>(null);  // UNDP: MINIMAL / PARTIAL / COMPLETE
-  // PR 6 (Apr 2026): damage level merged into the infra chip — same-chip
+  // PR 6 (Apr 2026): damage level merged into the infra chip - same-chip
   // second tap collapses the severity row. Starts expanded so users see the
   // silent PARTIAL default before interacting.
   const [showInfraSeverity, setShowInfraSeverity] = useState(true);
@@ -498,34 +498,34 @@ export default function App() {
   // unchanged. setInfraName / setDebrisClearing remain callable in case a
   // future feature wants to reintroduce the inputs.
   const [infraName, setInfraName] = useState('');
-  // Jun 2026 — debris is a UNDP CORE question (required to answer before
+  // Jun 2026 - debris is a UNDP CORE question (required to answer before
   // submit), so it is nullable: null = unanswered (gates Send), true/false =
   // an explicit citizen answer. Was a plain boolean that defaulted to false
   // and rendered "No" pre-selected, letting reports ship without an answer.
   const [debrisClearing, setDebrisClearing] = useState<boolean | null>(null);
-  // Apr 2026 UI v2.1 — tracks whether `infraName` was auto-filled from
+  // Apr 2026 UI v2.1 - tracks whether `infraName` was auto-filled from
   // an OSM tag vs typed manually. Only auto-cleared values when the
   // user clears the building selection; a manually-typed name survives.
   const [infraNameFromOsm, setInfraNameFromOsm] = useState(false);
-  // Phase B2 (Apr 2026 UI v3) — cached nearest-building list populated by
+  // Phase B2 (Apr 2026 UI v3) - cached nearest-building list populated by
   // preCacheNearest on GPS-ready. Non-authoritative; buildingId remains
   // the truth for any actual selection.
   const [nearbyBuildings, setNearbyBuildings] = useState<NearbyBuilding[]>([]);
 
-  // RN→PWA V4 parity (RNV4-P2) — geo-scoped crisis pack active at the current
+  // RN→PWA V4 parity (RNV4-P2) - geo-scoped crisis pack active at the current
   // location (null = default flow; fail-safe). crisisStockAnswers holds the
   // dynamic pack-question answers (filled by DynamicModuleRenderer in RNV4-P3).
   const [crisisPack, setCrisisPack] = useState<any>(null);
   const [crisisStockAnswers, setCrisisStockAnswers] = useState<Record<string, any>>({});
 
-  // Phase 1 (Apr 2026 — Optional reporter login). State is sourced from
+  // Phase 1 (Apr 2026 - Optional reporter login). State is sourced from
   // AuthStore (services/auth.ts); these local copies exist so React
   // re-renders the Login/account pill when they change. Never blocks
-  // the reporting flow — every call is best-effort.
+  // the reporting flow - every call is best-effort.
   const [authReady, setAuthReady] = useState(false);
   const [authLoggedIn, setAuthLoggedIn] = useState(false);
   const [authDisplay, setAuthDisplay] = useState<string | null>(null);
-  // Login screen state — simple in-place wizard (step 1 → 2 → 3).
+  // Login screen state - simple in-place wizard (step 1 → 2 → 3).
   const [loginChannel, setLoginChannel] = useState<'PHONE'|'EMAIL'>('PHONE');
   const [loginCC, setLoginCC] = useState('+91');
   const [loginPhone, setLoginPhone] = useState('');
@@ -536,10 +536,10 @@ export default function App() {
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginLinkable, setLoginLinkable] = useState(0);
   const [loginDestination, setLoginDestination] = useState('');
-  // Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — auto date/time label
+  // Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) - auto date/time label
   // painted on stage-where. Ticks every 60 s via a useEffect hook below;
   // purely local (`new Date()`), zero network, zero wait.
-  // Manual LOCAL fallback for Hermes builds without full Intl — the old
+  // Manual LOCAL fallback for Hermes builds without full Intl - the old
   // toISOString fallback rendered UTC wall-clock unlabeled (off by the
   // device offset). Local getters never need Intl.
   const _localStamp = () => {
@@ -568,17 +568,17 @@ export default function App() {
     const id = setInterval(tick, 60_000);
     return () => clearInterval(id);
   }, []);
-  // Phase B4 (Apr 2026 UI v3) — auto-derive severity from damage class so
+  // Phase B4 (Apr 2026 UI v3) - auto-derive severity from damage class so
   // stage-extras can drop the explicit severity chips.
   useEffect(() => {
     if (!uiV3) return;
-    // Same derivation the v4 flow uses (deriveSeverityFromDamage) — single
+    // Same derivation the v4 flow uses (deriveSeverityFromDamage) - single
     // source of truth, null-safe (null damageClass → MODERATE).
     const next = deriveSeverityFromDamage(damageClass);
     if (severity !== next) setSeverity(next);
   }, [damageClass, uiV3]);
   // PR 6 note: RN's home screen already renders the full flag row from
-  // getAvailableLanguages() inline, so no overlay is needed — the existing
+  // getAvailableLanguages() inline, so no overlay is needed - the existing
   // UX already satisfies the "non-redundant EN + picker" goal that PR 6
   // brings to the PWA via the new #btn-lang-change overlay.
   const [location, setLocation] = useState<{ lat: number; lng: number; acc: number } | null>(null);
@@ -587,7 +587,7 @@ export default function App() {
   const [isLocationUserCorrected, setIsLocationUserCorrected] = useState(false);
   const [userLocationName, setUserLocationName] = useState<string>('');
 
-  // RN→PWA V4 parity (RNV4-P2) — geo-gate. Resolve the active crisis pack for
+  // RN→PWA V4 parity (RNV4-P2) - geo-gate. Resolve the active crisis pack for
   // the current location fix (idempotent to ~110 m; fail-safe → default flow).
   // Mirrors the PWA's _maybeFetchCrisisPack (mobile-app/src/v4-flow.js): on a
   // hit, cache the pack + auto-set the canonical crisis_type when the zone's
@@ -600,7 +600,7 @@ export default function App() {
   const crisisTypeAutoRef = useRef<boolean>(false);
   const crisisPackIdRef = useRef<string | null>(null);
   const maybeFetchCrisisPack = (loc: { lat: number; lng: number } | null) => {
-    if (!UI_V4_ENABLED) return;   // V4-only feature — fully inert (no fetch, no crisis_type override) until activation (RNV4-P4)
+    if (!UI_V4_ENABLED) return;   // V4-only feature - fully inert (no fetch, no crisis_type override) until activation (RNV4-P4)
     if (!loc || typeof loc.lat !== 'number' || typeof loc.lng !== 'number') return;
     const key = loc.lat.toFixed(3) + ',' + loc.lng.toFixed(3);
     if (key === crisisPackKeyRef.current) return;
@@ -608,7 +608,7 @@ export default function App() {
     getCrisisFormsActive(loc.lat, loc.lng).then((data) => {
       // Pure reducer decides the swap (mirrors the PWA's _maybeFetchCrisisPack):
       // swap/clear the pack, drop the previous zone's answers on a pack change,
-      // and clear a zone-AUTO crisis_type once it no longer applies — never a
+      // and clear a zone-AUTO crisis_type once it no longer applies - never a
       // hand-picked one. See services/crisisForm.ts (unit-tested).
       const swap = resolveCrisisPackSwap(data, {
         packId: crisisPackIdRef.current, wasAuto: crisisTypeAutoRef.current,
@@ -625,13 +625,13 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { maybeFetchCrisisPack(location); }, [location]);
 
-  // UNDP Appendix 1 — optional OSM-way id for a specific building footprint
+  // UNDP Appendix 1 - optional OSM-way id for a specific building footprint
   // selected by the reporter via the map picker. `null` means "location as
   // GPS only". Submitted as `building_id` on the meta payload.
   const [buildingId, setBuildingId] = useState<string | null>(null);
   const [footprintPickerOpen, setFootprintPickerOpen] = useState(false);
   // Phase 4: service_status + pressing_needs (matches PWA meta).
-  // Phase 3 (Apr 2026): parity fix — backend `ServiceStatusEnum` is
+  // Phase 3 (Apr 2026): parity fix - backend `ServiceStatusEnum` is
   // OPERATIONAL/DISRUPTED/DESTROYED/UNKNOWN (backend/app/models/report.py:57–61).
   // Previously RN sent NORMAL/DEGRADED/DOWN which the backend silently
   // dropped. PWA already used the correct enum; RN now matches.
@@ -639,7 +639,7 @@ export default function App() {
   const [electricityStatus, setElectricityStatus] = useState<ServiceLevel>('UNKNOWN');
   const [waterStatus, setWaterStatus] = useState<ServiceLevel>('UNKNOWN');
   const [healthStatus, setHealthStatus] = useState<ServiceLevel>('UNKNOWN');
-  // pressing_needs — lowercase to match PWA + docs/PARITY.md.
+  // pressing_needs - lowercase to match PWA + docs/PARITY.md.
   const [pressingNeeds, setPressingNeeds] = useState<string[]>([]);
   // Phase 4: multi-photo support. Main photo stays in photoUri/photoBase64;
   // additional photos live here, each runs through the same blur pipeline.
@@ -651,7 +651,7 @@ export default function App() {
     variants?: import('./services/imageVariants').PhotoVariants | null;
     groupId?: string;
   }>>([]);
-  // Apr 2026 image viewer — full-screen preview with delete + confirm.
+  // Apr 2026 image viewer - full-screen preview with delete + confirm.
   // `kind: 'primary'` deletes photoUri (promoting the first extra if any);
   // `kind: 'extra'` deletes extraPhotos[index].
   const [viewerState, setViewerState] = useState<
@@ -661,28 +661,28 @@ export default function App() {
   const [isSending, setIsSending] = useState(false);
   const [reportId, setReportId] = useState('');
   const [isRecording, setIsRecording] = useState(false);
-  // Apr 2026 — PWA parity: show elapsed MM:SS during audio capture so
+  // Apr 2026 - PWA parity: show elapsed MM:SS during audio capture so
   // reporters know when their clip is getting long. PWA uses #rec-timer.
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [deviceHash, setDeviceHash] = useState('');
   const [history, setHistory] = useState<HistoryReport[]>([]);
-  // In-flight (queued / syncing / failed) reports — merged with history in
+  // In-flight (queued / syncing / failed) reports - merged with history in
   // the "My Reports" screen so users can see what hasn't shipped yet and
   // where each one is in its sync lifecycle.
   const [pendingReports, setPendingReports] = useState<QueuedReport[]>([]);
   const [impactStats, setImpactStats] = useState({ totalLives: 0, resolvedCount: 0 });
-  // Apr 2026 "My Reports" spec — individual report detail view state.
+  // Apr 2026 "My Reports" spec - individual report detail view state.
   // selectedReport holds the row currently rendered in screen==='report_detail';
   // it's populated from the status-since response (fresher than local SQLite).
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [showAdvancedDelete, setShowAdvancedDelete] = useState(false);
-  // Offline delete queue — IDs whose DELETE call we'll retry on reconnect.
+  // Offline delete queue - IDs whose DELETE call we'll retry on reconnect.
   const [deleteQueue, setDeleteQueue] = useState<string[]>([]);
   // iOS gotcha: passing `outputFormat: 'aac'` produces a CAFF (Core Audio
   // Format) container that HTML5 <audio> cannot play. The iOS FourCC code
   // is `'aac '` WITH a trailing space (IOSOutputFormat.MPEG4AAC). We also
-  // have to set the linearPCM* keys — without them AVAudioRecorder silently
+  // have to set the linearPCM* keys - without them AVAudioRecorder silently
   // falls back to CAFF even though the file extension is .m4a.
   const audioRecorder = useAudioRecorder({
     extension: '.m4a', sampleRate: 44100, numberOfChannels: 1, bitRate: 128000,
@@ -701,12 +701,12 @@ export default function App() {
   // Kept for the legacy single-variant path (e.g. the PII-blur-only fallback
   // when variant generation fails). New uploads prefer `photoVariants` below.
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
-  // Guaranteed-delivery pipeline — three JPEG variants of the main photo
+  // Guaranteed-delivery pipeline - three JPEG variants of the main photo
   // sharing a `photoGroupId`. Populated by generateVariants() in the
   // background after capture. null ⇒ fall back to the single-variant path.
   const [photoVariants, setPhotoVariants] = useState<import('./services/imageVariants').PhotoVariants | null>(null);
   const [photoGroupId, setPhotoGroupId] = useState<string | null>(null);
-  // Informative status flag only — DOES NOT block navigation. The Next button
+  // Informative status flag only - DOES NOT block navigation. The Next button
   // is gated on "photo present?", not on "blur finished?". If the user taps
   // submit before blur completes, submitReport() awaits blurPromiseRef first.
   const [isBlurring, setIsBlurring] = useState(false);
@@ -719,12 +719,12 @@ export default function App() {
    * Used by pickImage (non-first assets), pickExtraImage (all assets),
    * and takePhoto (subsequent captures in the multi-snap loop).
    *
-   * Matches entries by object identity (not index) — multi-select fires
+   * Matches entries by object identity (not index) - multi-select fires
    * this call in rapid succession and stale indices from setState-in-
    * flight would otherwise corrupt neighbour entries' variants.
    */
   const _ingestExtraFromUri = (rawUri: string, rawB64: string) => {
-    // Phase A1 (Apr 2026 UI v3) — enforce per-incident photo cap.
+    // Phase A1 (Apr 2026 UI v3) - enforce per-incident photo cap.
     // Create the entry up-front so the downstream variant closure can match
     // by object identity. Then atomically append inside a functional
     // setState, which is what guarantees a rapid multi-select can't race
@@ -800,7 +800,7 @@ export default function App() {
     const config = getAdaptiveConfig();
     console.log(`[Camera] Network: ${config.tier}, quality: ${config.imageQuality}, maxWidth: ${config.imageMaxWidth}`);
 
-    // Track primary-slot state locally — React state updates are async so the
+    // Track primary-slot state locally - React state updates are async so the
     // closure value from `photoUri` would be stale mid-loop.
     let primaryFilled = !!photoUri;
 
@@ -821,7 +821,7 @@ export default function App() {
         _ingestExtraFromUri(asset.uri, asset.base64!);
       }
 
-      // Phase A1 (Apr 2026 UI v3) — if the cap has been reached after this
+      // Phase A1 (Apr 2026 UI v3) - if the cap has been reached after this
       // snap, short-circuit the "Take another?" prompt. We peek at the
       // current state via a functional update-noop (the only synchronous
       // way to read extras-length inside a while loop that might batch
@@ -836,7 +836,7 @@ export default function App() {
       }
 
       const wantMore = await new Promise<boolean>((resolve) => {
-        // Apr 2026 i18n sweep (R7) — alert title/body/buttons now route
+        // Apr 2026 i18n sweep (R7) - alert title/body/buttons now route
         // through keys so field workers see prompts in their own locale.
         Alert.alert(
           t('take_another_title'),
@@ -866,7 +866,7 @@ export default function App() {
     await detectNetworkTier();
     const config = getAdaptiveConfig();
 
-    // Phase A1 (Apr 2026 UI v3) — cap the gallery picker's selectionLimit so
+    // Phase A1 (Apr 2026 UI v3) - cap the gallery picker's selectionLimit so
     // the user can't even see the ghost of a 6th photo. Accounts for the
     // primary slot: if it's empty, one of the picked assets fills it (no
     // drain on the extras quota); if it's taken, every pick is an extra.
@@ -905,7 +905,7 @@ export default function App() {
 
   /**
    * Phase 4: add more photos to the extraPhotos array.
-   * PR 5: now multi-select — all picked assets become extras.
+   * PR 5: now multi-select - all picked assets become extras.
    */
   const pickExtraImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -913,7 +913,7 @@ export default function App() {
       Alert.alert(t('permission_needed'), t('permission_gallery'));
       return;
     }
-    // Phase A1 (Apr 2026 UI v3) — narrow the gallery picker's selection
+    // Phase A1 (Apr 2026 UI v3) - narrow the gallery picker's selection
     // ceiling to the remaining capacity so the user never even sees the
     // 6th / 7th / … nth photo as a picked-ghost. Falls through to the
     // per-push guard in _ingestExtraFromUri for the primary-present race
@@ -993,11 +993,11 @@ export default function App() {
    * up with variants queued correctly.
    *
    * On any variant-generation failure we fall through to the original
-   * single-blur path — guaranteed-delivery is an enhancement on top of the
+   * single-blur path - guaranteed-delivery is an enhancement on top of the
    * existing pipeline, not a hard replacement.
    */
   const _applyClientBlur = (rawB64: string, rawUri: string, tier: string) => {
-    setPhotoBase64(rawB64);           // raw immediately — user can proceed now
+    setPhotoBase64(rawB64);           // raw immediately - user can proceed now
     setPhotoVariants(null);
     const groupId = crypto.randomUUID();
     setPhotoGroupId(groupId);
@@ -1012,18 +1012,18 @@ export default function App() {
       try {
         const variants = await generateVariants(rawUri, rawB64);
         setPhotoVariants(variants);
-        // Update preview to the SMALL blurred variant — same bytes the
+        // Update preview to the SMALL blurred variant - same bytes the
         // dashboard will see first, so what the user sees pre-submit and
         // what the analyst sees post-submit match.
         setPhotoBase64(variants.small.base64);
         setPhotoUri(`data:image/jpeg;base64,${variants.small.base64}`);
         console.log(
-          `[Capture] Variants ready — small=${Math.round(variants.small.bytes / 1024)}KB ` +
+          `[Capture] Variants ready - small=${Math.round(variants.small.bytes / 1024)}KB ` +
           `medium=${Math.round(variants.medium.bytes / 1024)}KB ` +
           `large=${Math.round(variants.large.bytes / 1024)}KB (net=${tier}) groupId=${groupId.slice(0, 8)}`
         );
       } catch (e) {
-        // Variant pipeline failed — fall back to the plain single-blur path
+        // Variant pipeline failed - fall back to the plain single-blur path
         // so the photo still uploads at full quality (just not progressively).
         console.warn('[Capture] variant generation failed, falling back to single blur:', e);
         try {
@@ -1060,7 +1060,7 @@ export default function App() {
 
       audioRecorder.record();
       setIsRecording(true);
-      // Start the MM:SS elapsed-time ticker. We tick every 1 s — good
+      // Start the MM:SS elapsed-time ticker. We tick every 1 s - good
       // enough resolution for a crisis report and won't re-render too
       // aggressively. Ref is cleared on stop or unmount.
       setRecordingSeconds(0);
@@ -1070,7 +1070,7 @@ export default function App() {
       }, 1000);
     } catch (e: any) {
       console.error('[Audio] Start failed:', e);
-      // Apr 2026 i18n sweep — localised error copy. The underlying
+      // Apr 2026 i18n sweep - localised error copy. The underlying
       // error string stays in English console logs above; the user-
       // visible alert body uses their active locale via t(). Title
       // falls back to a short English "Error" since we haven't spun
@@ -1117,7 +1117,7 @@ export default function App() {
           setLocationName(parts.join(', '));
         }
       } catch (e) { telemetrySwallow('reverseGeocode', e); }
-      // Phase B2 (Apr 2026 UI v3) — warm the AsyncStorage building cache with
+      // Phase B2 (Apr 2026 UI v3) - warm the AsyncStorage building cache with
       // the 10 nearest footprints. Non-blocking; failures are silent. The
       // free-text fallback + future autocomplete consume this list.
       try {
@@ -1133,7 +1133,7 @@ export default function App() {
     } catch (e) { telemetrySwallow('getLocation', e); }
   };
 
-  // Consent-gate state — mirrors the PWA's _initConsentGate. The render
+  // Consent-gate state - mirrors the PWA's _initConsentGate. The render
   // tree below is covered by <ConsentOverlay> until `consentGiven` flips
   // true, either because the user just accepted OR because a prior
   // launch already persisted acceptance in AsyncStorage.
@@ -1151,7 +1151,7 @@ export default function App() {
   }, []);
 
   /**
-   * Apr 2026 UI v2 — Android hardware-Back hook. When the review stage
+   * Apr 2026 UI v2 - Android hardware-Back hook. When the review stage
    * is showing the 3-page split, pressing the OS back button should step
    * through the pages rather than punt the whole stage back to audio.
    * Only mounts on Android (BackHandler is a no-op on iOS); only fires
@@ -1180,7 +1180,7 @@ export default function App() {
    * Reset reviewPage back to 1 whenever the user (re)enters the review
    * stage. Without this a user who Back-navs to audio and then returns
    * would briefly see their previous page-2 state before the render
-   * settled — disorienting for low-literacy field workers.
+   * settled - disorienting for low-literacy field workers.
    */
   useEffect(() => {
     if (screen === 'review_details') {
@@ -1189,13 +1189,13 @@ export default function App() {
   }, [screen]);
 
   useEffect(() => {
-    // Apr 2026 UI v2 flag read — fire-and-forget. See readUiV2Flag() for
+    // Apr 2026 UI v2 flag read - fire-and-forget. See readUiV2Flag() for
     // rollback semantics. Runs in the same mount effect so no extra
     // render is triggered after the rest of the boot sequence settles.
     readUiV2Flag().then((on) => { setUiV2(on); }).catch(() => { /* keep default */ });
     readUiV3Flag().then((on) => { setUiV3(on); }).catch(() => { /* keep default */ });
-    // Phase 1 (Apr 2026 — Optional reporter login). Initialise AuthStore
-    // once — it hydrates from expo-secure-store + AsyncStorage. Failures
+    // Phase 1 (Apr 2026 - Optional reporter login). Initialise AuthStore
+    // once - it hydrates from expo-secure-store + AsyncStorage. Failures
     // are swallowed; the UI just shows "Login / Sign up" as a fallback.
     try {
       AuthStore.setApiBase(getApiBase());
@@ -1242,7 +1242,7 @@ export default function App() {
     updateQueueCount();
     getLocation();
     // Pre-load the BlazeFace model in the background so the first photo
-    // capture pays ~0 ms of model-load latency. Swallows errors — if the
+    // capture pays ~0 ms of model-load latency. Swallows errors - if the
     // model can't load we'll just fall back to server-side PII blur.
     prewarmPIIBlur();
     // Stable device hash (persist across sessions for status tracking)
@@ -1255,7 +1255,7 @@ export default function App() {
     });
     // Load history
     refreshHistory();
-    // Network listener — sync silently in background, never show errors
+    // Network listener - sync silently in background, never show errors
     const unsub = NetInfo.addEventListener(state => {
       const online = !!(state.isConnected && state.isInternetReachable);
       setIsOnline(online);
@@ -1271,10 +1271,10 @@ export default function App() {
   }, []);
 
   const updateQueueCount = async () => setQueueCount(await getQueueCount());
-  // ── Apr 2026 "My Reports" spec — shared helpers (parity with PWA) ──────
+  // ── Apr 2026 "My Reports" spec - shared helpers (parity with PWA) ──────
   //
   // 4-state user-facing status derived from the backend's two orthogonal
-  // fields (status enum + reviewer_verdict). Verdict-first mapping — see
+  // fields (status enum + reviewer_verdict). Verdict-first mapping - see
   // mobile-app/src/app.js:_mapReportStatus for the canonical spec.
   const mapReportStatus = (r: any): { state: string; color: string; icon: string; label: string } => {
     const verdict = r?.reviewer_verdict || 'NOT_REVIEWED';
@@ -1290,7 +1290,7 @@ export default function App() {
     const lines: string[] = [];
     if (r?.help_arrived_at) lines.push('Help arrived on scene');
     else if (r?.help_dispatched_at) lines.push('Help dispatched');
-    else if ((r?.reviewer_verdict || '') === 'ACCEPTED') lines.push('Accepted — awaiting dispatch');
+    else if ((r?.reviewer_verdict || '') === 'ACCEPTED') lines.push('Accepted - awaiting dispatch');
     if ((r?.reviewer_verdict || '') === 'ACCEPTED' && r?.action_taken && String(r.action_taken).trim()) {
       lines.push(String(r.action_taken).trim());
     }
@@ -1368,7 +1368,7 @@ export default function App() {
     } catch (e) { telemetrySwallow('refreshHistory', e); }
   };
 
-  /** Phase 5e (Apr 2026) — celebratory delta detection. Compares the current
+  /** Phase 5e (Apr 2026) - celebratory delta detection. Compares the current
    *  status-since response against a snapshot saved on the last refresh so
    *  we can surface "🎉 Your report was accepted!" or "💚 N lives helped"
    *  without spamming the user on every tick. */
@@ -1448,20 +1448,20 @@ export default function App() {
   };
   const resetReport = () => {
     setPhotoUri(null); setPhotoBase64(null); setAudioUri(null); setDescription('');
-    // null-first reset for the user-picked taxonomy (RNV4-P4 / CLAUDE.md); the
+    // null-first reset for the user-picked taxonomy (RNV4-P4 / the project invariants); the
     // v4 classify flow re-collects them per report. severity is re-derived from
     // the next damage pick, so its reset value is overwritten before submit.
     setInfraType(null); setSeverity('MODERATE');
     setCrisisType(null); setDamageClass(null); setInfraName(''); setInfraNameFromOsm(false); setDebrisClearing(null);
     setLocation(null); setLocationName(''); setIsSending(false); setReportId('');
-    // RNV4-P2 — clear crisis-pack state + geo-gate key so a new report re-resolves.
+    // RNV4-P2 - clear crisis-pack state + geo-gate key so a new report re-resolves.
     setCrisisPack(null); setCrisisStockAnswers({}); crisisPackKeyRef.current = null;
     crisisTypeAutoRef.current = false; crisisPackIdRef.current = null;
-    // Phase 4 — reset the new service/needs/extra-photos state too.
+    // Phase 4 - reset the new service/needs/extra-photos state too.
     setElectricityStatus('UNKNOWN'); setWaterStatus('UNKNOWN'); setHealthStatus('UNKNOWN');
     setPressingNeeds([]); setExtraPhotos([]);
     setIsLocationUserCorrected(false); setUserLocationName('');
-    // Guaranteed-delivery — clear variant state so the next capture starts clean.
+    // Guaranteed-delivery - clear variant state so the next capture starts clean.
     setPhotoVariants(null); setPhotoGroupId(null);
   };
 
@@ -1470,9 +1470,9 @@ export default function App() {
     try {
       const clientId = crypto.randomUUID();
 
-      // ── ALL LOCAL — no network calls here ──
+      // ── ALL LOCAL - no network calls here ──
       // If client-side PII blur is still in flight, wait for it before reading
-      // photoBase64 — otherwise a fast user submits the raw unblurred bytes.
+      // photoBase64 - otherwise a fast user submits the raw unblurred bytes.
       if (blurPromiseRef.current) {
         try { await blurPromiseRef.current; } catch { /* fall through with raw */ }
       }
@@ -1480,7 +1480,7 @@ export default function App() {
       const photoData = photoBase64 ? `data:image/jpeg;base64,${photoBase64}` : null;
 
       // Audio: read local file as base64 (no network needed).
-      // Expo SDK 54 removed the top-level FileSystem.readAsStringAsync — now
+      // Expo SDK 54 removed the top-level FileSystem.readAsStringAsync - now
       // it throws at runtime. Use the new `new File(uri).base64()` API. This
       // was the bug causing audio to never reach the server: the old call
       // threw, the try/catch below swallowed it, and audioData stayed null.
@@ -1499,7 +1499,7 @@ export default function App() {
       // alongside the primary photo. Kept as a JSON-serialisable array.
       const extraPhotoDataUrls = extraPhotos.map(x => `data:image/jpeg;base64,${x.base64}`);
 
-      // Phase 4: meta payload now mirrors the PWA shape — service_status,
+      // Phase 4: meta payload now mirrors the PWA shape - service_status,
       // pressing_needs, and the full set of location-correction fields.
       // Guaranteed-delivery: each photo with variants becomes 3 Media rows
       // on the backend. expected_media must reflect that so the report
@@ -1511,7 +1511,7 @@ export default function App() {
         (photoData ? (mainHasVariants ? 3 : 1) : 0) +
         (extrasWithVariants * 3) + extrasWithoutVariants +
         (audioData ? 1 : 0);
-      // RN→PWA V4 parity (RNV4-P2) — Dynamic Crisis Forms. assembleCrisisForm
+      // RN→PWA V4 parity (RNV4-P2) - Dynamic Crisis Forms. assembleCrisisForm
       // mirrors the PWA: form_data = maps_to fields from canonical state ∪ the
       // pack answers; all three null on the default flow (byte-identical report).
       const { form_pack_id: formPackId, form_pack_version: formPackVersion, form_data: formData } =
@@ -1527,19 +1527,19 @@ export default function App() {
         expected_media: expectedMedia,
         crisis_type: crisisType, damage_classification: damageClass,
         infrastructure_name: infraName || null, debris_clearing_needed: debrisClearing,
-        // Phase B2 (Apr 2026 UI v3) — distinguisher between OSM-auto-filled and
+        // Phase B2 (Apr 2026 UI v3) - distinguisher between OSM-auto-filled and
         // user-typed building names. See backend/app/schemas/report.py
         // ReportMetaCreate.infrastructure_name_from_osm for the full rationale.
         // Dashboard flags `building_id IS NULL AND infrastructure_name_from_osm
         // = false` as "needs mapping" so operators can resolve the free-text
         // entry to a real OSM footprint later.
         infrastructure_name_from_osm: Boolean(infraNameFromOsm),
-        // UNDP Appendix 1 — pin to an OSM way id when the reporter picked
+        // UNDP Appendix 1 - pin to an OSM way id when the reporter picked
         // an exact building footprint. Backend expects `osm:way:<id>` or null.
         building_id: buildingId || null,
         // Phase-1 progressive-upload placeholder. Captured by
         // generateVariants() → jpeg-js decode → blurhash encode. Dashboard
-        // renders this the instant the meta POST lands — BEFORE any media
+        // renders this the instant the meta POST lands - BEFORE any media
         // chunk arrives. ~28–32-char string (~100 ms at 2 Kbps).
         blurhash: photoVariants?.blurhash || null,
         service_status: {
@@ -1558,18 +1558,18 @@ export default function App() {
           user_location_name: userLocationName || null,
           is_user_corrected: isLocationUserCorrected,
         } } : {}),
-        // Dynamic Crisis Forms (RNV4-P2) — null on the default flow.
+        // Dynamic Crisis Forms (RNV4-P2) - null on the default flow.
         form_pack_id: formPackId,
         form_pack_version: formPackVersion,
         form_data: formData,
         // Echo the active-zone event id captured by the /active fetch
         // (crisisPack.event_id). The server verifies it owns the answered pack
         // and re-derives from location otherwise, so it's a hint not trusted
-        // blindly — this links the report to its operation. Null on default flow.
+        // blindly - this links the report to its operation. Null on default flow.
         crisis_event_id: crisisPack?.event_id || null,
       };
 
-      // Guaranteed-delivery — serialize variant payloads alongside the
+      // Guaranteed-delivery - serialize variant payloads alongside the
       // legacy single-photo fields. syncEngine picks the variant path when
       // `photo_variants` is present, falling back to `photo` otherwise.
       const makeVariantRecord = (v: PhotoVariants) => ({
@@ -1586,7 +1586,7 @@ export default function App() {
           }) : null))
         : null;
 
-      // Save to LOCAL SQLite — works 100% offline, no network needed.
+      // Save to LOCAL SQLite - works 100% offline, no network needed.
       // extra_photos is a JSON blob so the sync engine can replay it.
       await enqueueReport({
         client_report_id: clientId,
@@ -1603,22 +1603,22 @@ export default function App() {
       setReportId(clientId.substring(0, 8));
       await updateQueueCount();
 
-      // Show success immediately — data is safe in local DB
+      // Show success immediately - data is safe in local DB
       setScreen('success');
 
-      // Try background sync SILENTLY — never show errors to user
+      // Try background sync SILENTLY - never show errors to user
       // If offline, sync will happen automatically when network returns
       processQueue().then(updateQueueCount).catch(() => {});
 
     } catch (e: any) {
       console.error('[Submit] Local save error:', e);
-      // Apr 2026 i18n sweep — localised error copy.
+      // Apr 2026 i18n sweep - localised error copy.
       Alert.alert('Error', t('error_save_local'));
     }
     setIsSending(false);
   };
 
-  // Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — 8 UNDP Appendix-1
+  // Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) - 8 UNDP Appendix-1
   // super-types replacing the 9 legacy chips. Enum values match
   // InfraTypeEnum on the backend so no client → server remap needed.
   // v2 fallback: when `uiV3` is false, the legacy `typesLegacy` array is
@@ -1651,9 +1651,9 @@ export default function App() {
     { key: 'MODERATE', icon: '🟠', label: t('sev_moderate') },
     { key: 'SEVERE', icon: '🔴', label: t('sev_severe') },
   ];
-  // Phase 3: added CYCLONE (was missing from RN — parity bug).
+  // Phase 3: added CYCLONE (was missing from RN - parity bug).
   const crisisTypes = [
-    // UNDP Appendix-1 crisis taxonomy — Natural / Technological / Human-made.
+    // UNDP Appendix-1 crisis taxonomy - Natural / Technological / Human-made.
     // HURRICANE + WILDFIRE removed from the user-visible chip list; the
     // backend still accepts them for historical rows.
     // `labelKey` routes the chip label through i18n (all 22 locales); the
@@ -1670,11 +1670,11 @@ export default function App() {
     { key: 'CIVIL_UNREST',       icon: '🪧', labelKey: 'crisis_unrest',     label: 'Civil Unrest' },
     { key: 'OTHER',              icon: '❓', labelKey: 'crisis_other',      label: 'Other' },
   ];
-  // UNDP Appendix-1 damage labels (Apr 2026 UI v2.1) — verbatim phrasing
+  // UNDP Appendix-1 damage labels (Apr 2026 UI v2.1) - verbatim phrasing
   // from the spec: "Minimal / No damage", "Partially damaged", "Completely
   // damaged". `labelKey` routes through i18n; hardcoded `label` left as
   // the last-resort fallback if t() can't resolve the key. The canonical
-  // stored value is MINIMAL — the backend normalises any legacy
+  // stored value is MINIMAL - the backend normalises any legacy
   // NO_DAMAGE payload on write.
   const damageOptions = [
     { key: 'MINIMAL',  icon: '✅', labelKey: 'minimal_damage', label: 'Minimal / No damage',  color: '#22c55e' },
@@ -1689,7 +1689,7 @@ export default function App() {
          top inset itself). On devices with a gesture-area / bottom
          notch (most Android 12+) this prevents overflow of the CTA row. */}
     <SafeAreaView style={s.container} edges={['left','right','bottom']}>
-      {/* (May 2026 — Fix-R5) — explicit translucent={false} so older
+      {/* (May 2026 - Fix-R5) - explicit translucent={false} so older
           Android (API 21-23) doesn't render content under the status
           bar despite the SafeAreaView edges config. backgroundColor
           must be set alongside for the opaque-bar path; barStyle
@@ -1700,18 +1700,18 @@ export default function App() {
         translucent={false}
       />
 
-      {/* Apr 2026 UX rewrite — landing screen simplified:
+      {/* Apr 2026 UX rewrite - landing screen simplified:
             · Hero title + short sub (no "4 easy steps" promise).
             · IMPACT METRICS card (reports submitted + lives impacted) gives
               social proof without overwhelming first-time users.
             · ONE primary CTA: "Start Reporting".
-            · ONE secondary entry: "My Reports" — which now hosts per-report
+            · ONE secondary entry: "My Reports" - which now hosts per-report
               + delete-all functionality (was a separate bottom link before).
             · Badge card lives BELOW the primary actions so users who just
               want to report never see distracting gamification first.
           Parity with PWA `stage-home` at mobile-app/src/index.html. */}
       {screen === 'home' && (
-        // May 2026 — Phase 2 of RN ↔ PWA parity. The new <HomeScreen>
+        // May 2026 - Phase 2 of RN ↔ PWA parity. The new <HomeScreen>
         // component matches the PWA's redesigned home stage (brand
         // row + Lifekeeper inline pill + consent + dominant CTA +
         // 5-tile utility row + 3×2 channels grid + privacy footer +
@@ -1730,10 +1730,10 @@ export default function App() {
           consentGiven={!!consentGiven}
           onConsentToggle={() => setConsentGiven(!consentGiven)}
           deviceId={deviceHash ? `CRISP-${deviceHash.slice(0, 4).toUpperCase()}-${deviceHash.slice(4, 8).toUpperCase()}` : ''}
-          badgeLevel={null /* TODO Phase 6 — fetch from /reports/profile */}
+          badgeLevel={null /* TODO Phase 6 - fetch from /reports/profile */}
           badgeLivesSaved={impactStats.totalLives}
           appVersion="v0.7.44"
-          /* Phase 1 "Verified Reports Nearby" — pass already-cached
+          /* Phase 1 "Verified Reports Nearby" - pass already-cached
              location from the v4 capture flow. NeverPrompt rule: this
              never triggers a permission prompt on the home screen.
              When `location` is null, the NearbyReports module stays
@@ -1752,8 +1752,8 @@ export default function App() {
             setScreen('login');
           }}
           onSettings={() => setScreen('settings')}
-          onPrivacy={() => setScreen('settings') /* TODO Phase 7 — dedicated privacy stage */}
-          onAudio={() => { /* TODO Phase 3 — TTS read-aloud */ }}
+          onPrivacy={() => setScreen('settings') /* TODO Phase 7 - dedicated privacy stage */}
+          onAudio={() => { /* TODO Phase 3 - TTS read-aloud */ }}
           onRewards={() => setScreen('v4_rewards')}
           onQueueTap={async () => {
             const { clearAllQueuedReports } = await import('./services/database');
@@ -1765,7 +1765,7 @@ export default function App() {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════
-           Phase 3 (May 2026 — RN ↔ PWA parity) — v4 single-page capture.
+           Phase 3 (May 2026 - RN ↔ PWA parity) - v4 single-page capture.
            Multi-modal capture screen: photo (camera + gallery) + voice
            (mic) + text (textarea) + smart-contextual tips card. The
            Continue button gates on ≥ 1 photo present. Hidden behind
@@ -1798,7 +1798,7 @@ export default function App() {
               console.log('[v4] GPS refresh failed:', (e as Error)?.message || e);
             }
           }}
-          onEditLocation={() => { /* TODO Phase 3.5 — inline location editor */ }}
+          onEditLocation={() => { /* TODO Phase 3.5 - inline location editor */ }}
           timeText={new Date().toLocaleString(undefined, {
             weekday: 'short', day: '2-digit', month: 'short',
             hour: '2-digit', minute: '2-digit',
@@ -1829,7 +1829,7 @@ export default function App() {
           onTextChange={setDescription}
           onBack={() => setScreen('home')}
           onContinue={() => {
-            // Phase 4 — route to v4_classify when its port has landed
+            // Phase 4 - route to v4_classify when its port has landed
             // (it has, as of this commit). Phase 5 will reroute the
             // classify onContinue to 'v4_review'.
             setScreen('v4_classify');
@@ -1838,7 +1838,7 @@ export default function App() {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════
-           Phase 4 (May 2026 — RN ↔ PWA parity) — v4 classify auto-progress.
+           Phase 4 (May 2026 - RN ↔ PWA parity) - v4 classify auto-progress.
            Three sub-views on one screen: damage → infra → crisis. Tile
            tap fires a 200 ms Animated.timing pulse then advances the
            sub-step. OTHER infra tile reveals a text input and waits for
@@ -1864,16 +1864,16 @@ export default function App() {
             setInfraType(v);
           }}
           onSetCrisis={(v) => {
-            // A manual pick is authoritative — mark it non-auto so a later GPS
+            // A manual pick is authoritative - mark it non-auto so a later GPS
             // drift out of / into a zone can't clear the user's choice.
             crisisTypeAutoRef.current = false;
             setCrisisType(v);
           }}
           onSetInfraName={setInfraName}
-          // RNV4-P3 — geo-scoped crisis pack. When active with renderable
+          // RNV4-P3 - geo-scoped crisis pack. When active with renderable
           // fields, V4ClassifyScreen appends a 'crisispack' sub-step that
           // collects the extra Stage-2/3 questions into crisisStockAnswers
-          // (fed into form_data at submit by assembleCrisisForm — RNV4-P2).
+          // (fed into form_data at submit by assembleCrisisForm - RNV4-P2).
           crisisPack={crisisPack}
           crisisStockAnswers={crisisStockAnswers}
           onSetStockAnswer={(k, v) =>
@@ -1881,20 +1881,20 @@ export default function App() {
           }
           onBack={() => setScreen(UI_V4_ENABLED ? 'v4_capture' : 'home')}
           onContinue={() => {
-            // Phase 5 landed — route to v4_review.
+            // Phase 5 landed - route to v4_review.
             setScreen('v4_review');
           }}
         />
       )}
 
       {/* ══════════════════════════════════════════════════════════════════
-           Phase 5 (May 2026 — RN ↔ PWA parity) — v4 review + Send.
+           Phase 5 (May 2026 - RN ↔ PWA parity) - v4 review + Send.
            Step 3 of 3. Captured strip · summary edit rows ·
            building footprint mount · voice/text drawer · UNDP
            details drawer (debris Y/N · service status × 3 ·
            pressing needs multi-select) · Send button.
            This commit closes the App-Store-submission gate per
-           V4_PARITY_DEFERRED.md — v4 flow is now end-to-end.
+           V4_PARITY_DEFERRED.md - v4 flow is now end-to-end.
       ══════════════════════════════════════════════════════════════════ */}
       {screen === 'v4_review' && (
         <V4ReviewScreen
@@ -1909,7 +1909,7 @@ export default function App() {
 
           buildingId={buildingId}
           buildingPickerNode={
-            // UNDP must-have #6 — render the open-trigger + selected-
+            // UNDP must-have #6 - render the open-trigger + selected-
             // state pill inside V4 review's §D mount. App.tsx still
             // owns the BuildingFootprintPicker modal (mounted at the
             // bottom of the tree); this node just toggles its
@@ -1988,11 +1988,11 @@ export default function App() {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════
-           Phase 6 (May 2026 — RN ↔ PWA parity) — Rewards + Badge Studio.
+           Phase 6 (May 2026 - RN ↔ PWA parity) - Rewards + Badge Studio.
            Combined screen: 4-tier ladder + progress hint + share-message
            picker + Share.share() dispatch. Locked at T1/T2; share unlocks
            at Changemaker (T3+). Badge level is derived locally from
-           backend impactStats — v6.5 will pull from the /reports/profile
+           backend impactStats - v6.5 will pull from the /reports/profile
            endpoint directly per the PWA's home-screen.js pattern.
       ══════════════════════════════════════════════════════════════════ */}
       {screen === 'v4_rewards' && (
@@ -2014,7 +2014,7 @@ export default function App() {
         />
       )}
 
-      {/* Legacy home block — hidden behind a flag for one-flag rollback
+      {/* Legacy home block - hidden behind a flag for one-flag rollback
           in case the new HomeScreen surfaces a regression in field
           testing. Default OFF; flip via __crispUseLegacyHome global
           OR set screen to 'legacy_home' programmatically. */}
@@ -2026,7 +2026,7 @@ export default function App() {
           contentContainerStyle={{ padding: responsivePad(), paddingBottom: 40, alignItems: 'center' }}>
           <Text style={s.emoji}>🆘</Text>
           <Text style={s.title}>{t('welcome_title')}</Text>
-          {/* Apr 2026 PR 3 — removed the "Tap the button" sub-copy; render
+          {/* Apr 2026 PR 3 - removed the "Tap the button" sub-copy; render
               the <Text> only when welcome_sub has actual content so
               locales that keep the tutorial text still see it. */}
           {(() => { const sub = t('welcome_sub'); return sub ? (<Text style={s.subtitle}>{sub}</Text>) : null; })()}
@@ -2035,7 +2035,7 @@ export default function App() {
               with the PWA's lang-switcher dot. Same visual placement. */}
           <View style={[s.langRow, { alignItems: 'center' }]}>
             <View
-              accessibilityLabel={isOnline ? 'Online' : 'Offline — reports will queue'}
+              accessibilityLabel={isOnline ? 'Online' : 'Offline - reports will queue'}
               style={{
                 width: 10, height: 10, borderRadius: 5,
                 marginRight: 8,
@@ -2044,7 +2044,7 @@ export default function App() {
                 shadowOpacity: 0.6, shadowRadius: 3, shadowOffset: { width: 0, height: 0 },
               }}
             />
-            {/* Apr 2026 §3.1 UX — UN official languages rendered first +
+            {/* Apr 2026 §3.1 UX - UN official languages rendered first +
                 visually enlarged. A thin divider then the non-UN locales
                 at regular size. Parity with the PWA `.lpf-un` tile
                 treatment in mobile-app/src/index.html. */}
@@ -2053,7 +2053,7 @@ export default function App() {
                 key={l.code}
                 style={[s.langBtn, s.langBtnUn, lang === l.code && s.langBtnActive]}
                 onPress={() => changeLang(l.code)}
-                accessibilityLabel={`${l.label} — UN official language`}
+                accessibilityLabel={`${l.label} - UN official language`}
               >
                 <Text style={[s.langFlag, s.langFlagUn]}>{l.flag}</Text>
               </TouchableOpacity>
@@ -2068,7 +2068,7 @@ export default function App() {
             ))}
           </View>
 
-          {/* Apr 2026 PR 3 — Lives Saved FIRST (was second), with
+          {/* Apr 2026 PR 3 - Lives Saved FIRST (was second), with
               heart-pulse + green glow. Parity with PWA's .hi-cell-lives
               ordering in mobile-app/src/index.html. */}
           {(impactStats.totalLives > 0 || impactStats.resolvedCount > 0) && (
@@ -2079,7 +2079,7 @@ export default function App() {
               borderRadius: 14, paddingVertical: 14, width: '100%',
               marginTop: 16, marginBottom: 16,
             }}>
-              {/* Lives Saved cell — animated heart + green glow. */}
+              {/* Lives Saved cell - animated heart + green glow. */}
               <View style={{ flex: 1, alignItems: 'center', position: 'relative' }}>
                 <HeartPulse />
                 <Text style={{
@@ -2107,7 +2107,7 @@ export default function App() {
           )}
 
           <TouchableOpacity style={s.bigBtn} onPress={() => {
-            // Phase B4 (Apr 2026 UI v3) — v3 flow opens on the "where"
+            // Phase B4 (Apr 2026 UI v3) - v3 flow opens on the "where"
             // stage (location + damage) before the reporter is asked
             // for evidence. When the flag is off (`crisp_ui_v3='off'`)
             // the legacy v2 flow opens straight to photo capture.
@@ -2116,13 +2116,13 @@ export default function App() {
             <Text style={s.bigBtnText}>{t('welcome_start')}</Text>
           </TouchableOpacity>
 
-          {/* My Reports — single entry point for history + delete-all. */}
+          {/* My Reports - single entry point for history + delete-all. */}
           <TouchableOpacity style={{ backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, paddingVertical: 14, borderRadius: 12, marginTop: 12, width: '100%', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
             onPress={() => { refreshHistory(); pollStatus(); setScreen('history'); }}>
             <Text style={{ color: Colors.text, fontSize: 15, fontWeight: '600' }}>📋 {t('my_reports')}</Text>
           </TouchableOpacity>
 
-          {/* Phase 1 (Apr 2026 — Optional reporter login). Tertiary CTA
+          {/* Phase 1 (Apr 2026 - Optional reporter login). Tertiary CTA
               beneath My Reports so the primary Start button stays biggest.
               When logged in, shows an account pill with a Settings gear. */}
           {authReady && !authLoggedIn && (
@@ -2152,16 +2152,16 @@ export default function App() {
             const cleared = await clearAllQueuedReports();
             updateQueueCount();
             Alert.alert('Queue Cleared', `${cleared} queued report${cleared !== 1 ? 's' : ''} removed.`);
-          }}><Text style={s.queueText}>{isOnline ? '🔄' : '📴'} {queueCount} {t('queued')} — Tap to clear</Text></TouchableOpacity>}
+          }}><Text style={s.queueText}>{isOnline ? '🔄' : '📴'} {queueCount} {t('queued')} - Tap to clear</Text></TouchableOpacity>}
           {!isOnline && <Text style={s.offlineText}>{t('offline')}</Text>}
 
-          {/* Gamification badge — demoted below primary actions so it doesn't
+          {/* Gamification badge - demoted below primary actions so it doesn't
               distract first-time reporters. */}
           <View style={{ marginTop: 18, width: '100%' }}>
             <BadgeCard deviceHash={deviceHash} />
           </View>
 
-          {/* Apr 2026 PR 3 — "Works offline" reassurance at the bottom of
+          {/* Apr 2026 PR 3 - "Works offline" reassurance at the bottom of
               the home screen. Parity with PWA's .home-offline-hint. */}
           <View style={{
             marginTop: 24, paddingVertical: 10, paddingHorizontal: 14,
@@ -2179,7 +2179,7 @@ export default function App() {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════
-           Phase 1 (Apr 2026 — Optional reporter login). Single screen
+           Phase 1 (Apr 2026 - Optional reporter login). Single screen
            hosts all 3 wizard steps via `loginStep` local state. Every
            step's "back" path lands on 'home' so reporting is never a
            tap deeper than necessary.
@@ -2354,7 +2354,7 @@ export default function App() {
         </View>
       )}
 
-      {/* Phase 1 (Apr 2026 — Optional reporter login) — Settings screen. */}
+      {/* Phase 1 (Apr 2026 - Optional reporter login) - Settings screen. */}
       {screen === 'settings' && (
         <View style={[s.screen, { padding: responsivePad() }]}>
           <Text style={s.title}>{(t as any)('settings_title') || 'Settings'}</Text>
@@ -2363,7 +2363,7 @@ export default function App() {
               {(t as any)('settings_account') || 'Account'}
             </Text>
             <Text style={{ color: Colors.text, fontSize: 15, fontWeight: '600', marginTop: 4 }}>
-              {authDisplay || '—'}
+              {authDisplay || '-'}
             </Text>
           </View>
           <TouchableOpacity
@@ -2393,7 +2393,7 @@ export default function App() {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════
-           UI v3 — 4 new capture-flow screens (Phase B4, Apr 2026).
+           UI v3 - 4 new capture-flow screens (Phase B4, Apr 2026).
            Each is a small chip-grid picker + Back/Continue row. Reuses the
            same `s.chipRow` / `s.chip` / `s.nextBtn` styles the legacy
            review_details screen uses, so no new styles needed.
@@ -2408,7 +2408,7 @@ export default function App() {
         <View style={[s.screen, { padding: responsivePad() }]}>
           <Text style={s.title}>{t('stage2_title') || 'Where and how bad?'}</Text>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
-            {/* Phase B4 (Apr 2026 UI v3) — auto date/time panel. Rendered
+            {/* Phase B4 (Apr 2026 UI v3) - auto date/time panel. Rendered
                 from `new Date()` on every mount, updated every 60 s via
                 the `whereAutoTime` useState tick. Zero network, zero wait. */}
             <View style={{ marginBottom: 12, padding: 12, backgroundColor: 'rgba(124,58,237,0.06)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(124,58,237,0.22)' }}>
@@ -2448,7 +2448,7 @@ export default function App() {
               ))}
             </View>
 
-            {/* Phase B4 (Apr 2026 UI v3) — building-footprint picker moved
+            {/* Phase B4 (Apr 2026 UI v3) - building-footprint picker moved
                  from stage-crisis to stage-where per the user spec. Works
                  offline against the 10-nearest AsyncStorage pre-cache
                  warmed by getLocation(). If a building_id is already set,
@@ -2524,7 +2524,7 @@ export default function App() {
         <View style={[s.screen, { padding: responsivePad() }]}>
           <Text style={s.title}>{t('stage4_title') || 'What caused it?'}</Text>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
-            {/* Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — crisis chips
+            {/* Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) - crisis chips
                 grouped into the three UNDP categories so the field matches
                 the Appendix-1 taxonomy section-by-section. Flat grid was
                 the Apr-22 shipping state; this sub-grouping mirrors the
@@ -2556,7 +2556,7 @@ export default function App() {
               </View>
             ))}
 
-            {/* Infrastructure-name free-text input — stays on stage-crisis
+            {/* Infrastructure-name free-text input - stays on stage-crisis
                 per the Apr-23 spec ("Crisis + name"). The building PICKER
                 moved to stage-where; this textbox captures the reporter's
                 native-language building name independently of an OSM tap. */}
@@ -2589,7 +2589,7 @@ export default function App() {
         <View style={[s.screen, { padding: responsivePad() }]}>
           <Text style={s.title}>{t('stage5_title') || 'Service + needs'}</Text>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
-            {/* Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — debris Yes/No
+            {/* Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) - debris Yes/No
                 toggle re-added per UNDP Appendix-1. Severity chips dropped;
                 severity is auto-derived from damageClass on stage-where
                 (MINIMAL→MINOR, PARTIAL→MODERATE, COMPLETE→SEVERE). */}
@@ -2647,7 +2647,7 @@ export default function App() {
       )}
 
       {screen === 'photo' && (
-        // R8: responsive padding override — keeps 24 on ≥360 px, scales
+        // R8: responsive padding override - keeps 24 on ≥360 px, scales
         // down on smaller devices so the capture buttons don't clip.
         <View style={[s.screen, { padding: responsivePad() }]}>
           <FlowProgress step={1} have={{ photo: !!photoUri, details: !!(audioUri || description?.trim()) }} />
@@ -2658,7 +2658,7 @@ export default function App() {
               <TouchableOpacity activeOpacity={0.85} onPress={() => setViewerState({ uri: photoUri, kind: 'primary' })}>
                 <Image source={{ uri: photoUri }} style={s.photoPreview} />
               </TouchableOpacity>
-              {/* ❌ bottom-left (per UX spec) — quick-delete the primary. */}
+              {/* ❌ bottom-left (per UX spec) - quick-delete the primary. */}
               <TouchableOpacity
                 onPress={deletePrimaryPhoto}
                 accessibilityLabel={t('image_delete_btn')}
@@ -2698,7 +2698,7 @@ export default function App() {
                     </TouchableOpacity>
                   </View>
                 ))}
-                {/* Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) — single
+                {/* Phase B4 (Apr 2026 UI v3, Apr-23 spec-align) - single
                     "Add more" button presenting a native action sheet
                     (iOS: ActionSheetIOS-style via Alert; Android: AlertDialog)
                     with Camera + Library options. Mirrors the PWA's single
@@ -2723,7 +2723,7 @@ export default function App() {
             </View>
           )}
           {/* Phase 2: image is mandatory. Next disabled until at least one photo
-              is attached. Blur no longer gates navigation — it runs in the
+              is attached. Blur no longer gates navigation - it runs in the
               background and submitReport awaits it if needed. */}
           {!photoUri && (
             <Text style={{ color: '#9ca3af', fontSize: 12, marginTop: 8 }}>
@@ -2731,7 +2731,7 @@ export default function App() {
             </Text>
           )}
           <View style={s.navRow}>
-            {/* Phase B4 (Apr 2026 UI v3) — Back routes to 'extras' when v3,
+            {/* Phase B4 (Apr 2026 UI v3) - Back routes to 'extras' when v3,
                 home otherwise. Keeps the legacy one-tap-home behaviour on v2. */}
             <TouchableOpacity style={s.backBtn} onPress={() => setScreen(uiV3 ? 'extras' : 'home')}><Text style={s.backText}>{t('back')}</Text></TouchableOpacity>
             <TouchableOpacity
@@ -2744,11 +2744,11 @@ export default function App() {
         </View>
       )}
 
-      {/* Apr 2026 UX rewrite — parity with PWA stage-audio. Low-literacy
+      {/* Apr 2026 UX rewrite - parity with PWA stage-audio. Low-literacy
           crisis UX: bulleted prompts + worked example + language hint so
           the user knows they can speak in their own tongue. Button copy
           unified to "Continue →". Plan:
-          /Users/pks/.claude/plans/swirling-forging-raccoon.md */}
+          the design plan */}
       {screen === 'audio' && (
         <ScrollView
           style={{ flex: 1, backgroundColor: Colors.bg }}
@@ -2783,7 +2783,7 @@ export default function App() {
           </TouchableOpacity>
           {/* Elapsed-time display during recording. Hidden when idle so the
               layout matches the pre-recording state. Red dot + MM:SS in
-              monospace — mirrors the PWA's .rec-timer. */}
+              monospace - mirrors the PWA's .rec-timer. */}
           {isRecording && (
             <View style={s.recTimer} accessibilityLiveRegion="polite">
               <View style={s.recTimerDot} />
@@ -2802,7 +2802,7 @@ export default function App() {
           <TextInput style={s.textInput} placeholder={t('audio_placeholder')} placeholderTextColor={Colors.textDim} value={description} onChangeText={setDescription} multiline numberOfLines={4} returnKeyType="done" blurOnSubmit={true} onSubmitEditing={Keyboard.dismiss} />
           <View style={s.navRow}>
             <TouchableOpacity style={s.backBtn} onPress={() => setScreen('photo')}><Text style={s.backText}>{t('back')}</Text></TouchableOpacity>
-            {/* Phase B4 (Apr 2026 UI v3) — v3 skips the review_details
+            {/* Phase B4 (Apr 2026 UI v3) - v3 skips the review_details
                 multi-page chip picker (already collected on earlier stages)
                 and jumps straight to review_confirm. Legacy v2 still visits
                 review_details for the last-chance edit. */}
@@ -2811,7 +2811,7 @@ export default function App() {
         </ScrollView>
       )}
 
-      {/* Apr 2026 UI v2 — review-stage renderer. When the feature flag is
+      {/* Apr 2026 UI v2 - review-stage renderer. When the feature flag is
            ON (default), the review flow splits into 3 pages driven by
            `reviewPage`: (1) What happened (crisis type + damage class),
            (2) How bad + where (severity + infrastructure + location +
@@ -2974,7 +2974,7 @@ export default function App() {
                 </TouchableOpacity>
               </View>
             ) : (
-              // Apr 2026 UI v2.1 — no `disabled={!location}` gate. UNDP
+              // Apr 2026 UI v2.1 - no `disabled={!location}` gate. UNDP
               // requires the building selector to be always reachable;
               // the picker modal handles the "no GPS yet" state inline.
               <TouchableOpacity
@@ -2999,7 +2999,7 @@ export default function App() {
         </ScrollView>
       )}
 
-      {/* ─── Apr 2026 UI v2 — 3-page review split ─────────────────────── */}
+      {/* ─── Apr 2026 UI v2 - 3-page review split ─────────────────────── */}
       {screen === 'review_details' && uiV2 && (
         <ScrollView
           // R3: outer scroll container delegates to nested WebViews (the
@@ -3013,7 +3013,7 @@ export default function App() {
           keyboardShouldPersistTaps="handled"
         >
           <FlowProgress step={3} have={{ photo: !!photoUri, details: !!(audioUri || description?.trim()) }} />
-          {/* Inline page-of-3 indicator — gives the user a "you are
+          {/* Inline page-of-3 indicator - gives the user a "you are
               here" cue that's cheaper to read than the FlowProgress row. */}
           <Text style={{ color: Colors.textDim, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.6 }}>
             {reviewPage} / 3
@@ -3024,11 +3024,11 @@ export default function App() {
               : t('review_v2_title_confirm')}
           </Text>
 
-          {/* ── Page 1: What happened — crisis type + damage class ── */}
+          {/* ── Page 1: What happened - crisis type + damage class ── */}
           {reviewPage === 1 && (
             <>
               <Text style={s.label}>{t('crisis_label')}</Text>
-              {/* 2-column grid (roughly) — `width: 48%` on each tile lets
+              {/* 2-column grid (roughly) - `width: 48%` on each tile lets
                   the wrap naturally land two per row at 360 px. */}
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                 {crisisTypes.map(ct => (
@@ -3056,7 +3056,7 @@ export default function App() {
               </View>
 
               <Text style={[s.label, { marginTop: 16 }]}>{t('damage_label')}</Text>
-              {/* 3-dot row — one tile per severity. Fills / colour driven
+              {/* 3-dot row - one tile per severity. Fills / colour driven
                   by IconTile's `filled` prop so COMPLETE reads as the
                   filled red disc + white X glyph. */}
               <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -3088,7 +3088,7 @@ export default function App() {
             </>
           )}
 
-          {/* ── Page 2: How bad + where — severity / infra / location ── */}
+          {/* ── Page 2: How bad + where - severity / infra / location ── */}
           {reviewPage === 2 && (
             <>
               <Text style={s.label}>{t('severity_label')}</Text>
@@ -3136,7 +3136,7 @@ export default function App() {
                 ))}
               </View>
 
-              {/* Location block — shrunk copy of v1 verify box. Keeps
+              {/* Location block - shrunk copy of v1 verify box. Keeps
                   the user editable text + "±acc" + footprint trigger
                   so page 2 can stand alone without jumping to page 3. */}
               <Text style={[s.label, { marginTop: 16 }]}>{t('location_label') || 'Location'}</Text>
@@ -3167,7 +3167,7 @@ export default function App() {
                 />
               </View>
 
-              {/* Service status — always visible (Apr 2026 UI v2.1).
+              {/* Service status - always visible (Apr 2026 UI v2.1).
                   Was collapsible behind a chevron TouchableOpacity; field
                   testing showed uneducated users didn't tap to expand.
                   Flattened to a plain section header + always-rendered
@@ -3212,7 +3212,7 @@ export default function App() {
                   })}
                   <Text style={[s.label, { marginTop: 8 }]}>{t('needs_label')}</Text>
                   <View style={s.chipRow}>
-                    {/* Apr 2026 UI v2.1 — chips expanded 5 → 10 to cover all
+                    {/* Apr 2026 UI v2.1 - chips expanded 5 → 10 to cover all
                         UNDP Appendix-1 pressing-needs categories + Other.
                         Order matches the UNDP doc. Old `security` legacy
                         value retained as `needs_security` i18n key for any
@@ -3239,7 +3239,7 @@ export default function App() {
             </>
           )}
 
-          {/* ── Page 3: Describe & send — description + footprint + submit ── */}
+          {/* ── Page 3: Describe & send - description + footprint + submit ── */}
           {reviewPage === 3 && (
             <>
               <Text style={s.label}>{t('description_label')}</Text>
@@ -3259,7 +3259,7 @@ export default function App() {
                   field users who submitted before location resolved.
                   NOW: always interactive. If no GPS yet, the picker
                   modal itself shows a "Waiting for GPS" state and waits
-                  for the fix to roll in — parity with the PWA's flat
+                  for the fix to roll in - parity with the PWA's flat
                   map + placeholder pattern. */}
               {buildingId ? (
                 <View style={[s.locSelectedPill, { marginBottom: 10 }]}>
@@ -3301,14 +3301,14 @@ export default function App() {
                 </TouchableOpacity>
               )}
 
-              {/* Phase B2 (Apr 2026 UI v3) — free-text building-name
+              {/* Phase B2 (Apr 2026 UI v3) - free-text building-name
                   fallback. Used when the BuildingFootprintPicker's Leaflet /
                   Overpass pipeline is unavailable (offline, WebView blocked,
                   Overpass rate-limit). The reporter types the name in their
                   native language; the backend stores it on
                   `infrastructure_name` with `building_id=NULL` and the
                   dashboard tags the row "needs mapping". Editing this input
-                  clears `infraNameFromOsm` — user intent overrides any
+                  clears `infraNameFromOsm` - user intent overrides any
                   prior OSM auto-fill. Always rendered (not behind a
                   conditional) so the path is discoverable; if the user
                   already picked a footprint, they see the typed name
@@ -3324,7 +3324,7 @@ export default function App() {
                   value={infraName}
                   onChangeText={(v) => {
                     setInfraName(v);
-                    // User typed — the text is no longer OSM-authoritative.
+                    // User typed - the text is no longer OSM-authoritative.
                     // Match PWA's setupBuildingFreeText() behaviour.
                     setInfraNameFromOsm(false);
                   }}
@@ -3337,12 +3337,12 @@ export default function App() {
                 </Text>
               </View>
 
-              {/* Inline summary — one dense card that lets the user
+              {/* Inline summary - one dense card that lets the user
                   sanity-check the most load-bearing fields before Submit. */}
               <View style={s.summaryCard}>
                 <Text style={s.summaryRow}>🌪 {(crisisTypes.find(ct => ct.key === crisisType)?.label) || crisisType}</Text>
-                <Text style={s.summaryRow}>🏗 {(damageClass || '—').replace(/_/g, ' ')}  ·  ⚠️ {severity}</Text>
-                <Text style={s.summaryRow}>📋 {(infraType || '—').replace(/_/g, ' ')}</Text>
+                <Text style={s.summaryRow}>🏗 {(damageClass || '-').replace(/_/g, ' ')}  ·  ⚠️ {severity}</Text>
+                <Text style={s.summaryRow}>📋 {(infraType || '-').replace(/_/g, ' ')}</Text>
                 {locationName ? <Text style={s.summaryRow}>📍 {locationName}</Text> : null}
                 {pressingNeeds.length > 0 ? <Text style={s.summaryRow}>{t('needs_prefix')} {pressingNeeds.join(', ')}</Text> : null}
               </View>
@@ -3357,7 +3357,7 @@ export default function App() {
             </>
           )}
 
-          {/* Nav footer — Back + Next on pages 1/2, Back-only on page 3
+          {/* Nav footer - Back + Next on pages 1/2, Back-only on page 3
               (Submit is the primary CTA inline with the summary card). */}
           <View style={s.navRow}>
             <TouchableOpacity
@@ -3384,7 +3384,7 @@ export default function App() {
         </ScrollView>
       )}
 
-      {/* Phase 3 (Apr 2026) — Confirm (summary + edit + Submit). Both Edit
+      {/* Phase 3 (Apr 2026) - Confirm (summary + edit + Submit). Both Edit
            links point to review_details now since that's the single editable
            screen after the 3-page → 2-page collapse. */}
       {screen === 'review_confirm' && (
@@ -3399,12 +3399,12 @@ export default function App() {
           <View style={s.summaryCard}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
               <Text style={[s.summaryRow, { fontWeight: '700' }]}>{t('incident_title')}</Text>
-              {/* Phase B4 (Apr 2026 UI v3) — edit pill deep-links to the
+              {/* Phase B4 (Apr 2026 UI v3) - edit pill deep-links to the
                   v3 crisis stage (where crisis + building name live). In v2
                   it returns to the legacy review_details screen. */}
               <TouchableOpacity onPress={() => setScreen(uiV3 ? 'crisis' : 'review_details')}><Text style={{ color: Colors.accent }}>{t('edit')}</Text></TouchableOpacity>
             </View>
-            <Text style={s.summaryRow}>🌪 {(crisisType || '—').replace(/_/g, ' ')}  📸 {photoUri ? '✅' : '❌'} + {extraPhotos.length} extra  🎤 {audioUri ? '✅' : '❌'}</Text>
+            <Text style={s.summaryRow}>🌪 {(crisisType || '-').replace(/_/g, ' ')}  📸 {photoUri ? '✅' : '❌'} + {extraPhotos.length} extra  🎤 {audioUri ? '✅' : '❌'}</Text>
             {description ? <Text style={s.summaryDesc} numberOfLines={3}>📝 {description}</Text> : null}
             {locationName ? <Text style={s.summaryRow}>📍 {locationName}</Text> : null}
           </View>
@@ -3412,22 +3412,22 @@ export default function App() {
           <View style={s.summaryCard}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
               <Text style={[s.summaryRow, { fontWeight: '700' }]}>{t('details_title')}</Text>
-              {/* Phase B4 (Apr 2026 UI v3) — details-edit pill deep-links
+              {/* Phase B4 (Apr 2026 UI v3) - details-edit pill deep-links
                   to the v3 infra stage (what was hit + damage severity). */}
               <TouchableOpacity onPress={() => setScreen(uiV3 ? 'infra' : 'review_details')}><Text style={{ color: Colors.accent }}>{t('edit')}</Text></TouchableOpacity>
             </View>
-            <Text style={s.summaryRow}>📋 {infraType || '—'} | ⚠️ {severity} | 🏗 {(damageClass || '—').replace(/_/g, ' ')}</Text>
+            <Text style={s.summaryRow}>📋 {infraType || '-'} | ⚠️ {severity} | 🏗 {(damageClass || '-').replace(/_/g, ' ')}</Text>
             {infraName ? <Text style={s.summaryRow}>🏛 {infraName}</Text> : null}
             {debrisClearing ? <Text style={s.summaryRow}>{t('debris_needed')}</Text> : null}
             <Text style={s.summaryRow}>⚡ {electricityStatus} · 💧 {waterStatus} · 🏥 {healthStatus}</Text>
             {pressingNeeds.length > 0 ? <Text style={s.summaryRow}>{t('needs_prefix')} {pressingNeeds.join(', ')}</Text> : null}
           </View>
 
-          {/* Phase 3: copy unified with PWA — "Submit" on both platforms. */}
+          {/* Phase 3: copy unified with PWA - "Submit" on both platforms. */}
           <TouchableOpacity style={[s.bigBtn, isSending && { opacity: 0.5 }]} onPress={submitReport} disabled={isSending}>
             <Text style={s.bigBtnText}>{isSending ? t('sending') : t('submit')}</Text>
           </TouchableOpacity>
-          {/* Phase B4 (Apr 2026 UI v3) — v3 skipped review_details on the
+          {/* Phase B4 (Apr 2026 UI v3) - v3 skipped review_details on the
               way forward, so Back here returns to 'audio'. Legacy v2 keeps
               its full back-nav through review_details. */}
           <TouchableOpacity onPress={() => setScreen(uiV3 ? 'audio' : 'review_details')}><Text style={s.backText}>{t('back')}</Text></TouchableOpacity>
@@ -3436,7 +3436,7 @@ export default function App() {
 
       {screen === 'success' && (
         <View style={[s.screen, { padding: responsivePad() }]}>
-          {/* PR 7 (Apr 2026): glowing heart close — warmer framing, explicit
+          {/* PR 7 (Apr 2026): glowing heart close - warmer framing, explicit
               two-action exit. Primary resets to a fresh report loop; secondary
               opens the just-submitted report's detail so the user can
               follow status without hunting in "My Reports". */}
@@ -3451,7 +3451,7 @@ export default function App() {
           <TouchableOpacity style={s.bigBtn} onPress={() => { resetReport(); setScreen('home'); }}>
             <Text style={s.bigBtnText}>+ {t('add_another_report')}</Text>
           </TouchableOpacity>
-          {/* PR 7 Track button — synthesises a minimal local row so the
+          {/* PR 7 Track button - synthesises a minimal local row so the
               detail view renders immediately even before the next
               status-since poll refreshes `history`. */}
           <TouchableOpacity
@@ -3496,12 +3496,12 @@ export default function App() {
           style={{ flex: 1, backgroundColor: Colors.bg }}
           nestedScrollEnabled
           scrollEventThrottle={16}
-          // R8: responsive horizontal padding — 20 px at 360 px, scales
+          // R8: responsive horizontal padding - 20 px at 360 px, scales
           // down to ~17 px at 280 px so cards don't clip the right edge.
           contentContainerStyle={{ padding: Math.min(20, Dimensions.get('window').width * 0.055) }}>
           {/* R1: back/refresh row wraps on narrow screens with gap + flex:1
-              + minWidth:120. No change to visible layout at ≥360 px — both
-              buttons still sit on one line — but at 320 px the refresh
+              + minWidth:120. No change to visible layout at ≥360 px - both
+              buttons still sit on one line - but at 320 px the refresh
               button drops to its own row instead of overflowing. */}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
             <TouchableOpacity
@@ -3533,7 +3533,7 @@ export default function App() {
             )}
           </View>
 
-          {/* In-flight / queued section — renders BEFORE synced so users see
+          {/* In-flight / queued section - renders BEFORE synced so users see
               what still needs to upload. Each card shows its sync state and
               chunk-progress percentages so the user has real observability. */}
           {pendingReports.length > 0 && (
@@ -3551,12 +3551,12 @@ export default function App() {
                   : p.status === 'failed' ? '⚠ Failed'
                   : !isOnline ? '📴 Waiting for network' : '⌛ Pending';
                 const statusColor = p.status === 'syncing' ? '#38bdf8' : p.status === 'failed' ? Colors.red : '#94a3b8';
-                // P2.12 — failed reports get explicit Retry / Delete actions.
+                // P2.12 - failed reports get explicit Retry / Delete actions.
                 // Before this, MAX_RETRIES reports stayed invisible in the
                 // queue forever with no user recourse. Retry resets status to
                 // `pending_sync` and zeroes retry_count; processQueue() picks
                 // it back up. Delete removes the row from the local DB (no
-                // server round-trip — the report was never successfully
+                // server round-trip - the report was never successfully
                 // registered there).
                 const isFailed = p.status === 'failed';
                 const borderColor = isFailed ? 'rgba(239,68,68,0.45)' : 'rgba(245,158,11,0.3)';
@@ -3569,7 +3569,7 @@ export default function App() {
                       <Text style={{ color: statusColor, fontSize: 11, fontWeight: '700' }}>{statusLabel}</Text>
                     </View>
                     <Text style={{ color: Colors.textDim, fontSize: 13, marginTop: 3 }}>
-                      📸 {hasPhoto ? `${photoPct}%` : '—'}  🎤 {hasAudio ? `${audioPct}%` : '—'}  {p.retry_count ? `(retry ${p.retry_count})` : ''}
+                      📸 {hasPhoto ? `${photoPct}%` : '-'}  🎤 {hasAudio ? `${audioPct}%` : '-'}  {p.retry_count ? `(retry ${p.retry_count})` : ''}
                     </Text>
                     {p.text_description ? <Text style={{ color: Colors.textDim, fontSize: 13, marginTop: 2 }} numberOfLines={1}>{p.text_description}</Text> : null}
                     {isFailed && (
@@ -3591,7 +3591,7 @@ export default function App() {
                         </TouchableOpacity>
                         <TouchableOpacity
                           onPress={() => {
-                            // Apr 2026 i18n sweep — localised button text via
+                            // Apr 2026 i18n sweep - localised button text via
                             // btn_cancel / btn_delete; title/body kept as
                             // English fall-through for now (no key yet).
                             Alert.alert('Delete queued report?',
@@ -3628,7 +3628,7 @@ export default function App() {
               <Text style={{ color: Colors.textDim, fontSize: 14, textAlign: 'center' }}>No reports yet.{'\n'}Your first report could save lives.</Text>
             </View>
           ) : (
-            // Apr 2026 "My Reports" spec — redesigned card: thumbnail +
+            // Apr 2026 "My Reports" spec - redesigned card: thumbnail +
             // location + date + 4-state color-coded chip. Tap opens the
             // new screen === 'report_detail' view (parity with PWA's
             // stage-report-detail). Delete moved into the detail view so
@@ -3643,8 +3643,8 @@ export default function App() {
                     : `${getApiBase().replace(/\/api\/v1$/, '')}${String(h.thumbnail_url).startsWith('/') ? '' : '/'}${h.thumbnail_url}`)
                 : null;
               const queued = deleteQueue.includes(h.server_id || h.client_report_id);
-              const title = (h.crisis_type ? String(h.crisis_type).replace(/_/g, ' ') : '—') +
-                  ' · ' + (h.infrastructure_type ? String(h.infrastructure_type).replace(/_/g, ' ') : '—');
+              const title = (h.crisis_type ? String(h.crisis_type).replace(/_/g, ' ') : '-') +
+                  ' · ' + (h.infrastructure_type ? String(h.infrastructure_type).replace(/_/g, ' ') : '-');
               return (
                 <TouchableOpacity
                   key={h.client_report_id}
@@ -3703,7 +3703,7 @@ export default function App() {
             })
           )}
 
-          {/* Apr 2026 "My Reports" spec — bulk "Delete all my reports"
+          {/* Apr 2026 "My Reports" spec - bulk "Delete all my reports"
               hidden behind an Advanced accordion (primary path is
               individual delete from the detail view). */}
           <View style={{ paddingTop: 24, paddingBottom: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)', marginTop: 16 }}>
@@ -3769,7 +3769,7 @@ export default function App() {
         </ScrollView>
       )}
 
-      {/* Apr 2026 "My Reports" spec — individual report detail.
+      {/* Apr 2026 "My Reports" spec - individual report detail.
           Parity with PWA's stage-report-detail. Photo + timeline +
           metadata + feedback + per-report delete with offline queue. */}
       {screen === 'report_detail' && selectedReport && (() => {
@@ -3917,7 +3917,7 @@ export default function App() {
                     {[
                       actions.join(' · '),
                       r.lives_impacted > 0 ? `~${r.lives_impacted} ${r.lives_impacted === 1 ? 'person' : 'people'} helped` : '',
-                    ].filter(Boolean).join(' · ') || 'Accepted — awaiting dispatch'}
+                    ].filter(Boolean).join(' · ') || 'Accepted - awaiting dispatch'}
                   </Text>
                 </View>
               </View>
@@ -4043,7 +4043,7 @@ export default function App() {
           style={{ position: 'absolute', bottom: 32, alignSelf: 'center', paddingVertical: 12, paddingHorizontal: 24, backgroundColor: '#ef4444', borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>🗑  {t('image_delete_btn')}</Text>
         </TouchableOpacity>
-        {/* Confirm-delete sheet — nested inside the viewer Modal so its
+        {/* Confirm-delete sheet - nested inside the viewer Modal so its
             backdrop stacks above the image when visible. */}
         {viewerConfirmOpen && (
           <View style={{ position: 'absolute', inset: 0 as any, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.72)', alignItems: 'center', justifyContent: 'center', padding: 16, zIndex: 3 }}>
@@ -4071,7 +4071,7 @@ export default function App() {
         )}
       </View>
     </Modal>
-    {/* Building-footprint picker — WebView + Leaflet + Overpass. Opens
+    {/* Building-footprint picker - WebView + Leaflet + Overpass. Opens
         from the review_details location box when the user taps "Select
         exact building". Only rendered when visible; the WebView boots
         lazily so we don't burn cycles when the user never opens it. */}
@@ -4084,7 +4084,7 @@ export default function App() {
           // Auto-fill infrastructure_name from the OSM `name` tag so
           // the web-dashboard shows "City Hospital" next to the
           // indigo Building-history pill instead of the bare OSM id.
-          // Respects a value the user has already typed — only
+          // Respects a value the user has already typed - only
           // overwrites when the field is blank.
           if (osmName && !infraName.trim()) {
             setInfraName(osmName);
@@ -4096,7 +4096,7 @@ export default function App() {
       />
     ) : null}
 
-    {/* Privacy consent gate — blocks first render until accepted. We
+    {/* Privacy consent gate - blocks first render until accepted. We
         show ONLY when consentGiven === false (explicit no); while it's
         still `null` we're still reading AsyncStorage and avoid a flash
         of the overlay. See PWA parity: mobile-app/src/index.html:29. */}
@@ -4106,7 +4106,7 @@ export default function App() {
         AsyncStorage.setItem(
           'crisp_privacy_consent',
           JSON.stringify({ accepted: true, ts: Date.now() }),
-        ).catch(() => { /* best-effort — user still gets to use the app */ });
+        ).catch(() => { /* best-effort - user still gets to use the app */ });
         setConsentGiven(true);
       }}
     />
@@ -4117,7 +4117,7 @@ export default function App() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
-  // Location verify box — parity with PWA .location-verify-box (styles.css:760).
+  // Location verify box - parity with PWA .location-verify-box (styles.css:760).
   // Hosts GPS status + search input + optional building-footprint selector.
   locVerifyBox: {
     marginTop: 14,
@@ -4161,7 +4161,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   locFootprintBtnText: { color: Colors.accent, fontSize: 13, fontWeight: '700' },
-  // Phase B2 (Apr 2026 UI v3) — free-text building-name fallback styles.
+  // Phase B2 (Apr 2026 UI v3) - free-text building-name fallback styles.
   // Mirrors the PWA's `.building-free-text*` selectors in styles.css.
   buildingFreeText: {
     marginTop: 2,
@@ -4193,7 +4193,7 @@ const s = StyleSheet.create({
     fontSize: 11,
     color: Colors.textDim,
   },
-  // Audio recording timer — shown during active capture only. Red dot
+  // Audio recording timer - shown during active capture only. Red dot
   // + monospace MM:SS, mirrors the PWA's .rec-timer in styles.css.
   recTimer: {
     flexDirection: 'row',
@@ -4229,7 +4229,7 @@ const s = StyleSheet.create({
   langBtn: { padding: 8, borderRadius: 8, borderWidth: 1, borderColor: Colors.border },
   langBtnActive: { borderColor: Colors.accent, backgroundColor: 'rgba(124,58,237,0.1)' },
   langFlag: { fontSize: 22 },
-  // UN-language tiles — bigger tap target + enlarged flag to echo the
+  // UN-language tiles - bigger tap target + enlarged flag to echo the
   // PWA's .lpf-un treatment. Tilts the visual weight toward UNDP's six
   // official languages on the home-screen language row.
   langBtnUn: {
@@ -4270,7 +4270,7 @@ const s = StyleSheet.create({
   backBtn: { minWidth: 120, paddingVertical: 8, paddingHorizontal: 8 },
   nextBtn: { backgroundColor: Colors.accent, paddingVertical: 10, paddingHorizontal: 24, borderRadius: 10, flex: 1, minWidth: 120, alignItems: 'center' },
   nextBtnText: { color: Colors.white, fontSize: 15, fontWeight: '700' },
-  // Apr 2026 UI v2 — large icon tile used on review pages 1/2. 48 %
+  // Apr 2026 UI v2 - large icon tile used on review pages 1/2. 48 %
   // width lets the wrap land two-per-row at 360 px; on 280 px the tile
   // still fits with room to breathe. `minHeight` floor prevents short
   // labels from collapsing the tile below the 64-px accessibility guide.
@@ -4291,7 +4291,7 @@ const s = StyleSheet.create({
     borderColor: Colors.accent,
     backgroundColor: 'rgba(124,58,237,0.12)',
   },
-  // R6: label sits at 13 — above the legibility floor for low-end
+  // R6: label sits at 13 - above the legibility floor for low-end
   // Android displays and the low-literacy field-worker persona.
   v2TileLabel: {
     color: Colors.text,
@@ -4305,7 +4305,7 @@ const s = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   chip: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12, backgroundColor: Colors.surface, borderWidth: 1.5, borderColor: Colors.border, alignItems: 'center' },
   chipActive: { borderColor: Colors.accent, backgroundColor: 'rgba(124,58,237,0.12)' },
-  // PWA parity — category chip labels use UPPERCASE with a subtle
+  // PWA parity - category chip labels use UPPERCASE with a subtle
   // letter-spacing for visual weight (.chip-btn in styles.css:517).
   chipText: { color: Colors.text, fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   summaryCard: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, borderRadius: 14, padding: 18, width: '100%', marginBottom: 16 },

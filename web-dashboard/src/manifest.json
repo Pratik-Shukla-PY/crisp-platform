@@ -1,7 +1,7 @@
 {
-  "name": "CRISP — UN Crisis Command",
+  "name": "CRISP - UN Crisis Command",
   "short_name": "CRISP",
-  "description": "UN Community Rapid Infrastructure Sensing Platform — QRT Operations Dashboard",
+  "description": "UN Community Rapid Infrastructure Sensing Platform - QRT Operations Dashboard",
   "start_url": "/web-dashboard/src/index.html",
   "display": "standalone",
   "background_color": "#0a0f1e",

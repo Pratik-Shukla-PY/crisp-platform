@@ -1,4 +1,4 @@
-# Maestro flow — submit a report while offline; verify queue persists.
+# Maestro flow - submit a report while offline; verify queue persists.
 #
 # Run manually: maestro test crisp-mobile/.maestro/offline-queue.yaml
 #
@@ -11,7 +11,7 @@ appId: com.crispundp.crispmobile
 ---
 - launchApp:
     clearState: true
-- toggleAirplaneMode  # Android only — iOS sim ignores this command
+- toggleAirplaneMode  # Android only - iOS sim ignores this command
 # Open capture flow and submit a minimal report
 - tapOn:
     id: "btn-start"

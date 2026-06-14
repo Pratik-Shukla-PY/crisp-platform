@@ -4,7 +4,7 @@ Used by the GPS-capable chat channels (Telegram, WhatsApp) at report intake:
 when the reporter shared a precise location, ask the backend which crisis
 operation is active there so the report links to it (Report.crisis_event_id).
 
-Non-GPS channels (SMS, IVR) deliberately do NOT call this — their text/audio
+Non-GPS channels (SMS, IVR) deliberately do NOT call this - their text/audio
 geocoded locations are too coarse to trust for zone-matching, so they stay
 GLOBAL (no fake-matching). The backend treats the returned event id as a hint
 and re-derives the linkage authoritatively from the submitted location, so a
@@ -25,7 +25,7 @@ async def resolve_active_event_id(lat: Optional[float], lng: Optional[float]) ->
     """Return the id of the active CrisisEvent whose zone covers (lat, lng), or
     None when there is no active zone / the lookup fails.
 
-    Never raises — any failure (no active zone, network error, non-200 status)
+    Never raises - any failure (no active zone, network error, non-200 status)
     returns None so the caller submits a GLOBAL report unchanged.
     """
     if lat is None or lng is None:

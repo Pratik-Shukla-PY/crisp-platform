@@ -1,25 +1,25 @@
 // ──────────────────────────────────────────────────────────────────────────
-// CRISP — PWA install prompt helper.
+// CRISP - PWA install prompt helper.
 //
 // Wraps the platform-specific "Add to Home Screen" UX in one helper so the
 // landing card just calls `InstallPrompt.show()` regardless of OS.
 //
 // Three platforms, three flows:
-//   1. Chrome / Edge / Android-Chrome — fires `beforeinstallprompt` once
+//   1. Chrome / Edge / Android-Chrome - fires `beforeinstallprompt` once
 //      the page meets PWA criteria (manifest + SW + HTTPS + icons). We
 //      stash the event and show our own button. On tap → call .prompt().
-//   2. iOS Safari (incl. iPad)        — has no programmatic install. We
+//   2. iOS Safari (incl. iPad)        - has no programmatic install. We
 //      detect via `navigator.standalone === false` AND iOS UA, then
 //      surface a slide-up sheet with the 3-step Share → Add to Home Screen
 //      instruction.
-//   3. Already installed              — `display-mode: standalone` matches.
+//   3. Already installed              - `display-mode: standalone` matches.
 //      We hide the install card entirely so we don't nag.
 //
 // State exposed on `window.InstallPrompt`:
-//   .canInstall (bool)        — true if we can trigger an install (any platform)
-//   .platform   (string)      — 'android' | 'ios' | 'desktop' | 'standalone' | 'unknown'
-//   .show()                   — invoke the right flow for the current platform
-//   .onChange(callback)       — fire when canInstall toggles (lets the landing
+//   .canInstall (bool)        - true if we can trigger an install (any platform)
+//   .platform   (string)      - 'android' | 'ios' | 'desktop' | 'standalone' | 'unknown'
+//   .show()                   - invoke the right flow for the current platform
+//   .onChange(callback)       - fire when canInstall toggles (lets the landing
 //                               card show/hide its install button reactively)
 // ──────────────────────────────────────────────────────────────────────────
 (function () {
@@ -49,11 +49,11 @@
 
     _platform = _detectPlatform();
 
-    // AUDIT 2026-05-23 (HC2 humanitarian-grade home) — default `canInstall`
+    // AUDIT 2026-05-23 (HC2 humanitarian-grade home) - default `canInstall`
     // to TRUE on every platform EXCEPT `standalone` (already installed).
     // Pre-fix, Android / Desktop / Firefox / Samsung Internet had to wait
     // for the Chromium-specific `beforeinstallprompt` to fire before the
-    // button appeared — and that event NEVER fires in some browsers (FF
+    // button appeared - and that event NEVER fires in some browsers (FF
     // Android, in-app webviews, older Samsung Internet). The spec asks
     // for an always-visible install affordance with a universal fallback.
     //
@@ -74,12 +74,12 @@
 
     // Listen for the Chrome / Edge / Android-Chrome install signal.
     window.addEventListener('beforeinstallprompt', (e) => {
-        // Suppress the browser's mini-infobar — we want to show our
+        // Suppress the browser's mini-infobar - we want to show our
         // own button instead, in our own UX.
         e.preventDefault();
         _deferredPrompt = e;
         _canInstall = true;
-        // Override platform if it's not iOS — we have hard proof of a
+        // Override platform if it's not iOS - we have hard proof of a
         // native install path now.
         if (_platform !== 'ios') _platform = 'android';  // close-enough label
         _emit();
@@ -96,7 +96,7 @@
     });
 
     // Universal Add-to-Home-Screen instructions sheet.
-    // AUDIT 2026-05-23 (HC2) — renamed from `_showIosSheet` because it
+    // AUDIT 2026-05-23 (HC2) - renamed from `_showIosSheet` because it
     // now serves Safari iOS + Chrome + Firefox + Samsung Internet users,
     // not just iPhone. Per-browser instruction blocks are shown/hidden
     // based on platform detection. The sheet is the universal fallback
@@ -119,7 +119,7 @@
         const isSamsung = /samsungbrowser/.test(ua);
         const isFirefox = /firefox|fxios/.test(ua);
 
-        // P1 (i18n audit, May 23) — was 5 hard-coded EN <li> blocks.
+        // P1 (i18n audit, May 23) - was 5 hard-coded EN <li> blocks.
         // Now reads through window.t() with EN fallback so every
         // locale gets a translated install instruction.
         const _t = (k, fallback) => {
@@ -172,7 +172,7 @@
                     ${primaryStep}
                 </ol>
                 <p class="iis-note" data-i18n="install_sheet_note">
-                    CRISP will then work like any other app — even when offline.
+                    CRISP will then work like any other app - even when offline.
                 </p>
             </div>
         `;
@@ -186,7 +186,7 @@
 
     async function _show() {
         // Universal flow: prefer the native prompt if Chromium cached it,
-        // otherwise open the instructional sheet — works on every browser.
+        // otherwise open the instructional sheet - works on every browser.
         if (_deferredPrompt) {
             _deferredPrompt.prompt();
             const result = await _deferredPrompt.userChoice;

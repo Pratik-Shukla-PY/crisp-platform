@@ -1,21 +1,21 @@
-"""Operation context — local weather (Open-Meteo) + hazard alerts (GDACS).
+"""Operation context - local weather (Open-Meteo) + hazard alerts (GDACS).
 
 Backend proxy for the operation dashboard's "Local conditions" panel. Mirrors the
 satellite_fetcher.py house style: async httpx, each provider a graceful no-op on
 any failure, a normalized dict out, queried SERVER-SIDE (never client-direct) so:
   * Open-Meteo's CC BY 4.0 attribution + non-commercial posture live in one place;
   * N analysts × refreshes collapse into ONE cached upstream call (45-min TTL);
-  * the dashboard never hard-fails — a down provider yields {available: false}.
+  * the dashboard never hard-fails - a down provider yields {available: false}.
 
 PII boundary (UNDP must-have #7): the ONLY values that ever leave this process are
 the operation's centre coords (rounded ~3 dp) and radius. NEVER any Report /
 Location / Reporter / Device data. The function signatures structurally cannot
-carry report data — enforced by test_operation_context.py.
+carry report data - enforced by test_operation_context.py.
 
 Sources (both free, no API key):
-  * Open-Meteo /v1/forecast — current + 3-day. FREE tier is NON-COMMERCIAL; CRISP
+  * Open-Meteo /v1/forecast - current + 3-day. FREE tier is NON-COMMERCIAL; CRISP
     (UN/humanitarian, no ads/subscriptions) qualifies. CC BY 4.0 attribution shown.
-  * GDACS geteventlist — UN OCHA + EC JRC multi-hazard disaster alerts; haversine-
+  * GDACS geteventlist - UN OCHA + EC JRC multi-hazard disaster alerts; haversine-
     filtered to the operation circle (+ buffer, since GDACS events are large-scale).
 """
 from __future__ import annotations
@@ -82,7 +82,7 @@ async def _open_meteo(lat: float, lng: float) -> Optional[dict]:
                     "t_min_c": (daily.get("temperature_2m_min") or [None] * 3)[i],
                     "precip_mm": (daily.get("precipitation_sum") or [None] * 3)[i],
                     "code": (daily.get("weather_code") or [None] * 3)[i],
-                    "summary": _WMO.get((daily.get("weather_code") or [None] * 3)[i], "—"),
+                    "summary": _WMO.get((daily.get("weather_code") or [None] * 3)[i], "-"),
                 })
         except Exception:
             days = []
@@ -93,7 +93,7 @@ async def _open_meteo(lat: float, lng: float) -> Optional[dict]:
             "precipitation_mm": cur.get("precipitation"),
             "wind_kmh": cur.get("wind_speed_10m"),
             "code": code,
-            "summary": _WMO.get(code, "—"),
+            "summary": _WMO.get(code, "-"),
             "daily": days,
             "attribution": "Weather by Open-Meteo.com (CC BY 4.0)",
         }
@@ -150,7 +150,7 @@ async def _gdacs_alerts(lat: float, lng: float, radius_km: float) -> Optional[li
 
 async def fetch_operation_context(lat: float, lng: float, radius_km: float) -> dict:
     """Fan out weather + hazard alerts concurrently. PII WHITELIST: the only data
-    passed onward is lat/lng/radius — never any report/reporter data."""
+    passed onward is lat/lng/radius - never any report/reporter data."""
     weather, alerts = await asyncio.gather(
         _open_meteo(lat, lng),
         _gdacs_alerts(lat, lng, radius_km),

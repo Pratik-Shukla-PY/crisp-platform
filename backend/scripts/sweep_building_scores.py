@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CRISP — Phase H.1.b initial-sweep: backfill Building roll-ups + scores.
+"""CRISP - Phase H.1.b initial-sweep: backfill Building roll-ups + scores.
 
 Migration 0028 created the `buildings` table + 16 backfilled rows (one
 per distinct Report.building_id) with cheap fields populated
@@ -10,7 +10,7 @@ and the 5 intelligence scores NULL.
 
 This script walks every Building row + invokes the same
 `_refresh_building_rollups` and `_compute_building_scores` helpers
-that the runtime `_apply_building_link` hook calls — so the existing
+that the runtime `_apply_building_link` hook calls - so the existing
 data lands at the same state a fresh Report.after_insert would have
 produced.
 
@@ -26,7 +26,7 @@ Invocation:
 import os
 import sys
 
-# Mirror create_admin.py's pattern — backend root on sys.path so
+# Mirror create_admin.py's pattern - backend root on sys.path so
 # `from app.db.session import ...` resolves whether invoked as
 # `python scripts/sweep_building_scores.py` or
 # `python -m scripts.sweep_building_scores` from inside backend/.

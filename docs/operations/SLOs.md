@@ -1,4 +1,4 @@
-# CRISP — Service Level Objectives (SLOs)
+# CRISP - Service Level Objectives (SLOs)
 
 Operator-facing reliability targets for the production environment.
 Measured against PROD (`https://undp.crisplabs.tech`) over rolling
@@ -12,7 +12,7 @@ Each SLO has:
 - An **alerting rule** (when an operator should be paged).
 - A **recovery action** (the runbook the on-call follows).
 
-Sprint 2C-4 (May 2026, post-HC91) — baseline. Numbers are deliberately
+Sprint 2C-4 (May 2026, post-HC91) - baseline. Numbers are deliberately
 conservative for the first pilot deployment; ratchet them up after we
 have ≥7 days of real telemetry from production.
 
@@ -36,7 +36,7 @@ as long as the 28-day average holds.
 - Sentry `transaction:POST /reports/meta` → `result:success` ratio.
 - Backend `app.api.endpoints.reports` access logs filtered by status.
 - Dashboard `Reports → CSV export` includes `submitted_at` vs
-  `created_at` — any non-NULL gap means client retries fired.
+  `created_at` - any non-NULL gap means client retries fired.
 
 **Alert:** Sentry rule firing if ≥ 5 distinct 5xx responses on
 `/reports/meta` within any 10-minute window.
@@ -71,7 +71,7 @@ served by the same pipeline.
 - Delta = first_visible − created_at.
 
 **Note for HC91:** rows that hit `assembler_wedged` count as
-**failed**, not as a latency miss — failure mode is "we gave up,"
+**failed**, not as a latency miss - failure mode is "we gave up,"
 not "we took too long."
 
 **Alert:** Sentry alert if median submit-to-visible delta crosses
@@ -108,19 +108,19 @@ here post-HC89; a vendored-bundle corruption WILL.
 
 ---
 
-## 4. Assembly recovery — abandon-reason distribution
+## 4. Assembly recovery - abandon-reason distribution
 
 **Target:** ≤ 1% of `Media` rows reach a non-`complete` terminal
 state (`assembly_status='failed' AND abandoned_at IS NOT NULL`) over
 28 days.
 
 **Breakdown (sub-target sums to 1%):**
-- `chunks_never_arrived`  — ≤ 0.7% (mostly client-side: tab closed
+- `chunks_never_arrived`  - ≤ 0.7% (mostly client-side: tab closed
   mid-upload, network timeout)
-- `assembly_worker_lost`  — ≤ 0.2% (server-side: worker OOM /
+- `assembly_worker_lost`  - ≤ 0.2% (server-side: worker OOM /
   container restart)
-- `assembler_wedged`      — ≤ 0.1% (HC91, post-Sprint 2B: should be
-  very rare — a row past 60 min of repeated revival failure)
+- `assembler_wedged`      - ≤ 0.1% (HC91, post-Sprint 2B: should be
+  very rare - a row past 60 min of repeated revival failure)
 
 **Signal:**
 - Prometheus / observability: `media_abandon_reason_total{reason="..."}`
@@ -155,7 +155,7 @@ the map look broken to UNDP reviewers.
 2. Paid Carto / MapTiler key (DSN in GH Secrets, injected via env).
 3. Switch to Stadia Maps free tier (50k requests/day).
 
-Not implemented in Sprint 2 — flagged as a Sprint 2C-3 follow-up.
+Not implemented in Sprint 2 - flagged as a Sprint 2C-3 follow-up.
 
 ---
 
@@ -169,7 +169,7 @@ Not implemented in Sprint 2 — flagged as a Sprint 2C-3 follow-up.
 - CLS ≤ 0.25
 - LCP ≤ 12,000 ms (Slow 4G mobile profile)
 - TBT ≤ 1,500 ms
-- (Sprint 1B-1) resource-summary:script:size ≤ 1.6 MB (warn — catches
+- (Sprint 1B-1) resource-summary:script:size ≤ 1.6 MB (warn - catches
   TF.js leaking into home-stage critical paint)
 
 **Why:** UNDP rubric weights accessibility heavily; the performance
@@ -184,12 +184,12 @@ PR comment with a diff against the lighthouse-history baseline.
 
 ---
 
-## Out of scope (intentionally — not SLOs yet)
+## Out of scope (intentionally - not SLOs yet)
 
 - p95 satellite verification turnaround (operator-tuned manually
   for now; no automation).
 - Concurrent active reporters (no traffic in pilot to baseline).
-- Per-region report volume (single-region pilot — no per-region
+- Per-region report volume (single-region pilot - no per-region
   variance to bound yet).
 
 Revisit these once we have 2+ pilot locations live.
@@ -203,7 +203,7 @@ After each deploy + 7-day soak:
    on-call may PROPOSE tightening it in a docs-only PR.
 2. PR must cite the 28-day measured-vs-target ratio + the proposed
    new target.
-3. Operator sign-off required before merge — never auto-ratchet.
+3. Operator sign-off required before merge - never auto-ratchet.
 4. Loosening is also allowed (e.g. if a new external dep adds latency
    we can't control), but requires a docs note explaining what
    changed in the system.

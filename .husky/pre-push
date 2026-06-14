@@ -7,14 +7,14 @@
 # the "uncommitted home-screen.js + untracked playwright specs" rush
 # at the end of the May deploy push.
 #
-# Note: `--no-verify` bypasses this. Per CLAUDE.md, never use
+# Note: `--no-verify` bypasses this. Per the project invariants, never use
 # --no-verify without explicit operator approval in chat.
 
 set -e
 
 # ── 1. Working tree must be clean ──────────────────────────────────
 if ! git diff --quiet; then
-    echo "✗ working tree has UNSTAGED changes — commit or stash before push."
+    echo "✗ working tree has UNSTAGED changes - commit or stash before push."
     echo
     git diff --stat
     exit 1
@@ -29,13 +29,13 @@ if ! git diff --cached --quiet; then
 fi
 
 # ── 2. Untracked files: warn (not block) ──────────────────────────
-# Hard-blocking on untracked is too aggressive — local dev creates
+# Hard-blocking on untracked is too aggressive - local dev creates
 # scratch files all the time. But surfacing them is useful: if a new
 # spec / module is sitting untracked, it's likely meant to be in this
 # push and got forgotten (which is exactly what bit us in May).
 untracked=$(git ls-files --others --exclude-standard)
 if [ -n "$untracked" ]; then
-    echo "⚠ untracked files (review — should any of these be in the push?):"
+    echo "⚠ untracked files (review - should any of these be in the push?):"
     # shellcheck disable=SC2001
     echo "$untracked" | sed 's/^/    /' | head -10
     untracked_count=$(echo "$untracked" | wc -l | tr -d ' ')

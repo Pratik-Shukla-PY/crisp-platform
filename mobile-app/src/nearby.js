@@ -1,6 +1,6 @@
 /* eslint-disable */
 /**
- * "Verified Reports Nearby" — home-stage intelligence module (May 2026).
+ * "Verified Reports Nearby" - home-stage intelligence module (May 2026).
  *
  * Public surface: window.NearbyIntel.boot()
  *
@@ -10,14 +10,14 @@
  *   ────────────  ────────    ─────────────────   ──────────────────
  *   online        granted     live API            YES (full list)
  *   online        granted     empty 200           YES (empty state)
- *   online        denied      —                   HIDDEN
- *   online        pending     —                   HIDDEN
+ *   online        denied      -                   HIDDEN
+ *   online        pending     -                   HIDDEN
  *   offline       granted     fresh < 5 min       OPTIONAL (cached + "Last seen X")
  *   offline       granted     stale > 5 min       HIDDEN
- *   offline       —           none                HIDDEN
+ *   offline       -           none                HIDDEN
  *   any           any         API error           HIDDEN (silent fail)
  *
- * The module NEVER prompts for GPS on the home stage — operator rule
+ * The module NEVER prompts for GPS on the home stage - operator rule
  * "offline-first reporting flow must remain unaffected". We read
  * whatever is already cached in localStorage / IndexedDB from the
  * last v4 capture stage. First-time visitors with no cached GPS see
@@ -58,21 +58,21 @@
         return '/api/v1';
     }
 
-    // HC84 (May 2026) — radius kept at 100 km from HC81. The current
+    // HC84 (May 2026) - radius kept at 100 km from HC81. The current
     // aggregate-number block only shows ONE total (sum of group counts)
-    // on the home + success surfaces — but the modal groups those same
+    // on the home + success surfaces - but the modal groups those same
     // groups by distance bucket (Within 500 m / 0.5-2 / 2-5 / 5-25 /
     // 25-100 km), so a wide fetch radius is still useful. HC82 lifted
     // the backend validator cap to 100 km to match.
     const DEFAULT_RADIUS_KM = 100;
-    const DEFAULT_LIMIT = 50;             // generous — modal needs the whole tail
+    const DEFAULT_LIMIT = 50;             // generous - modal needs the whole tail
     const COLLAPSED_ROWS = 3;             // rows shown before "View N more"
 
-    // HC84 — distance-bucket thresholds used INSIDE the shared
+    // HC84 - distance-bucket thresholds used INSIDE the shared
     // #nearby-list-sheet modal to group rows by approx distance from
     // the caller. Each group lands in the SMALLEST bucket whose
     // threshold >= the distance. Operator brief: "Within 500m / 1-2 km /
-    // 2-5 km" examples — we extend the tail (5-25 / 25-100) for the
+    // 2-5 km" examples - we extend the tail (5-25 / 25-100) for the
     // wider radius the backend now serves.
     const SHEET_BUCKET_THRESHOLDS_KM = [0.5, 2, 5, 25, 100];
     // Per-bucket i18n key + EN fallback for the section header copy.
@@ -85,7 +85,7 @@
         ['nearby_bucket_25_100km',    '25 – 100 km away'],
     ];
 
-    // Phase 3 (May 2026, docs §5.2-5.3) — per-tier TTL replaces the
+    // Phase 3 (May 2026, docs §5.2-5.3) - per-tier TTL replaces the
     // single CACHE_TTL_MS. Online TTL = "how long the cache stays
     // authoritative before we re-fetch". Offline TTL = "how long
     // we still RENDER the cache when network is gone". Weak-tier
@@ -103,13 +103,13 @@
         weak:     30 * 60 * 1000,        // 30 min (hide after)
         disaster:  1 * 60 * 60 * 1000,   //  1 h
     };
-    // Legacy single value — kept for code paths that don't yet
+    // Legacy single value - kept for code paths that don't yet
     // discriminate by tier. Defaults to the verified tier's online
     // TTL.
     const CACHE_TTL_MS = ONLINE_CACHE_TTL.verified;
     const STALE_LOCATION_TTL_MS = 30 * 60 * 1000;  // 30 minutes
 
-    // IDB schema bumped to v2 for Phase 3 — the payload now carries
+    // IDB schema bumped to v2 for Phase 3 - the payload now carries
     // additional fields (recently_resolved_groups, tier, is_burst,
     // is_acute, acute_grade, crisis_ttl_hours, etc.). Versioned
     // store name forces old caches to evict on next activate.
@@ -119,7 +119,7 @@
     // so localStorage / IDB doesn't accumulate dead schemas.
     const IDB_LEGACY_NAMES = ['crisp_nearby_cache_v1'];
 
-    /** Highest-tier hint for the whole payload — drives which
+    /** Highest-tier hint for the whole payload - drives which
      *  ONLINE_CACHE_TTL / OFFLINE_CACHE_TTL value applies. */
     function _payloadDominantTier(payload) {
         const groups = (payload && payload.groups) || [];
@@ -134,7 +134,7 @@
         return best;
     }
 
-    // ── i18n helper — proxies to window.t if present, falls back to en
+    // ── i18n helper - proxies to window.t if present, falls back to en
     function _t(key, fallback) {
         if (typeof window.t === 'function') {
             const v = window.t(key);
@@ -146,7 +146,7 @@
     // ── Location resolution ───────────────────────────────────────────
     //
     // Read whatever is already cached from prior capture stages. We
-    // DO NOT call navigator.geolocation — that would prompt the user
+    // DO NOT call navigator.geolocation - that would prompt the user
     // on the home stage, breaking the operator's offline-first rule.
     function _getCachedLocation() {
         // Try the v4-flow cache first (most recent + most accurate).
@@ -168,7 +168,7 @@
                 const lng = obj.lng ?? obj.longitude;
                 const ts = obj.ts ?? obj.timestamp ?? obj.updatedAt ?? 0;
                 if (typeof lat !== 'number' || typeof lng !== 'number') continue;
-                // Stale-location gate — ignore if older than 30 min.
+                // Stale-location gate - ignore if older than 30 min.
                 if (Date.now() - ts > STALE_LOCATION_TTL_MS) continue;
                 return { lat, lng, ts };
             } catch { /* ignore parse errors */ }
@@ -176,7 +176,7 @@
         return null;
     }
 
-    // ── 3-decimal rounding — privacy guarantee on the wire
+    // ── 3-decimal rounding - privacy guarantee on the wire
     function _round3(n) {
         return Math.round(n * 1000) / 1000;
     }
@@ -228,7 +228,7 @@
     }
 
     async function _fetchNearby({ lat, lng, radius_km, limit }) {
-        // Resolve base at call time, not module-load time — gives
+        // Resolve base at call time, not module-load time - gives
         // app.js a chance to set window.API_BASE before we reach for it.
         const base = _resolveBase();
         const endpoint = `${base}/reports/nearby`;
@@ -242,9 +242,9 @@
         url.searchParams.set('lng', _round3(lng).toString());
         url.searchParams.set('radius_km', String(radius_km));
         url.searchParams.set('limit', String(limit));
-        // May 21, 2026 — architectural audit Item 2. Resolve the
+        // May 21, 2026 - architectural audit Item 2. Resolve the
         // caller's own device_hash from localStorage so we can send it
-        // as the `X-Caller-Device-Hash` HEADER (not a query param —
+        // as the `X-Caller-Device-Hash` HEADER (not a query param -
         // headers don't leak into uvicorn's request-line access logs).
         // Backend uses the hash to exclude the caller's own reports
         // from the community-awareness feed. Privacy posture: hash
@@ -257,7 +257,7 @@
                    || localStorage.getItem('crisp_device_hash')
                    || localStorage.getItem('crisp_device_id'))
                 : null;
-        } catch (_) { /* private-mode localStorage throws — skip silently */ }
+        } catch (_) { /* private-mode localStorage throws - skip silently */ }
         // 6-second hard cap so a slow API doesn't drag down home boot.
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 6000);
@@ -316,7 +316,7 @@
 
     function _buildRow(group) {
         const summary = _summaryLabel(group);
-        // HC85 — pluralize count: "1 report" vs "{n} reports".
+        // HC85 - pluralize count: "1 report" vs "{n} reports".
         // Operator-reported "1 reports" bug in the bucket-grouped
         // modal sheet rendering rows.
         const countText = (Number(group.count) === 1)
@@ -353,7 +353,7 @@
             </span>
         `;
         // Detail-sheet click + Material-style ripple feedback.
-        // v7 (May 2026, operator) — "circular ripples on click."
+        // v7 (May 2026, operator) - "circular ripples on click."
         // The ripple element is a CSS-keyframed circle positioned at
         // the click coordinates inside the row. Falls back to a no-op
         // under prefers-reduced-motion (CSS handles that gate).
@@ -372,7 +372,7 @@
                 row.appendChild(ripple);
                 setTimeout(() => { try { ripple.remove(); } catch (_) {} }, 650);
             } catch (_) { /* never block the sheet on ripple errors */ }
-            // Phase 3 (May 2026 — docs §4.4) — write the prefill
+            // Phase 3 (May 2026 - docs §4.4) - write the prefill
             // envelope BEFORE dispatching, so any consumer that
             // wants to route to /stage-v4-capture finds the state
             // already in sessionStorage.
@@ -387,15 +387,15 @@
     }
 
     function _buildEmptyState() {
-        // May 2026 (operator preference, post-iPhone-14 audit) — was
+        // May 2026 (operator preference, post-iPhone-14 audit) - was
         // a two-line layout with a ✓ icon + "All clear in your area"
         // title. The ✓ implied "success" which felt wrong when no
-        // backend was available — the user reads "✓ All clear" and
+        // backend was available - the user reads "✓ All clear" and
         // assumes the system says their area is safe when actually
         // it just couldn't reach the service. New empty state is a
         // single plain line that's honest about its scope:
-        // "No nearby reports" — no checkmark, no editorialising.
-        // AUDIT 2026-05-23 — softened copy from operational "No nearby
+        // "No nearby reports" - no checkmark, no editorialising.
+        // AUDIT 2026-05-23 - softened copy from operational "No nearby
         // reports" to reassuring "You're the first eyes on the ground
         // here." Same i18n key (`nearby_no_reports`); the EN value is
         // updated in en.json + propagated via the home-i18n gen-script.
@@ -407,7 +407,7 @@
         return el;
     }
 
-    // ── Aggregate number block (v8 — May 2026 redesign) ──────────────
+    // ── Aggregate number block (v8 - May 2026 redesign) ──────────────
     //
     // Operator: "a single number with ripple effect thing first like
     // we had earlier and on click show in the banner sliding from
@@ -420,7 +420,7 @@
     // in that sheet → existing detail sheet for the group + actions.
 
     /**
-     * Phase 3 (May 2026, docs §4.4) — smart reporting prefill flow.
+     * Phase 3 (May 2026, docs §4.4) - smart reporting prefill flow.
      * When the user taps a nearby group, hand the v4-flow.js capture
      * stage a `crisp_prefill_v1` envelope (sessionStorage) with the
      * cluster's building / location / crisis context. The capture
@@ -430,7 +430,7 @@
      *
      * Privacy: prefilled coords are the GROUP CENTROID (not any
      * individual reporter's coords); building_id is a public OSM
-     * reference. No PII leakage — see docs §10.
+     * reference. No PII leakage - see docs §10.
      */
     function _writePrefillFromGroup(group) {
         if (!group) return;
@@ -443,7 +443,7 @@
                 // T1 weak: crisis_types is the coarse category; T2/T3
                 // expose the full enum. Surface whatever the server gave.
                 crisis_type: (group.crisis_types && group.crisis_types[0]) || null,
-                // "Suggested" severity — visually marked in capture as
+                // "Suggested" severity - visually marked in capture as
                 // 'tap to change'; never silently overwrites the user's
                 // own assessment.
                 suggested_severity: group.severity_max || null,
@@ -456,7 +456,7 @@
         }
     }
 
-    // ── Tier helpers (Phase 1, May 2026 — docs §3.2 + §4.1) ──────────
+    // ── Tier helpers (Phase 1, May 2026 - docs §3.2 + §4.1) ──────────
     // Three tiers: 'weak' (single-witness, < 30min), 'emerging' (2+
     // devices OR stale single), 'verified' (3+ devices). Highest
     // tier present in the response drives the block's visual.
@@ -471,7 +471,7 @@
         return best;   // null when groups list is empty
     }
 
-    // ── HC81 — distance-bucket helpers ──────────────────────────────
+    // ── HC81 - distance-bucket helpers ──────────────────────────────
     //
     // Operator brief (2026-05-26): "We can group the reports to 1Km
     // radius, 5 Km radius & 10 Km radius. If none no need to show
@@ -486,7 +486,7 @@
     // just that bucket's groups (no new modal infrastructure).
 
     /**
-     * HC84 — group the input groups into ordered distance buckets for
+     * HC84 - group the input groups into ordered distance buckets for
      * the SHARED #nearby-list-sheet modal. Each group is placed in the
      * SMALLEST bucket whose threshold >= the group's approx_distance_km.
      * Groups with no/invalid distance get a trailing "Distance unknown"
@@ -528,7 +528,7 @@
                     break;
                 }
             }
-            // > 100 km — outside our query window; should never reach
+            // > 100 km - outside our query window; should never reach
             // here because the backend respects radius_km, but defensive.
             if (!placed) unknownBucket.groups.push(g);
         }
@@ -541,7 +541,7 @@
         const groups = (payload && payload.groups) || [];
         const totalReports = groups.reduce((sum, g) => sum + (g.count || 0), 0);
         const totalGroups = groups.length;
-        // Phase 1 — tier-driven visual treatment
+        // Phase 1 - tier-driven visual treatment
         const dominantTier = _highestTier(groups) || 'weak';
         const isAcute = groups.some((g) => g.is_acute);
 
@@ -563,7 +563,7 @@
                                           'Weak Signal');
         block.setAttribute(
             'aria-label',
-            tierLabel + ' — '
+            tierLabel + ' - '
             + _t('nearby_count_reports', '{n} reports').replace('{n}', String(totalReports))
         );
 
@@ -616,7 +616,7 @@
     // ── Rendering ────────────────────────────────────────────────────
 
     /**
-     * Phase 1 (May 2026 — docs §3.6, §4.1) — render the
+     * Phase 1 (May 2026 - docs §3.6, §4.1) - render the
      * "Recently Resolved: N" subtotal line ALWAYS-SEPARATE from
      * the active count. Returns an element or null when nothing to
      * render.
@@ -639,13 +639,13 @@
     }
 
     // Module-scope cache of the last successful render so we can
-    // re-paint when the user changes language (no re-fetch needed —
+    // re-paint when the user changes language (no re-fetch needed -
     // strings are derived from the payload + i18n dict). Updated on
     // every `_renderInto` call; cleared when the module is hidden.
     let _lastRenderContainer = null;
     let _lastRenderPayload   = null;
     let _lastRenderOpts      = null;
-    // Bottom-sheet re-render — track which group is currently shown.
+    // Bottom-sheet re-render - track which group is currently shown.
     let _openSheetGroup = null;
 
     function _renderInto(container, payload, opts) {
@@ -656,7 +656,7 @@
         _lastRenderContainer = container;
         _lastRenderPayload   = payload;
         _lastRenderOpts      = opts;
-        // Phase F triage (May 2026) — preserve the static eyebrow `<h2
+        // Phase F triage (May 2026) - preserve the static eyebrow `<h2
         // class="home-nearby-eyebrow">` defined in index.html instead
         // of wiping the entire container. The eyebrow is the screen-
         // reader-labelled section header (carries data-i18n="nearby_eyebrow"
@@ -670,7 +670,7 @@
         }
 
         if (!payload || !payload.groups || payload.groups.length === 0) {
-            // May 2026 (operator preference) — append the empty state
+            // May 2026 (operator preference) - append the empty state
             // DIRECTLY to the section, not wrapped in `.home-nearby-list`.
             // That wrapper carries the frosted-glass card treatment
             // intended for grouped data rows; on the empty path the
@@ -681,13 +681,13 @@
             container.appendChild(_buildEmptyState());
             // Even when there are no ACTIVE groups, the Recently
             // Resolved subtotal may still apply (a cluster resolved
-            // in the past 24h — closure feedback).
+            // in the past 24h - closure feedback).
             const resolvedEl = _buildResolvedSubtotal(payload);
             if (resolvedEl) container.appendChild(resolvedEl);
             return;
         }
 
-        // HC84 — restore the aggregate-number-block design (a single
+        // HC84 - restore the aggregate-number-block design (a single
         // big count + halo + tier pill) that pre-dated HC81's concentric
         // rings. Operator brief: "compact homepage/post-submit UI, live
         // humanitarian-network feel, detailed intelligence only inside
@@ -695,7 +695,7 @@
         // modal as bucket-grouped sections.
         container.appendChild(_buildNumberBlock(payload));
 
-        // Phase 1 (May 2026 — docs §3.6, §4.1) — separate
+        // Phase 1 (May 2026 - docs §3.6, §4.1) - separate
         // "Recently Resolved: N" subtotal line below the active block.
         // Operator-stated: never fold into the big number; honest
         // closure feedback.
@@ -728,7 +728,7 @@
             return;
         }
 
-        // AUDIT 2026-05-23 — section is now always visible (the `hidden`
+        // AUDIT 2026-05-23 - section is now always visible (the `hidden`
         // attribute was removed in index.html). The empty state paints
         // immediately on home-stage entry so the user never sees a blank
         // slot, then upgrades to real data once GPS + fetch resolve.
@@ -739,12 +739,12 @@
 
         const location = _getCachedLocation();
         if (!location) {
-            // No GPS yet — keep the empty state visible. The
+            // No GPS yet - keep the empty state visible. The
             // `crisp:location-cached` listener at the bottom of this
             // module re-runs boot() when location resolves, which
             // triggers the real fetch + re-render. Until then, the
             // user reads "You're the first eyes on the ground here."
-            console.log('[NearbyIntel] no cached GPS — empty state shown; waiting for crisp:location-cached.');
+            console.log('[NearbyIntel] no cached GPS - empty state shown; waiting for crisp:location-cached.');
             return;
         }
         console.log('[NearbyIntel] boot with cached GPS:', location);
@@ -775,7 +775,7 @@
             }
         }
 
-        // May 2026 (operator preference, post-iPhone-14 audit) — when we
+        // May 2026 (operator preference, post-iPhone-14 audit) - when we
         // have coords but the fetch failed (offline, no backend, 5xx,
         // CORS), render the empty state and unhide ANYWAY. The earlier
         // "silently hide on fetch failure" rule was confusing the
@@ -786,7 +786,7 @@
         //   • Coords + payload with 0 groups → empty-state message
         //   • Coords + payload null (fail)   → empty-state message
         //   • No coords at all               → stay hidden (no module)
-        // The single ambiguity — "empty actually means broken" — is
+        // The single ambiguity - "empty actually means broken" - is
         // acceptable trade for consistent presence; a brief console
         // warn fires above in `_fetchNearby` so debugging on PROD
         // still has a signal.
@@ -803,7 +803,7 @@
     // Dismiss handlers: backdrop tap, Escape key, ✕ button.
     //
     // PRIVACY: the event detail carries the SAME projection the API
-    // returned — no extra fetch, no PII. The sheet just re-presents
+    // returned - no extra fetch, no PII. The sheet just re-presents
     // it.
 
     const _SEVERITY_FILL = {
@@ -829,7 +829,7 @@
         // 240 ms slide-out, then hide
         setTimeout(() => { sheet.hidden = true; }, 240);
         document.body.style.overflow = '';
-        _openSheetGroup = null;  // sheet is now closed — drop the lang-re-render anchor
+        _openSheetGroup = null;  // sheet is now closed - drop the lang-re-render anchor
     }
 
     function _openDetailSheet(group) {
@@ -859,7 +859,7 @@
         const earliestEl = sheet.querySelector('#nearby-sheet-earliest');
         if (earliestEl) earliestEl.textContent = _formatSheetTimestamp(group.earliest_at);
 
-        // Incident types breakdown — top crisis_types with counts
+        // Incident types breakdown - top crisis_types with counts
         // from damage_classes. The endpoint returns these as arrays
         // sorted by frequency; we don't have per-type counts here,
         // so render as a small list of "Crisis × Damage" combos.
@@ -869,7 +869,7 @@
             const crisisList = group.crisis_types || [];
             const damageList = group.damage_classes || [];
             const total = group.count || 0;
-            // Use crisis_types as the primary key — show each as a row.
+            // Use crisis_types as the primary key - show each as a row.
             if (crisisList.length === 0) {
                 const li = document.createElement('li');
                 li.className = 'nearby-sheet-type-row';
@@ -895,7 +895,7 @@
         // Severity bar
         const fillEl = sheet.querySelector('#nearby-sheet-severity-fill');
         const labelEl = sheet.querySelector('#nearby-sheet-severity-label');
-        // P1 (i18n audit, May 23) — was rendering the raw enum
+        // P1 (i18n audit, May 23) - was rendering the raw enum
         // ("PARTIAL" / "MINIMAL" / "COMPLETE" / "UNKNOWN") in every
         // locale. Now resolved via the damage_class_<lower> i18n
         // key (re-using the existing partial_damage / minimal_damage
@@ -915,7 +915,7 @@
             labelEl.textContent = _tSev(k) || fallback;
         }
 
-        // Soft pre-fill for "Add Your Report Here" — operator-approved
+        // Soft pre-fill for "Add Your Report Here" - operator-approved
         // option #7: pre-fill only building_id + lat/lng. Store in
         // localStorage; v4-flow.js reads + clears on stage-v4-capture
         // entry. (v4-flow.js wiring lands in a separate commit; for
@@ -955,7 +955,7 @@
         sheet.classList.add('is-open');
         document.body.style.overflow = 'hidden';
 
-        // Focus management — move keyboard focus to the close button
+        // Focus management - move keyboard focus to the close button
         // so Escape works + screen reader announces the modal.
         const close = sheet.querySelector('#nearby-sheet-close');
         if (close && typeof close.focus === 'function') {
@@ -963,7 +963,7 @@
         }
     }
 
-    /** Lookup helper — maps backend CrisisType + DamageClass to the
+    /** Lookup helper - maps backend CrisisType + DamageClass to the
      *  i18n key suffix we use in `_SUMMARY_MATRIX` server-side. */
     function _summaryKeyFor(crisis, damage) {
         const cmap = {
@@ -978,7 +978,7 @@
         return `${c}_${d}`;
     }
 
-    // ── List bottom-sheet (v8 — May 2026) ────────────────────────────
+    // ── List bottom-sheet (v8 - May 2026) ────────────────────────────
     //
     // Slides up on tap of the aggregate number block. Renders all
     // groups as tappable rows; a row tap dispatches the existing
@@ -996,7 +996,7 @@
         if (groups.length === 0) {
             listEl.appendChild(_buildEmptyState());
         } else {
-            // HC84 — group rows by distance bucket inside the modal.
+            // HC84 - group rows by distance bucket inside the modal.
             // The top-level surfaces (home + success) show a single
             // aggregate count; detail intelligence lives here, with
             // building names + summaries + distance grouped under
@@ -1044,7 +1044,7 @@
 
     // Wire dismissals on DOM ready.
     document.addEventListener('DOMContentLoaded', () => {
-        // Detail sheet (existing — unchanged).
+        // Detail sheet (existing - unchanged).
         const detail = document.getElementById('nearby-sheet');
         if (detail) {
             const close = detail.querySelector('#nearby-sheet-close');
@@ -1062,7 +1062,7 @@
             if (backdrop) backdrop.addEventListener('click', _closeListSheet);
         }
 
-        // Single Escape handler covers both sheets — closes whichever
+        // Single Escape handler covers both sheets - closes whichever
         // is currently open.
         document.addEventListener('keydown', (e) => {
             if (e.key !== 'Escape') return;
@@ -1090,7 +1090,7 @@
 
     // Re-render on language change. Strings come from the i18n dict via
     // `_t(key)` which IS reactive to `activateLang`, but the strings are
-    // baked into `innerHTML` at render time — they don't update unless we
+    // baked into `innerHTML` at render time - they don't update unless we
     // re-paint. The home strip uses the cached payload (no re-fetch);
     // the detail sheet re-paints from the stashed group object.
     // Operator-reported (May 2026): installed PWA has no refresh
@@ -1116,7 +1116,7 @@
         closeDetailSheet: _closeSheet,
         openListSheet: _openListSheet,
         closeListSheet: _closeListSheet,
-        // HC84 — exposed so app.js (success stage) can paint the
+        // HC84 - exposed so app.js (success stage) can paint the
         // SAME aggregate-number block as the home stage. Single
         // shared interaction model across both surfaces.
         buildNumberBlock: _buildNumberBlock,
@@ -1136,7 +1136,7 @@
     // when the script tag is parsed) runs BEFORE nearby.js even
     // starts loading. At that moment `window.NearbyIntel` is
     // undefined and the `if (NearbyIntel && ...)` guard in
-    // home-screen.js silently skips — module never boots.
+    // home-screen.js silently skips - module never boots.
     //
     // Fix: self-bootstrap here. Independent of home-screen.js
     // timing. If both paths fire, _renderInto just paints again
@@ -1158,14 +1158,14 @@
         setTimeout(_autoBoot, 0);
     }
 
-    // May 2026 (operator-reported) — module was staying hidden on the
+    // May 2026 (operator-reported) - module was staying hidden on the
     // first home visit because IP-geolocation (in app.js) was still in
     // flight when _autoBoot ran. After app.js's _saveLocCtx writes
     // `crisp_last_location_v2`, it dispatches `crisp:location-cached`.
     // Re-boot on that event so the module appears the moment location
-    // is available — no user tap, no permission prompt of our own.
+    // is available - no user tap, no permission prompt of our own.
     document.addEventListener('crisp:location-cached', () => {
-        console.log('[NearbyIntel] crisp:location-cached received — re-booting.');
+        console.log('[NearbyIntel] crisp:location-cached received - re-booting.');
         _autoBoot();
     });
 })();

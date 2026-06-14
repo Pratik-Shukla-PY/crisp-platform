@@ -1,5 +1,5 @@
 /**
- * ConsentOverlay — first-launch privacy consent gate.
+ * ConsentOverlay - first-launch privacy consent gate.
  *
  * React Native equivalent of the PWA `#consent-overlay`
  * (mobile-app/src/index.html:29–52). Blocks the render tree behind a
@@ -11,7 +11,7 @@
  *
  * Accessibility: honors `AccessibilityInfo.isReduceMotionEnabled()` by
  * disabling the fade animation when the OS setting is on. Read once on
- * mount — the value rarely changes mid-session and re-subscribing would
+ * mount - the value rarely changes mid-session and re-subscribing would
  * add a listener for a setting that only fires on OS toggle.
  */
 import React, { useEffect, useState } from 'react';
@@ -38,12 +38,12 @@ function ConsentOverlay({ visible, onAccept }: Props): React.ReactElement {
   const [reduceMotion, setReduceMotion] = useState<boolean>(false);
 
   useEffect(() => {
-    // Read once on mount — per-component listener not worth the overhead
+    // Read once on mount - per-component listener not worth the overhead
     // for a gate that typically unmounts within seconds of first render.
     AccessibilityInfo.isReduceMotionEnabled()
       .then((enabled) => setReduceMotion(enabled))
       .catch(() => {
-        /* non-fatal — fall through with animations enabled */
+        /* non-fatal - fall through with animations enabled */
       });
   }, []);
 
@@ -61,7 +61,7 @@ function ConsentOverlay({ visible, onAccept }: Props): React.ReactElement {
       // intentionally non-dismissable. Parity with the PWA, which has
       // no ✕ affordance on #consent-overlay.
       onRequestClose={() => {
-        /* no-op — consent cannot be skipped */
+        /* no-op - consent cannot be skipped */
       }}
       statusBarTranslucent
     >

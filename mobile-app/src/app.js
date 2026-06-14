@@ -12,7 +12,7 @@ const UI_V2_ENABLED = (() => {
 window.__crispUiV2 = UI_V2_ENABLED;
 
 // ── Reader Mode ────────────────────────────────
-// AUDIT 2026-05-23 — bumps every --fz-* token one step so elderly /
+// AUDIT 2026-05-23 - bumps every --fz-* token one step so elderly /
 // presbyopic / sunlit-screen users can boost text size in one tap
 // from Settings. Applied BEFORE first paint so there's no FOUC.
 // Toggled by the #settings-reader-mode checkbox (see _wireReaderMode).
@@ -46,10 +46,10 @@ window.__crispWireReaderMode = _wireReaderMode;
 
 // ── UI v3 feature flag ───────
 // v3 delivers three user-visible improvements on top of v2:
-//   1. Building-footprint pre-cache — 10 nearest buildings are downloaded
+//   1. Building-footprint pre-cache - 10 nearest buildings are downloaded
 //      into IndexedDB on app boot / GPS-ready, so offline capture flows
 //      have the overlay ready even without live Overpass access.
-//   2. Free-text building-name fallback — when the Leaflet map / Overpass
+//   2. Free-text building-name fallback - when the Leaflet map / Overpass
 //      fetch is unavailable, the user can type the building name in their
 //      native language. The backend stores it on `infrastructure_name`
 //      with `building_id = NULL`; the dashboard tags such rows as
@@ -59,11 +59,11 @@ window.__crispWireReaderMode = _wireReaderMode;
 //
 // The full 8-stage visual reorder is gated behind this same flag so a
 // rollback is one localStorage flip away: `localStorage.setItem('crisp_ui_v3','off')`.
-// May 2026 — V3 navigation chain (stage-where → infra → crisis →
+// May 2026 - V3 navigation chain (stage-where → infra → crisis →
 // extras → photo → audio → review) is locked off. The V3 stage DOMs
 // remain in index.html because V4 inherits helper functions from
 // them (e.g. setupPhotoStage's `_ingestFileAsPhoto` updates
-// `#photo-preview` / `#btn-photo-next` element state — V4's photo
+// `#photo-preview` / `#btn-photo-next` element state - V4's photo
 // pipeline calls into that chain via `window.__crispIngestFile`),
 // but the V3 user-facing navigation never engages. JIT eliminates
 // the dead `if (UI_V3_ENABLED) { ... }` branches at parse time. A
@@ -106,7 +106,7 @@ if ('serviceWorker' in navigator) {
                 if (event.data && event.data.type === 'NOTIFICATION_OPEN') {
                     const reportId = (event.data.data || {}).report_id;
                     if (reportId) {
-                        // Best-effort routing — open the device-status section
+                        // Best-effort routing - open the device-status section
                         // if the user is on the home screen, otherwise leave
                         // them where they are.
                         try { window.scrollTo(0, 0); } catch (_) {}
@@ -176,8 +176,8 @@ if ('serviceWorker' in navigator) {
         // gated by _pwaUpdateClicked so this listener
         // does NOT fire a reload on the FIRST install (when there's
         // no existing controller and the new SW activates naturally).
-        // Without this gate, every fresh browser context — Playwright
-        // included — got force-reloaded on SW activation, which
+        // Without this gate, every fresh browser context - Playwright
+        // included - got force-reloaded on SW activation, which
         // destroyed the page-evaluate context mid-test and broke
         // prod-smoke's "service worker cache version is current"
         // assertion.
@@ -185,7 +185,7 @@ if ('serviceWorker' in navigator) {
             if (!_pwaUpdateClicked) return;
             if (_pwaUpdateReloading) return;
             _pwaUpdateReloading = true;
-            // HC75 (May 2026) — show a "Upgraded to vNNN" success
+            // HC75 (May 2026) - show a "Upgraded to vNNN" success
             // toast for ~1 second before the reload, so the user
             // sees their tap completed successfully. The version
             // came back from the SW's SKIP_WAITING reply (handler
@@ -197,7 +197,7 @@ if ('serviceWorker' in navigator) {
             }, 1000);
         });
 
-        // HC75 — listen for the SW's `CRISP_NEW_VERSION` reply
+        // HC75 - listen for the SW's `CRISP_NEW_VERSION` reply
         // (sent in response to our SKIP_WAITING postMessage). The
         // payload's `version` field is the new SW's `CACHE_NAME`
         // (e.g. "crisp-v302"). Cached on the page so the success
@@ -212,7 +212,7 @@ if ('serviceWorker' in navigator) {
     let _pwaNewVersion = '';
 
     /**
-     * HC75 — swap the banner's contents to a success toast.
+     * HC75 - swap the banner's contents to a success toast.
      * Shows for ~1 second; the controllerchange handler reloads the
      * page right after. Renders even if `_pwaNewVersion` wasn't
      * captured (fallback to a generic "Update applied").
@@ -270,9 +270,9 @@ if ('serviceWorker' in navigator) {
             // brief skipWaiting → controllerchange → reload race.
             const btn = banner.querySelector('.pwa-update-banner-btn');
             btn.disabled = true;
-            // HC75 (May 2026) — was `_t('upload_sending')` which
+            // HC75 (May 2026) - was `_t('upload_sending')` which
             // resolved to "Sending report..." (wrong i18n key
-            // entirely — that's the report-upload progress text).
+            // entirely - that's the report-upload progress text).
             // Operator screenshot 2026-05-26 showed this stuck
             // visible. Now uses the proper `pwa_update_now_loading`
             // key with an "Updating…" fallback.
@@ -283,7 +283,7 @@ if ('serviceWorker' in navigator) {
             _pwaUpdateClicked = true;
             try { worker.postMessage({ type: 'SKIP_WAITING' }); }
             catch (e) {
-                // postMessage failed — fall back to a hard reload so
+                // postMessage failed - fall back to a hard reload so
                 // the user at least gets a fresh fetch of sw.js.
                 console.warn('SW postMessage failed:', e);
                 window.location.reload();
@@ -340,7 +340,7 @@ function _isPushSupported() {
 function _isStandaloneInstalled() {
     // True when the PWA is launched from home screen (iOS) or installed
     // (Android Chrome). On iOS Safari in a regular tab, web push is
-    // not delivered — we skip the permission prompt to avoid burning it.
+    // not delivered - we skip the permission prompt to avoid burning it.
     try {
         if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
         if (window.navigator && window.navigator.standalone === true) return true;  // iOS legacy
@@ -372,7 +372,7 @@ async function _postSubscriptionToServer(subscription, deviceHash) {
         locale: (state && state.lang) ? state.lang : null,
     };
     const headers = { 'Content-Type': 'application/json' };
-    // Attach JWT if the reporter is logged in — backend will tie the row to user_id.
+    // Attach JWT if the reporter is logged in - backend will tie the row to user_id.
     try {
         const token = localStorage.getItem('crisp_auth_token');
         if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -388,7 +388,7 @@ async function _postSubscriptionToServer(subscription, deviceHash) {
 async function ensurePushSubscription({ promptIfNeeded = false } = {}) {
     if (!_isPushSupported()) return { ok: false, reason: 'unsupported' };
 
-    // iOS Safari requires PWA installed to home screen — skip prompt
+    // iOS Safari requires PWA installed to home screen - skip prompt
     // (and don't even ask) when running as a regular tab.
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent || '');
     if (isIOS && !_isStandaloneInstalled() && promptIfNeeded) {
@@ -406,7 +406,7 @@ async function ensurePushSubscription({ promptIfNeeded = false } = {}) {
         return { ok, reason: ok ? 'resynced' : 'server_error' };
     }
 
-    // No existing subscription — need permission + fresh subscribe.
+    // No existing subscription - need permission + fresh subscribe.
     if (Notification.permission === 'denied') {
         return { ok: false, reason: 'denied' };
     }
@@ -483,14 +483,14 @@ async function enqueueReport(payload) {
     const db = await openIDB();
     return new Promise((resolve, reject) => {
         const tx = db.transaction(IDB_STORE, 'readwrite');
-        // Store ALL fields flat at top level — keyPath is client_report_id.
+        // Store ALL fields flat at top level - keyPath is client_report_id.
         // Previously nested under `payload` key which broke retry loop reads.
         // Preserve a caller-supplied timestamp if present (lets the orphan-
         // self-heal regression test seed rows that look 30 minutes old);
         // production callers (submitReport) don't pass a timestamp so they
         // get Date.now() as before.
         //
-        // K.4.d (May 2026, Phase K) — monotonic version stamp.
+        // K.4.d (May 2026, Phase K) - monotonic version stamp.
         // Increments on every enqueue so two tabs draining concurrently
         // can detect stale-snapshot writes: tab A reads at _version=5,
         // tab B reads + writes (now _version=6), tab A tries to write
@@ -510,15 +510,15 @@ async function enqueueReport(payload) {
     });
 }
 
-// K.4.e (May 2026, Phase K) — iOS HEIC quota guard.
+// K.4.e (May 2026, Phase K) - iOS HEIC quota guard.
 // Constants + helper used by the size-check in submitReport.
 // iOS WebKit caps each origin at 50 MB of IndexedDB storage. We
 // warn at 35 MB to leave headroom for the SW's own caches + a
-// margin for the new submission. Threshold is conservative — false
+// margin for the new submission. Threshold is conservative - false
 // positives (warn-but-actually-fine) are preferred over silent
 // failures.
 //
-// Phase L L.2.d (May 2026) — dropped from 40 → 35 MB because
+// Phase L L.2.d (May 2026) - dropped from 40 → 35 MB because
 // ORIGINAL tier is now up to 5 MB per photo (vs ~500 KB pre-L when
 // the highest tier was the resized "LARGE"). Operator gets the
 // warning one photo earlier; iOS quota collapse risk goes down.
@@ -534,7 +534,7 @@ function _estimateQueueItemBytes(item) {
             const v = variants[tier];
             if (v && v.blob && typeof v.blob.size === 'number') {
                 // Retained Blob (ORIGINAL tier post-fix): IDB stores raw
-                // bytes via structured clone — no base64 inflation.
+                // bytes via structured clone - no base64 inflation.
                 total += v.blob.size;
             } else if (v && typeof v.dataUrl === 'string') {
                 total += v.dataUrl.length;
@@ -561,7 +561,7 @@ function _estimateQueueItemBytes(item) {
     return Math.round(total);
 }
 
-// K.4.d — version-aware enqueue. Use this from inside the retry/
+// K.4.d - version-aware enqueue. Use this from inside the retry/
 // upload pass to write progress (chunkProgress, stages, etc.) and
 // have the write rejected if another context advanced the row between
 // our read and write. Returns `true` on success, `false` on stale-
@@ -610,7 +610,7 @@ async function dequeueReport(clientReportId) {
         const tx = db.transaction(IDB_STORE, 'readwrite');
         tx.objectStore(IDB_STORE).delete(clientReportId);
         tx.oncomplete = () => {
-            // HC16 (May 2026) — successful dequeue = a report just
+            // HC16 (May 2026) - successful dequeue = a report just
             // reached the server. Stamp localStorage so the
             // connection-status popover can render a humanised
             // "Last sync" time. Best-effort: swallow storage errors
@@ -631,7 +631,7 @@ async function dequeueReport(clientReportId) {
 // stages.photo back to false and clear the missing variants' completion
 // flags so the next retry-loop pass re-uploads them.
 //
-// Phase C.3 (May 2026) — `breakdown` returns `{ LOW, MEDIUM, HIGH }` complete
+// Phase C.3 (May 2026) - `breakdown` returns `{ LOW, MEDIUM, HIGH }` complete
 // counts pulled from the same server response so the caller can emit a
 // single verification log line like:
 //   [Upload:verify] report <id> → 5 photo groups × 3 tiers; backend has
@@ -639,10 +639,10 @@ async function dequeueReport(clientReportId) {
 // Trivial to compute (one extra reduce) and avoids a second tier-status
 // round-trip just for logging.
 async function _reconcileBeforeDequeue(item, reportId) {
-    // BUGFIX May 2026 (operator-reported, "1 queued never leaves") —
+    // BUGFIX May 2026 (operator-reported, "1 queued never leaves") -
     // soft-drain reconcile.
     //
-    // Pre-fix this function returned `ok: missing.length === 0` —
+    // Pre-fix this function returned `ok: missing.length === 0` -
     // EVERY local complete=true variant had to be present server-
     // side, or the queue entry rolled back (stages.photo=false) and
     // got re-queued forever. On good bandwidth this still happened
@@ -654,30 +654,30 @@ async function _reconcileBeforeDequeue(item, reportId) {
     //
     // New rule: the report is fundamentally DONE the moment SMALL of
     // every photo group is on the server. Originals (MEDIUM/HIGH) are
-    // progressive enhancement — the dashboard's "Original pending"
+    // progressive enhancement - the dashboard's "Original pending"
     // pill already covers the case where they finish later.
     //
     // Returns:
-    //   ok          — true if SMALL of every photo group is on the server
+    //   ok          - true if SMALL of every photo group is on the server
     //                  (and there are no photos at all is also ok)
-    //   softDrain   — true when ok=true but at least one MEDIUM/HIGH the
+    //   softDrain   - true when ok=true but at least one MEDIUM/HIGH the
     //                  client thought it sent is missing server-side
     //                  (caller marks those `deferred` for background retry
-    //                  and dequeues the report — no more "1 queued forever")
-    //   missing     — the variants the caller should mark deferred (soft-drain)
+    //                  and dequeues the report - no more "1 queued forever")
+    //   missing     - the variants the caller should mark deferred (soft-drain)
     //                  or reset to retry (hard-fail when SMALL is missing)
-    //   smallMissing— variants whose SMALL tier is missing server-side;
+    //   smallMissing- variants whose SMALL tier is missing server-side;
     //                  caller MUST roll back and re-upload (this is the
     //                  only hard-fail case)
-    //   breakdown   — counts of each tier present on the server (operator
+    //   breakdown   - counts of each tier present on the server (operator
     //                  log surface)
-    //   totalExpected — number of variants the client believed it sent
+    //   totalExpected - number of variants the client believed it sent
     if (!reportId) return { ok: true, softDrain: false, missing: [], smallMissing: [], breakdown: { LOW: 0, MEDIUM: 0, HIGH: 0 }, totalExpected: 0 };
     // Collect every (variant, mediaId) we believe we sent, AND track
     // which ones are the SMALL tier of their photo group (those are
     // the "must be on the server" set; MEDIUM/HIGH are softer).
     //
-    // BUGFIX May 2026 (operator-reported, cellular smoke 3) — also
+    // BUGFIX May 2026 (operator-reported, cellular smoke 3) - also
     // include MID-FLIGHT variants (mediaId set, chunks partially
     // uploaded, complete=false). Pre-fix, the collector only counted
     // `complete=true` variants. If a chunk loop threw mid-stream
@@ -685,13 +685,13 @@ async function _reconcileBeforeDequeue(item, reportId) {
     // exhausted), the variant stayed `complete=false` and was INVISIBLE
     // to reconcile. Reconcile saw "every variant I tracked is on the
     // server" → ok=true → dequeue. The pending chunks 22-24 were
-    // orphaned forever — the queue item was gone so the retry loop
+    // orphaned forever - the queue item was gone so the retry loop
     // had nothing to resume. The dashboard's report stayed
     // PARTIAL-promoted-to-SYNCED (Action ④) with one ORIGINAL frozen
     // at received_chunks < chunk_count and no abandon_reason.
     //
     // Post-fix: include `mediaId && (complete || chunkProgress > 0)`
-    // — the variant is either done (server should have it complete)
+    // - the variant is either done (server should have it complete)
     // OR mid-stream (server should have a row with chunks landing).
     // Either way, the reconciler MUST account for it before dequeueing.
     // The downstream softAssembling/softMissing bucketing then drives
@@ -732,7 +732,7 @@ async function _reconcileBeforeDequeue(item, reportId) {
             { method: 'GET', credentials: 'omit' },
         );
         if (!res.ok) {
-            // Endpoint missing (old backend) or transient error — fail
+            // Endpoint missing (old backend) or transient error - fail
             // open and trust local stages.*. Same fail-open as before.
             return { ok: true, softDrain: false, missing: [], smallMissing: [], breakdown: emptyBreakdown, totalExpected };
         }
@@ -762,7 +762,7 @@ async function _reconcileBeforeDequeue(item, reportId) {
     //   · `notComplete` = server doesn't show assembly_status='complete'
     //   · `notPresent`  = server doesn't have a row for this mediaId at all
     //
-    // Phase L follow-up (May 2026) — race-fix in reconcile.
+    // Phase L follow-up (May 2026) - race-fix in reconcile.
     // Pre-fix: any non-SMALL tier in `notComplete` was treated as
     // "soft-drain" (caller calls /media/mark-deferred + dequeues).
     // Bug: if the chunks were STILL being assembled on the server,
@@ -770,7 +770,7 @@ async function _reconcileBeforeDequeue(item, reportId) {
     // `failed/bandwidth_tier_deferred` mid-assembly. All chunks
     // arrived but the row was already terminal-failed → ORIGINAL
     // never landed. Operator-reported: "image landed but original
-    // failed with network timeout" — actually a "we gave up
+    // failed with network timeout" - actually a "we gave up
     // too early" misfire.
     //
     // Post-fix: also bucket non-SMALL tiers by whether the server
@@ -788,7 +788,7 @@ async function _reconcileBeforeDequeue(item, reportId) {
         e => e.tier === 'small' && serverHas.has(e.mediaId),
     );
     // MEDIUM / ORIGINAL tiers that DO exist on the server but aren't
-    // yet `complete`. Same grace window as smallAssembling — wait,
+    // yet `complete`. Same grace window as smallAssembling - wait,
     // don't soft-drain.
     const softAssembling = notComplete.filter(
         e => e.tier !== 'small' && serverHas.has(e.mediaId),
@@ -818,7 +818,7 @@ async function _reconcileBeforeDequeue(item, reportId) {
     };
 }
 
-// K.3.a (May 2026, Phase K) — walk the queue item's variant structure
+// K.3.a (May 2026, Phase K) - walk the queue item's variant structure
 // and produce the `tiers_by_group` payload shape the backend's
 // /media/mark-deferred endpoint expects:
 //     { "<photo_group_id>": ["MEDIUM", "HIGH"], ... }
@@ -827,10 +827,10 @@ async function _reconcileBeforeDequeue(item, reportId) {
 // photoVariants / extraPhotosVariants[i] container to find its
 // groupId, and map local lower-case tier names to backend enum
 // names (small → SMALL, medium → MEDIUM, original → ORIGINAL).
-// Phase L (May 2026) — canonical 3-value vocabulary; pre-L was
+// Phase L (May 2026) - canonical 3-value vocabulary; pre-L was
 // small/medium/large → LOW/MEDIUM/HIGH.
 //
-// Returns {} if nothing maps — the caller should skip the POST in
+// Returns {} if nothing maps - the caller should skip the POST in
 // that case to avoid a 422.
 function _enumerateDeferredByGroup(item, missing) {
     if (!item || !Array.isArray(missing) || missing.length === 0) return {};
@@ -870,10 +870,10 @@ function _enumerateDeferredByGroup(item, missing) {
             }
         }
         if (!matched) {
-            // Variant has no parent group we can identify — skip rather
+            // Variant has no parent group we can identify - skip rather
             // than send a NULL group key (backend would 422).
             console.warn(
-                `[Soft-drain] orphan deferred variant ${m.mediaId} (${m.label}) — ` +
+                `[Soft-drain] orphan deferred variant ${m.mediaId} (${m.label}) - ` +
                 `no parent photoGroup in queue item; skipping mark-deferred for it.`,
             );
         }
@@ -882,12 +882,12 @@ function _enumerateDeferredByGroup(item, missing) {
 }
 
 
-// Phase L L.2.c (May 2026) — IDB read-migration for tier vocabulary
+// Phase L L.2.c (May 2026) - IDB read-migration for tier vocabulary
 // rename. Pre-L queue items had `variants.large`; post-L items have
 // `variants.original`. A user upgrading the PWA between drains may
 // have items with the old key still sitting in IDB. Rename on read
 // so the retry loop's iteration over ['small','medium','original']
-// finds the variant under its new key. Idempotent — already-canonical
+// finds the variant under its new key. Idempotent - already-canonical
 // items pass through unchanged.
 function _migrateVariantsToPhaseL(item) {
     if (!item) return item;
@@ -939,21 +939,21 @@ async function updateQueueItemStatus(clientReportId, status, retryCount) {
 }
 
 // ── Self-heal orphan detection ──────────────────────────────────────────
-// BUGFIX May 2026 (operator-reported 2026-05-13) — a submission was
+// BUGFIX May 2026 (operator-reported 2026-05-13) - a submission was
 // interrupted mid-flight (page close or JS error) and left a row in
 // `pending-reports` with `stages.meta = stages.text = stages.audio = true`
 // but `serverId = null` AND zero actual payload (description empty, no
 // audio blob, every photo variant at chunkProgress=0). The row sat ~24h:
-//   · invisible to the soft-drain dequeue path — that branch is gated by
+//   · invisible to the soft-drain dequeue path - that branch is gated by
 //     `stages.meta && text && photo && audio` and stages.photo was false.
-//   · skipped by the retry loop — the photo-upload call threw on null
+//   · skipped by the retry loop - the photo-upload call threw on null
 //     serverId before bumping retryCount, so the item ricocheted between
 //     "not ready" and "errored" with no forward progress.
 //
 // Self-heal rule: when stages claim ANY upload happened but there is
 //   (a) no server-side report id, AND
 //   (b) no local payload bytes for any stage,
-// the row cannot make forward progress — there is literally nothing to
+// the row cannot make forward progress - there is literally nothing to
 // send. The 10-minute age gate avoids racing a genuine in-flight
 // submission whose stages haven't fully populated yet.
 function _isOrphanQueueRow(item) {
@@ -961,11 +961,11 @@ function _isOrphanQueueRow(item) {
     const stages = item.stages || {};
     const stagesClaimSent = !!(stages.meta || stages.text || stages.audio);
     // Field is `serverId` in the current schema; legacy callers may have
-    // written `serverReportId` and `reportId` — check all three so a
+    // written `serverReportId` and `reportId` - check all three so a
     // genuine server-acked row is never auto-dequeued.
     const noServerId = !item.serverId && !item.serverReportId && !item.reportId;
     // The description lives at `item.text` in the queue payload (see
-    // submitReport — text: state.description || state.transcript || '').
+    // submitReport - text: state.description || state.transcript || '').
     // Also check `description` in case future commits rename.
     const txt = item.text || item.description || '';
     const noTextPayload = !txt || txt.length === 0;
@@ -989,7 +989,7 @@ async function _selfHealOrphans() {
     for (const it of items) {
         if (_isOrphanQueueRow(it)) {
             console.warn(
-                `[Queue:self-heal] orphan ${it.client_report_id} — ` +
+                `[Queue:self-heal] orphan ${it.client_report_id} - ` +
                 `stages claim sent but no payload + no serverId. Auto-dequeue.`,
             );
             try { await dequeueReport(it.client_report_id); healed += 1; } catch (_) {}
@@ -1064,12 +1064,12 @@ function showUploadSuccess() {
 }
 
 function showUploadQueued() {
-    // Same success animation as online — user shouldn't feel different
+    // Same success animation as online - user shouldn't feel different
     showUploadSuccess();
 }
 
 // ── Sync Badge ───────────────────────────────────────────────────────────────
-// Helper — returns the count of UNDP-details patches sitting in
+// Helper - returns the count of UNDP-details patches sitting in
 // localStorage waiting to drain. Defined here so updateSyncBadge can
 // reference it BEFORE _DETAILS_QUEUE_KEY is declared (the const lives
 // further down in the file, but localStorage reads it by string key
@@ -1088,10 +1088,10 @@ async function updateSyncBadge() {
         const badge = document.getElementById('sync-badge');
         const text = document.getElementById('sync-badge-text');
         const fill = document.getElementById('sync-badge-fill');
-        // BUGFIX May 2026 (operator-reported, second pass) — user sees
+        // BUGFIX May 2026 (operator-reported, second pass) - user sees
         // the "N queued" pill and reads it as "my UNDP details aren't
         // syncing." Pre-fix the pill ONLY counted IndexedDB report
-        // queue items (`getAllQueued()`) — it had no awareness of the
+        // queue items (`getAllQueued()`) - it had no awareness of the
         // localStorage UNDP-details queue (`crisp_report_details_
         // queue_v1`) added in dab0544. So:
         //   · a stuck UNDP-details patch was invisible to the user
@@ -1101,13 +1101,13 @@ async function updateSyncBadge() {
         // Single source of truth fix: pill = reports + details. Tap
         // drains both (see syncQueueManual below).
         const items = await getAllQueued();
-        // BUGFIX May 2026 — items with `_submissionLanded=true` are the
+        // BUGFIX May 2026 - items with `_submissionLanded=true` are the
         // "deferred-Originals-still-retrying" state added by the
         // reconciler (see _hasDeferredVariantsPending). The user-facing
         // submission journey is already complete on those rows (SMALL
         // landed, dashboard sees the report). They live in IDB only so
         // the variant retry loop keeps trying to ship MEDIUM/LARGE in
-        // the background. We MUST not count them in the sync-badge —
+        // the background. We MUST not count them in the sync-badge -
         // otherwise the pill shows "1 queued" forever, which is the
         // exact UX complaint that prompted the original
         // dequeue-on-SMALL-landed change.
@@ -1115,7 +1115,7 @@ async function updateSyncBadge() {
         const detailsCount = _queuedDetailsCount();
         const total = visibleItems.length + detailsCount;
 
-        // May 2026 — the queued-reports badge shows ONLY on the home and
+        // May 2026 - the queued-reports badge shows ONLY on the home and
         // Thank-You (success) stages. Elsewhere (capture/review/etc.) it
         // overlapped the header/brand row, so it's suppressed. goToStage()
         // re-invokes updateSyncBadge() on every navigation so this stays
@@ -1132,20 +1132,20 @@ async function updateSyncBadge() {
         badge.style.display = 'flex';
         const syncing = visibleItems.filter(i => i.status === 'syncing').length;
         const failed = visibleItems.filter(i => i.status === 'failed').length;
-        // Resilience #4 — rows that have cycled ≥3 HC90 pause windows
+        // Resilience #4 - rows that have cycled ≥3 HC90 pause windows
         // without progress carry a calm soft flag (NOT status='failed').
         const needsAttention = visibleItems.filter(i => i && i._needsAttention === true).length;
 
         // BUGFIX May 2026 (operator-reported, "1 queued never leaves")
-        // — compute a stage-based progress % across the queue so the
+        // - compute a stage-based progress % across the queue so the
         // user has visibility into how close the queue is to draining.
         //
         // REVISED May 21 2026 (operator-reported, cellular smoke 5
-        // "why is it stuck at 75%?") — denominator is now per-item:
+        // "why is it stuck at 75%?") - denominator is now per-item:
         // only count stages this item actually has. Pre-fix, every
         // report contributed 4 to the denominator (meta+text+photo
         // +audio). For a no-audio report (which is the common case
-        // on UNDP capture flow — audio is optional), `stages.audio`
+        // on UNDP capture flow - audio is optional), `stages.audio`
         // stays false forever, capping max progress at 3/4 = 75%.
         // Operator looked at an actively-draining no-audio report
         // and saw "75% queued" persistently while uploads were
@@ -1154,7 +1154,7 @@ async function updateSyncBadge() {
         // New denominator: 3 stages (meta/text/photo) for every
         // report, +1 for audio iff the item actually has audio.
         // A fully-drained no-audio report now reads 3/3 = 99%
-        // (capped) — accurate "almost done, background ORIGINALs
+        // (capped) - accurate "almost done, background ORIGINALs
         // still uploading" signal instead of a permanent 75%.
         let pct = 0;
         if (visibleItems.length > 0) {
@@ -1178,10 +1178,10 @@ async function updateSyncBadge() {
                 ? Math.min(99, Math.round((totalStages / totalDenom) * 100))
                 : 0;
         }
-        // Details-queue items don't carry stage progress — they're
+        // Details-queue items don't carry stage progress - they're
         // either queued (0%) or drained (gone from queue). If ALL
         // remaining items are details patches (no reports), keep
-        // pct at 0 — accurate for "patch hasn't been attempted yet".
+        // pct at 0 - accurate for "patch hasn't been attempted yet".
         if (fill) fill.style.width = `${pct}%`;
 
         if (syncing > 0) {
@@ -1191,7 +1191,7 @@ async function updateSyncBadge() {
             badge.className = 'sync-badge error';
             text.textContent = `${total} ${t('sync_queued')} (${failed} ${t('sync_failed')})`;
         } else if (needsAttention > 0) {
-            // Resilience #4 — calm escalation (NOT the red .error pill). A
+            // Resilience #4 - calm escalation (NOT the red .error pill). A
             // report has cycled through ≥3 HC90 pause windows with no
             // progress (chronically-unreachable backend). Delivery still
             // continues in the background via the 1-h auto-resume; this
@@ -1215,7 +1215,7 @@ async function updateSyncBadge() {
 
 // ── Manual Sync Fallback (for browsers without Background Sync) ──────────────
 //
-// BUGFIX May 2026 — user reported tapping the "N queued" pill at the top of
+// BUGFIX May 2026 - user reported tapping the "N queued" pill at the top of
 // the capture screen was a silent no-op ("nothing happens"). The click DID
 // trigger this function via the inline onclick on #sync-badge (see
 // index.html:2617), but the user got zero visual feedback so it felt broken.
@@ -1229,14 +1229,14 @@ async function syncQueueManual(opts) {
         try { if (typeof showToast === 'function') showToast(msg, kind || 'info'); }
         catch (_) {}
     };
-    // BUGFIX May 2026 (operator-reported 2026-05-13) — sweep orphans
+    // BUGFIX May 2026 (operator-reported 2026-05-13) - sweep orphans
     // BEFORE pulling the queue snapshot so a stuck zero-payload row from
     // a prior interrupted submission doesn't inflate the "Retrying N
     // reports…" toast count or get probed against an unreachable server.
     try { await _selfHealOrphans(); } catch (_) {}
     let items;
     try { items = await getAllQueued(); } catch (_) { return; }
-    // BUGFIX May 2026 (operator-reported, second pass) — also drain the
+    // BUGFIX May 2026 (operator-reported, second pass) - also drain the
     // UNDP-details localStorage queue. Pre-fix, tapping the pill only
     // retried regular reports; UNDP-details patches stuck offline would
     // sit there until the next `online` event or the 2s post-boot tick
@@ -1253,7 +1253,7 @@ async function syncQueueManual(opts) {
         return;
     }
 
-    // Entry toast — user immediately sees "Retrying N reports…" so the
+    // Entry toast - user immediately sees "Retrying N reports…" so the
     // tap registers visually even before any network round-trip. The
     // count includes the UNDP-details queue so "3 queued" reflects
     // everything the user sees as pending.
@@ -1262,12 +1262,12 @@ async function syncQueueManual(opts) {
         .replace('{n}', String(_initialCount));
     showT(_retryMsg, 'info');
 
-    console.log(`Manual sync: ${_initialCount} queued reports — delegating to modern retry pipeline`);
+    console.log(`Manual sync: ${_initialCount} queued reports - delegating to modern retry pipeline`);
     // BUGFIX May 2026 (operator-reported, real iPhone Safari capture):
     // tapping the sync pill ran a legacy per-item loop that PATCH'd
     // /media/attach for the main photo AND every extra photo. The
     // backend's /attach handler dedupes by (report_id, type), so 3
-    // captured photos collapsed into 1 Media row — the operator saw
+    // captured photos collapsed into 1 Media row - the operator saw
     // a 3-photo report arrive at the dashboard as a single-image
     // report. The loop also ran legacy /attach for variant-shape items
     // that were already mid-flight on the page's chunked retry path,
@@ -1280,7 +1280,7 @@ async function syncQueueManual(opts) {
     //   • iterates `_buildVariantWork(item)` which expands each photo
     //     into per-tier work units (SMALL/MEDIUM/ORIGINAL) carrying
     //     distinct `media_id` + shared `photo_group_id` per photo,
-    //     uploaded via /media/chunk-bin (binary) — so 3 photos always
+    //     uploaded via /media/chunk-bin (binary) - so 3 photos always
     //     produce ≥3 Media rows (one per photo_group_id)
     //   • falls back to `_uploadLegacyPhoto` (now extras-aware) when
     //     a queue item predates the variant pipeline
@@ -1305,7 +1305,7 @@ async function syncQueueManual(opts) {
     }
     updateSyncBadge();
 
-    // Exit toast — count what's left vs what started; tell the user.
+    // Exit toast - count what's left vs what started; tell the user.
     // If we drained everything, celebrate. If some are still queued,
     // be honest about how many remain so they know to try again later
     // (network might still be flaky).
@@ -1314,7 +1314,7 @@ async function syncQueueManual(opts) {
     // UNDP-details queue (localStorage) so the toast reflects the
     // unified pill count. The _syncDetailsQueue() fired above runs
     // in parallel and may not be finished yet when this exit toast
-    // computes — that's fine, the remaining count is still accurate
+    // computes - that's fine, the remaining count is still accurate
     // for "what's in front of the user right now" and a follow-up
     // `online`/boot tick will keep retrying any stragglers.
     if (showFeedback) {
@@ -1330,16 +1330,16 @@ async function syncQueueManual(opts) {
                     .replace('{pending}', String(_stillQueued));
                 showT(msg, 'warn');
             } else {
-                const msg = (t('sync_none_drained') || '{n} still queued — check your connection.')
+                const msg = (t('sync_none_drained') || '{n} still queued - check your connection.')
                     .replace('{n}', String(_stillQueued));
                 showT(msg, 'warn');
             }
-        } catch (_) { /* getAllQueued race — silent */ }
+        } catch (_) { /* getAllQueued race - silent */ }
     }
 }
 
 // ── i18n strings ──────────────────────────────────────────────────────────────
-// ── UNDP §3.1b — Async locale-JSON loader ─────────────────────────
+// ── UNDP §3.1b - Async locale-JSON loader ─────────────────────────
 //
 // The inline I18N + EXTRA_LANG + UNDP_I18N_EXTRA dicts below are the SYNC
 // first-paint baseline. They are intentionally kept because:
@@ -1351,20 +1351,20 @@ async function syncQueueManual(opts) {
 // `mobile-app/src/i18n/{locale}.json` files are fetched asynchronously on
 // every `activateLang(code)` call. The fetched pack is merged on top of the
 // inline pack (JSON wins), then `applyI18n()` re-renders the DOM so users
-// see the richer translations once they arrive — typically within ~100 ms
+// see the richer translations once they arrive - typically within ~100 ms
 // on a warm cache.
 //
 // `_LOCALE_JSON_CACHE[code]` stores:
-//    undefined  — never attempted.
-//    Promise<T> — fetch in flight.
-//    object     — loaded + merged once.
-//    null       — fetch failed / 404 / parse error. Will not retry unless
+//    undefined  - never attempted.
+//    Promise<T> - fetch in flight.
+//    object     - loaded + merged once.
+//    null       - fetch failed / 404 / parse error. Will not retry unless
 //                 the page reloads.
 const _LOCALE_JSON_CACHE = Object.create(null);
 
 async function _loadLocaleJson(code) {
     if (!code) return null;
-    // (Delta-A fix) — en.json IS NOT identical to the inline
+    // (Delta-A fix) - en.json IS NOT identical to the inline
     // I18N.en. Every key added since Phase 2 (welcome overlay, device-id,
     // M3 UNDP details, M9 landmark fallback, M4 success impact, M5 ETA,
     // M6 filters, Q10 captured strip, M2 fullscreen picker, ~88 keys
@@ -1406,9 +1406,9 @@ const I18N = {
     en: {
         consent_title: "Your Privacy Matters",
         consent_desc: "CRISP collects only the data needed to help rescue teams respond faster:",
-        consent_loc: "Location — GPS coordinates to pinpoint the incident",
-        consent_photo: "Photos — damage evidence for response teams",
-        consent_audio: "Audio — voice descriptions transcribed by AI",
+        consent_loc: "Location - GPS coordinates to pinpoint the incident",
+        consent_photo: "Photos - damage evidence for response teams",
+        consent_audio: "Audio - voice descriptions transcribed by AI",
         consent_no_pii: "No personal identity collected",
         consent_shared: "Data shared only with crisis responders",
         consent_delete: "You can request deletion anytime",
@@ -1416,11 +1416,11 @@ const I18N = {
         consent_accept: "Accept & Continue",
         delete_my_data: "Delete My Data", your_reports: "Your Submitted Reports", delete_all: "Delete All Reports",
         delete_confirm: "Delete this report? Your data will be permanently deleted within 24 hours. You can undo this within that time.",
-        // UX rewrite — landing copy simplified; old 4-card roadmap
+        // UX rewrite - landing copy simplified; old 4-card roadmap
         // removed so rs1..rs4 are dead but retained for back-compat with
         // downstream i18n consumers. New fp_* keys label the flow-progress
         // bar that replaces the step-dots on each capture stage.
-        // PR 3 — removed the "Tap the button when you're ready"
+        // PR 3 - removed the "Tap the button when you're ready"
         // sub-copy; the big orange CTA already communicates the primary
         // action and the offline-hint at the bottom reassures users the
         // tool works in low connectivity. home_sub kept for back-compat
@@ -1436,7 +1436,7 @@ const I18N = {
         home_offline_hint: "📡 Works offline and in low internet connectivity.",
         fp_photo: "Photo", fp_details: "Details", fp_review: "Review", fp_send: "Send",
         my_reports: "My Reports",
-        // UI v2.1 — impact-card labels shown at the top of
+        // UI v2.1 - impact-card labels shown at the top of
         // stage-history. `in_flight` already exists; `mr_resolved` +
         // `mr_lives_impacted` are new (were hardcoded English before).
         mr_resolved: "Resolved",
@@ -1444,7 +1444,7 @@ const I18N = {
         delete_all_my_reports: "Delete all my reports",
         delete_all_note: "This removes every report you've sent from this device. Your data will be permanently deleted within 24 hours.",
         in_flight: "In flight", submitted: "Submitted",
-        // "My Reports" spec — individual report management.
+        // "My Reports" spec - individual report management.
         report_detail: "Report", details_label: "Details",
         delete_this_report: "Delete this report", rejected_reason: "Not valid",
         advanced: "Advanced",
@@ -1453,7 +1453,7 @@ const I18N = {
         s1_title: "PHOTO", s1_sub: "Take picture",
         no_photo: "No photo", use_camera: "Camera", browse: "Files", photo_required: "Please capture or upload an image to continue", next: "Continue",
         pii_warning: "Avoid faces or personal documents. Faces will be auto-blurred for privacy.",
-        // UX rewrite (see plan at ~/.claude/plans/swirling-forging-raccoon.md):
+        // UX rewrite (see plan at the design plan):
         // audio screen speaks to low-literacy / crisis users. Bullets + example
         // remove "what should I write?" paralysis. "Tap and speak clearly" +
         // "You can speak in your language" tells users native language is OK.
@@ -1484,7 +1484,7 @@ const I18N = {
         severity_label: "Severity?", minor: "Low", moderate: "Moderate", severe: "High", ready_send: "READY",
         s4_title: "SEND", s4_sub: "Tap below",
         report_id: "ID:", send_undp: "SEND", go_back: "Edit",
-        // PR 7: success screen re-framed — warm close-out instead
+        // PR 7: success screen re-framed - warm close-out instead
         // of the prior bureaucratic "UNDP rescue teams have been notified".
         // `new_report` kept for back-compat with downstream deep-link flows;
         // the DOM now renders `add_another_report` but legacy consumers can
@@ -1497,13 +1497,13 @@ const I18N = {
         loc_verified: "Verified", loc_missing: "No GPS",
         loc_error: "GPS Error", loc_not_supported: "No GPS",
         retry_gps: "Tap 🔄 to retry",
-        // PR 1 — English authoritative values for keys that were
+        // PR 1 - English authoritative values for keys that were
         // missing from EN and rendering as raw UPPERCASE_KEY names on the
         // review page (especially in non-English locales where the old
         // t() short-circuit never fell back to English). See the plan at
-        // ~/.claude/plans/swirling-forging-raccoon.md for the full list.
+        // the design plan for the full list.
         back: "Back",
-        // Review page block labels — user-facing form sections.
+        // Review page block labels - user-facing form sections.
         description_label: "Description",
         // PR 6: crisis label reframed as causal question.
         crisis_label: "What caused damage?",
@@ -1535,8 +1535,8 @@ const I18N = {
         // have targets; the RN parity layer picks these up through the
         // shared JSON pack via _loadLocaleJson().
         mic_permission_alert: "Please allow microphone access to record audio.",
-        camera_blocked_toast: "Camera access blocked — using file picker instead. Allow camera in browser settings for live capture.",
-        camera_unavailable_toast: "Camera unavailable — using file picker instead.",
+        camera_blocked_toast: "Camera access blocked - using file picker instead. Allow camera in browser settings for live capture.",
+        camera_unavailable_toast: "Camera unavailable - using file picker instead.",
         delete_requested_alert: "Your data will be permanently deleted within 24 hours.",
         delete_server_unreachable: "Could not reach server.",
         delete_undo_failed: "Could not undo deletion.",
@@ -1546,24 +1546,24 @@ const I18N = {
         confirm_yes: "Yes",
         confirm_no: "Cancel",
         confirm_delete: "Delete",
-        // Damage-classification labels — UNDP Appendix-1 verbatim phrasing
-        // (UI v2.1). Previously "Minimal / Partial / Destroyed" —
+        // Damage-classification labels - UNDP Appendix-1 verbatim phrasing
+        // (UI v2.1). Previously "Minimal / Partial / Destroyed" -
         // shorter but diverged from UNDP. The enum values on the wire
         // (MINIMAL / PARTIAL / COMPLETE) are unchanged; only the display
         // string is UNDP-aligned. Tooltip copy in the HTML carries the
         // full UNDP description for evaluator context.
-        // v3 redesign Q15 — plain-language user-facing labels.
+        // v3 redesign Q15 - plain-language user-facing labels.
         // Backend enum (MINIMAL / PARTIAL / COMPLETE) unchanged.
         minimal_damage: "Minimal",
         no_damage: "Minimal",
         partial_damage: "Partly damaged",
         complete_damage: "Fully destroyed",
         destroyed: "Fully destroyed",
-        // UNDP descriptive tooltips — longer form seen on hover / aria-label.
-        damage_tip_minimal: "Structurally sound and functional — cosmetic or no visible damage.",
+        // UNDP descriptive tooltips - longer form seen on hover / aria-label.
+        damage_tip_minimal: "Structurally sound and functional - cosmetic or no visible damage.",
         damage_tip_partial: "Repairable, still usable with caution.",
         damage_tip_complete: "Structurally unsafe or destroyed.",
-        // Infrastructure-type chip labels — keep semantic parity with the
+        // Infrastructure-type chip labels - keep semantic parity with the
         // existing short set (road/hospital/house/power/water/other).
         school: "School",
         telecom: "Telecom",
@@ -1591,7 +1591,7 @@ const I18N = {
         // finishes loading (and when the service worker serves a stale
         // JSON cache between v52 → v53 activations).
         login_or_signup: "Login / Sign up",
-        // May 2026 (landing-icon cleanup pass) — round login icon
+        // May 2026 (landing-icon cleanup pass) - round login icon
         // on the home stage. aria-label / title swap based on auth state.
         home_login_icon_signed_in: "Account",
         home_login_icon_signed_out: "Sign in",
@@ -1617,7 +1617,7 @@ const I18N = {
         settings_title: "Settings",
         settings_account: "Account",
         settings_unlink_device: "Unlink this device",
-        settings_reader_mode: "Reader Mode — larger text",
+        settings_reader_mode: "Reader Mode - larger text",
         settings_logout: "Logout",
         // UNDP §3.1e. Toast strings extracted from hardcoded
         // English literals so AR / FR / ES / RU / ZH locales render
@@ -1643,7 +1643,7 @@ const I18N = {
         pandemic: "Pandemic",
         conflict: "Conflict",
         civil_unrest: "Civil Unrest",
-        // Legacy labels — backend still accepts HURRICANE/WILDFIRE for
+        // Legacy labels - backend still accepts HURRICANE/WILDFIRE for
         // historical rows; keep EN text for reporters who land on an
         // older cached HTML.
         hurricane: "Cyclone",
@@ -1672,58 +1672,58 @@ const I18N = {
         need_protection: "Protection",
         need_local_support: "Local support",
         need_other: "Other",
-        // i18n-coverage sweep — every user-visible string that
+        // i18n-coverage sweep - every user-visible string that
         // was previously hardcoded in index.html or app.js now has a key
         // so 100% of the UI follows the selected language. Missing keys
         // in non-English locales fall through cleanly to English via
         // the per-key t() chain (PR 1).
-        // — Language picker chrome —
+        // - Language picker chrome -
         lang_picker_title: "Choose language",
-        // HC54 (May 2026) — `lang_picker_close` was removed when the
+        // HC54 (May 2026) - `lang_picker_close` was removed when the
         // bottom Close button was dropped; `lang_picker_un_section` /
         // `lang_picker_other_section` removed when the picker became
         // a single 21-tile grid.
         lang_picker_search_placeholder: "Search 24 languages…",
         lang_picker_no_match: "No match. Try the language name in English or its native script.",
-        // — Photo stage —
+        // - Photo stage -
         no_photo: "No photo yet",
-        // — Audio stage —
+        // - Audio stage -
         recording_tap_stop: "Recording... Tap to Stop",
-        recording_in_progress: "🎤 Recording — audio will be transcribed after submit",
-        recording_done: "✅ Recording done — you can type extra details below",
+        recording_in_progress: "🎤 Recording - audio will be transcribed after submit",
+        recording_done: "✅ Recording done - you can type extra details below",
         audio_recorded: "✅ Audio recorded",
-        // — Upload overlay —
+        // - Upload overlay -
         upload_sending: "Sending report...",
         upload_saved: "Report saved!",
         upload_success: "Report sent!",
-        upload_failed: "Upload failed — will retry",
+        upload_failed: "Upload failed - will retry",
         storage_full_toast: "⚠ Could not save report locally. Free up space on your device and try again.",
-        storage_almost_full_toast: "⚠ Device storage almost full — clear old reports from My Reports if this submission fails.",
+        storage_almost_full_toast: "⚠ Device storage almost full - clear old reports from My Reports if this submission fails.",
         storage_full_alert: "Could not save your report locally. Free up device storage and try again.",
-        // — Sync badge —
+        // - Sync badge -
         sync_syncing: "Syncing...",
         sync_queued: "queued",
         sync_failed: "failed",
-        // — Manual-sync toast feedback (May 2026, HAR-driven) —
+        // - Manual-sync toast feedback (May 2026, HAR-driven) -
         sync_nothing_queued: "Nothing in the queue right now.",
         sync_retrying: "Retrying {n} queued report(s)…",
         sync_all_done: "All queued reports synced!",
         sync_partial: "{done} synced, {pending} still queued.",
-        sync_none_drained: "{n} still queued — check your connection.",
-        // — Stuck-reason hint on My Reports in-flight cards (May 2026) —
+        sync_none_drained: "{n} still queued - check your connection.",
+        // - Stuck-reason hint on My Reports in-flight cards (May 2026) -
         stuck_reason: "waiting: {stages}",
         stage_meta: "details",
         stage_text: "description",
         stage_photo: "photo",
         stage_audio: "audio",
-        // — Review / confirm summary —
+        // - Review / confirm summary -
         summary_incident: "Incident",
         summary_details: "Details",
         summary_edit: "✏️ Edit",
         summary_debris: "🚛 Debris clearing needed",
         summary_needs_prefix: "🆘 Needs:",
-        summary_none: "—",
-        // — Location detection statuses —
+        summary_none: "-",
+        // - Location detection statuses -
         loc_approximate: "📍 Approximate location",
         loc_detected: "✅ Location detected",
         loc_getting: "🌐 Getting network location…",
@@ -1731,32 +1731,32 @@ const I18N = {
         loc_type_below: "📍 Type your location below",
         loc_resolving: "Resolving location…",
         loc_will_find: "We'll find it on the map for you",
-        // — Place autocomplete —
+        // - Place autocomplete -
         place_no_results: "No matches. Try a shorter or simpler name.",
         place_search_hint: "Search city or place…",
-        // — Success screen already covered by sent_title / sent_sub —
-        // — Delete dialogs —
+        // - Success screen already covered by sent_title / sent_sub -
+        // - Delete dialogs -
         delete_requested_toast: "Deletion requested. Removed within 24 hours.",
         delete_already_removed: "Report already removed",
-        delete_offline_queued: "Offline — will delete when connected",
+        delete_offline_queued: "Offline - will delete when connected",
         delete_all_confirm: "Delete ALL reports you've submitted from this device?\n\nYour data will be permanently removed within 24 hours. This cannot be undone.",
         delete_all_success: "Deletion requested. Your reports will be removed within 24 hours.",
         delete_no_reports: "No reports to delete.",
         delete_deleting: "Deleting…",
-        // — In-flight / queue statuses —
+        // - In-flight / queue statuses -
         status_queued: "Queued",
         status_uploading: "Uploading",
         status_failed: "Failed",
-        // — History empty states —
+        // - History empty states -
         empty_in_flight: "Nothing in flight. Tap Start Report to create one.",
         empty_submitted: "Nothing submitted yet.",
-        // — Report detail —
+        // - Report detail -
         report_not_found: "Report not found",
         report_no_tracking: "No report to track yet.",
-        // — Nav —
+        // - Nav -
         nav_refresh: "🔄 Refresh",
         nav_back: "← Back",
-        // — Take-another prompt (RN camera loop parity hint for PWA) —
+        // - Take-another prompt (RN camera loop parity hint for PWA) -
         take_another_title: "Photo added ✓",
         take_another_body: "Take another?",
         take_another_yes: "Yes",
@@ -1786,7 +1786,7 @@ const I18N = {
         rd_meta_severity: "Severity",
         rd_no_details: "No additional details.",
         rd_feedback_accepted_title: "Your report helped respond quickly",
-        rd_feedback_awaiting: "Accepted — awaiting dispatch",
+        rd_feedback_awaiting: "Accepted - awaiting dispatch",
         rd_action_help_arrived: "Help arrived on scene",
         rd_action_help_dispatched: "Help dispatched",
         rd_people_helped_one: "~1 person helped",
@@ -1854,7 +1854,7 @@ const I18N = {
         home_cta_helper: "Always Working. Everywhere.",
         home_cta_primary: "Report an Incident",
         home_devid_label: "Your reporter ID",
-        home_devid_tip_body: "Use this to find your reports later, even if you lose the app. Your ID is anonymous — we cannot link it back to you.",
+        home_devid_tip_body: "Use this to find your reports later, even if you lose the app. Your ID is anonymous - we cannot link it back to you.",
         home_devid_tip_dismiss: "Got it",
         home_devid_tip_title: "Save this ID",
         home_footer_help: "Help",
@@ -1908,9 +1908,9 @@ const I18N = {
         privacy_collect_5: "Crisis type, infrastructure type, and damage classification you select",
         privacy_collect_6: "A SHA-256 hash of your device fingerprint (your reporter ID)",
         privacy_collect_title: "What we collect",
-        privacy_how_1_b: "Take a photo, record a voice note, or type a quick description. Any one is enough — all three is even better.",
+        privacy_how_1_b: "Take a photo, record a voice note, or type a quick description. Any one is enough - all three is even better.",
         privacy_how_1_t: "Capture",
-        privacy_how_2_b: "Tap to tell us how bad the damage is, what was hit, and what caused it. Plain-language tiles — no jargon.",
+        privacy_how_2_b: "Tap to tell us how bad the damage is, what was hit, and what caused it. Plain-language tiles - no jargon.",
         privacy_how_2_t: "Classify",
         privacy_how_3_b: "Tap Send. If you're offline, the report queues and uploads automatically when the network is back.",
         privacy_how_3_t: "Send",
@@ -1927,7 +1927,7 @@ const I18N = {
         privacy_opensrc_undp: "UNDP InnoCentive Challenge",
         privacy_rights_1: "Delete any single report (per-report Delete button on the detail view)",
         privacy_rights_2: "Delete all your reports at once (Settings → Delete all my reports)",
-        privacy_rights_3: "24-hour soft-delete grace — you can undo deletion within 24 hours before permanent removal",
+        privacy_rights_3: "24-hour soft-delete grace - you can undo deletion within 24 hours before permanent removal",
         privacy_rights_4: "Export your reports as a JSON file (Settings → Export my data)",
         privacy_rights_5: "Anonymous reports stay anonymous forever; we cannot unblind them",
         privacy_rights_title: "Your rights",
@@ -1940,7 +1940,7 @@ const I18N = {
         rewards_ladder_title: "How to level up",
         rewards_open_studio: "Open Badge Studio",
         rewards_share_hint_locked: "Reach Changemaker to unlock badge sharing on LinkedIn, Instagram, WhatsApp.",
-        rewards_t1_criteria: "Default tier — every new reporter starts here.",
+        rewards_t1_criteria: "Default tier - every new reporter starts here.",
         rewards_t2_criteria: "Submit your first report.",
         rewards_t3_criteria: "Your report leads to help being dispatched.",
         rewards_t4_criteria: "Your report helps save at least 1 life.",
@@ -1956,7 +1956,7 @@ const I18N = {
         undp_details_cta: "Add 4 quick details",
         undp_details_cta_sub: "Helps responders prioritise rescue",
         undp_details_cta_time: "30 sec",
-        undp_details_intro: "Help responders prioritise — 30 seconds, optional",
+        undp_details_intro: "Help responders prioritise - 30 seconds, optional",
         undp_details_title: "UNDP details",
         undp_health_disrupted: "Disrupted",
         undp_health_hint: "Hospitals, clinics, ambulances",
@@ -1999,7 +1999,7 @@ const I18N = {
         v4_cap_voice: "Voice",
         v4_cap_voice_hint: "Tap to start. Tap again to stop.",
         v4_card_add_desc: "Add voice or text",
-        v4_card_add_desc_sub: "Optional — helps responders understand the scene",
+        v4_card_add_desc_sub: "Optional - helps responders understand the scene",
         v4_card_crisis_label: "Hazard",
         v4_card_damage_label: "Damage",
         v4_card_desc_edit: "Edit voice / text",
@@ -2011,7 +2011,7 @@ const I18N = {
         v4_card_photo_retake: "Retake",
         v4_continue: "Continue",
         v4_damage_complete_sub: "Structurally unsafe or collapsed",
-        v4_damage_minimal_sub: "Cracks, broken glass — building still safe",
+        v4_damage_minimal_sub: "Cracks, broken glass - building still safe",
         v4_damage_partial_sub: "Repairable, use with caution",
         v4_desc_text_empty: "No text added",
         v4_desc_voice_empty: "No voice recorded",
@@ -2053,7 +2053,7 @@ const I18N = {
         v4_undp_trigger_time: "Optional"
     },
     kn: {
-        consent_title: "ನಿಮ್ಮ ಗೌಪ್ಯತೆ ಮುಖ್ಯ", consent_desc: "ರಕ್ಷಣಾ ತಂಡಗಳಿಗೆ ಸಹಾಯ ಮಾಡಲು ಅಗತ್ಯ ಮಾಹಿತಿ ಮಾತ್ರ:", consent_loc: "ಸ್ಥಳ — GPS ನಿರ್ದೇಶಾಂಕಗಳು", consent_photo: "ಫೋಟೋಗಳು — ಹಾನಿ ಸಾಕ್ಷ್ಯ", consent_audio: "ಆಡಿಯೋ — ಧ್ವನಿ ವಿವರಣೆ", consent_no_pii: "ವೈಯಕ್ತಿಕ ಗುರುತು ಸಂಗ್ರಹಿಸಲಾಗುವುದಿಲ್ಲ", consent_shared: "ಬಿಕ್ಕಟ್ಟು ಪ್ರತಿಕ್ರಿಯಾಕಾರರಿಗೆ ಮಾತ್ರ", consent_delete: "ಯಾವಾಗ ಬೇಕಾದರೂ ಅಳಿಸಬಹುದು", consent_check: "ಈ ಡೇಟಾ ಹಂಚಿಕೊಳ್ಳಲು ಒಪ್ಪುತ್ತೇನೆ", consent_accept: "ಒಪ್ಪಿ ಮುಂದುವರಿಸಿ",
+        consent_title: "ನಿಮ್ಮ ಗೌಪ್ಯತೆ ಮುಖ್ಯ", consent_desc: "ರಕ್ಷಣಾ ತಂಡಗಳಿಗೆ ಸಹಾಯ ಮಾಡಲು ಅಗತ್ಯ ಮಾಹಿತಿ ಮಾತ್ರ:", consent_loc: "ಸ್ಥಳ - GPS ನಿರ್ದೇಶಾಂಕಗಳು", consent_photo: "ಫೋಟೋಗಳು - ಹಾನಿ ಸಾಕ್ಷ್ಯ", consent_audio: "ಆಡಿಯೋ - ಧ್ವನಿ ವಿವರಣೆ", consent_no_pii: "ವೈಯಕ್ತಿಕ ಗುರುತು ಸಂಗ್ರಹಿಸಲಾಗುವುದಿಲ್ಲ", consent_shared: "ಬಿಕ್ಕಟ್ಟು ಪ್ರತಿಕ್ರಿಯಾಕಾರರಿಗೆ ಮಾತ್ರ", consent_delete: "ಯಾವಾಗ ಬೇಕಾದರೂ ಅಳಿಸಬಹುದು", consent_check: "ಈ ಡೇಟಾ ಹಂಚಿಕೊಳ್ಳಲು ಒಪ್ಪುತ್ತೇನೆ", consent_accept: "ಒಪ್ಪಿ ಮುಂದುವರಿಸಿ",
         delete_my_data: "ನನ್ನ ಡೇಟಾ ಅಳಿಸಿ", your_reports: "ನಿಮ್ಮ ವರದಿಗಳು", delete_all: "ಎಲ್ಲಾ ಅಳಿಸಿ",
         home_title: "ಘಟನೆಯನ್ನು ವರದಿ ಮಾಡಿ", home_sub: "ಸಿದ್ಧವಾದಾಗ ಬಟನ್ ಒತ್ತಿ.",
         home_metric_reports: "ವರದಿಗಳು ಸಲ್ಲಿಸಲಾಗಿದೆ", home_metric_verified: "ಪರಿಶೀಲಿಸಿದ ವರದಿಗಳು", home_metric_lives: "ಉಳಿಸಿದ ಜೀವಗಳು",
@@ -2067,7 +2067,7 @@ const I18N = {
         start_btn: "ವರದಿ ಪ್ರಾರಂಭಿಸಿ",
         s1_title: "ಫೋಟೋ", s1_sub: "ಚಿತ್ರ ತೆಗೆಯಿರಿ",
         no_photo: "ಹಾಕಿ", use_camera: "ಕ್ಯಾಮೆರಾ", browse: "ಹುಡುಕಿ", skip_photo: "ಬಿಟ್ಟುಬಿಡಿ", next: "ಮುಂದುವರಿಸಿ",
-        // UX rewrite — low-literacy-friendly copy (see en block above).
+        // UX rewrite - low-literacy-friendly copy (see en block above).
         s2_title: "ಏನಾಯಿತು ಎಂದು ಹೇಳಿ", s2_sub: "ಮಾತನಾಡಿ ಅಥವಾ ಟೈಪ್ ಮಾಡಿ:",
         audio_bullet_1: "ಏನು ಹಾನಿಯಾಗಿದೆ? (ಮನೆ, ರಸ್ತೆ, ಜನರು…)",
         audio_bullet_2: "ಎಷ್ಟು ಹಾನಿ? (ಸಣ್ಣ / ದೊಡ್ಡ / ಸಂಪೂರ್ಣ ಹಾನಿ)",
@@ -2089,19 +2089,19 @@ const I18N = {
         loc_verified: "ಪರಿಶೀಲಿಸಲಾಗಿದೆ", loc_missing: "GPS ಇಲ್ಲ",
         loc_error: "GPS ದೋಷ", loc_not_supported: "GPS ಇಲ್ಲ",
         retry_gps: "Tap 🔄 ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲು",
-        // i18n-coverage sweep — Kannada translations for the
+        // i18n-coverage sweep - Kannada translations for the
         // full set of previously-hardcoded strings. Missing keys fall
         // through to English via the per-key t() chain (PR 1).
         lang_picker_title: "ಭಾಷೆಯನ್ನು ಆರಿಸಿ",
         no_photo: "ಇನ್ನೂ ಫೋಟೋ ಇಲ್ಲ",
         recording_tap_stop: "ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ... ನಿಲ್ಲಿಸಲು ಒತ್ತಿ",
-        recording_in_progress: "🎤 ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ — ಸಲ್ಲಿಸಿದ ನಂತರ ಲಿಪ್ಯಂತರಣವಾಗುತ್ತದೆ",
-        recording_done: "✅ ರೆಕಾರ್ಡಿಂಗ್ ಮುಗಿದಿದೆ — ಕೆಳಗೆ ಹೆಚ್ಚಿನ ವಿವರಗಳನ್ನು ಟೈಪ್ ಮಾಡಬಹುದು",
+        recording_in_progress: "🎤 ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ - ಸಲ್ಲಿಸಿದ ನಂತರ ಲಿಪ್ಯಂತರಣವಾಗುತ್ತದೆ",
+        recording_done: "✅ ರೆಕಾರ್ಡಿಂಗ್ ಮುಗಿದಿದೆ - ಕೆಳಗೆ ಹೆಚ್ಚಿನ ವಿವರಗಳನ್ನು ಟೈಪ್ ಮಾಡಬಹುದು",
         audio_recorded: "✅ ಆಡಿಯೋ ರೆಕಾರ್ಡ್ ಆಗಿದೆ",
         upload_sending: "ವರದಿ ಕಳುಹಿಸಲಾಗುತ್ತಿದೆ...",
         upload_saved: "ವರದಿ ಉಳಿಸಲಾಗಿದೆ!",
         upload_success: "ವರದಿ ಕಳುಹಿಸಲಾಗಿದೆ!",
-        upload_failed: "ಅಪ್‌ಲೋಡ್ ವಿಫಲ — ಮರುಪ್ರಯತ್ನಿಸಲಾಗುತ್ತದೆ",
+        upload_failed: "ಅಪ್‌ಲೋಡ್ ವಿಫಲ - ಮರುಪ್ರಯತ್ನಿಸಲಾಗುತ್ತದೆ",
         storage_full_toast: "⚠ ಸ್ಥಳೀಯವಾಗಿ ಉಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಜಾಗ ಮುಕ್ತಗೊಳಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
         storage_full_alert: "ವರದಿಯನ್ನು ಸ್ಥಳೀಯವಾಗಿ ಉಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಸಾಧನದ ಸಂಗ್ರಹಣೆಯನ್ನು ಮುಕ್ತಗೊಳಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
         sync_syncing: "ಸಿಂಕ್ ಮಾಡಲಾಗುತ್ತಿದೆ...",
@@ -2112,7 +2112,7 @@ const I18N = {
         summary_edit: "✏️ ಸಂಪಾದಿಸಿ",
         summary_debris: "🚛 ಅವಶೇಷ ತೆರವು ಅಗತ್ಯ",
         summary_needs_prefix: "🆘 ಅಗತ್ಯಗಳು:",
-        summary_none: "—",
+        summary_none: "-",
         loc_approximate: "📍 ಅಂದಾಜು ಸ್ಥಳ",
         loc_detected: "✅ ಸ್ಥಳ ಪತ್ತೆಯಾಗಿದೆ",
         loc_getting: "🌐 ನೆಟ್‌ವರ್ಕ್ ಸ್ಥಳ ಪಡೆಯಲಾಗುತ್ತಿದೆ…",
@@ -2124,7 +2124,7 @@ const I18N = {
         place_search_hint: "ನಗರ ಅಥವಾ ಸ್ಥಳವನ್ನು ಹುಡುಕಿ…",
         delete_requested_toast: "ಅಳಿಸುವ ವಿನಂತಿ. 24 ಗಂಟೆಗಳೊಳಗೆ ತೆಗೆದುಹಾಕಲಾಗುತ್ತದೆ.",
         delete_already_removed: "ವರದಿ ಈಗಾಗಲೇ ತೆಗೆದುಹಾಕಲಾಗಿದೆ",
-        delete_offline_queued: "ಆಫ್‌ಲೈನ್ — ಸಂಪರ್ಕಿಸಿದಾಗ ಅಳಿಸಲಾಗುವುದು",
+        delete_offline_queued: "ಆಫ್‌ಲೈನ್ - ಸಂಪರ್ಕಿಸಿದಾಗ ಅಳಿಸಲಾಗುವುದು",
         delete_all_confirm: "ಈ ಸಾಧನದಿಂದ ಸಲ್ಲಿಸಿದ ಎಲ್ಲಾ ವರದಿಗಳನ್ನು ಅಳಿಸಬೇಕೆ?\n\nನಿಮ್ಮ ಡೇಟಾವನ್ನು 24 ಗಂಟೆಗಳೊಳಗೆ ಶಾಶ್ವತವಾಗಿ ತೆಗೆದುಹಾಕಲಾಗುತ್ತದೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.",
         delete_all_success: "ಅಳಿಸುವ ವಿನಂತಿ. ನಿಮ್ಮ ವರದಿಗಳನ್ನು 24 ಗಂಟೆಗಳೊಳಗೆ ತೆಗೆದುಹಾಕಲಾಗುತ್ತದೆ.",
         delete_no_reports: "ಅಳಿಸಲು ವರದಿಗಳಿಲ್ಲ.",
@@ -2166,7 +2166,7 @@ const I18N = {
         rd_meta_severity: "ಗಂಭೀರತೆ",
         rd_no_details: "ಹೆಚ್ಚಿನ ವಿವರಗಳಿಲ್ಲ.",
         rd_feedback_accepted_title: "ನಿಮ್ಮ ವರದಿಯು ತ್ವರಿತ ಪ್ರತಿಕ್ರಿಯೆಗೆ ಸಹಾಯ ಮಾಡಿತು",
-        rd_feedback_awaiting: "ಸ್ವೀಕರಿಸಲಾಗಿದೆ — ರವಾನಿಸಲು ಕಾಯುತ್ತಿದೆ",
+        rd_feedback_awaiting: "ಸ್ವೀಕರಿಸಲಾಗಿದೆ - ರವಾನಿಸಲು ಕಾಯುತ್ತಿದೆ",
         rd_action_help_arrived: "ಸ್ಥಳಕ್ಕೆ ಸಹಾಯ ಬಂದಿದೆ",
         rd_action_help_dispatched: "ಸಹಾಯ ರವಾನಿಸಲಾಗಿದೆ",
         rd_people_helped_one: "~1 ವ್ಯಕ್ತಿಗೆ ಸಹಾಯ",
@@ -2184,7 +2184,7 @@ const I18N = {
         time_months_ago: "{n} ತಿಂಗಳ ಹಿಂದೆ"
     },
     hi: {
-        consent_title: "आपकी गोपनीयता महत्वपूर्ण है", consent_desc: "बचाव दलों की मदद के लिए केवल आवश्यक डेटा:", consent_loc: "स्थान — GPS निर्देशांक", consent_photo: "फोटो — क्षति का प्रमाण", consent_audio: "ऑडियो — आवाज विवरण", consent_no_pii: "कोई व्यक्तिगत पहचान नहीं", consent_shared: "केवल आपदा प्रतिक्रियाकर्ताओं के लिए", consent_delete: "कभी भी हटा सकते हैं", consent_check: "मैं इस डेटा को साझा करने के लिए सहमत हूँ", consent_accept: "स्वीकार करें",
+        consent_title: "आपकी गोपनीयता महत्वपूर्ण है", consent_desc: "बचाव दलों की मदद के लिए केवल आवश्यक डेटा:", consent_loc: "स्थान - GPS निर्देशांक", consent_photo: "फोटो - क्षति का प्रमाण", consent_audio: "ऑडियो - आवाज विवरण", consent_no_pii: "कोई व्यक्तिगत पहचान नहीं", consent_shared: "केवल आपदा प्रतिक्रियाकर्ताओं के लिए", consent_delete: "कभी भी हटा सकते हैं", consent_check: "मैं इस डेटा को साझा करने के लिए सहमत हूँ", consent_accept: "स्वीकार करें",
         delete_my_data: "मेरा डेटा हटाएं", your_reports: "आपकी रिपोर्टें", delete_all: "सभी हटाएं",
         home_title: "घटना की रिपोर्ट करें", home_sub: "तैयार होने पर बटन दबाएं।",
         home_metric_reports: "कुल रिपोर्टें", home_metric_verified: "सत्यापित रिपोर्टें", home_metric_lives: "बचाई गई जानें",
@@ -2199,7 +2199,7 @@ const I18N = {
         s1_title: "फोटो", s1_sub: "चित्र लें",
         no_photo: "नहीं है", use_camera: "कैमरा", browse: "फाइल", skip_photo: "छोड़ें", next: "आगे बढ़ें",
         pii_warning: "चेहरे या व्यक्तिगत दस्तावेज न दिखाएं। चेहरे गोपनीयता के लिए स्वचालित रूप से धुंधले होंगे।",
-        // UX rewrite — low-literacy-friendly copy.
+        // UX rewrite - low-literacy-friendly copy.
         s2_title: "हमें बताएं क्या हुआ", s2_sub: "बोलें या टाइप करें:",
         audio_bullet_1: "क्या नुकसान हुआ है? (घर, सड़क, लोग…)",
         audio_bullet_2: "कितना बुरा है? (छोटा / बड़ा / पूरी तरह नष्ट)",
@@ -2221,17 +2221,17 @@ const I18N = {
         loc_verified: "सत्यापित", loc_missing: "GPS नहीं",
         loc_error: "GPS त्रुटि", loc_not_supported: "GPS नहीं",
         retry_gps: "Tap 🔄 फिर से",
-        // i18n-coverage sweep — Hindi translations.
+        // i18n-coverage sweep - Hindi translations.
         lang_picker_title: "भाषा चुनें",
         no_photo: "अभी तक कोई फोटो नहीं",
         recording_tap_stop: "रिकॉर्ड हो रहा है... रोकने के लिए टैप करें",
-        recording_in_progress: "🎤 रिकॉर्ड हो रहा है — भेजने के बाद ऑडियो लिखा जाएगा",
-        recording_done: "✅ रिकॉर्डिंग पूरी — नीचे अतिरिक्त विवरण लिख सकते हैं",
+        recording_in_progress: "🎤 रिकॉर्ड हो रहा है - भेजने के बाद ऑडियो लिखा जाएगा",
+        recording_done: "✅ रिकॉर्डिंग पूरी - नीचे अतिरिक्त विवरण लिख सकते हैं",
         audio_recorded: "✅ ऑडियो रिकॉर्ड हो गया",
         upload_sending: "रिपोर्ट भेजी जा रही है...",
         upload_saved: "रिपोर्ट सहेजी गई!",
         upload_success: "रिपोर्ट भेज दी!",
-        upload_failed: "अपलोड विफल — फिर कोशिश की जाएगी",
+        upload_failed: "अपलोड विफल - फिर कोशिश की जाएगी",
         storage_full_toast: "⚠ स्थानीय रूप से सहेज नहीं सका। डिवाइस पर जगह खाली करें।",
         storage_full_alert: "रिपोर्ट स्थानीय रूप से सहेजी नहीं जा सकी। डिवाइस संग्रह खाली करें।",
         sync_syncing: "सिंक हो रहा है...",
@@ -2242,7 +2242,7 @@ const I18N = {
         summary_edit: "✏️ संपादित करें",
         summary_debris: "🚛 मलबा हटाने की जरूरत",
         summary_needs_prefix: "🆘 जरूरतें:",
-        summary_none: "—",
+        summary_none: "-",
         loc_approximate: "📍 अनुमानित स्थान",
         loc_detected: "✅ स्थान पता लग गया",
         loc_getting: "🌐 नेटवर्क स्थान प्राप्त किया जा रहा है…",
@@ -2254,7 +2254,7 @@ const I18N = {
         place_search_hint: "शहर या स्थान खोजें…",
         delete_requested_toast: "हटाने का अनुरोध। 24 घंटे के भीतर हटा दिया जाएगा।",
         delete_already_removed: "रिपोर्ट पहले ही हटा दी गई",
-        delete_offline_queued: "ऑफ़लाइन — कनेक्ट होने पर हटेगी",
+        delete_offline_queued: "ऑफ़लाइन - कनेक्ट होने पर हटेगी",
         delete_all_confirm: "इस डिवाइस से भेजी गई सभी रिपोर्टें हटाएँ?\n\nआपका डेटा 24 घंटे के भीतर स्थायी रूप से हटा दिया जाएगा। यह पूर्ववत नहीं किया जा सकता।",
         delete_all_success: "हटाने का अनुरोध। आपकी रिपोर्टें 24 घंटे के भीतर हटा दी जाएँगी।",
         delete_no_reports: "हटाने के लिए कोई रिपोर्ट नहीं।",
@@ -2296,7 +2296,7 @@ const I18N = {
         rd_meta_severity: "गंभीरता",
         rd_no_details: "कोई अतिरिक्त विवरण नहीं।",
         rd_feedback_accepted_title: "आपकी रिपोर्ट ने त्वरित प्रतिक्रिया में मदद की",
-        rd_feedback_awaiting: "स्वीकृत — प्रेषण की प्रतीक्षा में",
+        rd_feedback_awaiting: "स्वीकृत - प्रेषण की प्रतीक्षा में",
         rd_action_help_arrived: "स्थल पर सहायता पहुँची",
         rd_action_help_dispatched: "सहायता भेजी गई",
         rd_people_helped_one: "~1 व्यक्ति की मदद",
@@ -2314,7 +2314,7 @@ const I18N = {
         time_months_ago: "{n} महीने पहले"
     },
     ta: {
-        consent_title: "உங்கள் தனியுரிமை முக்கியம்", consent_desc: "மீட்புக் குழுக்களுக்கு உதவ தேவையான தகவல் மட்டும்:", consent_loc: "இடம் — GPS ஆயங்கள்", consent_photo: "புகைப்படங்கள் — சேத ஆதாரம்", consent_audio: "ஆடியோ — குரல் விளக்கம்", consent_no_pii: "தனிப்பட்ட அடையாளம் சேகரிக்கப்படாது", consent_shared: "நெருக்கடி மீட்பாளர்களுக்கு மட்டும்", consent_delete: "எப்போது வேண்டுமானாலும் நீக்கலாம்", consent_check: "இந்தத் தகவலைப் பகிர ஒப்புக்கொள்கிறேன்", consent_accept: "ஏற்கவும்",
+        consent_title: "உங்கள் தனியுரிமை முக்கியம்", consent_desc: "மீட்புக் குழுக்களுக்கு உதவ தேவையான தகவல் மட்டும்:", consent_loc: "இடம் - GPS ஆயங்கள்", consent_photo: "புகைப்படங்கள் - சேத ஆதாரம்", consent_audio: "ஆடியோ - குரல் விளக்கம்", consent_no_pii: "தனிப்பட்ட அடையாளம் சேகரிக்கப்படாது", consent_shared: "நெருக்கடி மீட்பாளர்களுக்கு மட்டும்", consent_delete: "எப்போது வேண்டுமானாலும் நீக்கலாம்", consent_check: "இந்தத் தகவலைப் பகிர ஒப்புக்கொள்கிறேன்", consent_accept: "ஏற்கவும்",
         delete_my_data: "என் தரவை நீக்கு", your_reports: "உங்கள் அறிக்கைகள்", delete_all: "அனைத்தும் நீக்கு",
         // Landing / home chrome.
         home_title: "நிகழ்வை புகாரளிக்கவும்", home_sub: "",
@@ -2325,7 +2325,7 @@ const I18N = {
         fp_photo: "புகைப்படம்", fp_details: "விவரங்கள்", fp_review: "மதிப்பாய்வு", fp_send: "அனுப்பு",
         my_reports: "எனது அறிக்கைகள்",
         start_btn: "அறிக்கை தொடங்கு",
-        // UX rewrite — low-literacy-friendly copy.
+        // UX rewrite - low-literacy-friendly copy.
         next: "தொடரவும்",
         s2_title: "என்ன நடந்தது என்று சொல்லுங்கள்", s2_sub: "பேசவும் அல்லது தட்டச்சு செய்யவும்:",
         audio_bullet_1: "என்ன சேதமடைந்துள்ளது? (வீடு, சாலை, மக்கள்…)",
@@ -2336,7 +2336,7 @@ const I18N = {
         audio_mic_lang: "நீங்கள் உங்கள் மொழியில் பேசலாம்",
         audio_placeholder: "உதாரணம்: வீடு இடிந்துவிட்டது, ஒருவர் சிக்கியுள்ளார்",
         transcript_hint: "கேட்கிறோம்...",
-        s3_title: "உங்கள் செய்தியை சரிபார்க்கவும்", s3_sub: "தவறு இருந்தால் திருத்தவும் — அல்லது தொடரவும்",
+        s3_title: "உங்கள் செய்தியை சரிபார்க்கவும்", s3_sub: "தவறு இருந்தால் திருத்தவும் - அல்லது தொடரவும்",
         photo_attached: "✅ புகைப்படம் இணைக்கப்பட்டது", your_message: "உங்கள் செய்தி:", type_your_msg: "என்ன நடந்தது...",
         what_damaged: "என்ன சேதமடைந்தது?", road: "சாலை", hospital: "மருத்துவமனை", house: "வீடு", power: "மின்சாரம்", water: "நீர்", other: "மற்றவை",
         severity_label: "எவ்வளவு தீவிரம்?", minor: "சிறிய", moderate: "மிதமான", severe: "தீவிர", ready_send: "அனுப்பத் தயார்",
@@ -2348,17 +2348,17 @@ const I18N = {
         loc_verified: "இடம் சரிபார்க்கப்பட்டது", loc_missing: "இடம் இல்லை",
         loc_error: "ஜிபிஎஸ் பிழை", loc_not_supported: "ஜிபிಎಸ್ ஆதரிக்கப்படவில்லை",
         retry_gps: "மீண்டும் முயற்சிக்க புதுப்பிக்கவும்",
-        // i18n-coverage sweep — Tamil translations.
+        // i18n-coverage sweep - Tamil translations.
         lang_picker_title: "மொழியைத் தேர்ந்தெடுக்கவும்",
         no_photo: "இன்னும் புகைப்படம் இல்லை",
         recording_tap_stop: "பதிவு செய்யப்படுகிறது... நிறுத்த தட்டவும்",
-        recording_in_progress: "🎤 பதிவு செய்யப்படுகிறது — சமர்ப்பித்த பிறகு எழுதப்படும்",
-        recording_done: "✅ பதிவு முடிந்தது — கீழே கூடுதல் விவரங்களை தட்டச்சு செய்யலாம்",
+        recording_in_progress: "🎤 பதிவு செய்யப்படுகிறது - சமர்ப்பித்த பிறகு எழுதப்படும்",
+        recording_done: "✅ பதிவு முடிந்தது - கீழே கூடுதல் விவரங்களை தட்டச்சு செய்யலாம்",
         audio_recorded: "✅ ஆடியோ பதிவு செய்யப்பட்டது",
         upload_sending: "அறிக்கை அனுப்பப்படுகிறது...",
         upload_saved: "அறிக்கை சேமிக்கப்பட்டது!",
         upload_success: "அறிக்கை அனுப்பப்பட்டது!",
-        upload_failed: "பதிவேற்றம் தோல்வி — மீண்டும் முயற்சிக்கப்படும்",
+        upload_failed: "பதிவேற்றம் தோல்வி - மீண்டும் முயற்சிக்கப்படும்",
         storage_full_toast: "⚠ உள்ளூரில் சேமிக்க முடியவில்லை. சாதனத்தில் இடத்தை விடுங்கள்.",
         storage_full_alert: "அறிக்கையை உள்ளூரில் சேமிக்க முடியவில்லை. சாதன சேமிப்பகத்தை விடுங்கள்.",
         sync_syncing: "ஒத்திசைக்கப்படுகிறது...",
@@ -2369,7 +2369,7 @@ const I18N = {
         summary_edit: "✏️ திருத்து",
         summary_debris: "🚛 குப்பை அகற்றம் தேவை",
         summary_needs_prefix: "🆘 தேவைகள்:",
-        summary_none: "—",
+        summary_none: "-",
         loc_approximate: "📍 தோராயமான இடம்",
         loc_detected: "✅ இடம் கண்டறியப்பட்டது",
         loc_getting: "🌐 நெட்வொர்க் இடம் பெறப்படுகிறது…",
@@ -2381,7 +2381,7 @@ const I18N = {
         place_search_hint: "நகரம் அல்லது இடத்தை தேடவும்…",
         delete_requested_toast: "நீக்க கோரிக்கை. 24 மணி நேரத்திற்குள் நீக்கப்படும்.",
         delete_already_removed: "அறிக்கை ஏற்கனவே நீக்கப்பட்டது",
-        delete_offline_queued: "ஆஃப்லைன் — இணைக்கப்பட்டவுடன் நீக்கப்படும்",
+        delete_offline_queued: "ஆஃப்லைன் - இணைக்கப்பட்டவுடன் நீக்கப்படும்",
         delete_all_confirm: "இந்த சாதனத்தில் இருந்து சமர்ப்பிக்கப்பட்ட அனைத்து அறிக்கைகளையும் நீக்கவா?\n\nஉங்கள் தரவு 24 மணி நேரத்திற்குள் நிரந்தரமாக நீக்கப்படும். இதை மாற்ற முடியாது.",
         delete_all_success: "நீக்க கோரிக்கை. உங்கள் அறிக்கைகள் 24 மணி நேரத்திற்குள் நீக்கப்படும்.",
         delete_no_reports: "நீக்க அறிக்கைகள் எதுவும் இல்லை.",
@@ -2423,7 +2423,7 @@ const I18N = {
         rd_meta_severity: "தீவிரம்",
         rd_no_details: "கூடுதல் விவரங்கள் இல்லை.",
         rd_feedback_accepted_title: "உங்கள் அறிக்கை விரைவான பதிலுக்கு உதவியது",
-        rd_feedback_awaiting: "ஏற்கப்பட்டது — அனுப்ப காத்திருக்கிறது",
+        rd_feedback_awaiting: "ஏற்கப்பட்டது - அனுப்ப காத்திருக்கிறது",
         rd_action_help_arrived: "இடத்திற்கு உதவி வந்தது",
         rd_action_help_dispatched: "உதவி அனுப்பப்பட்டது",
         rd_people_helped_one: "~1 நபருக்கு உதவி",
@@ -2442,14 +2442,14 @@ const I18N = {
     }
 };
 
-// AUDIT 2026-05-23 (UI:UX Improvements/I18N-INIT-AUDIT-2026-05-23.md) —
+// AUDIT 2026-05-23 (UI:UX Improvements/I18N-INIT-AUDIT-2026-05-23.md) -
 // merge ALL 22 inline locale packs into I18N at boot. This replaces the
 // previous EN-only inline merge with a per-locale merge so the first
 // synchronous applyI18n() call already has every key in every supported
-// locale — eliminating the visible English flash that happened when
+// locale - eliminating the visible English flash that happened when
 // activateLang(non-en) ran before en.json was fetched and merged.
 //
-// Each pack carries __version + __checksum (sanity probe — see
+// Each pack carries __version + __checksum (sanity probe - see
 // scripts/generate-home-i18n-inline.mjs). The body-time walker in
 // index.html has ALREADY applied these strings to the DOM by the time
 // app.js runs, so this merge is for the in-memory I18N dict that
@@ -2457,7 +2457,7 @@ const I18N = {
 //
 // Legacy `__crispHomeI18nEn` field is retained as a fallback alias if
 // the new packs payload is missing (e.g. mid-deploy with a stale SW
-// shell). Never throws — wrapped in try/catch with safe no-op default.
+// shell). Never throws - wrapped in try/catch with safe no-op default.
 try {
     const packs = (typeof window !== 'undefined' && window.__crispHomeI18nPacks) || null;
     if (packs && typeof packs === 'object') {
@@ -2469,14 +2469,14 @@ try {
         for (const code of SUPPORTED) {
             const pack = packs[code];
             if (!pack || typeof pack !== 'object') continue;
-            // Strip metadata keys before merging — __version / __checksum
+            // Strip metadata keys before merging - __version / __checksum
             // are pack-integrity fields, not translatable strings.
             const { __version: _v, __checksum: _c, ...content } = pack;
             if (!I18N[code]) I18N[code] = {};
             Object.assign(I18N[code], content);
         }
     } else if (typeof window !== 'undefined' && window.__crispHomeI18nEn) {
-        // Legacy fallback path — old EN-only inline block from before
+        // Legacy fallback path - old EN-only inline block from before
         // the 22-locale pack migration. Keeps cold-deploy SWs working.
         Object.assign(I18N.en, window.__crispHomeI18nEn);
     }
@@ -2486,14 +2486,14 @@ try {
     // raw keys for any missing entries until _loadLocaleJson resolves.
 }
 
-// v4 (post-prod fix) — inline the v4/landing/carousel keys
+// v4 (post-prod fix) - inline the v4/landing/carousel keys
 // onto every locale's I18N entry so applyI18n() resolves them at first
 // paint, BEFORE the async _loadLocaleJson() merge completes. Without
 // this block, landing.js / v4-flow.js mounted DOM whose data-i18n
-// attributes pointed at keys that hadn't loaded yet — every label
+// attributes pointed at keys that hadn't loaded yet - every label
 // rendered as its raw key (`v4_take_photo`, `landing_title`, …).
 //
-// Translations come from mobile-app/src/i18n/{locale}.json — same
+// Translations come from mobile-app/src/i18n/{locale}.json - same
 // values; just shipped inline so there's no race between mount and
 // JSON-load. The JSON files remain the source of truth and continue
 // to load asynchronously to enrich the rest of the locale.
@@ -2527,7 +2527,7 @@ Object.assign(I18N.en, {
     crisis_hurricane: "Hurricane", crisis_wildfire: "Wildfire",
     crisis_explosion: "Explosion", crisis_chemical: "Chemical",
     crisis_conflict: "Conflict", crisis_unrest: "Civil unrest",
-    // v3 redesign Q15 — plain-language chip labels match the
+    // v3 redesign Q15 - plain-language chip labels match the
     // longer minimal_damage / partial_damage / complete_damage labels in
     // i18n/*.json. Backend enum (MINIMAL / PARTIAL / COMPLETE) unchanged.
     damage_minimal: "Minimal", damage_partial: "Partly damaged", damage_complete: "Fully destroyed",
@@ -2691,22 +2691,22 @@ Object.assign(I18N.zh || (I18N.zh = {}), {
     crisis_conflict: "冲突", crisis_unrest: "动乱",
 });
 
-// ── Report capture state — SINGLE SOURCE OF TRUTH ────────────────────────────
+// ── Report capture state - SINGLE SOURCE OF TRUTH ────────────────────────────
 // `_freshReportState()` returns EVERY field scoped to ONE report. The reset
 // between reports is `Object.assign(state, _freshReportState())`
-// (see reportLifecycleReset) — so no per-report field can ever be missed again.
+// (see reportLifecycleReset) - so no per-report field can ever be missed again.
 // Any field NOT returned here is PRESERVED across reports and MUST be declared in
 // `_PRESERVED_STATE_KEYS`. `scripts/validate-report-reset.mjs` FAILS CI if any
 // `state.*` field is in neither set, so a future capture field can never silently
 // leak into the next report (this is the permanent fix for the recurring
 // state-persistence bug).
 //
-// NEVER hardcode classifier defaults here — null only (CLAUDE.md "Classifier-
+// NEVER hardcode classifier defaults here - null only (the project invariants "Classifier-
 // state field naming"; gated by e2e/88). The pre-v6.7 RESIDENTIAL/FLOOD/PARTIAL/
 // MODERATE defaults were a reporter-blocking bug.
 function _freshReportState() {
     // Re-seed location from the device-GPS cache so a fresh report starts at the
-    // device's last known position — but NEVER carry over a user-corrected
+    // device's last known position - but NEVER carry over a user-corrected
     // location (is_user_corrected is reset to false).
     let location = null, deviceLocation = null;
     try {
@@ -2726,23 +2726,23 @@ function _freshReportState() {
         mediaRecorder: null, isRecording: false, recognition: null,
         timerInterval: null, timerSeconds: 0, cameraStream: null, v4VoiceOnly: false,
         detectedLang: null, detectedLangLabel: null,
-        // Classifiers — snake_case is authoritative (v4 writes these). null only.
+        // Classifiers - snake_case is authoritative (v4 writes these). null only.
         damage_classification: null, infrastructure_type: null, crisis_type: null,
         infrastructure_name: '', infrastructure_name_from_osm: false,
-        // Classifiers — legacy v3 camelCase fallbacks (pre-v6.7 IDB rows). null only.
+        // Classifiers - legacy v3 camelCase fallbacks (pre-v6.7 IDB rows). null only.
         infraType: null, crisisType: null, damageClass: null, severity: null,
         infraName: '', infraNameFromOsm: false,
         // V4 extras + UNDP service details.
         debrisClearing: false,
         serviceStatus: { electricity: 'UNKNOWN', water: 'UNKNOWN', health: 'UNKNOWN', pressing_needs: [] },
-        // V4 FLAT UNDP fields — written by the review UNDP sheet through
+        // V4 FLAT UNDP fields - written by the review UNDP sheet through
         // computed-key _setState calls keyed off data-undp-field attributes,
         // which the static validator covers by scanning index.html. Missing
         // from this factory pre-Jun-2026 meant report N debris and service
         // answers leaked into the next report payload. null means unanswered;
         // the submit gate requires debris_present to be an explicit boolean.
         // NOTE for this factory body: keep comments free of apostrophes and
-        // braces — the static validator parses this object literal textually.
+        // braces - the static validator parses this object literal textually.
         debris_present: null,
         electricity_status: null, water_status: null, health_status: null,
         pressing_needs: [],
@@ -2764,11 +2764,11 @@ function _freshReportState() {
 }
 
 // Fields PRESERVED across reports (NOT report-scoped). Every `state.*` key must
-// be in `_freshReportState()` OR here — enforced by scripts/validate-report-reset.mjs.
+// be in `_freshReportState()` OR here - enforced by scripts/validate-report-reset.mjs.
 const _PRESERVED_STATE_KEYS = [
-    'lang',        // selected UI language — persists across reports
-    'speechCode',  // speech-recognition locale — persists
-    'crisisPack',  // active crisis-zone form schema — re-applies in-zone by design (v4-flow.js)
+    'lang',        // selected UI language - persists across reports
+    'speechCode',  // speech-recognition locale - persists
+    'crisisPack',  // active crisis-zone form schema - re-applies in-zone by design (v4-flow.js)
 ];
 
 const state = Object.assign({
@@ -2803,7 +2803,7 @@ const _backendHost = _isLocalDev
     ? `http://${window.location.hostname}:8000`
     : window.location.origin;
 const API_BASE = `${_backendHost}/api/v1`;
-// May 2026 — expose API_BASE on window so external modules
+// May 2026 - expose API_BASE on window so external modules
 // (home-screen.js, badge-studio.js, etc.) can hit the same backend
 // origin. Pre-fix home-screen.js fell back to `/api/v1` (relative
 // to the PWA's :8080 static-server origin) which 404'd on dev
@@ -2839,7 +2839,7 @@ function _singleFlightFetch(url, init, ttlMs) {
     // Only dedupe idempotent GETs. POST/DELETE/PATCH always pass through.
     if (method !== 'GET') return fetch(url, init);
     const ttl = (typeof ttlMs === 'number') ? ttlMs : _INFLIGHT_FETCH_TTL_MS;
-    // Auth header is part of the key — anonymous vs logged-in get separate
+    // Auth header is part of the key - anonymous vs logged-in get separate
     // caches (the response shape differs).
     const auth = (init.headers && (init.headers.Authorization || init.headers.authorization)) || '';
     const key = `${method}|${url}|${auth}`;
@@ -2860,7 +2860,7 @@ function _singleFlightFetch(url, init, ttlMs) {
     const p = fetch(url, init)
         .then(async (res) => {
             // Cache 2xx + 404. 404s for profile / report-not-found are stable
-            // for the device's lifetime — no point hammering on every poll.
+            // for the device's lifetime - no point hammering on every poll.
             if (res.ok || res.status === 404) {
                 try {
                     const clone = res.clone();
@@ -2889,7 +2889,7 @@ window.__crispClearFetchCache = () => {
     _inflightFetchPromises.clear();
 };
 
-// ── Phase 16 — defensive media-URL resolver ──────────────────
+// ── Phase 16 - defensive media-URL resolver ──────────────────
 //
 // Centralises every "given a media/thumbnail URL string from the API,
 // produce a fetchable URL" decision so a future backend drift can't
@@ -2909,15 +2909,15 @@ window.__crispClearFetchCache = () => {
 window._resolveMediaUrl = function _resolveMediaUrl(url) {
     if (!url || typeof url !== 'string') return '';
     if (url.startsWith('s3://') || url.startsWith('S3://')) {
-        // Backend regressed — see backend/app/api/endpoints/reports.py
+        // Backend regressed - see backend/app/api/endpoints/reports.py
         // `_thumb_url`. Surface a placeholder rather than 404.
-        try { console.warn('[media] raw s3:// URL — backend rewrite broke. Falling back to placeholder.', url); } catch (_) {}
+        try { console.warn('[media] raw s3:// URL - backend rewrite broke. Falling back to placeholder.', url); } catch (_) {}
         return '';
     }
     if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
         return url;
     }
-    // Backend paths — concatenate with host.
+    // Backend paths - concatenate with host.
     return `${_backendHost}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
@@ -2935,7 +2935,7 @@ async function tryIPGeolocation() {
         return null;
     }
     const TO = 4000;
-    // Tier 1: ipwho.is — most reliable free HTTPS, no key required
+    // Tier 1: ipwho.is - most reliable free HTTPS, no key required
     try {
         const res = await fetch('https://ipwho.is/', { signal: AbortSignal.timeout(TO) });
         if (res.ok) {
@@ -2945,7 +2945,7 @@ async function tryIPGeolocation() {
             }
         }
     } catch (_) {}
-    // Tier 2: ipapi.co — rich data but often rate-limited
+    // Tier 2: ipapi.co - rich data but often rate-limited
     try {
         const res = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(TO) });
         if (res.ok) {
@@ -2955,7 +2955,7 @@ async function tryIPGeolocation() {
             }
         }
     } catch (_) {}
-    // Tier 3: freeipapi.com — another free HTTPS fallback
+    // Tier 3: freeipapi.com - another free HTTPS fallback
     try {
         const res = await fetch('https://freeipapi.com/api/json', { signal: AbortSignal.timeout(TO) });
         if (res.ok) {
@@ -2970,7 +2970,7 @@ async function tryIPGeolocation() {
 
 // ── Reverse Geocoding (coordinates → place name) ─────────────────────────────
 //
-// HC55 (May 2026) — refactored from a direct `nominatim.openstreetmap.org/
+// HC55 (May 2026) - refactored from a direct `nominatim.openstreetmap.org/
 // reverse` fetch into a POST against our backend's
 // `/api/v1/reports/geocode/reverse`. The operator's 2026-05-24 HAR
 // caught the legacy browser-direct call returning 429 from Nominatim's
@@ -2979,7 +2979,7 @@ async function tryIPGeolocation() {
 // limited Nominatim → coords-only fallback, and caches every successful
 // resolution by rounded coord + language for 7 days.
 //
-// Client-side TTL cache layered on top — once a coord-language pair
+// Client-side TTL cache layered on top - once a coord-language pair
 // resolves, subsequent reads within 24 h skip the backend round-trip
 // entirely. Cache key rounds coords to 4dp (~11 m) so neighbouring
 // taps share entries.
@@ -2998,7 +2998,7 @@ function _readGeoCache(key) {
         if (!raw) return null;
         const { name, exp } = JSON.parse(raw);
         if (Date.now() < exp) return name;
-        // Expired — clear lazily.
+        // Expired - clear lazily.
         localStorage.removeItem(key);
         return null;
     } catch (_) { return null; }
@@ -3009,11 +3009,11 @@ function _writeGeoCache(key, name) {
         localStorage.setItem(key, JSON.stringify({
             name, exp: Date.now() + _GEO_CACHE_TTL_MS,
         }));
-    } catch (_) { /* localStorage quota — non-fatal */ }
+    } catch (_) { /* localStorage quota - non-fatal */ }
 }
 
 async function reverseGeocode(lat, lng) {
-    // Offline-first guard: skip if offline. A blank place name is fine —
+    // Offline-first guard: skip if offline. A blank place name is fine -
     // the review page already falls back to the raw lat/lng string.
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
         return null;
@@ -3023,7 +3023,7 @@ async function reverseGeocode(lat, lng) {
         // window.API_BASE missing means the head-IIFE didn't run (or
         // was stripped). Bail loudly rather than fall back to a relative
         // path that 404s on the static dev server.
-        console.warn('[reverseGeocode] window.API_BASE missing — bailing');
+        console.warn('[reverseGeocode] window.API_BASE missing - bailing');
         return null;
     }
 
@@ -3046,7 +3046,7 @@ async function reverseGeocode(lat, lng) {
         const data = await res.json();
         // The route ALWAYS returns a uniform shape, including a
         // synthetic fallback when both upstreams fail. We don't cache
-        // the synthetic shape — let the client surface coords until
+        // the synthetic shape - let the client surface coords until
         // a real name resolves.
         if (!data || !data.location_name || data.source === 'fallback') {
             return null;
@@ -3068,9 +3068,9 @@ function _saveLocCtx(lat, lng, acc, name, lang, langLabel, speechCode) {
         localStorage.setItem(_LOC_CTX_KEY, JSON.stringify({
             lat, lng, acc, name, lang, langLabel, speechCode, ts,
         }));
-        // (May 2026 — operator: "first-time PROD user grants GPS for
+        // (May 2026 - operator: "first-time PROD user grants GPS for
         // language-detect but the Nearby Reports section stays hidden
-        // until they go through capture once") — mirror the cache to
+        // until they go through capture once") - mirror the cache to
         // the key nearby.js reads (`crisp_last_location_v2`) so the
         // home-stage nearby intel appears immediately on the same
         // home visit, not on the second visit after capture flow.
@@ -3080,11 +3080,11 @@ function _saveLocCtx(lat, lng, acc, name, lang, langLabel, speechCode) {
         localStorage.setItem('crisp_last_location_v2', JSON.stringify({
             lat, lng, acc, ts,
         }));
-        // May 2026 (operator-reported, post-iPhone-14 audit) — nearby.js
+        // May 2026 (operator-reported, post-iPhone-14 audit) - nearby.js
         // module's first paint of `boot()` runs BEFORE IP-geolocation
         // resolves on a fresh visitor (the lang-picker IP-geo cascade
         // is async). Dispatch this event after every cache write so
-        // any subscriber — nearby.js today, future modules tomorrow —
+        // any subscriber - nearby.js today, future modules tomorrow -
         // can react without polling localStorage on a timer. Zero user
         // permission prompts beyond what the lang picker already
         // triggers.
@@ -3146,7 +3146,7 @@ function _paintLocationDisplays() {
     if (topEl) topEl.textContent = display;
 
     // Review block lower display (#loc-coords). When v3 is on this is
-    // slotted into stage-where alongside the auto-meta panel — same
+    // slotted into stage-where alongside the auto-meta panel - same
     // visual stage, must show the same value.
     const lowerEl = document.getElementById('loc-coords');
     if (lowerEl) lowerEl.textContent = display;
@@ -3156,15 +3156,15 @@ function _paintLocationDisplays() {
     if (summaryEl) summaryEl.textContent = display;
 }
 
-// PR 3 — update the connectivity indicator pinned to the CRISP
+// PR 3 - update the connectivity indicator pinned to the CRISP
 // wordmark. HC42 (May 23, 2026) turned the 8 px dot into an inline
-// labelled chip — green "Online" / red "Offline". The element keeps
+// labelled chip - green "Online" / red "Offline". The element keeps
 // the same #connectivity-dot id + the same online/offline classes
 // so every existing call site (online/offline window events, the
 // boot probe, the HC16 status-sheet tap target) stays wired.
 // Painter writes textContent + classes + aria-label/title.
 function _applyOnlineDot(online) {
-    // May 2026 — update EVERY connectivity dot, not just the home
+    // May 2026 - update EVERY connectivity dot, not just the home
     // #connectivity-dot. The success/Thank-You header carries its own
     // labeled dot (#connectivity-dot-success) so the online state reads
     // consistently there too. querySelectorAll keeps both (and any future
@@ -3186,15 +3186,15 @@ function _applyOnlineDot(online) {
             dot.classList.add('connectivity-offline');
         }
         dot.textContent = label;
-        dot.setAttribute('aria-label', online ? 'Online' : 'Offline — reports will queue');
-        dot.setAttribute('title', online ? 'Online — tap to re-check' : 'Offline — tap to re-check');
+        dot.setAttribute('aria-label', online ? 'Online' : 'Offline - reports will queue');
+        dot.setAttribute('title', online ? 'Online - tap to re-check' : 'Offline - tap to re-check');
     });
 }
 
 // Connectivity probe.
 //
 // Earlier iteration polled every 15 s regardless of state (240 calls/hr
-// per idle user). That was wasteful — the polling only matters when
+// per idle user). That was wasteful - the polling only matters when
 // we *actually* have reason to doubt the browser's connectivity hint,
 // which is basically the case where `navigator.onLine === false`
 // (possibly a lie: captive portal, post-sleep Chrome, missed `online`
@@ -3234,7 +3234,7 @@ async function _probeConnectivity() {
             // Cachebust param so a stale SW/proxy cache can't masquerade as
             // live connectivity. `/api/v1/health` is the PWA's tiny public
             // health route (mirrored under the /api/v1/ prefix nginx proxies
-            // in PROD) — cheap to hit; we force a fresh response here.
+            // in PROD) - cheap to hit; we force a fresh response here.
             const res = await fetch(`${API_BASE}/health?_cb=${Date.now()}`, {
                 method: 'GET',
                 signal: ctrl.signal,
@@ -3249,7 +3249,7 @@ async function _probeConnectivity() {
                 _stopConnectivityProbe();
                 return;
             }
-        } catch (_) { /* fall through — probe failed */ }
+        } catch (_) { /* fall through - probe failed */ }
         // Probe failed. If navigator.onLine is true but the probe timed
         // out on a slow link, keep showing green (trust navigator). If
         // navigator says offline too, show red and (if not already)
@@ -3262,7 +3262,7 @@ async function _probeConnectivity() {
     }
 }
 
-// Start the 30-s recovery poll. Idempotent — safe to call repeatedly.
+// Start the 30-s recovery poll. Idempotent - safe to call repeatedly.
 // Only active while the dot is red; stops as soon as a probe succeeds.
 function _ensureOfflineRecoveryPoll() {
     if (_connectivityProbeTimer) return;
@@ -3271,7 +3271,7 @@ function _ensureOfflineRecoveryPoll() {
 
 // ── i18n helpers ───────────────────────────────────────────────────────────────
 // Per-key fallback chain: current locale → English → the key itself.
-// Previous bug: `(I18N[state.lang] || I18N.en)[key] || key` short-circuited —
+// Previous bug: `(I18N[state.lang] || I18N.en)[key] || key` short-circuited -
 // once a non-English dict existed (truthy), missing keys returned the literal
 // key (e.g. "CRISIS_LABEL", "COMPLETE_DAMAGE" leaking to Kannada users).
 // The new form tries the locale first; if the key is undefined there, tries
@@ -3296,7 +3296,7 @@ function applyI18n() {
             el.textContent = text;
         }
     });
-    // (Delta-D follow-up) — broadcast so components that build
+    // (Delta-D follow-up) - broadcast so components that build
     // dynamic i18n strings (e.g. the v4 sub-step label that mixes a
     // localised header with a numeric "1 of 3" suffix) can re-render
     // when the language pack actually arrives. Best-effort; no listeners
@@ -3305,7 +3305,7 @@ function applyI18n() {
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
         el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
     });
-    // UI v2.1 — `data-i18n-title` drives the `title` HTML attribute
+    // UI v2.1 - `data-i18n-title` drives the `title` HTML attribute
     // (hover tooltip). Used by the UNDP-aligned damage chips to carry the
     // full Appendix-1 description ("Structurally sound and functional …").
     // Evaluators hovering a chip read the spec language verbatim.
@@ -3323,7 +3323,7 @@ function applyI18n() {
     });
     // i18n-coverage sweep: dynamically-rendered chrome also needs
     // a refresh when the locale CHANGES. Only re-run when state.lang
-    // actually differs from the last applied lang — this avoids
+    // actually differs from the last applied lang - this avoids
     // unnecessary status-since network calls on every boot
     // applyI18n invocation and keeps repeat applyI18n() calls cheap.
     const changed = _lastAppliedLang && _lastAppliedLang !== state.lang;
@@ -3342,7 +3342,7 @@ function applyI18n() {
             }
         }
     } catch (_) {}
-    // Report detail view — if it's currently active, re-render against the
+    // Report detail view - if it's currently active, re-render against the
     // last-viewed report so timeline labels, status chip, meta grid, and
     // feedback text all update to the new language.
     try {
@@ -3359,13 +3359,13 @@ let _lastRenderedReport = null;
 // `stage-login` +
 // `stage-settings` added. Both are off the capture flow; they don't
 // participate in the progress-bar counter (hidden when active).
-// v4 — three new stages (capture / classify / review) for the
+// v4 - three new stages (capture / classify / review) for the
 // 3-page UI v4 flow. Adding them here so goToStage()'s deactivation
 // sweep (`allStages.forEach → remove .active`) correctly hides the
 // previous v4 stage when the user navigates between them. Without
 // this, transitions between v4 stages left the prior one .active
 // and the absolute-positioned stages stacked on top of each other.
-// May 2026 — `stage-review` (V3 paginated review) deleted from
+// May 2026 - `stage-review` (V3 paginated review) deleted from
 // index.html; V4 uses `stage-v4-review`. Other V3 stage IDs remain
 // because their DOM still exists (V4 inherits helpers from them).
 // They are unreachable via navigation because UI_V3_ENABLED is false
@@ -3374,7 +3374,7 @@ let _lastRenderedReport = null;
 // flicker .active on but no user-action can reach it).
 const STAGES = ['stage-home', 'stage-photo', 'stage-audio', 'stage-send', 'stage-success', 'stage-history', 'stage-report-detail', 'stage-login', 'stage-settings', 'stage-privacy', 'stage-v4-capture', 'stage-v4-classify', 'stage-v4-review', 'stage-undp-details'];
 
-// ── — 8-stage capture flow ───────────────────────
+// ── - 8-stage capture flow ───────────────────────
 // When `UI_V3_ENABLED` is on, the capture flow is re-ordered:
 //
 //   1 home → 2 where+damage → 3 infra → 4 crisis+name
@@ -3385,13 +3385,13 @@ const STAGES = ['stage-home', 'stage-photo', 'stage-audio', 'stage-send', 'stage
 // UI_V3_ENABLED to pick the right chain.
 const STAGES_V3 = [
     'stage-home',
-    'stage-where',     // 2 — location + damage severity chips
-    'stage-infra',     // 3 — infrastructure type chips
-    'stage-crisis',    // 4 — crisis type chips + building-footprint selector
-    'stage-extras',    // 5 — severity + service status + pressing needs + W6 modules
-    'stage-photo',     // 6 — photo capture (unchanged)
-    'stage-audio',     // 7 — audio + text description (description moves here)
-    'stage-review',    // 8 — summary + submit (v3 mode: input blocks hidden)
+    'stage-where',     // 2 - location + damage severity chips
+    'stage-infra',     // 3 - infrastructure type chips
+    'stage-crisis',    // 4 - crisis type chips + building-footprint selector
+    'stage-extras',    // 5 - severity + service status + pressing needs + W6 modules
+    'stage-photo',     // 6 - photo capture (unchanged)
+    'stage-audio',     // 7 - audio + text description (description moves here)
+    'stage-review',    // 8 - summary + submit (v3 mode: input blocks hidden)
     'stage-send',
     'stage-success',
     'stage-history',
@@ -3402,7 +3402,7 @@ const STAGES_V3 = [
     'stage-settings',
 ];
 
-/** The active stage list for navigation — STAGES_V3 when v3 is on, STAGES otherwise. */
+/** The active stage list for navigation - STAGES_V3 when v3 is on, STAGES otherwise. */
 function _activeStageList() {
     return UI_V3_ENABLED ? STAGES_V3 : STAGES;
 }
@@ -3414,7 +3414,7 @@ function nextStageId(currentId) {
     const list = _activeStageList();
     const idx = list.indexOf(currentId);
     if (idx < 0) return null;
-    // stage-success / history / report-detail are terminal — no auto-advance.
+    // stage-success / history / report-detail are terminal - no auto-advance.
     const TERMINAL = new Set(['stage-success', 'stage-history', 'stage-report-detail']);
     if (TERMINAL.has(currentId)) return null;
     for (let i = idx + 1; i < list.length; i++) {
@@ -3436,7 +3436,7 @@ function prevStageId(currentId) {
  * DOMContentLoaded-time migration: when UI v3 is enabled, move the review
  * blocks tagged `data-v3-slot="where|infra|crisis|extras|audio-text"` out of
  * their current parent (stage-review) and into the matching `<div class="v3-slot">`
- * on the new v3 stages (see index.html). Idempotent — calling again after
+ * on the new v3 stages (see index.html). Idempotent - calling again after
  * migration is a no-op because the blocks no longer match the selector inside
  * stage-review. Handlers bound to the moved elements stay intact (same DOM
  * nodes, different parent).
@@ -3455,7 +3455,7 @@ function migrateV3Blocks() {
     };
     const sourceRoot = document.getElementById('stage-review');
     if (!sourceRoot) return;
-    // Only take blocks that are currently INSIDE stage-review — prevents
+    // Only take blocks that are currently INSIDE stage-review - prevents
     // re-moving a block that's already been relocated by a prior call.
     const nodes = sourceRoot.querySelectorAll('[data-v3-slot]');
     nodes.forEach((el) => {
@@ -3537,7 +3537,7 @@ function _v3AutoDeriveSeverity() {
 const MAX_EXTRA_PHOTOS = 2;
 const MAX_PHOTOS_TOTAL = MAX_EXTRA_PHOTOS + 1;   // main + extras
 
-/** Guard every extraPhotos.push — returns true when the push is allowed.
+/** Guard every extraPhotos.push - returns true when the push is allowed.
  *  When capped, shows the localised "5/5 max" toast + aborts. Callers
  *  should `return` immediately if this returns false. */
 function _canAddMorePhotos() {
@@ -3552,7 +3552,7 @@ function _canAddMorePhotos() {
     return true;
 }
 
-// PR 1 — testability hooks. Mirrors the dashboard pattern from the
+// PR 1 - testability hooks. Mirrors the dashboard pattern from the
 // previous sprint (web-dashboard/src/app.js). Exposes the module-scope
 // `state` + `goToStage` on window for Playwright E2E access + DevTools
 // debugging. Zero production-path effect; safe to keep always-on.
@@ -3563,7 +3563,7 @@ window.__crispGoToStage = (id) => goToStage(id);
 // When user presses back, we get a popstate with the PREVIOUS history
 // entry's state. If it's a v3/v4 stage we navigate there. If we're
 // already on stage-home, allow the default back (which exits the PWA
-// — that's the correct UX for "I'm done"). Otherwise route to home
+// - that's the correct UX for "I'm done"). Otherwise route to home
 // instead of exiting.
 window.addEventListener('popstate', (e) => {
     const prevStage = e.state && e.state.crispStage;
@@ -3595,74 +3595,74 @@ window.addEventListener('popstate', (e) => {
         window.__crispIsHistoryNav = false;
     }
 });
-// v4 — `submitReport` exposed for v4-flow.js's "Send to UNDP"
+// v4 - `submitReport` exposed for v4-flow.js's "Send to UNDP"
 // button. Same code path the v3 #btn-send + #btn-review-submit clicks
-// land in — guarantees the v4 review page produces an identical
+// land in - guarantees the v4 review page produces an identical
 // /reports/meta payload to the legacy flow.
 window.__crispSubmitReport = () => submitReport();
-// v4 (post-prod fix) — applyI18n MUST be on window for
+// v4 (post-prod fix) - applyI18n MUST be on window for
 // landing.js + v4-flow.js to translate dynamically-mounted DOM after
 // the initial boot pass. Without this, every [data-i18n] in the
 // v4 stages + landing card showed its raw key (e.g. `v4_take_photo`,
 // `landing_title`) because the cross-module call `window.applyI18n()`
 // was undefined and silently no-op'd.
 window.applyI18n = applyI18n;
-// Testability hooks for the reconcile E2E spec — let tests seed the IDB
+// Testability hooks for the reconcile E2E spec - let tests seed the IDB
 // queue with a stuck in-flight entry and then verify reconcile dequeues it.
 window.__crispEnqueueReport = (payload) => enqueueReport(payload);
 window.__crispGetAllQueued = () => getAllQueued();
 window.__crispDequeueReport = (clientReportId) => dequeueReport(clientReportId);
 window.__crispReconcileQueue = () => _reconcileQueueAgainstServer();
-// May 2026 cellular-smoke-3 fix — expose _reconcileBeforeDequeue so the
+// May 2026 cellular-smoke-3 fix - expose _reconcileBeforeDequeue so the
 // in-flight-aware regression test can call it directly + assert ok/
 // softAssembling shape without driving the full retry loop.
 window.__crispReconcileBeforeDequeue = (item, reportId) => _reconcileBeforeDequeue(item, reportId);
-// K.3.a (May 2026, Phase K) — let tests invoke trySendQueuedReport
+// K.3.a (May 2026, Phase K) - let tests invoke trySendQueuedReport
 // directly so the soft-drain mark-deferred branch is exercisable
 // without needing to drive the full retry-loop schedule.
 window.__crispTrySendQueuedReport = (item) => trySendQueuedReport(item);
-// K.3.a — helper-export for the e2e spec to verify the
+// K.3.a - helper-export for the e2e spec to verify the
 // payload-shaping function in isolation.
 window.__crispEnumerateDeferredByGroup = (item, missing) =>
     _enumerateDeferredByGroup(item, missing);
-// K.3.c — let tests trigger the upload-tier path so the orphan-recovery
+// K.3.c - let tests trigger the upload-tier path so the orphan-recovery
 // + deferred-marker branch is exercisable.
 window.__crispUploadVariantTier = (item, reportId, unit) =>
     _uploadVariantTier(item, reportId, unit);
-// Mode B — let tests drive the drain-time tier regeneration in isolation.
+// Mode B - let tests drive the drain-time tier regeneration in isolation.
 window.__crispRegenerateMissingVariants = (item) => _regenerateMissingVariants(item);
-// K.4.a — drain-mutex helpers exposed for the cross-tab e2e spec.
+// K.4.a - drain-mutex helpers exposed for the cross-tab e2e spec.
 window.__crispAcquireDrainLock = () => _acquireDrainLock();
 window.__crispReleaseDrainLock = () => _releaseDrainLock();
 window.__crispDrainLockKey = () => _DRAIN_LOCK_KEY;
 window.__crispStartRetryLoop = () => startRetryLoop(true);
-// B-E submit-decoupling contract — expose the blur-await gate so the
+// B-E submit-decoupling contract - expose the blur-await gate so the
 // instant-return spec can assert its {timedOut, allDone} sentinel +
 // timeout budget directly, without driving a full photo-capture flow.
 window.__crispAwaitPendingBlur = (opts) => awaitPendingBlur(opts);
-// Wedge-recovery — expose the pure decision so the offline-false-wedge
+// Wedge-recovery - expose the pure decision so the offline-false-wedge
 // regression suite can assert it across airplane/offline/reconnect/restart.
 window.__crispIsLoopWedged = (args) => _isLoopWedged(args);
-// K.4.b — let tests inspect whether a submit is in flight + invoke
+// K.4.b - let tests inspect whether a submit is in flight + invoke
 // submitReport directly for the double-tap dedup assertion.
 window.__crispSubmitReport = () => submitReport();
 window.__crispIsSubmitInFlight = () => _submitInFlight !== null;
-// K.4.c — expose the backoff-delay helper so the schedule is verifiable
+// K.4.c - expose the backoff-delay helper so the schedule is verifiable
 // in a unit-style test (10 invocations should return values in the
 // expected capped + jittered range).
 window.__crispBackoffDelayMs = (attempt) => _backoffDelayMs(attempt);
-// K.4.d — let tests verify the version stamp + the
+// K.4.d - let tests verify the version stamp + the
 // `enqueueReportIfVersionMatches` stale-write guard directly.
 window.__crispEnqueueReportIfVersionMatches = (payload, expectedVersion) =>
     enqueueReportIfVersionMatches(payload, expectedVersion);
-// K.4.e — quota estimator helper + threshold expose so the e2e spec
+// K.4.e - quota estimator helper + threshold expose so the e2e spec
 // can verify the warn-threshold math without driving a full submission.
 window.__crispEstimateQueueItemBytes = (item) => _estimateQueueItemBytes(item);
 window.__crispQuotaWarnThresholdBytes = () => _QUOTA_WARN_THRESHOLD_BYTES;
 // Queue self-heal hooks for the orphan-detection E2E spec.
 window.__crispIsOrphanQueueRow = (item) => _isOrphanQueueRow(item);
 window.__crispSelfHealOrphans = () => _selfHealOrphans();
-// May 2026 — let tests trigger the My Reports / queued-list render
+// May 2026 - let tests trigger the My Reports / queued-list render
 // without driving the home → My Reports button click (which depends
 // on auth + privacy banner state that's noisy to set up in tests).
 window.__crispRenderPartialReports = () => (typeof _renderPartialReports === 'function'
@@ -3673,7 +3673,7 @@ function goToStage(id) {
     // reset-on-entry guard further down can tell where the user came from.
     const _prevStageEl = document.querySelector('.stage.active');
     const _prevStageId = _prevStageEl ? _prevStageEl.id : null;
-    // May 2026 (perf Sprint B.2) — lazy-load FontAwesome on first
+    // May 2026 (perf Sprint B.2) - lazy-load FontAwesome on first
     // non-home stage navigation. The home stage uses inline SVG for
     // all icons (audio glyph, channels strip, login/MyReports, trophy)
     // and never needs FontAwesome. Every other stage (V4 capture,
@@ -3690,14 +3690,14 @@ function goToStage(id) {
             fa.rel = 'stylesheet';
             fa.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css';
             document.head.appendChild(fa);
-        } catch (_) { /* network blocked — icons render as Unicode boxes; acceptable */ }
+        } catch (_) { /* network blocked - icons render as Unicode boxes; acceptable */ }
     }
 
     // UI v3 introduces 4 new stage ids (where/infra/crisis/extras) not
     // present in STAGES. De-activate BOTH the legacy and v3 lists so a
     // transition between chains doesn't leave an orphan ".active" behind.
     const ACTIVE_LIST = _activeStageList();
-    // May 2026 — deactivate EVERY `.stage` element instead of relying
+    // May 2026 - deactivate EVERY `.stage` element instead of relying
     // on the STAGES + STAGES_V3 lists. The lists were drifting out of
     // sync as new stages were added (stage-rewards, stage-badge-studio
     // in the reward-system v2 work were missing → goToStage left them
@@ -3708,7 +3708,7 @@ function goToStage(id) {
     const target = document.getElementById(id);
     if (target) target.classList.add('active');
 
-    // May 2026 — re-evaluate the queued-reports badge on every stage change
+    // May 2026 - re-evaluate the queued-reports badge on every stage change
     // so it appears ONLY on home + success and hides elsewhere; and refresh
     // the connectivity dot(s) so the success header's "Online" indicator
     // reflects the live state the moment the Thank-You stage paints.
@@ -3724,7 +3724,7 @@ function goToStage(id) {
     const pbarContainer = document.getElementById('progress-bar-container');
     if (pbarContainer) pbarContainer.style.display = (id === 'stage-home' || id === 'stage-success') ? 'none' : 'block';
 
-    // UX rewrite — unified 4-step flow-progress bar. Visible on
+    // UX rewrite - unified 4-step flow-progress bar. Visible on
     // capture stages (photo / audio / review / send); hidden on home,
     // success, history. `updateFlowProgress` colour-codes each step:
     // green ✓ done · accent ● active · red ! missing · grey ○ upcoming.
@@ -3737,13 +3737,13 @@ function goToStage(id) {
         try { updateHomeImpactMetrics(); } catch (e) { console.warn('[Home] metrics:', e); }
     }
 
-    // Guarded reset-on-entry — start a FRESH report whenever the user ARRIVES at
+    // Guarded reset-on-entry - start a FRESH report whenever the user ARRIVES at
     // capture from a terminal / non-flow stage (home, success/thank-you, My
     // Reports, report detail). This closes Journey 4 (abandon → Home → new) and
     // any nav path that reaches capture without a prior reset, so a previous
     // report can never bleed into the new one. We DON'T reset when arriving from
     // within the flow (classify / review / back-nav, or the review "+ Add photo"
-    // which routes through capture) — that would wipe an in-progress capture;
+    // which routes through capture) - that would wipe an in-progress capture;
     // render-from-state on entry keeps that DOM correct instead. Runs BEFORE the
     // stage-entered dispatch so v4-flow's capture render-from-state reflects the
     // cleared state. Idempotent (safe even when a caller already reset).
@@ -3769,17 +3769,17 @@ function goToStage(id) {
     if (!window.__crispIsHistoryNav) {
         try {
             history.pushState({ crispStage: id }, '', `#${id}`);
-        } catch (_) { /* private mode / file:// — silent skip */ }
+        } catch (_) { /* private mode / file:// - silent skip */ }
     }
 
 
-    // M3 — re-evaluate the post-submission UNDP-details soft
+    // M3 - re-evaluate the post-submission UNDP-details soft
     // prompt every time we land on stage-success. Hidden when the user
     // already filled debris/services during capture (Q14 v4 path), so we
     // never nag a repeat question.
     if (id === 'stage-success') {
         try { maybeShowUndpDetailsPrompt(); } catch (e) { console.warn('[M3] prompt:', e); }
-        // HC79 (May 2026) — paint the live mission-control snapshot.
+        // HC79 (May 2026) - paint the live mission-control snapshot.
         // All 5 paints are best-effort; failures log + continue.
         try { _paintSuccessDevidPill(); }            catch (e) { console.warn('[HC79] devid:', e); }
         try { _renderSuccessStatusPill(); }          catch (e) { console.warn('[HC79] status:', e); }
@@ -3787,7 +3787,7 @@ function goToStage(id) {
         try { _renderSuccessMyReportsCount(); }      catch (e) { console.warn('[HC79] mr-count:', e); }
         try { _bootSuccessNearby(); }                catch (e) { console.warn('[HC79] nearby:', e); }
     } else {
-        // HC79 — leaving stage-success: stop the time-ago ticker so the
+        // HC79 - leaving stage-success: stop the time-ago ticker so the
         // setInterval doesn't keep firing in the background.
         try { _stopSuccessTimers(); } catch (_) {}
     }
@@ -3798,19 +3798,19 @@ function hasMinimumInput() {
     return !!(state.photoDataUrl || state.audioBlob || (state.description && state.description.trim()));
 }
 
-// ── UX rewrite — unified flow-progress bar ────────────────────────
+// ── UX rewrite - unified flow-progress bar ────────────────────────
 // Maps the internal stage names to the 4 user-visible steps:
 //   Photo     · stage-photo
 //   Details   · stage-audio  (the voice+text step is the "details" kickoff)
 //   Review    · stage-review
 //   Send      · stage-send
 // State per step:
-//   done     — the step's required data is captured AND we're past it
-//   active   — currently rendering this step
-//   missing  — we're past this step but required data wasn't captured
-//              (shouldn't normally happen — guards upstream — but the
+//   done     - the step's required data is captured AND we're past it
+//   active   - currently rendering this step
+//   missing  - we're past this step but required data wasn't captured
+//              (shouldn't normally happen - guards upstream - but the
 //              red flag is a recoverable signal if it does)
-//   upcoming — future step
+//   upcoming - future step
 function updateFlowProgress(currentStage) {
     const bar = document.getElementById('flow-progress');
     if (!bar) return;
@@ -3825,7 +3825,7 @@ function updateFlowProgress(currentStage) {
         return;
     }
     bar.style.display = 'flex';
-    // ── v3 branch — 7 equal-width segments across the full capture chain.
+    // ── v3 branch - 7 equal-width segments across the full capture chain.
     // (Home is step 0, not rendered as a segment.) The existing DOM only
     // ships 5 fp-steps, so we paint a lightweight overlay bar that stays
     // accurate regardless of whether the index.html segment nodes exist.
@@ -3869,7 +3869,7 @@ function updateFlowProgress(currentStage) {
         return;
     }
 
-    // UI v2: 5 steps — Photo / Audio / What / Details / Send —
+    // UI v2: 5 steps - Photo / Audio / What / Details / Send -
     // mapped to data-step=1..5 in index.html. Step 3 ("What") lives on
     // review-page 1, step 4 ("Details") on review-page 2, step 5 ("Send")
     // on review-page 3 (the confirm summary). When UI_V2 is off, step-3's
@@ -3906,7 +3906,7 @@ function updateFlowProgress(currentStage) {
     bar.querySelectorAll('.fp-step').forEach((el) => {
         const step = parseInt(el.getAttribute('data-step') || '0', 10);
         el.classList.remove('fp-done', 'fp-active', 'fp-missing', 'fp-upcoming');
-        // Legacy (v2-off): skip the v2-only "What" step entirely — it's
+        // Legacy (v2-off): skip the v2-only "What" step entirely - it's
         // already hidden above, but also skip its state class work so the
         // other steps light up as they did before.
         if (!v2 && el.hasAttribute('data-v2-only')) return;
@@ -3922,19 +3922,19 @@ function updateFlowProgress(currentStage) {
 
 // ── Landing-screen impact metrics ───────────────────────────────────────────
 // Fetches community-wide (or device-scoped) counts so a user arriving at
-// the home screen immediately sees social proof — "this platform works,
+// the home screen immediately sees social proof - "this platform works,
 // people report, lives get saved". Falls back to hiding the card on error.
 async function updateHomeImpactMetrics() {
     const wrap = document.getElementById('home-impact');
-    // April 2026 — `home-verified-count` was the user-facing
-    // "Reports Verified" tile. May 2026 (operator-reported) — that
+    // April 2026 - `home-verified-count` was the user-facing
+    // "Reports Verified" tile. May 2026 (operator-reported) - that
     // tile is gone from the markup; only `home-lives-count` remains.
     // We KEEP the verifiedCount fetch logic below because the badge
     // ladder (Newcomer / Contributor / Trusted) in home-screen.js
     // still reads it via the profile endpoint. We just no longer
     // write it into the DOM.
     //
-    // verifiedEl is left as an optional lookup — null on the current
+    // verifiedEl is left as an optional lookup - null on the current
     // HTML, present only if an old pre-fix cached index.html happens
     // to be served. The fmt-and-write below is guarded so a missing
     // element is a no-op.
@@ -3953,10 +3953,10 @@ async function updateHomeImpactMetrics() {
             // counting only reports the analyst workflow has promoted out
             // of PENDING. This also means deleted reports (which drop off
             // the list) correctly don't contribute to the headline
-            // number — resolves the stale-counter UX bug.
+            // number - resolves the stale-counter UX bug.
             let statusList = null;
             try {
-                // HAR-driven (May 2026) — was a raw fetch that raced 2-3
+                // HAR-driven (May 2026) - was a raw fetch that raced 2-3
                 // other init paths on the same URL, producing 3 duplicate
                 // 15 KB responses per page load. _singleFlightFetch
                 // dedupes within a 10 s window so only ONE network call
@@ -3974,11 +3974,11 @@ async function updateHomeImpactMetrics() {
                 livesImpacted = statusList.reduce(
                     (n, r) => n + (Number.isFinite(r.lives_impacted) ? r.lives_impacted : 0), 0);
             }
-            // Cross-check the profile endpoint — it carries the authoritative
+            // Cross-check the profile endpoint - it carries the authoritative
             // ``verified_count`` bumped whenever an analyst dispatches /
             // resolves a report (_mark_report_verified_for_credibility).
             try {
-                // HAR-driven (May 2026) — see _singleFlightFetch comment above.
+                // HAR-driven (May 2026) - see _singleFlightFetch comment above.
                 // Was hit 7× per page load (3 call sites + retry-on-404 race
                 // + multiple init paths). Now coalesces to ONE network call.
                 const profileRes = await _singleFlightFetch(`${API_BASE}/reports/profile/${deviceHash}`);
@@ -3994,22 +3994,22 @@ async function updateHomeImpactMetrics() {
             } catch (_) {}
         }
         // impact card is now ALWAYS visible (no more
-        // "hide below 5 verified" gate). The HTML ships with `—`
+        // "hide below 5 verified" gate). The HTML ships with `-`
         // placeholders so the card looks intentional even on the
         // anonymous first paint; subsequent renders fill in real
         // numbers when status-since / profile return them. Filling
         // the bottom dead zone is more valuable than the marginal
         // trust cost of "0 / 0" for brand-new users, which we paper
-        // over by showing "—" while the numbers are still zero.
-        const fmt = (n) => (n > 0 ? _fmtCompactNumber(n) : '—');
+        // over by showing "-" while the numbers are still zero.
+        const fmt = (n) => (n > 0 ? _fmtCompactNumber(n) : '-');
         if (verifiedEl) verifiedEl.textContent = fmt(verifiedCount);
         livesEl.textContent = fmt(livesImpacted);
         wrap.style.display = 'flex';
 
-        // v4 — also paint the landing card's impact panel if
+        // v4 - also paint the landing card's impact panel if
         // it's currently mounted. Same data, mirror copy. Doing this
         // here keeps the single-source-of-truth in updateHomeImpactMetrics().
-        // May 2026 — verified-count writes guarded: the tile was
+        // May 2026 - verified-count writes guarded: the tile was
         // removed in the same commit; landing card now shows only
         // lives. Verified-count fetch is still useful for the badge
         // ladder (home-screen.js) which reads it separately.
@@ -4024,7 +4024,7 @@ async function updateHomeImpactMetrics() {
     } catch (e) {
         console.warn('[Home] impact metrics fetch failed:', e);
         // even on error keep the card visible with the
-        // baseline `—` placeholders. Better than the bottom dead
+        // baseline `-` placeholders. Better than the bottom dead
         // zone reappearing whenever the backend hiccups.
         wrap.style.display = 'flex';
     }
@@ -4050,7 +4050,7 @@ function setupLangSwitcher() {
             document.querySelectorAll('#lang-switcher button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
-            // Persist manual language choice — survives offline reload
+            // Persist manual language choice - survives offline reload
             const langLabel = langCode !== 'en' ? btn.textContent.trim() : null;
             _patchLocCtx({ lang: langCode, langLabel, speechCode });
         });
@@ -4261,16 +4261,16 @@ const LANG_FAMILY_FALLBACK = {
     // East Africa (Swahili belt; English serves as lingua franca)
     'TZ': 'en', 'KE': 'en', 'UG': 'en', 'ET': 'en',
     'RW': 'fr', 'BI': 'fr',
-    // West Africa — Francophone
+    // West Africa - Francophone
     'SN': 'fr', 'CI': 'fr', 'BF': 'fr', 'ML': 'fr', 'NE': 'fr',
     'BJ': 'fr', 'TG': 'fr', 'GN': 'fr', 'GA': 'fr', 'CM': 'fr',
     'CG': 'fr', 'CD': 'fr', 'MG': 'fr', 'CF': 'fr', 'MR': 'fr',
-    // Central + South Asia — Hindi is the nearest CRISP language
+    // Central + South Asia - Hindi is the nearest CRISP language
     'AF': 'hi', 'MM': 'hi', 'BT': 'hi',
-    // Central Asia / Mongolia — Russian as lingua franca
+    // Central Asia / Mongolia - Russian as lingua franca
     'MN': 'ru', 'KZ': 'ru', 'KG': 'ru', 'TJ': 'ru', 'TM': 'ru',
     'UZ': 'ru', 'AZ': 'ru', 'GE': 'ru', 'AM': 'ru', 'BY': 'ru',
-    // South-east Asia — English as the regional working language
+    // South-east Asia - English as the regional working language
     'TH': 'en', 'VN': 'en', 'ID': 'en', 'PH': 'en', 'MY': 'en',
     'SG': 'en', 'KH': 'en', 'LA': 'en',
 };
@@ -4309,20 +4309,20 @@ const EXTRA_LANG = {
     // metric, §3.2 building selector, and §3.1 RTL layout notes. Keys are
     // merged into the base locale object below each main definition so the
     // dense packs already translated keep their existing keys intact.
-    fr: { home_title: 'Signaler', start_btn: 'Commencer', use_camera: 'Photo', browse: 'Parcourir', skip_photo: 'Passer', next: 'Continuer', tap_mic: 'Appuyez et parlez clairement', send_undp: 'Envoyer', sent_title: 'Envoyé!', consent_title: 'Votre vie privée compte', consent_desc: 'CRISP collecte uniquement les données nécessaires:', consent_loc: 'Localisation — coordonnées GPS', consent_photo: 'Photos — preuves de dégâts', consent_audio: 'Audio — descriptions vocales', consent_no_pii: 'Aucune identité personnelle collectée', consent_shared: 'Données partagées uniquement avec les secours', consent_delete: 'Suppression possible à tout moment', consent_check: 'Je consens au partage de ces données', consent_accept: 'Accepter', delete_my_data: 'Supprimer mes données', your_reports: 'Vos rapports soumis', delete_all: 'Tout supprimer', s2_title: 'Dites-nous ce qui s\'est passé', s2_sub: 'Parlez ou écrivez:', audio_bullet_1: 'Qu\'est-ce qui est endommagé? (maison, route, personnes…)', audio_bullet_2: 'Quelle est la gravité? (petit / grand / détruit)', audio_bullet_3: 'Quelqu\'un est-il blessé ou en danger?', audio_example: 'Exemple: La route est cassée et l\'eau inonde les maisons. 2 personnes sont blessées.', audio_mic_lang: 'Vous pouvez parler dans votre langue', audio_placeholder: 'Exemple: Maison effondrée, une personne piégée', home_offline_hint: '📡 Fonctionne hors ligne et avec une connexion limitée.', home_metric_reports: 'Rapports soumis', home_metric_lives: 'Vies sauvées', fp_photo: 'Photo', fp_details: 'Détails', fp_review: 'Vérifier', fp_send: 'Envoyer', my_reports: 'Mes rapports', mr_resolved: 'Résolus', mr_lives_impacted: 'Vies touchées', in_flight: 'En cours', submitted: 'Envoyé', empty_in_flight: "Rien en cours. Appuyez sur Démarrer pour en créer un.", empty_submitted: 'Rien envoyé pour le moment.', rd_status_submitted: 'Envoyé', rd_status_under_review: 'En examen', rd_status_accepted: 'Accepté', rd_status_rejected: 'Rejeté', rd_tl_submitted: 'Envoyé', rd_tl_review: 'En examen', rd_tl_accepted: 'Accepté', rd_tl_rejected: 'Rejeté', rd_tl_help_sent: 'Aide envoyée', rd_meta_location: 'Lieu', rd_meta_crisis: 'Crise', rd_meta_what: 'Quoi', rd_meta_damage: 'Dégât', rd_meta_severity: 'Gravité', rd_delete_queued: 'Supprimé à la reconnexion.', rd_people_helped_one: '~1 personne aidée', rd_people_helped_many: '~{n} personnes aidées', time_seconds_ago: 'il y a {n}s', time_minutes_ago: 'il y a {n} min', time_hours_ago: 'il y a {n} h', time_1_day_ago: 'il y a 1 jour', time_days_ago: 'il y a {n} jours', time_1_month_ago: 'il y a 1 mois', time_months_ago: 'il y a {n} mois', back: 'Retour', review_details_title: 'Détails', confirm_title: 'Confirmer', summary_incident: 'Incident', summary_details: 'Détails', summary_edit: '✏️ Modifier', summary_needs_prefix: '🆘 Besoins :', summary_debris: '🚛 Déblaiement nécessaire', summary_none: '—', wildfire: 'Feu de forêt', earthquake: 'Tremblement', cyclone: 'Cyclone', hurricane: 'Ouragan', landslide: 'Glissement', pandemic: 'Pandémie', conflict: 'Conflit', other_crisis: 'Autre', road: 'Route', hospital: 'Hôpital', house: 'Maison', power: 'Électricité', school: 'École', telecom: 'Télécoms', government: 'Bâtiment', other: 'Autre', severe: 'Grave', minor: 'Mineur', moderate: 'Modéré', no_damage: 'Aucun dommage', partial_damage: 'Partiel', complete_damage: 'Détruit', destroyed: 'Détruit', unknown: 'Inconnu', working: 'Fonctionne', disrupted: 'Perturbé', needs_label: '🆘 Besoins urgents', food: 'Nourriture', need_water: 'Eau', shelter: 'Abri', medical: 'Médical', security: 'Sécurité', need_cash: 'Argent', need_livelihoods: 'Moyens de subsistance', need_wash: 'EAH', need_basic_services: 'Services de base', need_protection: 'Protection', need_local_support: 'Aide locale', need_other: 'Autre' },
-    es: { home_title: 'Reportar', start_btn: 'Iniciar', use_camera: 'Cámara', browse: 'Buscar', skip_photo: 'Omitir', next: 'Continuar', tap_mic: 'Toque y hable claramente', send_undp: 'Enviar', sent_title: 'Enviado!', consent_title: 'Su privacidad importa', consent_desc: 'CRISP recopila solo los datos necesarios:', consent_loc: 'Ubicación — coordenadas GPS', consent_photo: 'Fotos — evidencia de daños', consent_audio: 'Audio — descripción por voz', consent_no_pii: 'No se recopila identidad personal', consent_shared: 'Datos solo para equipos de rescate', consent_delete: 'Puede solicitar eliminación', consent_check: 'Consiento compartir estos datos', consent_accept: 'Aceptar', delete_my_data: 'Eliminar mis datos', your_reports: 'Sus informes', delete_all: 'Eliminar todo', s2_title: 'Cuéntenos qué pasó', s2_sub: 'Hable o escriba:', audio_bullet_1: '¿Qué está dañado? (casa, carretera, personas…)', audio_bullet_2: '¿Qué tan grave? (pequeño / grande / destruido)', audio_bullet_3: '¿Hay alguien herido o en peligro?', audio_example: 'Ejemplo: La carretera está rota y el agua inunda las casas. 2 personas están heridas.', audio_mic_lang: 'Puede hablar en su idioma', audio_placeholder: 'Ejemplo: Casa derrumbada, una persona atrapada', home_offline_hint: '📡 Funciona sin conexión y con internet limitado.', home_metric_reports: 'Informes enviados', home_metric_lives: 'Vidas salvadas', fp_photo: 'Foto', fp_details: 'Detalles', fp_review: 'Revisar', fp_send: 'Enviar', my_reports: 'Mis informes', mr_resolved: 'Resueltos', mr_lives_impacted: 'Vidas afectadas', in_flight: 'En vuelo', submitted: 'Enviado', empty_in_flight: 'Nada en vuelo. Toca Iniciar para crear una.', empty_submitted: 'Aún nada enviado.', rd_status_submitted: 'Enviado', rd_status_under_review: 'En revisión', rd_status_accepted: 'Aceptado', rd_status_rejected: 'Rechazado', rd_tl_submitted: 'Enviado', rd_tl_review: 'En revisión', rd_tl_accepted: 'Aceptado', rd_tl_rejected: 'Rechazado', rd_tl_help_sent: 'Ayuda enviada', rd_meta_location: 'Ubicación', rd_meta_crisis: 'Crisis', rd_meta_what: 'Qué', rd_meta_damage: 'Daño', rd_meta_severity: 'Gravedad', rd_delete_queued: 'Se eliminará al conectar.', rd_people_helped_one: '~1 persona ayudada', rd_people_helped_many: '~{n} personas ayudadas', time_seconds_ago: 'hace {n}s', time_minutes_ago: 'hace {n} min', time_hours_ago: 'hace {n} h', time_1_day_ago: 'hace 1 día', time_days_ago: 'hace {n} días', time_1_month_ago: 'hace 1 mes', time_months_ago: 'hace {n} meses', back: 'Atrás', review_details_title: 'Detalles', confirm_title: 'Confirmar', summary_incident: 'Incidente', summary_details: 'Detalles', summary_edit: '✏️ Editar', summary_needs_prefix: '🆘 Necesidades:', summary_debris: '🚛 Remoción de escombros necesaria', summary_none: '—', wildfire: 'Incendio forestal', earthquake: 'Terremoto', cyclone: 'Ciclón', hurricane: 'Huracán', landslide: 'Deslizamiento', pandemic: 'Pandemia', conflict: 'Conflicto', other_crisis: 'Otro', road: 'Carretera', hospital: 'Hospital', house: 'Casa', power: 'Electricidad', school: 'Escuela', telecom: 'Telecom', government: 'Gubernamental', other: 'Otro', severe: 'Severo', minor: 'Leve', moderate: 'Moderado', no_damage: 'Sin daños', partial_damage: 'Parcial', complete_damage: 'Destruido', destroyed: 'Destruido', unknown: 'Desconocido', working: 'Funcionando', disrupted: 'Interrumpido', needs_label: '🆘 Necesidades urgentes', food: 'Comida', need_water: 'Agua', shelter: 'Refugio', medical: 'Médico', security: 'Seguridad', need_cash: 'Efectivo', need_livelihoods: 'Medios de vida', need_wash: 'WASH', need_basic_services: 'Servicios básicos', need_protection: 'Protección', need_local_support: 'Apoyo local', need_other: 'Otro' },
-    ar: { home_title: 'إبلاغ', start_btn: 'ابدأ', use_camera: 'كاميرا', browse: 'تصفح', skip_photo: 'تخطي', next: 'متابعة', tap_mic: 'اضغط وتحدث بوضوح', send_undp: 'إرسال', sent_title: 'تم!', consent_title: 'خصوصيتك مهمة', consent_desc: 'يجمع CRISP فقط البيانات اللازمة:', consent_loc: 'الموقع — إحداثيات GPS', consent_photo: 'صور — أدلة الأضرار', consent_audio: 'صوت — وصف صوتي', consent_no_pii: 'لا يتم جمع هوية شخصية', consent_shared: 'البيانات للمستجيبين فقط', consent_delete: 'يمكنك طلب الحذف', consent_check: 'أوافق على مشاركة هذه البيانات', consent_accept: 'قبول', delete_my_data: 'حذف بياناتي', your_reports: 'تقاريرك', delete_all: 'حذف الكل', s2_title: 'أخبرنا بما حدث', s2_sub: 'تحدث أو اكتب:', audio_bullet_1: 'ما المتضرر؟ (منزل، طريق، أشخاص…)', audio_bullet_2: 'ما مدى السوء؟ (صغير / كبير / مدمر)', audio_bullet_3: 'هل هناك جرحى أو في خطر؟', audio_example: 'مثال: الطريق مكسور والمياه تغمر المنازل. جريحان.', audio_mic_lang: 'يمكنك التحدث بلغتك', audio_placeholder: 'مثال: انهار المنزل، شخص محاصر', home_offline_hint: '📡 يعمل دون اتصال وفي حالات الإنترنت الضعيف.', home_metric_reports: 'التقارير المرسلة', home_metric_lives: 'الأرواح المنقذة', fp_photo: 'صورة', fp_details: 'تفاصيل', fp_review: 'مراجعة', fp_send: 'إرسال', my_reports: 'تقاريري', mr_resolved: 'محلولة', mr_lives_impacted: 'الأرواح المتأثرة', in_flight: 'قيد الإرسال', submitted: 'مُرسل', empty_in_flight: 'لا شيء قيد الإرسال. اضغط لبدء تقرير جديد.', empty_submitted: 'لم يُرسل شيء بعد.', rd_status_submitted: 'مُرسل', rd_status_under_review: 'قيد المراجعة', rd_status_accepted: 'مقبول', rd_status_rejected: 'مرفوض', rd_tl_submitted: 'مُرسل', rd_tl_review: 'قيد المراجعة', rd_tl_accepted: 'مقبول', rd_tl_rejected: 'مرفوض', rd_tl_help_sent: 'تم إرسال المساعدة', rd_meta_location: 'الموقع', rd_meta_crisis: 'الأزمة', rd_meta_what: 'ماذا', rd_meta_damage: 'الضرر', rd_meta_severity: 'الخطورة', rd_delete_queued: 'سيُحذف عند الاتصال.', rd_people_helped_one: '~مساعدة شخص واحد', rd_people_helped_many: '~مساعدة {n} أشخاص', time_seconds_ago: 'منذ {n} ث', time_minutes_ago: 'منذ {n} د', time_hours_ago: 'منذ {n} س', time_1_day_ago: 'منذ يوم', time_days_ago: 'منذ {n} أيام', time_1_month_ago: 'منذ شهر', time_months_ago: 'منذ {n} أشهر', back: 'رجوع', review_details_title: 'التفاصيل', confirm_title: 'تأكيد', summary_incident: 'الحادث', summary_details: 'التفاصيل', summary_edit: '✏️ تعديل', summary_needs_prefix: '🆘 الاحتياجات:', summary_debris: '🚛 إزالة الأنقاض مطلوبة', summary_none: '—', wildfire: 'حريق غابات', earthquake: 'زلزال', cyclone: 'إعصار', hurricane: 'إعصار', landslide: 'انهيار أرضي', pandemic: 'جائحة', conflict: 'نزاع', other_crisis: 'أخرى', road: 'طريق', hospital: 'مستشفى', house: 'منزل', power: 'كهرباء', school: 'مدرسة', telecom: 'اتصالات', government: 'مبنى حكومي', other: 'أخرى', severe: 'شديد', minor: 'طفيف', moderate: 'متوسط', no_damage: 'لا ضرر', partial_damage: 'جزئي', complete_damage: 'مدمر', destroyed: 'مدمر', unknown: 'غير معروف', working: 'يعمل', disrupted: 'معطل', needs_label: '🆘 احتياجات عاجلة', food: 'طعام', need_water: 'ماء', shelter: 'مأوى', medical: 'طبي', security: 'أمن', need_cash: 'مال', need_livelihoods: 'سبل العيش', need_wash: 'المياه والصرف الصحي', need_basic_services: 'خدمات أساسية', need_protection: 'الحماية', need_local_support: 'دعم محلي', need_other: 'أخرى' },
-    ru: { home_title: 'Сообщить о происшествии', start_btn: 'Начать', use_camera: 'Камера', browse: 'Обзор', skip_photo: 'Пропустить', next: 'Далее', tap_mic: 'Говорить', send_undp: 'Отправить', sent_title: 'Отправлено!', consent_title: 'Ваша конфиденциальность важна', consent_check: 'Я согласен на передачу данных', consent_accept: 'Принять', home_offline_hint: '📡 Работает офлайн и при слабом интернете.', home_metric_reports: 'Отправленные отчёты', home_metric_lives: 'Спасённые жизни', fp_photo: 'Фото', fp_details: 'Детали', fp_review: 'Проверка', fp_send: 'Отправить', my_reports: 'Мои отчёты', mr_resolved: 'Решено', mr_lives_impacted: 'Затронутые жизни', in_flight: 'Отправляется', submitted: 'Отправлено', empty_in_flight: 'Ничего не отправляется. Нажмите Начать для создания.', empty_submitted: 'Пока ничего не отправлено.', rd_status_submitted: 'Отправлено', rd_status_under_review: 'На проверке', rd_status_accepted: 'Принято', rd_status_rejected: 'Отклонено', rd_tl_submitted: 'Отправлено', rd_tl_review: 'На проверке', rd_tl_accepted: 'Принято', rd_tl_rejected: 'Отклонено', rd_tl_help_sent: 'Помощь отправлена', rd_meta_location: 'Место', rd_meta_crisis: 'Кризис', rd_meta_what: 'Что', rd_meta_damage: 'Ущерб', rd_meta_severity: 'Тяжесть', rd_delete_queued: 'Удалится при подключении.', rd_people_helped_one: '~помощь 1 человеку', rd_people_helped_many: '~помощь {n} людям', time_seconds_ago: '{n}с назад', time_minutes_ago: '{n} мин назад', time_hours_ago: '{n} ч назад', time_1_day_ago: '1 день назад', time_days_ago: '{n} дней назад', time_1_month_ago: '1 месяц назад', time_months_ago: '{n} месяцев назад', back: 'Назад', review_details_title: 'Детали', confirm_title: 'Подтвердить', summary_incident: 'Инцидент', summary_details: 'Детали', summary_edit: '✏️ Изменить', summary_needs_prefix: '🆘 Нужды:', summary_debris: '🚛 Нужна уборка обломков', summary_none: '—', wildfire: 'Лесной пожар', earthquake: 'Землетрясение', cyclone: 'Циклон', hurricane: 'Ураган', landslide: 'Оползень', pandemic: 'Пандемия', conflict: 'Конфликт', other_crisis: 'Другое', road: 'Дорога', hospital: 'Больница', house: 'Дом', power: 'Электричество', school: 'Школа', telecom: 'Связь', government: 'Здание', other: 'Другое', severe: 'Тяжёлое', minor: 'Лёгкое', moderate: 'Среднее', no_damage: 'Нет ущерба', partial_damage: 'Частично', complete_damage: 'Разрушено', destroyed: 'Разрушено', unknown: 'Неизвестно', working: 'Работает', disrupted: 'Прервано', needs_label: '🆘 Срочные нужды', food: 'Еда', need_water: 'Вода', shelter: 'Убежище', medical: 'Медицина', security: 'Безопасность', need_cash: 'Деньги', need_livelihoods: 'Средства к существованию', need_wash: 'ВСГ', need_basic_services: 'Базовые услуги', need_protection: 'Защита', need_local_support: 'Местная помощь', need_other: 'Другое' },
-    zh: { home_title: '报告', start_btn: '开始', use_camera: '相机', browse: '浏览', skip_photo: '跳过', next: '继续', tap_mic: '点击后清晰地说话', send_undp: '发送', sent_title: '已发送!', consent_title: '您的隐私很重要', consent_check: '我同意分享此数据', consent_accept: '接受', s2_title: '告诉我们发生了什么', s2_sub: '说话或输入:', audio_bullet_1: '什么受损了？（房屋、道路、人员…）', audio_bullet_2: '严重程度？（小 / 大 / 完全毁坏）', audio_bullet_3: '有人受伤或处于危险中吗？', audio_example: '示例：道路断裂，水淹房屋。2 人受伤。', audio_mic_lang: '您可以用您的语言说话', audio_placeholder: '示例：房屋倒塌，一人被困', home_offline_hint: '📡 离线和低网络环境下均可使用。', home_metric_reports: '已提交报告', home_metric_lives: '挽救的生命', fp_photo: '照片', fp_details: '详情', fp_review: '审查', fp_send: '发送', my_reports: '我的报告', mr_resolved: '已解决', mr_lives_impacted: '受影响的生命', in_flight: '传输中', submitted: '已提交', empty_in_flight: '没有传输中的报告。点击开始报告以创建。', empty_submitted: '尚未提交任何报告。', rd_status_submitted: '已提交', rd_status_under_review: '审核中', rd_status_accepted: '已接受', rd_status_rejected: '已拒绝', rd_tl_submitted: '已提交', rd_tl_review: '审核中', rd_tl_accepted: '已接受', rd_tl_rejected: '已拒绝', rd_tl_help_sent: '已派出援助', rd_meta_location: '位置', rd_meta_crisis: '危机', rd_meta_what: '什么', rd_meta_damage: '损坏', rd_meta_severity: '严重程度', rd_delete_queued: '连接后将删除。', rd_people_helped_one: '~帮助了1人', rd_people_helped_many: '~帮助了{n}人', time_seconds_ago: '{n}秒前', time_minutes_ago: '{n}分钟前', time_hours_ago: '{n}小时前', time_1_day_ago: '1天前', time_days_ago: '{n}天前', time_1_month_ago: '1个月前', time_months_ago: '{n}个月前', back: '返回', review_details_title: '详情', confirm_title: '确认', summary_incident: '事件', summary_details: '详情', summary_edit: '✏️ 编辑', summary_needs_prefix: '🆘 需求：', summary_debris: '🚛 需要清理碎片', summary_none: '—', wildfire: '野火', earthquake: '地震', cyclone: '气旋', hurricane: '飓风', landslide: '山体滑坡', pandemic: '大流行', conflict: '冲突', other_crisis: '其他', road: '道路', hospital: '医院', house: '房屋', power: '电力', school: '学校', telecom: '电信', government: '政府建筑', other: '其他', severe: '严重', minor: '轻微', moderate: '中等', no_damage: '无损坏', partial_damage: '部分', complete_damage: '完全毁坏', destroyed: '毁坏', unknown: '未知', working: '正常', disrupted: '中断', needs_label: '🆘 紧急需求', food: '食物', need_water: '水', shelter: '避难所', medical: '医疗', security: '安全', need_cash: '现金', need_livelihoods: '生计', need_wash: '水卫设施', need_basic_services: '基本服务', need_protection: '保护', need_local_support: '本地支援', need_other: '其他' },
-    pt: { home_title: 'Reportar', start_btn: 'Iniciar', use_camera: 'Câmera', browse: 'Procurar', skip_photo: 'Pular', next: 'Continuar', tap_mic: 'Toque e fale claramente', send_undp: 'Enviar', sent_title: 'Enviado!', consent_title: 'Sua privacidade importa', consent_check: 'Concordo em compartilhar dados', consent_accept: 'Aceitar', s2_title: 'Conte-nos o que aconteceu', s2_sub: 'Fale ou digite:', audio_bullet_1: 'O que está danificado? (casa, estrada, pessoas…)', audio_bullet_2: 'Quão grave é? (pequeno / grande / destruído)', audio_bullet_3: 'Alguém está ferido ou em perigo?', audio_example: 'Exemplo: A estrada está quebrada e a água está inundando casas. 2 pessoas feridas.', audio_mic_lang: 'Você pode falar no seu idioma', audio_placeholder: 'Exemplo: Casa desabou, uma pessoa presa', home_offline_hint: '📡 Funciona offline e com internet limitada.', home_metric_reports: 'Relatórios enviados', home_metric_lives: 'Vidas salvas', fp_photo: 'Foto', fp_details: 'Detalhes', fp_review: 'Revisar', fp_send: 'Enviar', my_reports: 'Meus relatórios', mr_resolved: 'Resolvidos', mr_lives_impacted: 'Vidas afetadas', in_flight: 'Em envio', submitted: 'Enviado', empty_in_flight: 'Nada em envio. Toque em Iniciar para criar um.', empty_submitted: 'Nada enviado ainda.', rd_status_submitted: 'Enviado', rd_status_under_review: 'Em análise', rd_status_accepted: 'Aceito', rd_status_rejected: 'Rejeitado', rd_tl_submitted: 'Enviado', rd_tl_review: 'Em análise', rd_tl_accepted: 'Aceito', rd_tl_rejected: 'Rejeitado', rd_tl_help_sent: 'Ajuda enviada', rd_meta_location: 'Local', rd_meta_crisis: 'Crise', rd_meta_what: 'O quê', rd_meta_damage: 'Dano', rd_meta_severity: 'Gravidade', rd_delete_queued: 'Será excluído ao conectar.', rd_people_helped_one: '~1 pessoa ajudada', rd_people_helped_many: '~{n} pessoas ajudadas', time_seconds_ago: 'há {n}s', time_minutes_ago: 'há {n} min', time_hours_ago: 'há {n} h', time_1_day_ago: 'há 1 dia', time_days_ago: 'há {n} dias', time_1_month_ago: 'há 1 mês', time_months_ago: 'há {n} meses', back: 'Voltar', review_details_title: 'Detalhes', confirm_title: 'Confirmar', summary_incident: 'Incidente', summary_details: 'Detalhes', summary_edit: '✏️ Editar', summary_needs_prefix: '🆘 Necessidades:', summary_debris: '🚛 Remoção de detritos necessária', summary_none: '—', wildfire: 'Incêndio florestal', earthquake: 'Terremoto', cyclone: 'Ciclone', hurricane: 'Furacão', landslide: 'Deslizamento', pandemic: 'Pandemia', conflict: 'Conflito', other_crisis: 'Outro', road: 'Estrada', hospital: 'Hospital', house: 'Casa', power: 'Energia', school: 'Escola', telecom: 'Telecom', government: 'Prédio governamental', other: 'Outro', severe: 'Grave', minor: 'Leve', moderate: 'Moderado', no_damage: 'Sem danos', partial_damage: 'Parcial', complete_damage: 'Destruído', destroyed: 'Destruído', unknown: 'Desconhecido', working: 'Funcionando', disrupted: 'Interrompido', needs_label: '🆘 Necessidades urgentes', food: 'Comida', need_water: 'Água', shelter: 'Abrigo', medical: 'Médico', security: 'Segurança', need_cash: 'Dinheiro', need_livelihoods: 'Meios de vida', need_wash: 'WASH', need_basic_services: 'Serviços básicos', need_protection: 'Proteção', need_local_support: 'Apoio local', need_other: 'Outro' },
-    de: { home_title: 'Vorfall melden', start_btn: 'Starten', use_camera: 'Kamera', browse: 'Suchen', skip_photo: 'Überspringen', next: 'Weiter', tap_mic: 'Sprechen', send_undp: 'Senden', sent_title: 'Gesendet!', consent_title: 'Ihre Privatsphäre ist wichtig', consent_check: 'Ich stimme der Datenweitergabe zu', consent_accept: 'Akzeptieren', home_offline_hint: '📡 Funktioniert offline und bei schlechter Internetverbindung.', home_metric_reports: 'Übermittelte Berichte', home_metric_lives: 'Gerettete Leben', fp_photo: 'Foto', fp_details: 'Details', fp_review: 'Prüfen', fp_send: 'Senden', my_reports: 'Meine Berichte', mr_resolved: 'Gelöst', mr_lives_impacted: 'Betroffene Leben', in_flight: 'Im Versand', submitted: 'Gesendet', empty_in_flight: 'Nichts im Versand. Tippen Sie auf Starten, um einen Bericht zu erstellen.', empty_submitted: 'Noch nichts gesendet.', rd_status_submitted: 'Gesendet', rd_status_under_review: 'In Prüfung', rd_status_accepted: 'Angenommen', rd_status_rejected: 'Abgelehnt', rd_tl_submitted: 'Gesendet', rd_tl_review: 'In Prüfung', rd_tl_accepted: 'Angenommen', rd_tl_rejected: 'Abgelehnt', rd_tl_help_sent: 'Hilfe gesendet', rd_meta_location: 'Ort', rd_meta_crisis: 'Krise', rd_meta_what: 'Was', rd_meta_damage: 'Schaden', rd_meta_severity: 'Schweregrad', rd_delete_queued: 'Wird bei Verbindung gelöscht.', rd_people_helped_one: '~1 Person geholfen', rd_people_helped_many: '~{n} Personen geholfen', time_seconds_ago: 'vor {n}s', time_minutes_ago: 'vor {n} min', time_hours_ago: 'vor {n} h', time_1_day_ago: 'vor 1 Tag', time_days_ago: 'vor {n} Tagen', time_1_month_ago: 'vor 1 Monat', time_months_ago: 'vor {n} Monaten', back: 'Zurück', review_details_title: 'Details', confirm_title: 'Bestätigen', summary_incident: 'Vorfall', summary_details: 'Details', summary_edit: '✏️ Bearbeiten', summary_needs_prefix: '🆘 Bedarf:', summary_debris: '🚛 Trümmerbeseitigung nötig', summary_none: '—', wildfire: 'Waldbrand', earthquake: 'Erdbeben', cyclone: 'Zyklon', hurricane: 'Hurrikan', landslide: 'Erdrutsch', pandemic: 'Pandemie', conflict: 'Konflikt', other_crisis: 'Sonstiges', road: 'Straße', hospital: 'Krankenhaus', house: 'Haus', power: 'Strom', school: 'Schule', telecom: 'Telekom', government: 'Gebäude', other: 'Sonstiges', severe: 'Schwer', minor: 'Leicht', moderate: 'Mittel', no_damage: 'Kein Schaden', partial_damage: 'Teilweise', complete_damage: 'Zerstört', destroyed: 'Zerstört', unknown: 'Unbekannt', working: 'Funktioniert', disrupted: 'Gestört', needs_label: '🆘 Dringender Bedarf', food: 'Essen', need_water: 'Wasser', shelter: 'Unterkunft', medical: 'Medizin', security: 'Sicherheit', need_cash: 'Bargeld', need_livelihoods: 'Lebensgrundlage', need_wash: 'WASH', need_basic_services: 'Grundversorgung', need_protection: 'Schutz', need_local_support: 'Lokale Hilfe', need_other: 'Sonstiges' },
+    fr: { home_title: 'Signaler', start_btn: 'Commencer', use_camera: 'Photo', browse: 'Parcourir', skip_photo: 'Passer', next: 'Continuer', tap_mic: 'Appuyez et parlez clairement', send_undp: 'Envoyer', sent_title: 'Envoyé!', consent_title: 'Votre vie privée compte', consent_desc: 'CRISP collecte uniquement les données nécessaires:', consent_loc: 'Localisation - coordonnées GPS', consent_photo: 'Photos - preuves de dégâts', consent_audio: 'Audio - descriptions vocales', consent_no_pii: 'Aucune identité personnelle collectée', consent_shared: 'Données partagées uniquement avec les secours', consent_delete: 'Suppression possible à tout moment', consent_check: 'Je consens au partage de ces données', consent_accept: 'Accepter', delete_my_data: 'Supprimer mes données', your_reports: 'Vos rapports soumis', delete_all: 'Tout supprimer', s2_title: 'Dites-nous ce qui s\'est passé', s2_sub: 'Parlez ou écrivez:', audio_bullet_1: 'Qu\'est-ce qui est endommagé? (maison, route, personnes…)', audio_bullet_2: 'Quelle est la gravité? (petit / grand / détruit)', audio_bullet_3: 'Quelqu\'un est-il blessé ou en danger?', audio_example: 'Exemple: La route est cassée et l\'eau inonde les maisons. 2 personnes sont blessées.', audio_mic_lang: 'Vous pouvez parler dans votre langue', audio_placeholder: 'Exemple: Maison effondrée, une personne piégée', home_offline_hint: '📡 Fonctionne hors ligne et avec une connexion limitée.', home_metric_reports: 'Rapports soumis', home_metric_lives: 'Vies sauvées', fp_photo: 'Photo', fp_details: 'Détails', fp_review: 'Vérifier', fp_send: 'Envoyer', my_reports: 'Mes rapports', mr_resolved: 'Résolus', mr_lives_impacted: 'Vies touchées', in_flight: 'En cours', submitted: 'Envoyé', empty_in_flight: "Rien en cours. Appuyez sur Démarrer pour en créer un.", empty_submitted: 'Rien envoyé pour le moment.', rd_status_submitted: 'Envoyé', rd_status_under_review: 'En examen', rd_status_accepted: 'Accepté', rd_status_rejected: 'Rejeté', rd_tl_submitted: 'Envoyé', rd_tl_review: 'En examen', rd_tl_accepted: 'Accepté', rd_tl_rejected: 'Rejeté', rd_tl_help_sent: 'Aide envoyée', rd_meta_location: 'Lieu', rd_meta_crisis: 'Crise', rd_meta_what: 'Quoi', rd_meta_damage: 'Dégât', rd_meta_severity: 'Gravité', rd_delete_queued: 'Supprimé à la reconnexion.', rd_people_helped_one: '~1 personne aidée', rd_people_helped_many: '~{n} personnes aidées', time_seconds_ago: 'il y a {n}s', time_minutes_ago: 'il y a {n} min', time_hours_ago: 'il y a {n} h', time_1_day_ago: 'il y a 1 jour', time_days_ago: 'il y a {n} jours', time_1_month_ago: 'il y a 1 mois', time_months_ago: 'il y a {n} mois', back: 'Retour', review_details_title: 'Détails', confirm_title: 'Confirmer', summary_incident: 'Incident', summary_details: 'Détails', summary_edit: '✏️ Modifier', summary_needs_prefix: '🆘 Besoins :', summary_debris: '🚛 Déblaiement nécessaire', summary_none: '-', wildfire: 'Feu de forêt', earthquake: 'Tremblement', cyclone: 'Cyclone', hurricane: 'Ouragan', landslide: 'Glissement', pandemic: 'Pandémie', conflict: 'Conflit', other_crisis: 'Autre', road: 'Route', hospital: 'Hôpital', house: 'Maison', power: 'Électricité', school: 'École', telecom: 'Télécoms', government: 'Bâtiment', other: 'Autre', severe: 'Grave', minor: 'Mineur', moderate: 'Modéré', no_damage: 'Aucun dommage', partial_damage: 'Partiel', complete_damage: 'Détruit', destroyed: 'Détruit', unknown: 'Inconnu', working: 'Fonctionne', disrupted: 'Perturbé', needs_label: '🆘 Besoins urgents', food: 'Nourriture', need_water: 'Eau', shelter: 'Abri', medical: 'Médical', security: 'Sécurité', need_cash: 'Argent', need_livelihoods: 'Moyens de subsistance', need_wash: 'EAH', need_basic_services: 'Services de base', need_protection: 'Protection', need_local_support: 'Aide locale', need_other: 'Autre' },
+    es: { home_title: 'Reportar', start_btn: 'Iniciar', use_camera: 'Cámara', browse: 'Buscar', skip_photo: 'Omitir', next: 'Continuar', tap_mic: 'Toque y hable claramente', send_undp: 'Enviar', sent_title: 'Enviado!', consent_title: 'Su privacidad importa', consent_desc: 'CRISP recopila solo los datos necesarios:', consent_loc: 'Ubicación - coordenadas GPS', consent_photo: 'Fotos - evidencia de daños', consent_audio: 'Audio - descripción por voz', consent_no_pii: 'No se recopila identidad personal', consent_shared: 'Datos solo para equipos de rescate', consent_delete: 'Puede solicitar eliminación', consent_check: 'Consiento compartir estos datos', consent_accept: 'Aceptar', delete_my_data: 'Eliminar mis datos', your_reports: 'Sus informes', delete_all: 'Eliminar todo', s2_title: 'Cuéntenos qué pasó', s2_sub: 'Hable o escriba:', audio_bullet_1: '¿Qué está dañado? (casa, carretera, personas…)', audio_bullet_2: '¿Qué tan grave? (pequeño / grande / destruido)', audio_bullet_3: '¿Hay alguien herido o en peligro?', audio_example: 'Ejemplo: La carretera está rota y el agua inunda las casas. 2 personas están heridas.', audio_mic_lang: 'Puede hablar en su idioma', audio_placeholder: 'Ejemplo: Casa derrumbada, una persona atrapada', home_offline_hint: '📡 Funciona sin conexión y con internet limitado.', home_metric_reports: 'Informes enviados', home_metric_lives: 'Vidas salvadas', fp_photo: 'Foto', fp_details: 'Detalles', fp_review: 'Revisar', fp_send: 'Enviar', my_reports: 'Mis informes', mr_resolved: 'Resueltos', mr_lives_impacted: 'Vidas afectadas', in_flight: 'En vuelo', submitted: 'Enviado', empty_in_flight: 'Nada en vuelo. Toca Iniciar para crear una.', empty_submitted: 'Aún nada enviado.', rd_status_submitted: 'Enviado', rd_status_under_review: 'En revisión', rd_status_accepted: 'Aceptado', rd_status_rejected: 'Rechazado', rd_tl_submitted: 'Enviado', rd_tl_review: 'En revisión', rd_tl_accepted: 'Aceptado', rd_tl_rejected: 'Rechazado', rd_tl_help_sent: 'Ayuda enviada', rd_meta_location: 'Ubicación', rd_meta_crisis: 'Crisis', rd_meta_what: 'Qué', rd_meta_damage: 'Daño', rd_meta_severity: 'Gravedad', rd_delete_queued: 'Se eliminará al conectar.', rd_people_helped_one: '~1 persona ayudada', rd_people_helped_many: '~{n} personas ayudadas', time_seconds_ago: 'hace {n}s', time_minutes_ago: 'hace {n} min', time_hours_ago: 'hace {n} h', time_1_day_ago: 'hace 1 día', time_days_ago: 'hace {n} días', time_1_month_ago: 'hace 1 mes', time_months_ago: 'hace {n} meses', back: 'Atrás', review_details_title: 'Detalles', confirm_title: 'Confirmar', summary_incident: 'Incidente', summary_details: 'Detalles', summary_edit: '✏️ Editar', summary_needs_prefix: '🆘 Necesidades:', summary_debris: '🚛 Remoción de escombros necesaria', summary_none: '-', wildfire: 'Incendio forestal', earthquake: 'Terremoto', cyclone: 'Ciclón', hurricane: 'Huracán', landslide: 'Deslizamiento', pandemic: 'Pandemia', conflict: 'Conflicto', other_crisis: 'Otro', road: 'Carretera', hospital: 'Hospital', house: 'Casa', power: 'Electricidad', school: 'Escuela', telecom: 'Telecom', government: 'Gubernamental', other: 'Otro', severe: 'Severo', minor: 'Leve', moderate: 'Moderado', no_damage: 'Sin daños', partial_damage: 'Parcial', complete_damage: 'Destruido', destroyed: 'Destruido', unknown: 'Desconocido', working: 'Funcionando', disrupted: 'Interrumpido', needs_label: '🆘 Necesidades urgentes', food: 'Comida', need_water: 'Agua', shelter: 'Refugio', medical: 'Médico', security: 'Seguridad', need_cash: 'Efectivo', need_livelihoods: 'Medios de vida', need_wash: 'WASH', need_basic_services: 'Servicios básicos', need_protection: 'Protección', need_local_support: 'Apoyo local', need_other: 'Otro' },
+    ar: { home_title: 'إبلاغ', start_btn: 'ابدأ', use_camera: 'كاميرا', browse: 'تصفح', skip_photo: 'تخطي', next: 'متابعة', tap_mic: 'اضغط وتحدث بوضوح', send_undp: 'إرسال', sent_title: 'تم!', consent_title: 'خصوصيتك مهمة', consent_desc: 'يجمع CRISP فقط البيانات اللازمة:', consent_loc: 'الموقع - إحداثيات GPS', consent_photo: 'صور - أدلة الأضرار', consent_audio: 'صوت - وصف صوتي', consent_no_pii: 'لا يتم جمع هوية شخصية', consent_shared: 'البيانات للمستجيبين فقط', consent_delete: 'يمكنك طلب الحذف', consent_check: 'أوافق على مشاركة هذه البيانات', consent_accept: 'قبول', delete_my_data: 'حذف بياناتي', your_reports: 'تقاريرك', delete_all: 'حذف الكل', s2_title: 'أخبرنا بما حدث', s2_sub: 'تحدث أو اكتب:', audio_bullet_1: 'ما المتضرر؟ (منزل، طريق، أشخاص…)', audio_bullet_2: 'ما مدى السوء؟ (صغير / كبير / مدمر)', audio_bullet_3: 'هل هناك جرحى أو في خطر؟', audio_example: 'مثال: الطريق مكسور والمياه تغمر المنازل. جريحان.', audio_mic_lang: 'يمكنك التحدث بلغتك', audio_placeholder: 'مثال: انهار المنزل، شخص محاصر', home_offline_hint: '📡 يعمل دون اتصال وفي حالات الإنترنت الضعيف.', home_metric_reports: 'التقارير المرسلة', home_metric_lives: 'الأرواح المنقذة', fp_photo: 'صورة', fp_details: 'تفاصيل', fp_review: 'مراجعة', fp_send: 'إرسال', my_reports: 'تقاريري', mr_resolved: 'محلولة', mr_lives_impacted: 'الأرواح المتأثرة', in_flight: 'قيد الإرسال', submitted: 'مُرسل', empty_in_flight: 'لا شيء قيد الإرسال. اضغط لبدء تقرير جديد.', empty_submitted: 'لم يُرسل شيء بعد.', rd_status_submitted: 'مُرسل', rd_status_under_review: 'قيد المراجعة', rd_status_accepted: 'مقبول', rd_status_rejected: 'مرفوض', rd_tl_submitted: 'مُرسل', rd_tl_review: 'قيد المراجعة', rd_tl_accepted: 'مقبول', rd_tl_rejected: 'مرفوض', rd_tl_help_sent: 'تم إرسال المساعدة', rd_meta_location: 'الموقع', rd_meta_crisis: 'الأزمة', rd_meta_what: 'ماذا', rd_meta_damage: 'الضرر', rd_meta_severity: 'الخطورة', rd_delete_queued: 'سيُحذف عند الاتصال.', rd_people_helped_one: '~مساعدة شخص واحد', rd_people_helped_many: '~مساعدة {n} أشخاص', time_seconds_ago: 'منذ {n} ث', time_minutes_ago: 'منذ {n} د', time_hours_ago: 'منذ {n} س', time_1_day_ago: 'منذ يوم', time_days_ago: 'منذ {n} أيام', time_1_month_ago: 'منذ شهر', time_months_ago: 'منذ {n} أشهر', back: 'رجوع', review_details_title: 'التفاصيل', confirm_title: 'تأكيد', summary_incident: 'الحادث', summary_details: 'التفاصيل', summary_edit: '✏️ تعديل', summary_needs_prefix: '🆘 الاحتياجات:', summary_debris: '🚛 إزالة الأنقاض مطلوبة', summary_none: '-', wildfire: 'حريق غابات', earthquake: 'زلزال', cyclone: 'إعصار', hurricane: 'إعصار', landslide: 'انهيار أرضي', pandemic: 'جائحة', conflict: 'نزاع', other_crisis: 'أخرى', road: 'طريق', hospital: 'مستشفى', house: 'منزل', power: 'كهرباء', school: 'مدرسة', telecom: 'اتصالات', government: 'مبنى حكومي', other: 'أخرى', severe: 'شديد', minor: 'طفيف', moderate: 'متوسط', no_damage: 'لا ضرر', partial_damage: 'جزئي', complete_damage: 'مدمر', destroyed: 'مدمر', unknown: 'غير معروف', working: 'يعمل', disrupted: 'معطل', needs_label: '🆘 احتياجات عاجلة', food: 'طعام', need_water: 'ماء', shelter: 'مأوى', medical: 'طبي', security: 'أمن', need_cash: 'مال', need_livelihoods: 'سبل العيش', need_wash: 'المياه والصرف الصحي', need_basic_services: 'خدمات أساسية', need_protection: 'الحماية', need_local_support: 'دعم محلي', need_other: 'أخرى' },
+    ru: { home_title: 'Сообщить о происшествии', start_btn: 'Начать', use_camera: 'Камера', browse: 'Обзор', skip_photo: 'Пропустить', next: 'Далее', tap_mic: 'Говорить', send_undp: 'Отправить', sent_title: 'Отправлено!', consent_title: 'Ваша конфиденциальность важна', consent_check: 'Я согласен на передачу данных', consent_accept: 'Принять', home_offline_hint: '📡 Работает офлайн и при слабом интернете.', home_metric_reports: 'Отправленные отчёты', home_metric_lives: 'Спасённые жизни', fp_photo: 'Фото', fp_details: 'Детали', fp_review: 'Проверка', fp_send: 'Отправить', my_reports: 'Мои отчёты', mr_resolved: 'Решено', mr_lives_impacted: 'Затронутые жизни', in_flight: 'Отправляется', submitted: 'Отправлено', empty_in_flight: 'Ничего не отправляется. Нажмите Начать для создания.', empty_submitted: 'Пока ничего не отправлено.', rd_status_submitted: 'Отправлено', rd_status_under_review: 'На проверке', rd_status_accepted: 'Принято', rd_status_rejected: 'Отклонено', rd_tl_submitted: 'Отправлено', rd_tl_review: 'На проверке', rd_tl_accepted: 'Принято', rd_tl_rejected: 'Отклонено', rd_tl_help_sent: 'Помощь отправлена', rd_meta_location: 'Место', rd_meta_crisis: 'Кризис', rd_meta_what: 'Что', rd_meta_damage: 'Ущерб', rd_meta_severity: 'Тяжесть', rd_delete_queued: 'Удалится при подключении.', rd_people_helped_one: '~помощь 1 человеку', rd_people_helped_many: '~помощь {n} людям', time_seconds_ago: '{n}с назад', time_minutes_ago: '{n} мин назад', time_hours_ago: '{n} ч назад', time_1_day_ago: '1 день назад', time_days_ago: '{n} дней назад', time_1_month_ago: '1 месяц назад', time_months_ago: '{n} месяцев назад', back: 'Назад', review_details_title: 'Детали', confirm_title: 'Подтвердить', summary_incident: 'Инцидент', summary_details: 'Детали', summary_edit: '✏️ Изменить', summary_needs_prefix: '🆘 Нужды:', summary_debris: '🚛 Нужна уборка обломков', summary_none: '-', wildfire: 'Лесной пожар', earthquake: 'Землетрясение', cyclone: 'Циклон', hurricane: 'Ураган', landslide: 'Оползень', pandemic: 'Пандемия', conflict: 'Конфликт', other_crisis: 'Другое', road: 'Дорога', hospital: 'Больница', house: 'Дом', power: 'Электричество', school: 'Школа', telecom: 'Связь', government: 'Здание', other: 'Другое', severe: 'Тяжёлое', minor: 'Лёгкое', moderate: 'Среднее', no_damage: 'Нет ущерба', partial_damage: 'Частично', complete_damage: 'Разрушено', destroyed: 'Разрушено', unknown: 'Неизвестно', working: 'Работает', disrupted: 'Прервано', needs_label: '🆘 Срочные нужды', food: 'Еда', need_water: 'Вода', shelter: 'Убежище', medical: 'Медицина', security: 'Безопасность', need_cash: 'Деньги', need_livelihoods: 'Средства к существованию', need_wash: 'ВСГ', need_basic_services: 'Базовые услуги', need_protection: 'Защита', need_local_support: 'Местная помощь', need_other: 'Другое' },
+    zh: { home_title: '报告', start_btn: '开始', use_camera: '相机', browse: '浏览', skip_photo: '跳过', next: '继续', tap_mic: '点击后清晰地说话', send_undp: '发送', sent_title: '已发送!', consent_title: '您的隐私很重要', consent_check: '我同意分享此数据', consent_accept: '接受', s2_title: '告诉我们发生了什么', s2_sub: '说话或输入:', audio_bullet_1: '什么受损了？（房屋、道路、人员…）', audio_bullet_2: '严重程度？（小 / 大 / 完全毁坏）', audio_bullet_3: '有人受伤或处于危险中吗？', audio_example: '示例：道路断裂，水淹房屋。2 人受伤。', audio_mic_lang: '您可以用您的语言说话', audio_placeholder: '示例：房屋倒塌，一人被困', home_offline_hint: '📡 离线和低网络环境下均可使用。', home_metric_reports: '已提交报告', home_metric_lives: '挽救的生命', fp_photo: '照片', fp_details: '详情', fp_review: '审查', fp_send: '发送', my_reports: '我的报告', mr_resolved: '已解决', mr_lives_impacted: '受影响的生命', in_flight: '传输中', submitted: '已提交', empty_in_flight: '没有传输中的报告。点击开始报告以创建。', empty_submitted: '尚未提交任何报告。', rd_status_submitted: '已提交', rd_status_under_review: '审核中', rd_status_accepted: '已接受', rd_status_rejected: '已拒绝', rd_tl_submitted: '已提交', rd_tl_review: '审核中', rd_tl_accepted: '已接受', rd_tl_rejected: '已拒绝', rd_tl_help_sent: '已派出援助', rd_meta_location: '位置', rd_meta_crisis: '危机', rd_meta_what: '什么', rd_meta_damage: '损坏', rd_meta_severity: '严重程度', rd_delete_queued: '连接后将删除。', rd_people_helped_one: '~帮助了1人', rd_people_helped_many: '~帮助了{n}人', time_seconds_ago: '{n}秒前', time_minutes_ago: '{n}分钟前', time_hours_ago: '{n}小时前', time_1_day_ago: '1天前', time_days_ago: '{n}天前', time_1_month_ago: '1个月前', time_months_ago: '{n}个月前', back: '返回', review_details_title: '详情', confirm_title: '确认', summary_incident: '事件', summary_details: '详情', summary_edit: '✏️ 编辑', summary_needs_prefix: '🆘 需求：', summary_debris: '🚛 需要清理碎片', summary_none: '-', wildfire: '野火', earthquake: '地震', cyclone: '气旋', hurricane: '飓风', landslide: '山体滑坡', pandemic: '大流行', conflict: '冲突', other_crisis: '其他', road: '道路', hospital: '医院', house: '房屋', power: '电力', school: '学校', telecom: '电信', government: '政府建筑', other: '其他', severe: '严重', minor: '轻微', moderate: '中等', no_damage: '无损坏', partial_damage: '部分', complete_damage: '完全毁坏', destroyed: '毁坏', unknown: '未知', working: '正常', disrupted: '中断', needs_label: '🆘 紧急需求', food: '食物', need_water: '水', shelter: '避难所', medical: '医疗', security: '安全', need_cash: '现金', need_livelihoods: '生计', need_wash: '水卫设施', need_basic_services: '基本服务', need_protection: '保护', need_local_support: '本地支援', need_other: '其他' },
+    pt: { home_title: 'Reportar', start_btn: 'Iniciar', use_camera: 'Câmera', browse: 'Procurar', skip_photo: 'Pular', next: 'Continuar', tap_mic: 'Toque e fale claramente', send_undp: 'Enviar', sent_title: 'Enviado!', consent_title: 'Sua privacidade importa', consent_check: 'Concordo em compartilhar dados', consent_accept: 'Aceitar', s2_title: 'Conte-nos o que aconteceu', s2_sub: 'Fale ou digite:', audio_bullet_1: 'O que está danificado? (casa, estrada, pessoas…)', audio_bullet_2: 'Quão grave é? (pequeno / grande / destruído)', audio_bullet_3: 'Alguém está ferido ou em perigo?', audio_example: 'Exemplo: A estrada está quebrada e a água está inundando casas. 2 pessoas feridas.', audio_mic_lang: 'Você pode falar no seu idioma', audio_placeholder: 'Exemplo: Casa desabou, uma pessoa presa', home_offline_hint: '📡 Funciona offline e com internet limitada.', home_metric_reports: 'Relatórios enviados', home_metric_lives: 'Vidas salvas', fp_photo: 'Foto', fp_details: 'Detalhes', fp_review: 'Revisar', fp_send: 'Enviar', my_reports: 'Meus relatórios', mr_resolved: 'Resolvidos', mr_lives_impacted: 'Vidas afetadas', in_flight: 'Em envio', submitted: 'Enviado', empty_in_flight: 'Nada em envio. Toque em Iniciar para criar um.', empty_submitted: 'Nada enviado ainda.', rd_status_submitted: 'Enviado', rd_status_under_review: 'Em análise', rd_status_accepted: 'Aceito', rd_status_rejected: 'Rejeitado', rd_tl_submitted: 'Enviado', rd_tl_review: 'Em análise', rd_tl_accepted: 'Aceito', rd_tl_rejected: 'Rejeitado', rd_tl_help_sent: 'Ajuda enviada', rd_meta_location: 'Local', rd_meta_crisis: 'Crise', rd_meta_what: 'O quê', rd_meta_damage: 'Dano', rd_meta_severity: 'Gravidade', rd_delete_queued: 'Será excluído ao conectar.', rd_people_helped_one: '~1 pessoa ajudada', rd_people_helped_many: '~{n} pessoas ajudadas', time_seconds_ago: 'há {n}s', time_minutes_ago: 'há {n} min', time_hours_ago: 'há {n} h', time_1_day_ago: 'há 1 dia', time_days_ago: 'há {n} dias', time_1_month_ago: 'há 1 mês', time_months_ago: 'há {n} meses', back: 'Voltar', review_details_title: 'Detalhes', confirm_title: 'Confirmar', summary_incident: 'Incidente', summary_details: 'Detalhes', summary_edit: '✏️ Editar', summary_needs_prefix: '🆘 Necessidades:', summary_debris: '🚛 Remoção de detritos necessária', summary_none: '-', wildfire: 'Incêndio florestal', earthquake: 'Terremoto', cyclone: 'Ciclone', hurricane: 'Furacão', landslide: 'Deslizamento', pandemic: 'Pandemia', conflict: 'Conflito', other_crisis: 'Outro', road: 'Estrada', hospital: 'Hospital', house: 'Casa', power: 'Energia', school: 'Escola', telecom: 'Telecom', government: 'Prédio governamental', other: 'Outro', severe: 'Grave', minor: 'Leve', moderate: 'Moderado', no_damage: 'Sem danos', partial_damage: 'Parcial', complete_damage: 'Destruído', destroyed: 'Destruído', unknown: 'Desconhecido', working: 'Funcionando', disrupted: 'Interrompido', needs_label: '🆘 Necessidades urgentes', food: 'Comida', need_water: 'Água', shelter: 'Abrigo', medical: 'Médico', security: 'Segurança', need_cash: 'Dinheiro', need_livelihoods: 'Meios de vida', need_wash: 'WASH', need_basic_services: 'Serviços básicos', need_protection: 'Proteção', need_local_support: 'Apoio local', need_other: 'Outro' },
+    de: { home_title: 'Vorfall melden', start_btn: 'Starten', use_camera: 'Kamera', browse: 'Suchen', skip_photo: 'Überspringen', next: 'Weiter', tap_mic: 'Sprechen', send_undp: 'Senden', sent_title: 'Gesendet!', consent_title: 'Ihre Privatsphäre ist wichtig', consent_check: 'Ich stimme der Datenweitergabe zu', consent_accept: 'Akzeptieren', home_offline_hint: '📡 Funktioniert offline und bei schlechter Internetverbindung.', home_metric_reports: 'Übermittelte Berichte', home_metric_lives: 'Gerettete Leben', fp_photo: 'Foto', fp_details: 'Details', fp_review: 'Prüfen', fp_send: 'Senden', my_reports: 'Meine Berichte', mr_resolved: 'Gelöst', mr_lives_impacted: 'Betroffene Leben', in_flight: 'Im Versand', submitted: 'Gesendet', empty_in_flight: 'Nichts im Versand. Tippen Sie auf Starten, um einen Bericht zu erstellen.', empty_submitted: 'Noch nichts gesendet.', rd_status_submitted: 'Gesendet', rd_status_under_review: 'In Prüfung', rd_status_accepted: 'Angenommen', rd_status_rejected: 'Abgelehnt', rd_tl_submitted: 'Gesendet', rd_tl_review: 'In Prüfung', rd_tl_accepted: 'Angenommen', rd_tl_rejected: 'Abgelehnt', rd_tl_help_sent: 'Hilfe gesendet', rd_meta_location: 'Ort', rd_meta_crisis: 'Krise', rd_meta_what: 'Was', rd_meta_damage: 'Schaden', rd_meta_severity: 'Schweregrad', rd_delete_queued: 'Wird bei Verbindung gelöscht.', rd_people_helped_one: '~1 Person geholfen', rd_people_helped_many: '~{n} Personen geholfen', time_seconds_ago: 'vor {n}s', time_minutes_ago: 'vor {n} min', time_hours_ago: 'vor {n} h', time_1_day_ago: 'vor 1 Tag', time_days_ago: 'vor {n} Tagen', time_1_month_ago: 'vor 1 Monat', time_months_ago: 'vor {n} Monaten', back: 'Zurück', review_details_title: 'Details', confirm_title: 'Bestätigen', summary_incident: 'Vorfall', summary_details: 'Details', summary_edit: '✏️ Bearbeiten', summary_needs_prefix: '🆘 Bedarf:', summary_debris: '🚛 Trümmerbeseitigung nötig', summary_none: '-', wildfire: 'Waldbrand', earthquake: 'Erdbeben', cyclone: 'Zyklon', hurricane: 'Hurrikan', landslide: 'Erdrutsch', pandemic: 'Pandemie', conflict: 'Konflikt', other_crisis: 'Sonstiges', road: 'Straße', hospital: 'Krankenhaus', house: 'Haus', power: 'Strom', school: 'Schule', telecom: 'Telekom', government: 'Gebäude', other: 'Sonstiges', severe: 'Schwer', minor: 'Leicht', moderate: 'Mittel', no_damage: 'Kein Schaden', partial_damage: 'Teilweise', complete_damage: 'Zerstört', destroyed: 'Zerstört', unknown: 'Unbekannt', working: 'Funktioniert', disrupted: 'Gestört', needs_label: '🆘 Dringender Bedarf', food: 'Essen', need_water: 'Wasser', shelter: 'Unterkunft', medical: 'Medizin', security: 'Sicherheit', need_cash: 'Bargeld', need_livelihoods: 'Lebensgrundlage', need_wash: 'WASH', need_basic_services: 'Grundversorgung', need_protection: 'Schutz', need_local_support: 'Lokale Hilfe', need_other: 'Sonstiges' },
     it: { home_title: 'Segnala un evento', start_btn: 'Inizia', use_camera: 'Foto', browse: 'Sfoglia', skip_photo: 'Salta', next: 'Avanti', tap_mic: 'Parla', send_undp: 'Invia', sent_title: 'Inviato!', consent_title: 'La tua privacy è importante', consent_check: 'Acconsento alla condivisione dei dati', consent_accept: 'Accetta', home_offline_hint: '📡 Funziona offline e con internet limitato.', home_metric_reports: 'Rapporti inviati', home_metric_lives: 'Vite salvate', fp_photo: 'Foto', fp_details: 'Dettagli', fp_review: 'Controlla', fp_send: 'Invia', my_reports: 'I miei rapporti' },
     tr: { home_title: 'Olay bildir', start_btn: 'Başla', use_camera: 'Kamera', browse: 'Ara', skip_photo: 'Atla', next: 'İleri', tap_mic: 'Konuş', send_undp: 'Gönder', sent_title: 'Gönderildi!', consent_title: 'Gizliliğiniz önemli', consent_check: 'Veri paylaşmayı kabul ediyorum', consent_accept: 'Kabul et', home_offline_hint: '📡 Çevrimdışı ve zayıf internet bağlantısında çalışır.', home_metric_reports: 'Gönderilen raporlar', home_metric_lives: 'Kurtarılan hayatlar', fp_photo: 'Fotoğraf', fp_details: 'Detaylar', fp_review: 'İncele', fp_send: 'Gönder', my_reports: 'Raporlarım' },
     uk: { home_title: 'Повідомити про інцидент', start_btn: 'Почати', use_camera: 'Камера', browse: 'Огляд', skip_photo: 'Пропустити', next: 'Далі', tap_mic: 'Записати', send_undp: 'Надіслати', sent_title: 'Надіслано!', consent_title: 'Ваша конфіденційність важлива', consent_check: 'Я погоджуюсь на передачу даних', consent_accept: 'Прийняти', home_offline_hint: "📡 Працює офлайн і за поганого інтернет-з'єднання.", home_metric_reports: 'Надіслані звіти', home_metric_lives: 'Врятовані життя', fp_photo: 'Фото', fp_details: 'Деталі', fp_review: 'Перевірити', fp_send: 'Надіслати', my_reports: 'Мої звіти' },
-    ja: { home_title: '事件を報告', start_btn: '開始', use_camera: 'カメラ', browse: '参照', skip_photo: 'スキップ', next: '次へ', tap_mic: '話す', send_undp: '送信', sent_title: '送信済み!', consent_title: 'プライバシーについて', consent_check: 'データ共有に同意します', consent_accept: '同意', home_offline_hint: '📡 オフラインや低速接続でも動作します。', home_metric_reports: '送信したレポート', home_metric_lives: '救われた命', fp_photo: '写真', fp_details: '詳細', fp_review: '確認', fp_send: '送信', my_reports: 'マイレポート', mr_resolved: '解決済み', mr_lives_impacted: '影響を受けた命', in_flight: '送信中', submitted: '送信済み', empty_in_flight: '送信中はありません。新規作成するには開始をタップ。', empty_submitted: 'まだ送信されていません。', rd_status_submitted: '送信済み', rd_status_under_review: '審査中', rd_status_accepted: '承認済み', rd_status_rejected: '拒否', rd_tl_submitted: '送信済み', rd_tl_review: '審査中', rd_tl_accepted: '承認済み', rd_tl_rejected: '拒否', rd_tl_help_sent: '救援派遣済み', rd_meta_location: '場所', rd_meta_crisis: '危機', rd_meta_what: '何', rd_meta_damage: '損傷', rd_meta_severity: '重大度', rd_delete_queued: '接続時に削除されます。', rd_people_helped_one: '~1人を救助', rd_people_helped_many: '~{n}人を救助', time_seconds_ago: '{n}秒前', time_minutes_ago: '{n}分前', time_hours_ago: '{n}時間前', time_1_day_ago: '1日前', time_days_ago: '{n}日前', time_1_month_ago: '1ヶ月前', time_months_ago: '{n}ヶ月前', back: '戻る', review_details_title: '詳細', confirm_title: '確認', summary_incident: '事件', summary_details: '詳細', summary_edit: '✏️ 編集', summary_needs_prefix: '🆘 必要:', summary_debris: '🚛 がれき撤去が必要', summary_none: '—', wildfire: '山火事', earthquake: '地震', cyclone: 'サイクロン', hurricane: 'ハリケーン', landslide: '地すべり', pandemic: 'パンデミック', conflict: '紛争', other_crisis: 'その他', road: '道路', hospital: '病院', house: '家', power: '電力', school: '学校', telecom: '通信', government: '政府ビル', other: 'その他', severe: '深刻', minor: '軽微', moderate: '中程度', no_damage: '被害なし', partial_damage: '部分的', complete_damage: '全壊', destroyed: '全壊', unknown: '不明', working: '稼働中', disrupted: '中断', needs_label: '🆘 緊急ニーズ', food: '食料', need_water: '水', shelter: '避難所', medical: '医療', security: '治安', need_cash: '現金', need_livelihoods: '生計', need_wash: '水と衛生', need_basic_services: '基本サービス', need_protection: '保護', need_local_support: '地域支援', need_other: 'その他' },
-    ko: { home_title: '사건 신고', start_btn: '시작', use_camera: '카메라', browse: '찾기', skip_photo: '건너뛰기', next: '다음', tap_mic: '말하기', send_undp: '보내기', sent_title: '전송됨!', consent_title: '개인정보 보호', consent_check: '데이터 공유에 동의합니다', consent_accept: '동의', home_offline_hint: '📡 오프라인 및 낮은 인터넷 환경에서도 작동합니다.', home_metric_reports: '제출한 신고', home_metric_lives: '구한 생명', fp_photo: '사진', fp_details: '세부사항', fp_review: '검토', fp_send: '보내기', my_reports: '내 신고', mr_resolved: '해결됨', mr_lives_impacted: '영향받은 생명', in_flight: '전송 중', submitted: '제출됨', empty_in_flight: '전송 중 항목 없음. 새로 만들려면 시작을 탭하세요.', empty_submitted: '아직 제출되지 않았습니다.', rd_status_submitted: '제출됨', rd_status_under_review: '검토 중', rd_status_accepted: '승인됨', rd_status_rejected: '거부됨', rd_tl_submitted: '제출됨', rd_tl_review: '검토 중', rd_tl_accepted: '승인됨', rd_tl_rejected: '거부됨', rd_tl_help_sent: '지원 파견됨', rd_meta_location: '위치', rd_meta_crisis: '위기', rd_meta_what: '무엇', rd_meta_damage: '피해', rd_meta_severity: '심각도', rd_delete_queued: '연결 시 삭제됩니다.', rd_people_helped_one: '~1명 지원', rd_people_helped_many: '~{n}명 지원', time_seconds_ago: '{n}초 전', time_minutes_ago: '{n}분 전', time_hours_ago: '{n}시간 전', time_1_day_ago: '1일 전', time_days_ago: '{n}일 전', time_1_month_ago: '1달 전', time_months_ago: '{n}달 전', back: '뒤로', review_details_title: '세부사항', confirm_title: '확인', summary_incident: '사건', summary_details: '세부사항', summary_edit: '✏️ 편집', summary_needs_prefix: '🆘 필요:', summary_debris: '🚛 잔해 제거 필요', summary_none: '—', wildfire: '산불', earthquake: '지진', cyclone: '사이클론', hurricane: '허리케인', landslide: '산사태', pandemic: '팬데믹', conflict: '분쟁', other_crisis: '기타', road: '도로', hospital: '병원', house: '집', power: '전기', school: '학교', telecom: '통신', government: '정부 건물', other: '기타', severe: '심각', minor: '경미', moderate: '중간', no_damage: '피해 없음', partial_damage: '부분', complete_damage: '파괴', destroyed: '파괴', unknown: '알 수 없음', working: '작동 중', disrupted: '중단', needs_label: '🆘 긴급 필요', food: '음식', need_water: '물', shelter: '대피소', medical: '의료', security: '보안', need_cash: '현금', need_livelihoods: '생계', need_wash: 'WASH', need_basic_services: '기본 서비스', need_protection: '보호', need_local_support: '지역 지원', need_other: '기타' },
+    ja: { home_title: '事件を報告', start_btn: '開始', use_camera: 'カメラ', browse: '参照', skip_photo: 'スキップ', next: '次へ', tap_mic: '話す', send_undp: '送信', sent_title: '送信済み!', consent_title: 'プライバシーについて', consent_check: 'データ共有に同意します', consent_accept: '同意', home_offline_hint: '📡 オフラインや低速接続でも動作します。', home_metric_reports: '送信したレポート', home_metric_lives: '救われた命', fp_photo: '写真', fp_details: '詳細', fp_review: '確認', fp_send: '送信', my_reports: 'マイレポート', mr_resolved: '解決済み', mr_lives_impacted: '影響を受けた命', in_flight: '送信中', submitted: '送信済み', empty_in_flight: '送信中はありません。新規作成するには開始をタップ。', empty_submitted: 'まだ送信されていません。', rd_status_submitted: '送信済み', rd_status_under_review: '審査中', rd_status_accepted: '承認済み', rd_status_rejected: '拒否', rd_tl_submitted: '送信済み', rd_tl_review: '審査中', rd_tl_accepted: '承認済み', rd_tl_rejected: '拒否', rd_tl_help_sent: '救援派遣済み', rd_meta_location: '場所', rd_meta_crisis: '危機', rd_meta_what: '何', rd_meta_damage: '損傷', rd_meta_severity: '重大度', rd_delete_queued: '接続時に削除されます。', rd_people_helped_one: '~1人を救助', rd_people_helped_many: '~{n}人を救助', time_seconds_ago: '{n}秒前', time_minutes_ago: '{n}分前', time_hours_ago: '{n}時間前', time_1_day_ago: '1日前', time_days_ago: '{n}日前', time_1_month_ago: '1ヶ月前', time_months_ago: '{n}ヶ月前', back: '戻る', review_details_title: '詳細', confirm_title: '確認', summary_incident: '事件', summary_details: '詳細', summary_edit: '✏️ 編集', summary_needs_prefix: '🆘 必要:', summary_debris: '🚛 がれき撤去が必要', summary_none: '-', wildfire: '山火事', earthquake: '地震', cyclone: 'サイクロン', hurricane: 'ハリケーン', landslide: '地すべり', pandemic: 'パンデミック', conflict: '紛争', other_crisis: 'その他', road: '道路', hospital: '病院', house: '家', power: '電力', school: '学校', telecom: '通信', government: '政府ビル', other: 'その他', severe: '深刻', minor: '軽微', moderate: '中程度', no_damage: '被害なし', partial_damage: '部分的', complete_damage: '全壊', destroyed: '全壊', unknown: '不明', working: '稼働中', disrupted: '中断', needs_label: '🆘 緊急ニーズ', food: '食料', need_water: '水', shelter: '避難所', medical: '医療', security: '治安', need_cash: '現金', need_livelihoods: '生計', need_wash: '水と衛生', need_basic_services: '基本サービス', need_protection: '保護', need_local_support: '地域支援', need_other: 'その他' },
+    ko: { home_title: '사건 신고', start_btn: '시작', use_camera: '카메라', browse: '찾기', skip_photo: '건너뛰기', next: '다음', tap_mic: '말하기', send_undp: '보내기', sent_title: '전송됨!', consent_title: '개인정보 보호', consent_check: '데이터 공유에 동의합니다', consent_accept: '동의', home_offline_hint: '📡 오프라인 및 낮은 인터넷 환경에서도 작동합니다.', home_metric_reports: '제출한 신고', home_metric_lives: '구한 생명', fp_photo: '사진', fp_details: '세부사항', fp_review: '검토', fp_send: '보내기', my_reports: '내 신고', mr_resolved: '해결됨', mr_lives_impacted: '영향받은 생명', in_flight: '전송 중', submitted: '제출됨', empty_in_flight: '전송 중 항목 없음. 새로 만들려면 시작을 탭하세요.', empty_submitted: '아직 제출되지 않았습니다.', rd_status_submitted: '제출됨', rd_status_under_review: '검토 중', rd_status_accepted: '승인됨', rd_status_rejected: '거부됨', rd_tl_submitted: '제출됨', rd_tl_review: '검토 중', rd_tl_accepted: '승인됨', rd_tl_rejected: '거부됨', rd_tl_help_sent: '지원 파견됨', rd_meta_location: '위치', rd_meta_crisis: '위기', rd_meta_what: '무엇', rd_meta_damage: '피해', rd_meta_severity: '심각도', rd_delete_queued: '연결 시 삭제됩니다.', rd_people_helped_one: '~1명 지원', rd_people_helped_many: '~{n}명 지원', time_seconds_ago: '{n}초 전', time_minutes_ago: '{n}분 전', time_hours_ago: '{n}시간 전', time_1_day_ago: '1일 전', time_days_ago: '{n}일 전', time_1_month_ago: '1달 전', time_months_ago: '{n}달 전', back: '뒤로', review_details_title: '세부사항', confirm_title: '확인', summary_incident: '사건', summary_details: '세부사항', summary_edit: '✏️ 편집', summary_needs_prefix: '🆘 필요:', summary_debris: '🚛 잔해 제거 필요', summary_none: '-', wildfire: '산불', earthquake: '지진', cyclone: '사이클론', hurricane: '허리케인', landslide: '산사태', pandemic: '팬데믹', conflict: '분쟁', other_crisis: '기타', road: '도로', hospital: '병원', house: '집', power: '전기', school: '학교', telecom: '통신', government: '정부 건물', other: '기타', severe: '심각', minor: '경미', moderate: '중간', no_damage: '피해 없음', partial_damage: '부분', complete_damage: '파괴', destroyed: '파괴', unknown: '알 수 없음', working: '작동 중', disrupted: '중단', needs_label: '🆘 긴급 필요', food: '음식', need_water: '물', shelter: '대피소', medical: '의료', security: '보안', need_cash: '현금', need_livelihoods: '생계', need_wash: 'WASH', need_basic_services: '기본 서비스', need_protection: '보호', need_local_support: '지역 지원', need_other: '기타' },
     am: { home_title: 'ክስተት ሪፖርት ያድርጉ', start_btn: 'ጀምር', use_camera: 'ካሜራ', browse: 'ፈልግ', skip_photo: 'ዝለል', next: 'ቀጣይ', tap_mic: 'ንካ', send_undp: 'ላክ', sent_title: 'ተልኳል!', consent_title: 'ግላዊነትዎ ጠቃሚ', consent_check: 'ዳታ ማጋራት እስማማለሁ', consent_accept: 'ተቀበል', home_offline_hint: '📡 ከመስመር ውጭ እና በዝቅተኛ ኢንተርኔት ግንኙነት ይሰራል።', home_metric_reports: 'የቀረቡ ሪፖርቶች', home_metric_lives: 'የዳኑ ሕይወቶች', fp_photo: 'ፎቶ', fp_details: 'ዝርዝሮች', fp_review: 'ገምግም', fp_send: 'ላክ', my_reports: 'የእኔ ሪፖርቶች' },
-    ur: { home_title: 'واقعہ رپورٹ کریں', start_btn: 'شروع', use_camera: 'کیمرا', browse: 'تلاش', skip_photo: 'چھوڑیں', next: 'جاری رکھیں', back: 'پیچھے', tap_mic: 'بولیں', send_undp: 'بھیجیں', sent_title: 'بھیج دیا!', consent_title: 'آپ کی رازداری اہم ہے', consent_check: 'ڈیٹا شیئر کرنے پر متفق', consent_accept: 'قبول', home_offline_hint: '📡 آف لائن اور کم انٹرنیٹ کنیکٹوٹی میں کام کرتا ہے۔', home_metric_reports: 'جمع کرائی گئی رپورٹیں', home_metric_lives: 'بچائی گئی زندگیاں', fp_photo: 'تصویر', fp_details: 'تفصیلات', fp_review: 'جائزہ', fp_send: 'بھیجیں', my_reports: 'میری رپورٹیں', mr_resolved: 'حل ہو گیا', mr_lives_impacted: 'متاثرہ زندگیاں', in_flight: 'پرواز میں', submitted: 'جمع کرائی گئی', empty_in_flight: 'پرواز میں کچھ نہیں۔ نئی رپورٹ شروع کرنے کے لیے ٹیپ کریں۔', empty_submitted: 'ابھی تک کچھ جمع نہیں کرایا گیا۔', rd_status_submitted: 'جمع کرائی گئی', rd_status_under_review: 'جائزے میں', rd_status_accepted: 'منظور', rd_status_rejected: 'مسترد', rd_tl_submitted: 'جمع کرائی گئی', rd_tl_review: 'جائزے میں', rd_tl_accepted: 'منظور', rd_tl_rejected: 'مسترد', rd_tl_help_sent: 'مدد بھیجی گئی', rd_meta_location: 'مقام', rd_meta_crisis: 'بحران', rd_meta_what: 'کیا', rd_meta_damage: 'نقصان', rd_meta_severity: 'شدت', rd_feedback_accepted_title: 'آپ کی رپورٹ نے تیز ردعمل میں مدد کی', rd_feedback_awaiting: 'منظور — بھیجنے کا انتظار', rd_action_help_arrived: 'مدد موقع پر پہنچ گئی', rd_action_help_dispatched: 'مدد بھیج دی گئی', rd_people_helped_one: '~1 فرد کی مدد', rd_people_helped_many: '~{n} افراد کی مدد', rd_rejection_default: 'جائزہ کاروں نے اس رپورٹ کو غیر معتبر قرار دیا۔', rd_delete_in_progress: 'حذف جاری ہے۔ یہ رپورٹ 24 گھنٹوں میں مستقل طور پر ہٹا دی جائے گی۔', rd_delete_queued: 'کنکشن ہونے پر حذف ہو جائے گا۔', rd_delete_confirm_prompt: 'یہ رپورٹ حذف کریں؟\n\nآپ کا ڈیٹا 24 گھنٹوں میں مستقل ہٹا دیا جائے گا۔ یہ واپس نہیں ہوگا۔', time_seconds_ago: '{n} سیکنڈ پہلے', time_minutes_ago: '{n} منٹ پہلے', time_hours_ago: '{n} گھنٹے پہلے', time_1_day_ago: '1 دن پہلے', time_days_ago: '{n} دن پہلے', time_1_month_ago: '1 مہینہ پہلے', time_months_ago: '{n} مہینے پہلے', review_details_title: 'تفصیلات', confirm_title: 'تصدیق کریں', summary_incident: 'واقعہ', summary_details: 'تفصیلات', summary_edit: '✏️ ترمیم', summary_needs_prefix: '🆘 ضروریات:', summary_debris: '🚛 ملبہ ہٹانے کی ضرورت', summary_none: '—', description_label: 'تفصیل', crisis_label: 'کیا وجہ تھی؟', damage_label: 'کتنا نقصان؟', severity_label: 'شدت؟', service_label: 'اختیاری: سروس کی حالت', needs_label: '🆘 فوری ضروریات', what_damaged: 'کیا نقصان ہوا؟', earthquake: 'زلزلہ', flood: 'سیلاب', conflict: 'تنازع', hurricane: 'سمندری طوفان', cyclone: 'سمندری طوفان', wildfire: 'جنگل کی آگ', landslide: 'زمینی تودہ', pandemic: 'وبا', other_crisis: 'دیگر', road: 'سڑک', hospital: 'ہسپتال', house: 'گھر', power: 'بجلی', water: 'پانی', school: 'اسکول', telecom: 'مواصلات', government: 'سرکاری عمارت', other: 'دیگر', severity_minor: 'معمولی', minor: 'معمولی', moderate: 'اعتدال پسند', severe: 'شدید', no_damage: 'کوئی نقصان نہیں', partial_damage: 'جزوی', complete_damage: 'مکمل تباہ', destroyed: 'تباہ', electricity: '⚡ بجلی', water_svc: '💧 پانی', health_svc: '🏥 صحت', unknown: 'نامعلوم', working: 'کام کر رہا ہے', disrupted: 'متاثر', food: 'خوراک', need_water: 'پانی', shelter: 'پناہ', medical: 'طبی', security: 'سلامتی', need_cash: 'نقد', need_livelihoods: 'معاش', need_wash: 'WASH', need_basic_services: 'بنیادی خدمات', need_protection: 'تحفظ', need_local_support: 'مقامی مدد', need_other: 'دیگر' },
+    ur: { home_title: 'واقعہ رپورٹ کریں', start_btn: 'شروع', use_camera: 'کیمرا', browse: 'تلاش', skip_photo: 'چھوڑیں', next: 'جاری رکھیں', back: 'پیچھے', tap_mic: 'بولیں', send_undp: 'بھیجیں', sent_title: 'بھیج دیا!', consent_title: 'آپ کی رازداری اہم ہے', consent_check: 'ڈیٹا شیئر کرنے پر متفق', consent_accept: 'قبول', home_offline_hint: '📡 آف لائن اور کم انٹرنیٹ کنیکٹوٹی میں کام کرتا ہے۔', home_metric_reports: 'جمع کرائی گئی رپورٹیں', home_metric_lives: 'بچائی گئی زندگیاں', fp_photo: 'تصویر', fp_details: 'تفصیلات', fp_review: 'جائزہ', fp_send: 'بھیجیں', my_reports: 'میری رپورٹیں', mr_resolved: 'حل ہو گیا', mr_lives_impacted: 'متاثرہ زندگیاں', in_flight: 'پرواز میں', submitted: 'جمع کرائی گئی', empty_in_flight: 'پرواز میں کچھ نہیں۔ نئی رپورٹ شروع کرنے کے لیے ٹیپ کریں۔', empty_submitted: 'ابھی تک کچھ جمع نہیں کرایا گیا۔', rd_status_submitted: 'جمع کرائی گئی', rd_status_under_review: 'جائزے میں', rd_status_accepted: 'منظور', rd_status_rejected: 'مسترد', rd_tl_submitted: 'جمع کرائی گئی', rd_tl_review: 'جائزے میں', rd_tl_accepted: 'منظور', rd_tl_rejected: 'مسترد', rd_tl_help_sent: 'مدد بھیجی گئی', rd_meta_location: 'مقام', rd_meta_crisis: 'بحران', rd_meta_what: 'کیا', rd_meta_damage: 'نقصان', rd_meta_severity: 'شدت', rd_feedback_accepted_title: 'آپ کی رپورٹ نے تیز ردعمل میں مدد کی', rd_feedback_awaiting: 'منظور - بھیجنے کا انتظار', rd_action_help_arrived: 'مدد موقع پر پہنچ گئی', rd_action_help_dispatched: 'مدد بھیج دی گئی', rd_people_helped_one: '~1 فرد کی مدد', rd_people_helped_many: '~{n} افراد کی مدد', rd_rejection_default: 'جائزہ کاروں نے اس رپورٹ کو غیر معتبر قرار دیا۔', rd_delete_in_progress: 'حذف جاری ہے۔ یہ رپورٹ 24 گھنٹوں میں مستقل طور پر ہٹا دی جائے گی۔', rd_delete_queued: 'کنکشن ہونے پر حذف ہو جائے گا۔', rd_delete_confirm_prompt: 'یہ رپورٹ حذف کریں؟\n\nآپ کا ڈیٹا 24 گھنٹوں میں مستقل ہٹا دیا جائے گا۔ یہ واپس نہیں ہوگا۔', time_seconds_ago: '{n} سیکنڈ پہلے', time_minutes_ago: '{n} منٹ پہلے', time_hours_ago: '{n} گھنٹے پہلے', time_1_day_ago: '1 دن پہلے', time_days_ago: '{n} دن پہلے', time_1_month_ago: '1 مہینہ پہلے', time_months_ago: '{n} مہینے پہلے', review_details_title: 'تفصیلات', confirm_title: 'تصدیق کریں', summary_incident: 'واقعہ', summary_details: 'تفصیلات', summary_edit: '✏️ ترمیم', summary_needs_prefix: '🆘 ضروریات:', summary_debris: '🚛 ملبہ ہٹانے کی ضرورت', summary_none: '-', description_label: 'تفصیل', crisis_label: 'کیا وجہ تھی؟', damage_label: 'کتنا نقصان؟', severity_label: 'شدت؟', service_label: 'اختیاری: سروس کی حالت', needs_label: '🆘 فوری ضروریات', what_damaged: 'کیا نقصان ہوا؟', earthquake: 'زلزلہ', flood: 'سیلاب', conflict: 'تنازع', hurricane: 'سمندری طوفان', cyclone: 'سمندری طوفان', wildfire: 'جنگل کی آگ', landslide: 'زمینی تودہ', pandemic: 'وبا', other_crisis: 'دیگر', road: 'سڑک', hospital: 'ہسپتال', house: 'گھر', power: 'بجلی', water: 'پانی', school: 'اسکول', telecom: 'مواصلات', government: 'سرکاری عمارت', other: 'دیگر', severity_minor: 'معمولی', minor: 'معمولی', moderate: 'اعتدال پسند', severe: 'شدید', no_damage: 'کوئی نقصان نہیں', partial_damage: 'جزوی', complete_damage: 'مکمل تباہ', destroyed: 'تباہ', electricity: '⚡ بجلی', water_svc: '💧 پانی', health_svc: '🏥 صحت', unknown: 'نامعلوم', working: 'کام کر رہا ہے', disrupted: 'متاثر', food: 'خوراک', need_water: 'پانی', shelter: 'پناہ', medical: 'طبی', security: 'سلامتی', need_cash: 'نقد', need_livelihoods: 'معاش', need_wash: 'WASH', need_basic_services: 'بنیادی خدمات', need_protection: 'تحفظ', need_local_support: 'مقامی مدد', need_other: 'دیگر' },
     ne: { home_title: 'घटना रिपोर्ट गर्नुहोस्', start_btn: 'सुरु', use_camera: 'क्यामेरा', browse: 'खोज', skip_photo: 'छोड्नुहोस्', next: 'अर्को', tap_mic: 'बोल्नुहोस्', send_undp: 'पठाउ', sent_title: 'पठाइयो!', consent_title: 'तपाईंको गोपनीयता महत्त्वपूर्ण', consent_check: 'डाटा साझा गर्न सहमत', consent_accept: 'स्वीकार', home_offline_hint: '📡 अफलाइन र कम इन्टरनेट कनेक्टिविटीमा काम गर्छ।', home_metric_reports: 'पेश गरिएका रिपोर्टहरू', home_metric_lives: 'बचाइएका जीवनहरू', fp_photo: 'फोटो', fp_details: 'विवरण', fp_review: 'समीक्षा', fp_send: 'पठाउ', my_reports: 'मेरा रिपोर्टहरू' },
     th: { home_title: 'รายงานเหตุการณ์', start_btn: 'เริ่ม', use_camera: 'กล้อง', browse: 'ค้นหา', skip_photo: 'ข้าม', next: 'ถัดไป', tap_mic: 'พูด', send_undp: 'ส่ง', sent_title: 'ส่งแล้ว!', consent_title: 'ความเป็นส่วนตัวสำคัญ', consent_check: 'ยินยอมแบ่งปันข้อมูล', consent_accept: 'ยอมรับ', home_offline_hint: '📡 ทำงานแบบออฟไลน์และการเชื่อมต่ออินเทอร์เน็ตต่ำ', home_metric_reports: 'รายงานที่ส่ง', home_metric_lives: 'ชีวิตที่รอด', fp_photo: 'รูป', fp_details: 'รายละเอียด', fp_review: 'ตรวจสอบ', fp_send: 'ส่ง', my_reports: 'รายงานของฉัน' },
     vi: { home_title: 'Báo cáo sự cố', start_btn: 'Bắt đầu', use_camera: 'Máy ảnh', browse: 'Duyệt', skip_photo: 'Bỏ qua', next: 'Tiếp', tap_mic: 'Nói', send_undp: 'Gửi', sent_title: 'Đã gửi!', consent_title: 'Quyền riêng tư quan trọng', consent_check: 'Tôi đồng ý chia sẻ dữ liệu', consent_accept: 'Chấp nhận', home_offline_hint: '📡 Hoạt động khi không có mạng hoặc mạng yếu.', home_metric_reports: 'Báo cáo đã gửi', home_metric_lives: 'Mạng sống được cứu', fp_photo: 'Ảnh', fp_details: 'Chi tiết', fp_review: 'Xem lại', fp_send: 'Gửi', my_reports: 'Báo cáo của tôi' },
@@ -4337,7 +4337,7 @@ const EXTRA_LANG = {
     si: { home_title: 'සිද්ධියක් වාර්තා කරන්න', start_btn: 'ආරම්භ', use_camera: 'කැමරාව', browse: 'සොයන්න', skip_photo: 'මඟ හරින්න', next: 'ඊළඟ', tap_mic: 'කතා කරන්න', send_undp: 'යවන්න', sent_title: 'යැවීය!', consent_title: 'ඔබේ පෞද්ගලිකත්වය වැදගත්', consent_check: 'දත්ත බෙදා ගැනීමට එකඟ', consent_accept: 'පිළිගන්න', home_offline_hint: '📡 නොබැඳි සහ අඩු අන්තර්ජාල සම්බන්ධතාවකින් ක්‍රියාත්මක වේ.', home_metric_reports: 'ඉදිරිපත් කළ වාර්තා', home_metric_lives: 'බේරාගත් ජීවිත', fp_photo: 'ඡායාරූපය', fp_details: 'විස්තර', fp_review: 'සමාලෝචනය', fp_send: 'යවන්න', my_reports: 'මගේ වාර්තා' },
     he: { home_title: 'דווח על אירוע', start_btn: 'התחל', use_camera: 'מצלמה', browse: 'חפש', skip_photo: 'דלג', next: 'הבא', tap_mic: 'דבר', send_undp: 'שלח', sent_title: 'נשלח!', consent_title: 'הפרטיות שלך חשובה', consent_check: 'אני מסכים לשתף נתונים', consent_accept: 'אישור', home_offline_hint: '📡 פועל גם ללא אינטרנט ובחיבור איטי.', home_metric_reports: 'דיווחים שנשלחו', home_metric_lives: 'חיים שניצלו', fp_photo: 'תמונה', fp_details: 'פרטים', fp_review: 'סקירה', fp_send: 'שלח', my_reports: 'הדיווחים שלי' },
     el: { home_title: 'Αναφορά συμβάντος', start_btn: 'Έναρξη', use_camera: 'Κάμερα', browse: 'Αναζήτηση', skip_photo: 'Παράλειψη', next: 'Επόμενο', tap_mic: 'Μιλήστε', send_undp: 'Αποστολή', sent_title: 'Εστάλη!', consent_title: 'Το απόρρητό σας μετράει', consent_check: 'Συμφωνώ να μοιραστώ δεδομένα', consent_accept: 'Αποδοχή', home_offline_hint: '📡 Λειτουργεί εκτός σύνδεσης και σε αργό internet.', home_metric_reports: 'Απεσταλμένες αναφορές', home_metric_lives: 'Ζωές που σώθηκαν', fp_photo: 'Φωτογραφία', fp_details: 'Λεπτομέρειες', fp_review: 'Έλεγχος', fp_send: 'Αποστολή', my_reports: 'Οι αναφορές μου' },
-    bn: { home_title: 'রিপোর্ট', start_btn: 'শুরু', use_camera: 'ক্যামেরা', browse: 'খুঁজুন', skip_photo: 'বাদ', next: 'চালিয়ে যান', tap_mic: 'চাপুন এবং স্পষ্টভাবে বলুন', send_undp: 'পাঠান', sent_title: 'পাঠানো হয়েছে!', consent_title: 'আপনার গোপনীয়তা গুরুত্বপূর্ণ', consent_check: 'ডেটা শেয়ার করতে সম্মত', consent_accept: 'গ্রহণ', s2_title: 'কী হয়েছে আমাদের বলুন', s2_sub: 'বলুন বা টাইপ করুন:', audio_bullet_1: 'কী ক্ষতিগ্রস্ত? (বাড়ি, রাস্তা, মানুষ…)', audio_bullet_2: 'কতটা খারাপ? (ছোট / বড় / সম্পূর্ণ ধ্বংস)', audio_bullet_3: 'কেউ আহত বা বিপদে আছে?', audio_example: 'উদাহরণ: রাস্তা ভেঙে গেছে এবং জল বাড়িতে ঢুকছে। 2 জন আহত।', audio_mic_lang: 'আপনি আপনার ভাষায় কথা বলতে পারেন', audio_placeholder: 'উদাহরণ: বাড়ি ধসে গেছে, একজন আটকা পড়েছে', home_offline_hint: '📡 অফলাইন এবং কম ইন্টারনেট সংযোগে কাজ করে।', home_metric_reports: 'জমা দেওয়া রিপোর্ট', home_metric_lives: 'বাঁচানো জীবন', fp_photo: 'ছবি', fp_details: 'বিবরণ', fp_review: 'পর্যালোচনা', fp_send: 'পাঠান', my_reports: 'আমার রিপোর্ট', mr_resolved: 'সমাধান হয়েছে', mr_lives_impacted: 'ক্ষতিগ্রস্ত জীবন', in_flight: 'পাঠানো হচ্ছে', submitted: 'জমা দেওয়া হয়েছে', empty_in_flight: 'কিছুই পাঠানো হচ্ছে না। নতুন তৈরি করতে শুরু করুন ট্যাপ করুন।', empty_submitted: 'এখনও কিছু জমা দেওয়া হয়নি।', rd_status_submitted: 'জমা দেওয়া', rd_status_under_review: 'পর্যালোচনাধীন', rd_status_accepted: 'গৃহীত', rd_status_rejected: 'প্রত্যাখ্যাত', rd_tl_submitted: 'জমা দেওয়া', rd_tl_review: 'পর্যালোচনাধীন', rd_tl_accepted: 'গৃহীত', rd_tl_rejected: 'প্রত্যাখ্যাত', rd_tl_help_sent: 'সাহায্য পাঠানো হয়েছে', rd_meta_location: 'অবস্থান', rd_meta_crisis: 'সংকট', rd_meta_what: 'কী', rd_meta_damage: 'ক্ষতি', rd_meta_severity: 'তীব্রতা', rd_delete_queued: 'সংযোগ হলে মুছে যাবে।', rd_people_helped_one: '~১ জনকে সাহায্য', rd_people_helped_many: '~{n} জনকে সাহায্য', time_seconds_ago: '{n} সেকেন্ড আগে', time_minutes_ago: '{n} মিনিট আগে', time_hours_ago: '{n} ঘন্টা আগে', time_1_day_ago: '১ দিন আগে', time_days_ago: '{n} দিন আগে', time_1_month_ago: '১ মাস আগে', time_months_ago: '{n} মাস আগে', back: 'পিছনে', review_details_title: 'বিবরণ', confirm_title: 'নিশ্চিত করুন', summary_incident: 'ঘটনা', summary_details: 'বিবরণ', summary_edit: '✏️ সম্পাদনা', summary_needs_prefix: '🆘 প্রয়োজন:', summary_debris: '🚛 ধ্বংসাবশেষ পরিষ্কার দরকার', summary_none: '—', wildfire: 'বনাগ্নি', earthquake: 'ভূমিকম্প', cyclone: 'ঘূর্ণিঝড়', hurricane: 'হারিকেন', landslide: 'ভূমিধ্বস', pandemic: 'মহামারী', conflict: 'সংঘাত', other_crisis: 'অন্যান্য', road: 'রাস্তা', hospital: 'হাসপাতাল', house: 'বাড়ি', power: 'বিদ্যুৎ', school: 'স্কুল', telecom: 'টেলিকম', government: 'সরকারি ভবন', other: 'অন্যান্য', severe: 'গুরুতর', minor: 'সামান্য', moderate: 'মাঝারি', no_damage: 'ক্ষতি নেই', partial_damage: 'আংশিক', complete_damage: 'ধ্বংস', destroyed: 'ধ্বংস', unknown: 'অজানা', working: 'কাজ করছে', disrupted: 'বিঘ্নিত', needs_label: '🆘 জরুরি প্রয়োজন', food: 'খাবার', need_water: 'পানি', shelter: 'আশ্রয়', medical: 'চিকিৎসা', security: 'নিরাপত্তা', need_cash: 'অর্থ', need_livelihoods: 'জীবিকা', need_wash: 'WASH', need_basic_services: 'মৌলিক সেবা', need_protection: 'সুরক্ষা', need_local_support: 'স্থানীয় সহায়তা', need_other: 'অন্যান্য' },
+    bn: { home_title: 'রিপোর্ট', start_btn: 'শুরু', use_camera: 'ক্যামেরা', browse: 'খুঁজুন', skip_photo: 'বাদ', next: 'চালিয়ে যান', tap_mic: 'চাপুন এবং স্পষ্টভাবে বলুন', send_undp: 'পাঠান', sent_title: 'পাঠানো হয়েছে!', consent_title: 'আপনার গোপনীয়তা গুরুত্বপূর্ণ', consent_check: 'ডেটা শেয়ার করতে সম্মত', consent_accept: 'গ্রহণ', s2_title: 'কী হয়েছে আমাদের বলুন', s2_sub: 'বলুন বা টাইপ করুন:', audio_bullet_1: 'কী ক্ষতিগ্রস্ত? (বাড়ি, রাস্তা, মানুষ…)', audio_bullet_2: 'কতটা খারাপ? (ছোট / বড় / সম্পূর্ণ ধ্বংস)', audio_bullet_3: 'কেউ আহত বা বিপদে আছে?', audio_example: 'উদাহরণ: রাস্তা ভেঙে গেছে এবং জল বাড়িতে ঢুকছে। 2 জন আহত।', audio_mic_lang: 'আপনি আপনার ভাষায় কথা বলতে পারেন', audio_placeholder: 'উদাহরণ: বাড়ি ধসে গেছে, একজন আটকা পড়েছে', home_offline_hint: '📡 অফলাইন এবং কম ইন্টারনেট সংযোগে কাজ করে।', home_metric_reports: 'জমা দেওয়া রিপোর্ট', home_metric_lives: 'বাঁচানো জীবন', fp_photo: 'ছবি', fp_details: 'বিবরণ', fp_review: 'পর্যালোচনা', fp_send: 'পাঠান', my_reports: 'আমার রিপোর্ট', mr_resolved: 'সমাধান হয়েছে', mr_lives_impacted: 'ক্ষতিগ্রস্ত জীবন', in_flight: 'পাঠানো হচ্ছে', submitted: 'জমা দেওয়া হয়েছে', empty_in_flight: 'কিছুই পাঠানো হচ্ছে না। নতুন তৈরি করতে শুরু করুন ট্যাপ করুন।', empty_submitted: 'এখনও কিছু জমা দেওয়া হয়নি।', rd_status_submitted: 'জমা দেওয়া', rd_status_under_review: 'পর্যালোচনাধীন', rd_status_accepted: 'গৃহীত', rd_status_rejected: 'প্রত্যাখ্যাত', rd_tl_submitted: 'জমা দেওয়া', rd_tl_review: 'পর্যালোচনাধীন', rd_tl_accepted: 'গৃহীত', rd_tl_rejected: 'প্রত্যাখ্যাত', rd_tl_help_sent: 'সাহায্য পাঠানো হয়েছে', rd_meta_location: 'অবস্থান', rd_meta_crisis: 'সংকট', rd_meta_what: 'কী', rd_meta_damage: 'ক্ষতি', rd_meta_severity: 'তীব্রতা', rd_delete_queued: 'সংযোগ হলে মুছে যাবে।', rd_people_helped_one: '~১ জনকে সাহায্য', rd_people_helped_many: '~{n} জনকে সাহায্য', time_seconds_ago: '{n} সেকেন্ড আগে', time_minutes_ago: '{n} মিনিট আগে', time_hours_ago: '{n} ঘন্টা আগে', time_1_day_ago: '১ দিন আগে', time_days_ago: '{n} দিন আগে', time_1_month_ago: '১ মাস আগে', time_months_ago: '{n} মাস আগে', back: 'পিছনে', review_details_title: 'বিবরণ', confirm_title: 'নিশ্চিত করুন', summary_incident: 'ঘটনা', summary_details: 'বিবরণ', summary_edit: '✏️ সম্পাদনা', summary_needs_prefix: '🆘 প্রয়োজন:', summary_debris: '🚛 ধ্বংসাবশেষ পরিষ্কার দরকার', summary_none: '-', wildfire: 'বনাগ্নি', earthquake: 'ভূমিকম্প', cyclone: 'ঘূর্ণিঝড়', hurricane: 'হারিকেন', landslide: 'ভূমিধ্বস', pandemic: 'মহামারী', conflict: 'সংঘাত', other_crisis: 'অন্যান্য', road: 'রাস্তা', hospital: 'হাসপাতাল', house: 'বাড়ি', power: 'বিদ্যুৎ', school: 'স্কুল', telecom: 'টেলিকম', government: 'সরকারি ভবন', other: 'অন্যান্য', severe: 'গুরুতর', minor: 'সামান্য', moderate: 'মাঝারি', no_damage: 'ক্ষতি নেই', partial_damage: 'আংশিক', complete_damage: 'ধ্বংস', destroyed: 'ধ্বংস', unknown: 'অজানা', working: 'কাজ করছে', disrupted: 'বিঘ্নিত', needs_label: '🆘 জরুরি প্রয়োজন', food: 'খাবার', need_water: 'পানি', shelter: 'আশ্রয়', medical: 'চিকিৎসা', security: 'নিরাপত্তা', need_cash: 'অর্থ', need_livelihoods: 'জীবিকা', need_wash: 'WASH', need_basic_services: 'মৌলিক সেবা', need_protection: 'সুরক্ষা', need_local_support: 'স্থানীয় সহায়তা', need_other: 'অন্যান্য' },
     pa: { home_title: 'ਘਟਨਾ ਦੀ ਰਿਪੋਰਟ ਕਰੋ', start_btn: 'ਸ਼ੁਰੂ', use_camera: 'ਕੈਮਰਾ', browse: 'ਖੋਜੋ', skip_photo: 'ਛੱਡੋ', next: 'ਅੱਗੇ', tap_mic: 'ਦਬਾਓ', send_undp: 'ਭੇਜੋ', sent_title: 'ਭੇਜਿਆ!', consent_title: 'ਤੁਹਾਡੀ ਗੋਪਨੀਯਤਾ ਮਹੱਤਵਪੂਰਨ', consent_check: 'ਡੇਟਾ ਸਾਂਝਾ ਕਰਨ ਲਈ ਸਹਿਮਤ', consent_accept: 'ਸਵੀਕਾਰ', home_offline_hint: '📡 ਆਫਲਾਈਨ ਅਤੇ ਘੱਟ ਇੰਟਰਨੈੱਟ ਕਨੈਕਟੀਵਿਟੀ ਵਿੱਚ ਕੰਮ ਕਰਦਾ ਹੈ।', home_metric_reports: 'ਜਮ੍ਹਾਂ ਕੀਤੀਆਂ ਰਿਪੋਰਟਾਂ', home_metric_lives: 'ਬਚਾਈਆਂ ਜਾਨਾਂ', fp_photo: 'ਫੋਟੋ', fp_details: 'ਵੇਰਵੇ', fp_review: 'ਸਮੀਖਿਆ', fp_send: 'ਭੇਜੋ', my_reports: 'ਮੇਰੀਆਂ ਰਿਪੋਰਟਾਂ' },
 };
 
@@ -4345,7 +4345,7 @@ const EXTRA_LANG = {
 // Keys added during the UNDP-alignment sprint for each of the six UN
 // locales. Merged into the live I18N dict inside `activateLang` AFTER
 // `I18N.en` and AFTER `EXTRA_LANG[code]`, so these values take
-// precedence — the older dense packs are not re-written key-by-key.
+// precedence - the older dense packs are not re-written key-by-key.
 const UNDP_I18N_EXTRA = {
     fr: {
         minimal_damage: 'Minime', tsunami: 'Tsunami', explosion: 'Explosion',
@@ -4362,8 +4362,8 @@ const UNDP_I18N_EXTRA = {
         review_v2_title_confirm: "Vérifier et envoyer",
         fp_audio: 'Audio', fp_what: 'Quoi',
         mic_permission_alert: "Autorisez l'accès au microphone pour enregistrer.",
-        camera_blocked_toast: "Accès caméra bloqué — sélecteur de fichiers utilisé à la place.",
-        camera_unavailable_toast: "Caméra indisponible — sélecteur de fichiers utilisé.",
+        camera_blocked_toast: "Accès caméra bloqué - sélecteur de fichiers utilisé à la place.",
+        camera_unavailable_toast: "Caméra indisponible - sélecteur de fichiers utilisé.",
         delete_requested_alert: "Vos données seront supprimées définitivement sous 24 heures.",
         delete_server_unreachable: "Impossible de joindre le serveur.",
         delete_undo_failed: "Impossible d'annuler la suppression.",
@@ -4385,8 +4385,8 @@ const UNDP_I18N_EXTRA = {
         review_v2_title_confirm: 'Revisar y enviar',
         fp_audio: 'Audio', fp_what: 'Qué',
         mic_permission_alert: 'Permita el acceso al micrófono para grabar audio.',
-        camera_blocked_toast: 'Acceso a la cámara bloqueado — usando selector de archivos.',
-        camera_unavailable_toast: 'Cámara no disponible — usando selector de archivos.',
+        camera_blocked_toast: 'Acceso a la cámara bloqueado - usando selector de archivos.',
+        camera_unavailable_toast: 'Cámara no disponible - usando selector de archivos.',
         delete_requested_alert: 'Sus datos se eliminarán permanentemente en 24 horas.',
         delete_server_unreachable: 'No se pudo conectar al servidor.',
         delete_undo_failed: 'No se pudo deshacer la eliminación.',
@@ -4408,8 +4408,8 @@ const UNDP_I18N_EXTRA = {
         review_v2_title_confirm: 'راجع وأرسل',
         fp_audio: 'صوت', fp_what: 'ماذا',
         mic_permission_alert: 'يرجى السماح بالوصول إلى الميكروفون لتسجيل الصوت.',
-        camera_blocked_toast: 'تم حظر الوصول إلى الكاميرا — سيتم استخدام منتقي الملفات.',
-        camera_unavailable_toast: 'الكاميرا غير متاحة — سيتم استخدام منتقي الملفات.',
+        camera_blocked_toast: 'تم حظر الوصول إلى الكاميرا - سيتم استخدام منتقي الملفات.',
+        camera_unavailable_toast: 'الكاميرا غير متاحة - سيتم استخدام منتقي الملفات.',
         delete_requested_alert: 'سيتم حذف بياناتك نهائيًا خلال 24 ساعة.',
         delete_server_unreachable: 'تعذر الوصول إلى الخادم.',
         delete_undo_failed: 'تعذر التراجع عن الحذف.',
@@ -4431,8 +4431,8 @@ const UNDP_I18N_EXTRA = {
         review_v2_title_confirm: 'Проверить и отправить',
         fp_audio: 'Аудио', fp_what: 'Что',
         mic_permission_alert: 'Разрешите доступ к микрофону для записи.',
-        camera_blocked_toast: 'Доступ к камере заблокирован — используется выбор файла.',
-        camera_unavailable_toast: 'Камера недоступна — используется выбор файла.',
+        camera_blocked_toast: 'Доступ к камере заблокирован - используется выбор файла.',
+        camera_unavailable_toast: 'Камера недоступна - используется выбор файла.',
         delete_requested_alert: 'Ваши данные будут удалены безвозвратно в течение 24 часов.',
         delete_server_unreachable: 'Не удалось связаться с сервером.',
         delete_undo_failed: 'Не удалось отменить удаление.',
@@ -4454,8 +4454,8 @@ const UNDP_I18N_EXTRA = {
         review_v2_title_confirm: '核查并发送',
         fp_audio: '音频', fp_what: '什么',
         mic_permission_alert: '请允许访问麦克风以录制音频。',
-        camera_blocked_toast: '相机访问被阻止 — 改用文件选择器。',
-        camera_unavailable_toast: '相机不可用 — 改用文件选择器。',
+        camera_blocked_toast: '相机访问被阻止 - 改用文件选择器。',
+        camera_unavailable_toast: '相机不可用 - 改用文件选择器。',
         delete_requested_alert: '您的数据将在 24 小时内被永久删除。',
         delete_server_unreachable: '无法连接服务器。',
         delete_undo_failed: '无法撤消删除。',
@@ -4463,7 +4463,7 @@ const UNDP_I18N_EXTRA = {
         delete_all_success_count: '已删除 {n} 份报告。所有本地数据已清除。',
         confirm_yes: '是', confirm_no: '取消', confirm_delete: '删除',
     },
-    // Urdu, Farsi, Hebrew — RTL locales get the same additions so the
+    // Urdu, Farsi, Hebrew - RTL locales get the same additions so the
     // text direction flip + new keys ship together.
     ur: {
         minimal_damage: 'کم سے کم', tsunami: 'سونامی', explosion: 'دھماکہ',
@@ -4480,11 +4480,11 @@ const UNDP_I18N_EXTRA = {
 // Expose the locale dicts on window so tests, the dashboard embed shell,
 // and future debugging probes can read them without reaching into module
 // scope. Top-level `const` bindings in a classic (non-module) script are
-// accessible by bare identifier but NOT via `window.<name>` — see the
+// accessible by bare identifier but NOT via `window.<name>` - see the
 // locale-JSON loader spec which relied on `window.I18N.fr.loc_resolving`.
 // `I18N[code]` is mutated in-place by `activateLang()`, so this single
 // window-assignment automatically reflects the merged dense JSON pack
-// as it arrives — no need to re-assign on every merge.
+// as it arrives - no need to re-assign on every merge.
 window.I18N = I18N;
 window.EXTRA_LANG = EXTRA_LANG;
 window.UNDP_I18N_EXTRA = UNDP_I18N_EXTRA;
@@ -4494,7 +4494,7 @@ function detectAndSetupLanguage() {
     const localBtn = document.getElementById('btn-lang-local');
     const enBtn = document.getElementById('btn-lang-en');
     const changeBtn = document.getElementById('btn-lang-change');
-    // UX rewrite — primary visible control. Always shows
+    // UX rewrite - primary visible control. Always shows
     // the current active locale; click opens the full picker. All legacy
     // buttons (#btn-lang-local / #btn-lang-en / #btn-lang-change) are kept
     // in the DOM hidden for Playwright back-compat.
@@ -4509,24 +4509,24 @@ function detectAndSetupLanguage() {
     // have their own ISO flag emoji.
     //
     // BUGFIX May 2026 (operator-reported, "fallback is appearing for
-    // different windows laptops and browsers") — every emoji here was
+    // different windows laptops and browsers") - every emoji here was
     // the native Unicode flag character. Chrome/Edge on Windows 10 +
     // many Linux distros don't ship colour flag glyphs and render
     // them as monochrome "GB"/"FR"/"IN" letter pairs. The companion
     // dict below tracks the ISO alpha-2 country code so the CSS
     // `.lps-flag[data-cc="<cc>"]` rule can swap in an inline SVG.
     // Emoji is kept ONLY as accessible text content for screen
-    // readers — visually hidden via `color: transparent` in styles.css.
+    // readers - visually hidden via `color: transparent` in styles.css.
     const LANG_FLAGS = {
-        // Tier 1 — UN official languages
+        // Tier 1 - UN official languages
         en: '🇬🇧', zh: '🇨🇳', es: '🇪🇸', ar: '🇸🇦', fr: '🇫🇷', ru: '🇷🇺',
-        // Tier 2 — UNDP submission set (national flags). Bengali is
+        // Tier 2 - UNDP submission set (national flags). Bengali is
         // anchored on Bangladesh (national language) and Urdu on
         // Pakistan; both reflect where the language is the official
         // primary state rather than a sub-national region.
         hi: '🇮🇳', pt: '🇵🇹', bn: '🇧🇩', ja: '🇯🇵', tr: '🇹🇷',
         vi: '🇻🇳', ko: '🇰🇷', id: '🇮🇩', ur: '🇵🇰',
-        // Tier 3 — Indian sub-national (share the 🇮🇳 country flag
+        // Tier 3 - Indian sub-national (share the 🇮🇳 country flag
         // because no per-state ISO flag emoji exists).
         kn: '🇮🇳', ta: '🇮🇳', te: '🇮🇳', ml: '🇮🇳',
         gu: '🇮🇳', mr: '🇮🇳', pa: '🇮🇳',
@@ -4557,9 +4557,9 @@ function detectAndSetupLanguage() {
                 '<span class="lps-code">' + upper + '</span>';
             currentBtn.dataset.lang = norm;
         }
-        // HC53 (May 2026) — every .v4-lang-pill mirrors the home pill:
+        // HC53 (May 2026) - every .v4-lang-pill mirrors the home pill:
         // same .lps-flag SVG (via data-cc) + same .lps-code text. This
-        // reverses the v6.8 "globe + code is enough" call — operator
+        // reverses the v6.8 "globe + code is enough" call - operator
         // reported missing flag identity on capture / classify / review.
         // Reuses the existing 15-flag SVG library (.lps-flag[data-cc])
         // at styles.css:3658-3672, so zero new CSS data URIs.
@@ -4580,13 +4580,13 @@ function detectAndSetupLanguage() {
         } catch (_) { /* DOM mutation failure is non-blocking */ }
     }
 
-    // UNDP §3.1 April 2026 — RTL-script languages. Flipping the document
+    // UNDP §3.1 April 2026 - RTL-script languages. Flipping the document
     // direction via `<html dir>` cascades to every logical-property style
     // (margin-inline-start, padding-inline-end, text-align: start, etc.)
     // The flow-progress bar, chip rows, and card layouts were written
     // with logical properties where practical, so the mirror is free for
     // those. A handful of hand-positioned elements needed :dir() tweaks
-    // in styles.css — see the "RTL" block at the bottom of that file.
+    // in styles.css - see the "RTL" block at the bottom of that file.
     const RTL_LANGS = new Set([
         'ar', 'ur', 'fa', 'he', 'ps', 'ku', 'sd', 'ug', 'yi',
     ]);
@@ -4597,7 +4597,7 @@ function detectAndSetupLanguage() {
         const dir = RTL_LANGS.has(String(code || '').toLowerCase()) ? 'rtl' : 'ltr';
         if (html.dir !== dir) html.dir = dir;
         html.lang = code || 'en';
-        // May 2026 (perf Sprint B.1) — lazily fetch the Noto Sans
+        // May 2026 (perf Sprint B.1) - lazily fetch the Noto Sans
         // Arabic / CJK CSS the first time the user picks (or
         // auto-detects) a non-Latin locale. Latin-script sessions
         // never pay the ~50-100 KB cost. The injector lives in the
@@ -4610,7 +4610,7 @@ function detectAndSetupLanguage() {
         } catch (_) { /* font CSS injection failure is non-blocking */ }
     }
 
-    // v4 (post-prod fix) — guard against locales we don't ship
+    // v4 (post-prod fix) - guard against locales we don't ship
     // a translation for. Without this, a Karnataka-IP user got `kn`
     // detected → `kn.json` 404 → I18N['kn'] never populated → every
     // applyI18n() call resolved every key to its raw string. Better
@@ -4620,18 +4620,18 @@ function detectAndSetupLanguage() {
     // sub-national tier-3 (7). Anything else routes silently to 'en'
     // via the warn-and-fall-back branch below.
     const SUPPORTED_LANGS = new Set([
-        // Tier 1 — UN official
+        // Tier 1 - UN official
         'en', 'zh', 'es', 'ar', 'fr', 'ru',
-        // Tier 2 — UNDP submission set
+        // Tier 2 - UNDP submission set
         'hi', 'pt', 'bn', 'ja', 'tr', 'vi', 'ko', 'id', 'ur',
-        // Tier 3 — Indian sub-national
+        // Tier 3 - Indian sub-national
         'kn', 'ta', 'te', 'ml', 'gu', 'mr', 'pa',
     ]);
     function activateLang(code) {
         // If we don't have an inline pack AND we know the JSON file
         // doesn't exist, fall back to en immediately so we never paint
         // raw keys. The 6 UN locales + 9 South-Asian inline packs
-        // cover what we ship — anything else routes to English.
+        // cover what we ship - anything else routes to English.
         const supported = SUPPORTED_LANGS.has(String(code || '').toLowerCase());
         if (!supported && code !== 'en') {
             console.warn(`[i18n] locale "${code}" not supported, falling back to en`);
@@ -4666,14 +4666,14 @@ function detectAndSetupLanguage() {
         // refresh affordance to fix it.
         try {
             document.dispatchEvent(new CustomEvent('crisp:lang-changed', { detail: { code } }));
-        } catch (_) { /* CustomEvent unsupported on ancient WebKit — silent */ }
+        } catch (_) { /* CustomEvent unsupported on ancient WebKit - silent */ }
 
         // i18n fallback chain repair.
         //
         // Bug: when the active locale is non-English (e.g. Kannada via
         // auto-detect) the previous code fetched ONLY `kn.json`. The
         // English JSON (`en.json`, 575 keys) was never loaded, so the
-        // `t()` fallback chain — active locale → English → raw key —
+        // `t()` fallback chain - active locale → English → raw key -
         // failed to find keys that lived only in `en.json` and not in
         // the smaller inline `I18N.en`. Users saw raw keys like
         // `home_cta_primary`.
@@ -4684,7 +4684,7 @@ function detectAndSetupLanguage() {
         // sessions this is a single fetch (same as before).
         (async () => {
             try {
-                // Step 1 — always populate the full English dict if we
+                // Step 1 - always populate the full English dict if we
                 // haven't yet. Boots from the inline ~230 keys to the
                 // full 575 from the JSON. Subsequent activateLang calls
                 // skip the re-fetch (cache hit in `_loadLocaleJson`).
@@ -4695,7 +4695,7 @@ function detectAndSetupLanguage() {
                         I18N.__en_fully_loaded = true;
                     }
                 }
-                // Step 2 — for non-English active locales, also fetch
+                // Step 2 - for non-English active locales, also fetch
                 // the locale's own JSON. The merge order ensures the
                 // active locale's translations win over English where
                 // present, but English fills any gaps.
@@ -4710,7 +4710,7 @@ function detectAndSetupLanguage() {
                     );
                     I18N[code] = merged;
                 } else {
-                    // English active — just refresh from the (now full) en.
+                    // English active - just refresh from the (now full) en.
                     if (state.lang !== 'en') return;
                     I18N.en = Object.assign({}, I18N.en);
                 }
@@ -4722,7 +4722,7 @@ function detectAndSetupLanguage() {
                     document.dispatchEvent(new CustomEvent('crisp:lang-changed', { detail: { code, phase: 'json-loaded' } }));
                 } catch (_) {}
             } catch (_) {
-                // Non-fatal — inline packs remain in use and the
+                // Non-fatal - inline packs remain in use and the
                 // partial English fallback still works.
             }
         })();
@@ -4753,13 +4753,13 @@ function detectAndSetupLanguage() {
             localBtn.textContent = '🌐 ' + String(code || 'EN').toUpperCase();
             if (label) localBtn.title = label;
         }
-        // Auto-activate policy (Jun 2026 — explicit-signal precedence):
+        // Auto-activate policy (Jun 2026 - explicit-signal precedence):
         // a geo/IP-detected region language fills a VOID, it never overrides
         // an explicit locale signal. Precedence: manual pick > browser
         // locale (when it resolves to a supported language) > geo detection
         // > en. Previously "local wins" auto-switched even when the device
         // declared a supported locale (e.g. an en-US browser in Karnataka
-        // silently flipped to Kannada) — jarring, non-deterministic across
+        // silently flipped to Kannada) - jarring, non-deterministic across
         // host machines, and it surprised evaluators. The suggestion pill
         // below still always advertises the detected region language.
         // Gate on SUPPORTED_LANGS instead of I18N[code]: the inline I18N
@@ -4773,7 +4773,7 @@ function detectAndSetupLanguage() {
             activateLang(code);
         }
         // Paint the suggestion chip inside the picker overlay only when
-        // it's actionable — user is manually on a different locale AND
+        // it's actionable - user is manually on a different locale AND
         // the detected one is a real supported language. Keeps the picker
         // clean when the user is already on their region's language.
         if (!suggestedRow) return;
@@ -4784,11 +4784,11 @@ function detectAndSetupLanguage() {
         // render the detected country's flag next to the
         // "Your region" pin. Flag comes from LANG_FLAGS (the same dict
         // used in the top-right pill). If the user is on a sub-national
-        // Indian language (kn/ta/te/…) all of those share 🇮🇳 — visually
+        // Indian language (kn/ta/te/…) all of those share 🇮🇳 - visually
         // the picker chip stays consistent with the country.
         const codeLower = String(code).toLowerCase();
         const flagGlyph = LANG_FLAGS[codeLower] || '📍';
-        // May-2026 cross-browser flag fix — emit `data-cc` so the CSS
+        // May-2026 cross-browser flag fix - emit `data-cc` so the CSS
         // background-SVG rule in styles.css renders the same flag on
         // Windows-Chrome / Linux-without-Noto-Emoji where the native
         // Unicode emoji falls back to monochrome region letters.
@@ -4810,7 +4810,7 @@ function detectAndSetupLanguage() {
         });
     }
 
-    // AUDIT 2026-05-23 — telemetry counter for "user picked a different
+    // AUDIT 2026-05-23 - telemetry counter for "user picked a different
     // lang after first paint". Read by device-telemetry.js. Session-
     // scoped (resets on new session) so we measure per-session friction.
     function _recordLangPickerChange() {
@@ -4882,7 +4882,7 @@ function detectAndSetupLanguage() {
 
     if (currentBtn) currentBtn.addEventListener('click', _openLangPicker);
     if (changeBtn) changeBtn.addEventListener('click', _openLangPicker);
-    // v6.8 — mid-flow lang pills on the v4 stages. Delegated via
+    // v6.8 - mid-flow lang pills on the v4 stages. Delegated via
     // closest('[data-v4-lang-pill]') so the 3 static pills in
     // #stage-v4-{capture,classify,review} all share one listener.
     // Opens the same #lang-picker-overlay modal as the home pill;
@@ -4897,7 +4897,7 @@ function detectAndSetupLanguage() {
         pickerOverlay.addEventListener('click', (e) => {
             if (e.target === pickerOverlay) _closeLangPicker();
         });
-        // HC54 (May 2026) — top-right ✕ inside the sticky header is now
+        // HC54 (May 2026) - top-right ✕ inside the sticky header is now
         // the sole close affordance. The legacy bottom #lang-picker-close
         // button was dropped per operator's UX brief (single close
         // option, reduced visual clutter). Tap-outside-overlay still
@@ -4939,7 +4939,7 @@ function detectAndSetupLanguage() {
     });
 
     // ── Restore cached location + language instantly (before any network call) ──
-    // (_LOC_CTX_KEY, _saveLocCtx, _patchLocCtx are module-scope — defined near resolveLocationName)
+    // (_LOC_CTX_KEY, _saveLocCtx, _patchLocCtx are module-scope - defined near resolveLocationName)
 
     function _applyLocCtx(ctx) {
         // Restore location state
@@ -4947,7 +4947,7 @@ function detectAndSetupLanguage() {
         state.deviceLocation = { lat: ctx.lat, lng: ctx.lng };
         state.locationName = ctx.name || null;
         // Language policy: auto-activate the cached
-        // local lang unless the user has a manual override — see
+        // local lang unless the user has a manual override - see
         // noteDetectedLocal for the full policy. When no cache match,
         // the live GPS / IP paths below will call noteDetectedLocal
         // directly once a locale resolves.
@@ -4959,7 +4959,7 @@ function detectAndSetupLanguage() {
         // async resolves. Previous bug: this function painted
         // #loc-coords + #summary-loc directly with the cached name,
         // but #v3-auto-loc was painted later by _refreshV3AutoMeta
-        // when stage-where was entered — and if a fresh GPS resolve
+        // when stage-where was entered - and if a fresh GPS resolve
         // landed in between, the top showed the new name while the
         // bottom kept the cached old name.
         try { _paintLocationDisplays(); } catch (_) {
@@ -4974,7 +4974,7 @@ function detectAndSetupLanguage() {
     // UX rewrite: start with English by default, then
     // upgrade to the user's manual choice (from localStorage) if present.
     // GPS / IP detection proceeds in the background purely to populate
-    // the "Your region" suggestion — never to force-switch the UI.
+    // the "Your region" suggestion - never to force-switch the UI.
     const _manualLang = (() => {
         try { return localStorage.getItem('crisp_lang_manual') || ''; } catch (_) { return ''; }
     })();
@@ -4985,14 +4985,14 @@ function detectAndSetupLanguage() {
     // direction flip + async JSON load should still work). Previously
     // this check only consulted I18N, so a user manually picking Arabic /
     // French / Hebrew etc. would silently snap back to English on every
-    // reload — bug reproduced by 13-rtl-layout + 14-locale-json-loader.
+    // reload - bug reproduced by 13-rtl-layout + 14-locale-json-loader.
     const _isKnownLocale = (code) => {
         if (!code || typeof code !== 'string') return false;
         if (I18N[code]) return true;
         if (typeof EXTRA_LANG !== 'undefined' && EXTRA_LANG[code]) return true;
         if (typeof UNDP_I18N_EXTRA !== 'undefined' && UNDP_I18N_EXTRA[code]) return true;
         if (RTL_LANGS.has(code)) return true;
-        // COUNTRY_LANG_DATA values are { code, label, speech } — accept
+        // COUNTRY_LANG_DATA values are { code, label, speech } - accept
         // any code declared there (e.g. Italian via IT).
         if (typeof COUNTRY_LANG_DATA !== 'undefined') {
             for (const k in COUNTRY_LANG_DATA) {
@@ -5008,11 +5008,11 @@ function detectAndSetupLanguage() {
         return false;
     };
     // boot-time language resolution order:
-    //   1. Manual pick (`crisp_lang_manual`) — explicit user choice always wins.
-    //   2. Browser locale (`navigator.language`) — zero cost, no permission
+    //   1. Manual pick (`crisp_lang_manual`) - explicit user choice always wins.
+    //   2. Browser locale (`navigator.language`) - zero cost, no permission
     //      prompt, no network. A French Chrome user lands in French on
     //      their very first visit before any GPS / IP detection.
-    //   3. English — last-resort default.
+    //   3. English - last-resort default.
     // Cached `crisp_loc_ctx` from a prior detection (next block) can
     // upgrade the choice further. Deferred GPS detection (below) can
     // refine it once the user is interactive on the home stage.
@@ -5028,24 +5028,24 @@ function detectAndSetupLanguage() {
             // We don't have a country code here, so map by language code
             // to the nearest supported language via a tiny dict.
             const LANG_NEIGHBOUR = {
-                // Romance — fall to Spanish (largest CRISP-supported Romance)
+                // Romance - fall to Spanish (largest CRISP-supported Romance)
                 'it': 'es', 'ro': 'es', 'ca': 'es', 'gl': 'es',
-                // Germanic / Northern European — fall to English
+                // Germanic / Northern European - fall to English
                 'de': 'en', 'nl': 'en', 'sv': 'en', 'no': 'en',
                 'da': 'en', 'fi': 'en', 'is': 'en',
-                // Slavic — fall to Russian
+                // Slavic - fall to Russian
                 'pl': 'ru', 'cs': 'ru', 'sk': 'ru', 'uk': 'ru',
                 'be': 'ru', 'bg': 'ru', 'sr': 'ru', 'hr': 'ru',
                 'sl': 'ru', 'mk': 'ru',
-                // Greek / Hebrew / Persian — fall to English (no nearest match)
+                // Greek / Hebrew / Persian - fall to English (no nearest match)
                 'el': 'en', 'he': 'en', 'fa': 'en', 'sq': 'en',
-                // SE-Asian non-supported — fall to English (regional lingua franca)
+                // SE-Asian non-supported - fall to English (regional lingua franca)
                 'th': 'en', 'ms': 'en', 'tl': 'en', 'fil': 'en',
                 'km': 'en', 'lo': 'en', 'my': 'en',
-                // African — fall to English / French (handled in family fallback,
+                // African - fall to English / French (handled in family fallback,
                 // but useful here when only browser hint available)
                 'sw': 'en', 'am': 'en', 'so': 'en', 'rw': 'fr',
-                // South-Asian sub-national not in tier-3 — fall to Hindi
+                // South-Asian sub-national not in tier-3 - fall to Hindi
                 'as': 'hi', 'or': 'hi', 'ne': 'hi', 'si': 'hi',
                 'sd': 'hi', 'mai': 'hi',
             };
@@ -5055,7 +5055,7 @@ function detectAndSetupLanguage() {
             return null;
         }
     }
-    // AUDIT 2026-05-23 — prefer the lang resolved by the synchronous head
+    // AUDIT 2026-05-23 - prefer the lang resolved by the synchronous head
     // IIFE (window.__crispBootLang), which uses the SAME resolution chain
     // (manual → cached_loc_ctx → navigator.language → 'en') but runs at
     // frame 0 so <html lang dir> is correct from first paint. The body-
@@ -5105,16 +5105,16 @@ function detectAndSetupLanguage() {
     //
     // New policy: fire GPS detection on the home stage AFTER:
     //   • The page has been interactive for ~1.5 s (`requestIdleCallback`
-    //     or fallback `setTimeout`) — well past FCP/LCP, so the
+    //     or fallback `setTimeout`) - well past FCP/LCP, so the
     //     Lighthouse rule (which measures sync calls before user
     //     interaction during page-load) does not trigger.
     //   • The user has no manual pick (`crisp_lang_manual` unset).
     //   • The origin is HTTPS (otherwise getCurrentPosition is blocked
     //     anyway).
     //   • No live IP-geolocation call (avoids the prod CORS error
-    //     issue from ipapi.co / freeipapi.com — we use GPS only).
+    //     issue from ipapi.co / freeipapi.com - we use GPS only).
     //
-    // On result: `_saveLocCtx` + `noteDetectedLocal` — which now (per
+    // On result: `_saveLocCtx` + `noteDetectedLocal` - which now (per
     // the SUPPORTED_LANGS gate fix above) actually auto-activates the
     // detected language for all 22 supported locales.
     function _scheduleHomeLanguageDetect() {
@@ -5145,14 +5145,14 @@ function detectAndSetupLanguage() {
                     const lng = pos.coords.longitude;
                     // Online-only reverse geocode. Offline → silently skip.
                     if (navigator.onLine === false) return;
-                    // HC55 follow-up — this boot-time language-detection
+                    // HC55 follow-up - this boot-time language-detection
                     // path consumes Nominatim's raw `address` object
                     // (country_code / state / county) for the region-
                     // to-locale matcher. Routing through the new
                     // `/geocode/reverse` backend would lose that shape
                     // (the route returns the formatted `location_name`,
                     // not the structured address). Tracked as a separate
-                    // chore — the backend route needs to expose an
+                    // chore - the backend route needs to expose an
                     // optional `raw_address` field before this site can
                     // join the proper cascade. Per-session boot call
                     // (not user-tap-driven), so the rate-limit pressure
@@ -5204,7 +5204,7 @@ function detectAndSetupLanguage() {
                     try { localStorage.setItem('crisp_lang_auto_country', countryCode); } catch (_) {}
                     noteDetectedLocal(pickedCode, pickedLabel);
                 } catch (_) { /* swallow */ }
-            }, () => { /* GPS denied / unavailable — silent */ }, {
+            }, () => { /* GPS denied / unavailable - silent */ }, {
                 enableHighAccuracy: false,
                 timeout: 8000,
                 maximumAge: 5 * 60 * 1000,
@@ -5221,11 +5221,11 @@ function detectAndSetupLanguage() {
     }
     _scheduleHomeLanguageDetect();
 
-    // (Lighthouse "geolocation-on-start" fix) — never call
+    // (Lighthouse "geolocation-on-start" fix) - never call
     // getCurrentPosition at boot. Browsers fire a permission prompt
     // synchronously on the first invocation, which scares users + tanks
     // the Best-Practices score. GPS is requested by v4-flow's
-    // _refreshGps() ONLY after the user taps "Start Reporting" — i.e.
+    // _refreshGps() ONLY after the user taps "Start Reporting" - i.e.
     // after explicit user intent.
     //
     // Boot-time region-based language detection is now SKIPPED entirely:
@@ -5244,7 +5244,7 @@ function detectAndSetupLanguage() {
     // dead branch below for reference.
     const _gpsBootEnabled = false;   // toggle to true to restore old behavior
     if (!_gpsBootEnabled) {
-        // Boot is now silent — no GPS, no IP geo, no permission prompts,
+        // Boot is now silent - no GPS, no IP geo, no permission prompts,
         // no third-party CORS errors. Stick with the cached / manual
         // language already activated by the line above.
         return;
@@ -5271,7 +5271,7 @@ function detectAndSetupLanguage() {
             if (ipLoc) {
                 state.location = ipLoc;
                 state.deviceLocation = { lat: ipLoc.lat, lng: ipLoc.lng };
-                // Mirror unconditionally — see post-iPhone-14 audit note
+                // Mirror unconditionally - see post-iPhone-14 audit note
                 // on the GPS-error-handler branch ≈line 4914.
                 _saveLocCtx(ipLoc.lat, ipLoc.lng, 5000, state.locationName || null, null, null, null);
                 const regionStr = (ipLoc.region || '').toLowerCase();
@@ -5299,7 +5299,7 @@ function detectAndSetupLanguage() {
         return;
     }
 
-    // Set a timeout for GPS — 8s is enough for most devices.
+    // Set a timeout for GPS - 8s is enough for most devices.
     // Don't give up too early (was 4s, GPS needs 5-10s on cold start)
     const gpsTimeout = setTimeout(() => {
         if (!state.location) {
@@ -5307,12 +5307,12 @@ function detectAndSetupLanguage() {
             // stage-where. Cleared if IP fallback succeeds and resolves a
             // workable coordinate.
             state.gpsErrorCode = 'timeout';
-            console.warn('GPS timeout (8s) — trying IP fallback');
+            console.warn('GPS timeout (8s) - trying IP fallback');
             tryIPGeolocation().then(ipLoc => {
                 if (ipLoc && !state.location) {
                     state.location = ipLoc;
                     state.deviceLocation = { lat: ipLoc.lat, lng: ipLoc.lng };
-                    // Mirror unconditionally — see post-iPhone-14 audit
+                    // Mirror unconditionally - see post-iPhone-14 audit
                     // note on the GPS-error-handler branch ≈line 4914.
                     _saveLocCtx(ipLoc.lat, ipLoc.lng, 5000, state.locationName || null, null, null, null);
                 }
@@ -5324,11 +5324,11 @@ function detectAndSetupLanguage() {
     // Try coarse location first (WiFi/cell, instant), then upgrade to GPS
     navigator.geolocation.getCurrentPosition(async (pos) => {
         clearTimeout(gpsTimeout);
-        // M9: clear any earlier "timeout" mark — GPS resolved.
+        // M9: clear any earlier "timeout" mark - GPS resolved.
         state.gpsErrorCode = null;
         state.location = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy };
         state.deviceLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        // Cache raw device GPS — restored on new report (not user-corrected location)
+        // Cache raw device GPS - restored on new report (not user-corrected location)
         try {
             localStorage.setItem('crisp_device_gps', JSON.stringify({
                 lat: pos.coords.latitude, lng: pos.coords.longitude,
@@ -5336,7 +5336,7 @@ function detectAndSetupLanguage() {
             }));
         } catch (_) {}
         console.log('GPS Fixed:', state.location);
-        // UI v2.1 — broadcast GPS-ready so the building-footprint
+        // UI v2.1 - broadcast GPS-ready so the building-footprint
         // map can init the first time location resolves. Other listeners
         // (region match, offline cache) are free to subscribe the same
         // hook rather than polling `state.location`.
@@ -5356,7 +5356,7 @@ function detectAndSetupLanguage() {
                     console.log(`[BuildingPreCache] ${state.nearbyBuildings.length} buildings cached`);
                 })
                 .catch((e) => {
-                    // Network failure, Overpass rate-limit, CORS, etc. — silent by design.
+                    // Network failure, Overpass rate-limit, CORS, etc. - silent by design.
                     console.warn('[BuildingPreCache] skip:', e?.message || e);
                 });
         }
@@ -5369,11 +5369,11 @@ function detectAndSetupLanguage() {
             return;
         }
         try {
-            // HC55 follow-up — same caveat as site #2 above: this
+            // HC55 follow-up - same caveat as site #2 above: this
             // post-GPS-lock language-detection path needs Nominatim's
             // raw `address` shape, which the new `/geocode/reverse`
             // backend route doesn't expose yet. Per-session boot call,
-            // single fire per onboarding — low rate-limit pressure.
+            // single fire per onboarding - low rate-limit pressure.
             // The user-facing reverseGeocode() (called by
             // resolveLocationName() / v4-flow.js) IS routed through
             // the backend now; this auxiliary detection call is the
@@ -5446,15 +5446,15 @@ function detectAndSetupLanguage() {
             activateLang('en');
         }
     }, async (err) => {
-        // GPS denied/unavailable — fall back to IP geolocation for coords + language
+        // GPS denied/unavailable - fall back to IP geolocation for coords + language
         clearTimeout(gpsTimeout);
-        // M9: PositionError codes — 1=PERMISSION_DENIED, 2=POSITION_UNAVAILABLE, 3=TIMEOUT.
+        // M9: PositionError codes - 1=PERMISSION_DENIED, 2=POSITION_UNAVAILABLE, 3=TIMEOUT.
         // We expose semantically-named values so the landmark-fallback banner
         // can pick a contextual headline ("GPS permission denied" vs
         // "GPS unavailable in this area" vs "GPS taking too long").
         const codeMap = { 1: 'denied', 2: 'unavailable', 3: 'timeout' };
         state.gpsErrorCode = codeMap[err && err.code] || 'unavailable';
-        console.warn('GPS error on startup:', err.code, err.message, '— trying IP geolocation fallback');
+        console.warn('GPS error on startup:', err.code, err.message, '- trying IP geolocation fallback');
         const ipLoc = await tryIPGeolocation();
         if (ipLoc) {
             state.location = ipLoc;
@@ -5464,12 +5464,12 @@ function detectAndSetupLanguage() {
                     lat: ipLoc.lat, lng: ipLoc.lng, acc: 5000, ts: Date.now(), is_ip_based: true
                 }));
             } catch (_) {}
-            // May 2026 (operator-reported, post-iPhone-14 audit) — pre-fix
+            // May 2026 (operator-reported, post-iPhone-14 audit) - pre-fix
             // the IP-geo coords were ONLY mirrored to the nearby.js cache
             // key `crisp_last_location_v2` inside the language-matching
             // branches below. A visitor in a region/country whose
             // language we don't ship would resolve IP coords but never
-            // get them written to the nearby cache — the Nearby Reports
+            // get them written to the nearby cache - the Nearby Reports
             // module stayed silently hidden forever. Write the cache
             // (and dispatch the crisp:location-cached event via
             // _saveLocCtx) UNCONDITIONALLY here, before any language
@@ -5564,7 +5564,7 @@ function setupPhotoStage() {
         const scroll = document.getElementById('extra-photos-scroll');
         if (!scroll) return;
         scroll.innerHTML = '';
-        // Primary photo — first thumb, ❌ in bottom-left, tap opens viewer.
+        // Primary photo - first thumb, ❌ in bottom-left, tap opens viewer.
         if (state.photoDataUrl) {
             const thumb = document.createElement('div');
             thumb.className = 'extra-photo-thumb active';
@@ -5588,7 +5588,7 @@ function setupPhotoStage() {
             });
             scroll.appendChild(thumb);
         }
-        // Extra photos — ❌ in bottom-left, tap opens viewer.
+        // Extra photos - ❌ in bottom-left, tap opens viewer.
         state.extraPhotos.forEach((ep, idx) => {
             const thumb = document.createElement('div');
             thumb.className = 'extra-photo-thumb';
@@ -5608,7 +5608,7 @@ function setupPhotoStage() {
             scroll.appendChild(thumb);
         });
 
-        // UI v3 — disable every "add more photo" surface when the
+        // UI v3 - disable every "add more photo" surface when the
         // per-incident cap is reached. Three buttons can trigger an extra
         // add: the inline + button, the camera-modal's "add another" shutter,
         // and the v3 photo-stage "Camera / Gallery" row (issue 5).
@@ -5647,7 +5647,7 @@ function setupPhotoStage() {
         _updateExtraPhotoStrip();
     };
 
-    // Deleting the primary is a bit special — if the user has extras, the
+    // Deleting the primary is a bit special - if the user has extras, the
     // first extra is promoted so the capture flow still has something (photo
     // is mandatory downstream). If no extras, we reset the primary to the
     // empty-state so the user can re-capture.
@@ -5721,7 +5721,7 @@ function setupPhotoStage() {
     const addMoreBtn = document.getElementById('btn-add-more-photo');
     const fileExtra = document.getElementById('file-extra');
     if (addMoreBtn && fileExtra) {
-        // Legacy + button (hidden in v3) — keep the click handler so test
+        // Legacy + button (hidden in v3) - keep the click handler so test
         // harnesses that synthesise the click don't regress.
         addMoreBtn.addEventListener('click', () => fileExtra.click());
         fileExtra.addEventListener('change', (e) => {
@@ -5731,7 +5731,7 @@ function setupPhotoStage() {
         });
     }
 
-    // v3 single Add-more button — triggers the file-extra-browse input
+    // v3 single Add-more button - triggers the file-extra-browse input
     // which has `multiple` + NO `capture` attribute, so mobile browsers
     // surface the OS native sheet with "Take Photo / Photo Library /
     // Files" as options. One target → lower cognitive load.
@@ -5761,7 +5761,7 @@ function setupPhotoStage() {
         });
     }
 
-    // v3 Gallery button — multi-select from the device library. Each file is
+    // v3 Gallery button - multi-select from the device library. Each file is
     // fed sequentially through the ingest pipeline; we stop enqueueing once
     // the cap is reached. _canAddMorePhotos() guards each push but also
     // shows a toast the first time, so the loop below just early-breaks.
@@ -5775,7 +5775,7 @@ function setupPhotoStage() {
         fileExtraBrowse.addEventListener('change', (e) => {
             const files = Array.from(e.target.files || []);
             for (const f of files) {
-                // Probe the cap before kicking off the async ingest —
+                // Probe the cap before kicking off the async ingest -
                 // prevents over-stuffing when the user selects 10+ photos
                 // but we can only accept up to MAX_EXTRA_PHOTOS more.
                 const currentCount = (state.extraPhotos || []).length;
@@ -5798,7 +5798,7 @@ function setupPhotoStage() {
     // Camera button (legacy stage-photo). v4-flow has its own copy of
     // this routing at v4-flow.js:735+.
     document.getElementById('btn-open-camera').addEventListener('click', () => {
-        // v6.8 — broader iOS detection (catches iPadOS desktop-mode Safari).
+        // v6.8 - broader iOS detection (catches iPadOS desktop-mode Safari).
         // See v4-flow.js:735 for the same pattern + rationale.
         const _ua = navigator.userAgent || '';
         const isIOS = /iPad|iPhone|iPod/.test(_ua)
@@ -5816,20 +5816,20 @@ function setupPhotoStage() {
         document.getElementById('file-browse').click();
     });
 
-    // PR 5: shared ingest pipeline for File objects — camera-fallback
+    // PR 5: shared ingest pipeline for File objects - camera-fallback
     // AND browse (both single + multi-select). `asExtra=true` appends into
     // state.extraPhotos; `asExtra=false` fills the primary photo slot. The
     // caller decides routing once, synchronously, based on whether the primary
     // slot is already populated.
     //
-    // v6.8 (May 2026) — HEIC pre-conversion. iOS 17+ defaults to HEIC for
+    // v6.8 (May 2026) - HEIC pre-conversion. iOS 17+ defaults to HEIC for
     // camera capture (and the user can't change it in standalone-PWA mode
     // because the per-app setting toggle requires the iOS Camera app to be
     // the originator). `Image.src = heicDataUrl` does NOT decode HEIC on
     // most browsers; only Safari ≥ 17 handles it natively, and even there
     // the canvas pipeline downstream fails MIME checks. Without
     // re-encoding, captured photos vanished from the v4 capture stage
-    // silently — root cause of the "iPhone camera doesn't work" regression
+    // silently - root cause of the "iPhone camera doesn't work" regression
     // reported on May 19. We detect HEIC by MIME or file extension and
     // re-encode to JPEG via createImageBitmap → canvas → toBlob before
     // re-entering the existing pipeline.
@@ -5886,7 +5886,7 @@ function setupPhotoStage() {
                 // thumbnail strip. The original File blob is preserved
                 // verbatim and used as the LARGE tier's source, so the
                 // dashboard's archival copy keeps the camera's native
-                // fidelity — not a network-tier-degraded re-encode.
+                // fidelity - not a network-tier-degraded re-encode.
                 const canvas = document.createElement('canvas');
                 let w = img.width, h = img.height;
                 if (w > previewMaxDim || h > previewMaxDim) {
@@ -5910,7 +5910,7 @@ function setupPhotoStage() {
 
                 if (asExtra) {
                     if (!_canAddMorePhotos()) return;
-                    // HC77 — dedupe at push site (same as camera-modal
+                    // HC77 - dedupe at push site (same as camera-modal
                     // shutter path). Prevents the file-picker / gallery
                     // path from inserting a duplicate `dataUrl` into
                     // state.extraPhotos, which would render twice on
@@ -5930,7 +5930,7 @@ function setupPhotoStage() {
                     };
                     state.extraPhotos.push(entry);
                     _updateExtraPhotoStrip();
-                    // HC78 — also kick the V4 review-strip refresher.
+                    // HC78 - also kick the V4 review-strip refresher.
                     // _updateExtraPhotoStrip paints the V3 capture-stage
                     // extras row only; on the review stage's `+ Add`
                     // → openCameraModal → file-camera fallback flow
@@ -5953,7 +5953,7 @@ function setupPhotoStage() {
                             try {
                                 entry.dataUrl = await _blobToDataUrl(variants.small.blob);
                                 _updateExtraPhotoStrip();
-                                // HC78 — repaint the review strip too so the
+                                // HC78 - repaint the review strip too so the
                                 // (rebuild-on-paint) `state.v4Photos` picks up
                                 // the BlazeFace-rewritten dataUrl in place of
                                 // the original.
@@ -6018,8 +6018,8 @@ function setupPhotoStage() {
     window.__crispIngestFile = _ingestFileAsPhoto;
 
     // File input handlers.
-    //   file-camera — single-file (iOS native camera, one shot per invocation)
-    //   file-browse — PR 5: multi-select; first file fills primary slot if
+    //   file-camera - single-file (iOS native camera, one shot per invocation)
+    //   file-browse - PR 5: multi-select; first file fills primary slot if
     //                 empty, rest go to extras. Route decided synchronously
     //                 so async FileReader can't misorder the decision.
     ['file-camera', 'file-browse'].forEach(id => {
@@ -6035,12 +6035,12 @@ function setupPhotoStage() {
         });
     });
 
-    // Phase 2: photo is now mandatory — skip link removed; Next is gated on
+    // Phase 2: photo is now mandatory - skip link removed; Next is gated on
     // having a photo. The disabled attribute set in index.html keeps the button
     // unclickable until showPreview() flips it to enabled on first capture.
     nextBtn.addEventListener('click', () => {
         if (!state.photoDataUrl) {
-            // Defensive — button is disabled but in case CSS is fighting us.
+            // Defensive - button is disabled but in case CSS is fighting us.
             if (typeof showToast === 'function') showToast(t('photo_required'));
             return;
         }
@@ -6049,7 +6049,7 @@ function setupPhotoStage() {
 }
 
 // ── Camera modal ───────────────────────────────────────────────────────────────
-// Lightweight "starting camera" spinner inside the modal — gives the first tap
+// Lightweight "starting camera" spinner inside the modal - gives the first tap
 // immediate feedback while getUserMedia + the iOS permission prompt resolve
 // (the live preview is black until the stream attaches). FontAwesome is loaded
 // globally so fa-spin needs no extra CSS/i18n.
@@ -6071,14 +6071,14 @@ function _showCameraLoading(modal, show) {
 
 function openCameraModal() {
     const modal = document.getElementById('camera-modal');
-    // HC97 — re-entrancy guard: `display==='flex'` is set synchronously below,
+    // HC97 - re-entrancy guard: `display==='flex'` is set synchronously below,
     // so a rapid second tap (while getUserMedia is still resolving on iOS) is
     // ignored rather than firing an overlapping getUserMedia. Fixes the "had to
     // tap the camera button multiple times" report.
     if (!modal || modal.style.display === 'flex') return;
     modal.style.display = 'flex';
     _showCameraLoading(modal, true);
-    // Perceived first-open speed (Jun 2026) — two-phase resolution. A cold
+    // Perceived first-open speed (Jun 2026) - two-phase resolution. A cold
     // camera warms up and paints its FIRST FRAME noticeably faster at 1080p
     // than at 4K, so we request 1080p first → the live preview appears sooner
     // and the modal stops "sitting on a spinner". Once the preview is visible
@@ -6087,7 +6087,7 @@ function openCameraModal() {
     //
     // Capture quality stays safe: the shutter snapshots the live <video> (iOS
     // has no ImageCapture.takePhoto), so once the upgrade lands every snap is
-    // 4K. A snap taken in the brief pre-upgrade window is still 1080p —
+    // 4K. A snap taken in the brief pre-upgrade window is still 1080p -
     // comfortably above the ~640×480/720p default that HC97's 4K hint was added
     // to fix, never the old "quality capped" regression. If the 4K upgrade is
     // unsupported/refused (some iOS capture modes) the stream simply stays 1080p.
@@ -6101,7 +6101,7 @@ function openCameraModal() {
     })
         .then(stream => {
             // If the user closed the modal during the getUserMedia/permission
-            // wait, don't attach a now-orphaned stream — stop it.
+            // wait, don't attach a now-orphaned stream - stop it.
             if (modal.style.display !== 'flex') {
                 _showCameraLoading(modal, false);
                 stream.getTracks().forEach(tk => { try { tk.stop(); } catch (_) {} });
@@ -6109,8 +6109,8 @@ function openCameraModal() {
             }
             state.cameraStream = stream;
             const videoEl = document.getElementById('camera-stream');
-            // Hide the spinner the instant the preview paints its FIRST FRAME —
-            // not merely when getUserMedia resolves — which removes the black
+            // Hide the spinner the instant the preview paints its FIRST FRAME -
+            // not merely when getUserMedia resolves - which removes the black
             // flash between spinner-off and first pixels so the preview snaps in
             // cleanly. Then kick off the background 4K upgrade. The fallback
             // timer covers any browser that doesn't fire the frame events.
@@ -6134,7 +6134,7 @@ function openCameraModal() {
             videoEl.addEventListener('playing', _onFirstFrame, { once: true });
             setTimeout(_onFirstFrame, 1500);
             videoEl.srcObject = stream;
-            // May 2026 redesign — wire the overlay layers (status bar with live
+            // May 2026 redesign - wire the overlay layers (status bar with live
             // GPS, toolbar, focus reticle, tap-to-focus).
             try { _attachCameraOverlay(stream); }
             catch (e) { console.warn('[camera] overlay attach failed:', e); }
@@ -6147,7 +6147,7 @@ function openCameraModal() {
                 ? t('camera_blocked_toast')
                 : t('camera_unavailable_toast');
             showToast(msg);
-            // HC97 — fall back through the V4 file input when present: its
+            // HC97 - fall back through the V4 file input when present: its
             // change handler routes via _handlePhoto → both capture + review
             // strips repaint. Legacy #file-camera is the backstop.
             const _fb = document.getElementById('v4-file-camera') || document.getElementById('file-camera');
@@ -6156,10 +6156,10 @@ function openCameraModal() {
 }
 
 // Close the camera modal, tearing down the active stream. Shared between the
-// X (cancel) button and the Done (confirm) button — same teardown, different
+// X (cancel) button and the Done (confirm) button - same teardown, different
 // semantics on what's already been stashed in state.
 function _closeCameraModal() {
-    // Tear overlay handlers down BEFORE stopping the stream — _detachCameraOverlay
+    // Tear overlay handlers down BEFORE stopping the stream - _detachCameraOverlay
     // clears intervals + removes event listeners so we don't leak a setInterval
     // that keeps polling localStorage after the modal closes.
     try { _detachCameraOverlay(); } catch (_) { /* idempotent */ }
@@ -6190,7 +6190,7 @@ function _closeCameraModal() {
 //
 // _attachCameraOverlay is called from openCameraModal once the stream is
 // live; _detachCameraOverlay is called from _closeCameraModal during
-// teardown. Both are idempotent — calling them outside the lifecycle is
+// teardown. Both are idempotent - calling them outside the lifecycle is
 // a no-op rather than an error.
 // ──────────────────────────────────────────────────────────────────────
 let _cmOverlayState = null;  // { gpsIntervalId, orientHandler, mediaTrack }
@@ -6204,7 +6204,7 @@ async function _attachCameraOverlay(stream) {
                      : null),
     };
 
-    // Live GPS poll — 1 Hz. Reads from the existing
+    // Live GPS poll - 1 Hz. Reads from the existing
     // localStorage['crisp_last_location_v2'] cache (written by the
     // V4 stage's getCurrentPosition handler) so we don't burn extra
     // battery firing fresh GPS requests; the cache is updated on the
@@ -6224,7 +6224,7 @@ async function _attachCameraOverlay(stream) {
     tickGps();
     _cmOverlayState.gpsIntervalId = setInterval(tickGps, 1000);
 
-    // Toolbar button bindings — same close path as the bottom X / Done
+    // Toolbar button bindings - same close path as the bottom X / Done
     // controls, so BACK doesn't fork the teardown logic. Flash / focus /
     // lock are wired to their own helpers; each gracefully no-ops if the
     // underlying MediaTrackCapability isn't supported.
@@ -6241,7 +6241,7 @@ async function _attachCameraOverlay(stream) {
     // click point; where the underlying MediaStreamTrack exposes
     // `pointsOfInterest` (Android Chrome 89+, Edge), we also apply a
     // single-shot focus at the normalized (x, y) so the camera physically
-    // re-hunts focus. iOS Safari doesn't expose pointsOfInterest — the
+    // re-hunts focus. iOS Safari doesn't expose pointsOfInterest - the
     // reticle is visual feedback only there.
     const streamEl = document.getElementById('camera-stream');
     if (streamEl) streamEl.onclick = _tapToFocus;
@@ -6253,7 +6253,7 @@ async function _attachCameraOverlay(stream) {
     // on denial / non-iOS browsers that don't expose the API.
     //
     // Implemented via a dedicated handler so _detachCameraOverlay can
-    // unregister it on close — without this, a stale handler keeps
+    // unregister it on close - without this, a stale handler keeps
     // firing in the background and slowly drains battery.
     try {
         if (typeof DeviceOrientationEvent !== 'undefined' &&
@@ -6262,7 +6262,7 @@ async function _attachCameraOverlay(stream) {
             if (grant !== 'granted') return;
         }
     } catch (_) {
-        // requestPermission throws on non-iOS — fall through and try
+        // requestPermission throws on non-iOS - fall through and try
         // to wire the listener anyway; if the browser doesn't fire
         // `deviceorientation` events, the slot just stays hidden.
     }
@@ -6308,7 +6308,7 @@ function _detachCameraOverlay() {
 
 // Paint the GPS status bar's three slots: coords (N/S + E/W + 5dp degrees),
 // accuracy in metres, and (later) compass heading. Called once per second
-// from the GPS-poll interval; safe to call with partial values — undefined
+// from the GPS-poll interval; safe to call with partial values - undefined
 // slots just keep their previous text.
 function _paintCmStatus(lat, lng, acc) {
     const coordsEl = document.getElementById('cm-status-coords');
@@ -6338,7 +6338,7 @@ function _paintCmHeading(deg) {
 
 // Cycle AUTO → ON → OFF → AUTO. AUTO is the default user-facing label;
 // under the hood we toggle the MediaStreamTrack `torch` constraint only
-// for the explicit ON state. iOS Safari doesn't implement torch — we
+// for the explicit ON state. iOS Safari doesn't implement torch - we
 // detect via getCapabilities().torch and let the label cycle without
 // actually applying the constraint (graceful no-op).
 function _toggleFlashMode() {
@@ -6381,7 +6381,7 @@ function _recenterFocus() {
     }
 }
 
-// Best-effort screen-orientation lock — flips the icon visually and, on
+// Best-effort screen-orientation lock - flips the icon visually and, on
 // browsers that expose `screen.orientation.lock`, actually pins the
 // orientation. iOS Safari (no `lock` API) gets the visual toggle only.
 function _toggleRotationLock() {
@@ -6404,7 +6404,7 @@ function _toggleRotationLock() {
 //      where the focus target landed.
 //   2. Functional (where supported): apply a single-shot focus at the
 //      normalised (x, y) of the clicked point via `pointsOfInterest`.
-//      Android Chrome 89+ and Edge expose this; iOS Safari does not —
+//      Android Chrome 89+ and Edge expose this; iOS Safari does not -
 //      iOS users get the reticle animation as visual feedback only.
 //
 // The (x, y) normalisation: getBoundingClientRect of the <video> gives
@@ -6439,7 +6439,7 @@ function _tapToFocus(evt) {
     }
 }
 
-// Reticle animation helper — re-triggers the CSS @keyframes by toggling
+// Reticle animation helper - re-triggers the CSS @keyframes by toggling
 // `animation: none` and reading offsetHeight (forced layout) before
 // restoring the animation. Without the reflow read, the keyframe doesn't
 // re-fire on a second tap at the same position. Used by _recenterFocus
@@ -6460,13 +6460,13 @@ function _animateReticle(reticle, x, y) {
 // what the user sees on-screen during capture + what we already ship
 // in the JSON payload. Compass heading (when granted on iOS / available
 // on Android) is mirrored onto `window._cmLastHeading` by the camera
-// modal's deviceorientation handler — read it here for the optional
+// modal's deviceorientation handler - read it here for the optional
 // GPSImgDirection EXIF field.
 //
 // Safety: no-op on any failure path (missing CrispExifGps module, no
 // GPS state, malformed JPEG, etc.). The JSON payload still carries the
 // geotag, so a no-op here means "no enhancement" rather than broken
-// upload. Strict GPS-IFD-only — see exif-gps.js for the field list.
+// upload. Strict GPS-IFD-only - see exif-gps.js for the field list.
 async function _embedGpsExif(jpegBlob) {
     if (!jpegBlob || typeof window === 'undefined' ||
         !window.CrispExifGps || typeof window.CrispExifGps.embed !== 'function') {
@@ -6495,7 +6495,7 @@ async function _embedGpsExif(jpegBlob) {
 // (same shape the "Add more photos" file-extra path uses).
 //
 // The "Done" button confirms + closes; "X" cancels + closes (but in-progress
-// state stays — aborting the modal never un-captures work the user did).
+// state stays - aborting the modal never un-captures work the user did).
 // An internal snap counter drives the Done-enabled toggle and the mini-gallery
 // badge count.
 function setupCameraModal() {
@@ -6510,7 +6510,7 @@ function setupCameraModal() {
         if (typeof window.__crispRefreshPhotoStrip === 'function') {
             window.__crispRefreshPhotoStrip();
         }
-        // HC76 (May 2026) — also kick the V4 review-strip refresher.
+        // HC76 (May 2026) - also kick the V4 review-strip refresher.
         // The V3 `__crispRefreshPhotoStrip` only repaints the V3-era
         // capture-stage strip; on the review stage's + Add → camera
         // flow the V4 review strip never got refreshed on Done close,
@@ -6576,7 +6576,7 @@ function setupCameraModal() {
             if (_helper) _helper.style.display = 'none';
         }
 
-        // Update the mini-gallery inside the modal immediately — feedback that
+        // Update the mini-gallery inside the modal immediately - feedback that
         // the snap landed. Primary and extras both appear here; the primary is
         // marked with a green border.
         const gallery = document.getElementById('cam-gallery');
@@ -6601,14 +6601,14 @@ function setupCameraModal() {
             state.photoGroupId = state.photoGroupId || genUUID();
             if (asExtra) {
                 if (!_canAddMorePhotos()) return;
-                // HC77 (May 2026) — dedupe at push site. Pre-HC77 the
+                // HC77 (May 2026) - dedupe at push site. Pre-HC77 the
                 // shutter could fire twice on consecutive video frames
                 // that produce byte-identical JPEG dataUrls (high-FPS
                 // device + matte-still scene), leaving extraPhotos with
-                // 2 entries pointing at the same image — the review
+                // 2 entries pointing at the same image - the review
                 // strip then rendered the same image in 2 slots
                 // (operator screenshot 2026-05-26). Also: if the same
-                // dataUrl is already the primary, skip too — no point
+                // dataUrl is already the primary, skip too - no point
                 // adding it as an extra of itself.
                 const dup = (state.extraPhotos || []).some(
                     (e) => e && e.dataUrl === dataUrl,
@@ -6620,7 +6620,7 @@ function setupCameraModal() {
                     dataUrl,
                     blob: rawBlob,
                     groupId: genUUID(),
-                    // HC77 — unique photo ID so two truly-different
+                    // HC77 - unique photo ID so two truly-different
                     // photos that happen to encode to identical bytes
                     // can still be tracked as distinct in queue +
                     // upload paths.
@@ -6628,7 +6628,7 @@ function setupCameraModal() {
                     variants: null,
                 };
                 state.extraPhotos.push(entry);
-                // HC76 (May 2026) — kick the V4 review-strip refresher
+                // HC76 (May 2026) - kick the V4 review-strip refresher
                 // immediately on each snap so the user sees the new
                 // photo appear behind the modal too. Without this,
                 // only the modal mini-gallery updated until the user
@@ -6676,7 +6676,7 @@ function setupCameraModal() {
                 if (variants) {
                     state.photoVariants = variants;
                     state.photoClientBlurApplied = Boolean(variants.clientBlurApplied);
-                    // Phase-1 progressive-upload — capture blurhash for meta POST.
+                    // Phase-1 progressive-upload - capture blurhash for meta POST.
                     state.blurhash = variants.blurhash || null;
                     try {
                         const smallUrl = await _blobToDataUrl(variants.small.blob);
@@ -6702,7 +6702,7 @@ function setupCameraModal() {
 }
 
 // ── Client-side PII blur helpers ─────────────────────────────────────────────
-// All three capture paths call these; they never throw — on any failure the
+// All three capture paths call these; they never throw - on any failure the
 // original blob comes back so the pipeline continues. The backend still runs
 // its own full PII pass as the safety net.
 //
@@ -6720,7 +6720,7 @@ async function _blurIfPossible(rawBlob) {
     }
     try {
         const result = await window.PIIBlur.blurFaces(rawBlob);
-        // Old PIIBlur returned a raw Blob — back-compat for any cached build.
+        // Old PIIBlur returned a raw Blob - back-compat for any cached build.
         if (result instanceof Blob) {
             return { blob: result, blurred: false, facesDetected: 0, skipped: true, error: 'legacy PIIBlur shape' };
         }
@@ -6732,7 +6732,7 @@ async function _blurIfPossible(rawBlob) {
 }
 
 // Phase 1: non-blocking blur. The three capture paths call _blurIfPossible()
-// asynchronously and don't block the UI — but if the user submits very fast we
+// asynchronously and don't block the UI - but if the user submits very fast we
 // need the enqueue step to wait for the in-flight blur before reading
 // state.photoBlob. Each capture site tracks its wrapping promise here; the
 // submit path awaits them all before constructing the queued item.
@@ -6750,7 +6750,7 @@ function _trackBlur(promise) {
     return promise;
 }
 
-// : field-reported UX bug — the Next button on stage-photo and the
+// : field-reported UX bug - the Next button on stage-photo and the
 // "Done" button inside the camera modal felt "sticky" for 300–800 ms after
 // a capture. Root cause: the code enabled Next synchronously in showPreview()
 // but IMMEDIATELY afterwards kicked off the blur+variants pipeline
@@ -6763,7 +6763,7 @@ function _trackBlur(promise) {
 // callbacks, so "capture → tap Next" feels instant even when the pipeline
 // is still churning. On Safari (no rIC) we fall back to a short setTimeout
 // which at least lets the current paint complete. The pipeline itself is
-// unchanged — same variants, same blur, same `awaitPendingBlur()` gate at
+// unchanged - same variants, same blur, same `awaitPendingBlur()` gate at
 // submit time. Only WHEN it starts moves from "immediately" to "after the
 // next idle tick".
 function _runWhenIdle(asyncFn) {
@@ -6782,7 +6782,7 @@ function _runWhenIdle(asyncFn) {
         }
     });
 }
-// P1 fix (May 2026) — defensive variant re-generation for photos whose
+// P1 fix (May 2026) - defensive variant re-generation for photos whose
 // first-pass `ImageVariants.generate()` failed silently (caught by
 // `_silent`, returning null). Without this, expected_media announces
 // fewer than the actual variant rows the queue ends up uploading,
@@ -6796,7 +6796,7 @@ function _runWhenIdle(asyncFn) {
 async function _reattemptMissingVariants(opts) {
     if (typeof window.ImageVariants?.generate !== 'function') return;
 
-    // B-E (May 2026) — overall time cap for the submit-time recovery
+    // B-E (May 2026) - overall time cap for the submit-time recovery
     // pass. Pre-fix this could block submit for several seconds when
     // the worker pool was still chewing through a large photo. Now
     // each per-photo reattempt races against a shared deadline, and
@@ -6845,7 +6845,7 @@ async function _reattemptMissingVariants(opts) {
         if (!ep || !ep.blob) continue;
         if (ep.variants && ep.variants.small) continue;  // already good
         if (_remainingMs() <= 0) {
-            console.log(`[submitReport] extra[${i}]: skipping re-attempt — submit deadline hit`);
+            console.log(`[submitReport] extra[${i}]: skipping re-attempt - submit deadline hit`);
             continue;
         }
         const variants = await _withTimeout(
@@ -6871,7 +6871,7 @@ async function awaitPendingBlur(opts) {
     }
     if (pending.length === 0) return { timedOut: false, allDone: true };
 
-    // B-E (May 2026) — submit-instant-return path: if a timeout is
+    // B-E (May 2026) - submit-instant-return path: if a timeout is
     // provided, race the pending blurs against a fallback so submit
     // returns within the operator's no-lag budget (target < 250 ms)
     // even when the worker pool is still encoding. Stale Promises
@@ -6890,12 +6890,12 @@ async function awaitPendingBlur(opts) {
             state.photoBlurPending = [];
             return { timedOut: false, allDone: true };
         }
-        // Time budget exceeded. Don't clear the list — those promises
+        // Time budget exceeded. Don't clear the list - those promises
         // are still running and `_trackBlur` should let them resolve.
         return { timedOut: true, allDone: false };
     }
 
-    // No timeout — legacy unbounded wait (still used for non-submit
+    // No timeout - legacy unbounded wait (still used for non-submit
     // call sites that genuinely need the blurs to be done first).
     try { await Promise.all(pending); } catch (_) { /* raw blob is fine */ }
     state.photoBlurPending = [];
@@ -6912,7 +6912,7 @@ function _blobToDataUrl(blob) {
 }
 
 /**
- * Inverse of `_blobToDataUrl` — decode a `data:image/jpeg;base64,...`
+ * Inverse of `_blobToDataUrl` - decode a `data:image/jpeg;base64,...`
  * URL into a Blob without going through intermediate strings.
  *
  * Used by the UNDP §5 binary chunk path (`_uploadVariantTier`): the
@@ -6920,7 +6920,7 @@ function _blobToDataUrl(blob) {
  * (JSON-serialisable), but uploaded as raw bytes via multipart. This
  * helper bridges the two representations at upload time.
  *
- * Falls through with a zero-byte Blob if the input is malformed —
+ * Falls through with a zero-byte Blob if the input is malformed -
  * the caller's retry loop will surface an obvious failure rather
  * than throwing here.
  */
@@ -6944,7 +6944,7 @@ function _dataUrlToBlob(dataUrl) {
             return new Blob();
         }
     } else {
-        // Percent-encoded body — decode to UTF-8 bytes.
+        // Percent-encoded body - decode to UTF-8 bytes.
         try {
             bytes = new TextEncoder().encode(decodeURIComponent(body));
         } catch (_) {
@@ -6968,12 +6968,12 @@ function setupAudioStage() {
     const timerText = document.getElementById('timer-text');
     const nextBtn = document.getElementById('btn-audio-next');
     // PR 4: `#audio-skip-link` ("Type instead") removed from DOM.
-    // The textarea and mic coexist — users type without any toggle.
+    // The textarea and mic coexist - users type without any toggle.
 
     // Keep state.transcript synced with manual edits. UI v3: the
     // live-transcript textarea is the SINGLE source for both the voice
     // transcription AND the free-text description, so every input also
-    // mirrors into `state.description` — no separate description box.
+    // mirrors into `state.description` - no separate description box.
     liveTranscript.addEventListener('input', () => {
         state.transcript = liveTranscript.value;
         if (UI_V3_ENABLED) state.description = liveTranscript.value;
@@ -6983,7 +6983,7 @@ function setupAudioStage() {
     // Uses `webkitSpeechRecognition` / `SpeechRecognition` when the browser
     // ships it (Chrome, Edge, Safari iOS 14.5+, Chrome Android). Sets
     // `recognition.lang` to `state.speechCode` so the device's engine
-    // transcribes in the reporter's language (UNDP §3.1 — local-language
+    // transcribes in the reporter's language (UNDP §3.1 - local-language
     // first-class). Interim + final results append to the textarea; the
     // raw audio blob from MediaRecorder is ALSO submitted so the server
     // can run a higher-accuracy Whisper pass later if it wants. Recogniser
@@ -6998,7 +6998,7 @@ function setupAudioStage() {
         if (!UI_V3_ENABLED) return null;
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SR) {
-            console.info('[v3 speech] SpeechRecognition unavailable — plain textarea fallback active');
+            console.info('[v3 speech] SpeechRecognition unavailable - plain textarea fallback active');
             return null;
         }
         try {
@@ -7033,7 +7033,7 @@ function setupAudioStage() {
                 state.description = liveTranscript.value;
             };
             r.onerror = (e) => {
-                // `no-speech` / `network` / `not-allowed` — fall through
+                // `no-speech` / `network` / `not-allowed` - fall through
                 // silently; MediaRecorder still captures the audio blob.
                 console.warn('[v3 speech] onerror:', e?.error || e);
             };
@@ -7069,7 +7069,7 @@ function setupAudioStage() {
                 stream.getTracks().forEach(t => t.stop());
             };
             state.mediaRecorder.start();
-            // Start SpeechRecognition in parallel (v3 only). Non-blocking —
+            // Start SpeechRecognition in parallel (v3 only). Non-blocking -
             // if the browser doesn't support it, returns null and the raw
             // audio blob still goes to the server.
             _v3Recognition = _startV3Recognition();
@@ -7155,7 +7155,7 @@ function populateReview() {
     const editText = document.getElementById('edit-text');
     editText.value = state.transcript || '';
 
-    // Update location UI — show place names, not coordinates
+    // Update location UI - show place names, not coordinates
     const locStatus = document.getElementById('loc-status');
     const locCoords = document.getElementById('loc-coords');
     if (state.location && (state.location.lat !== 0 || state.location.lng !== 0)) {
@@ -7171,7 +7171,7 @@ function populateReview() {
             locCoords.textContent = state.locationName;
         } else {
             locCoords.textContent = t('loc_resolving');
-            resolveLocationName(); // async — will update UI when done
+            resolveLocationName(); // async - will update UI when done
         }
     } else {
         locStatus.textContent = t('loc_type_below');
@@ -7225,7 +7225,7 @@ async function refreshLocation() {
             populateReview();
             return;
         }
-        // GPS failed — fall through to IP fallback
+        // GPS failed - fall through to IP fallback
         locStatus.textContent = '⚡ GPS unavailable, trying network location...';
     }
 
@@ -7239,7 +7239,7 @@ async function refreshLocation() {
         state.deviceLocation = { lat: ipLoc.lat, lng: ipLoc.lng };
         populateReview();
     } else {
-        // Both GPS and IP geo failed — show helpful message, don't block
+        // Both GPS and IP geo failed - show helpful message, don't block
         locStatus.textContent = t('loc_unavailable');
         locStatus.style.color = 'var(--red)';
         locCoords.textContent = 'Search a place name below to set location manually';
@@ -7361,8 +7361,8 @@ function setupLocationAutocomplete() {
         const fullName = [place.name, place.region, place.country].filter(Boolean).join(', ');
         state.userLocationName = fullName;
         state.locationName = fullName;
-        // P1.3 — Previously, if the selected place had no lat/lng AND the
-        // device had no GPS fix, we wrote {lat: 0, lng: 0} — which clusters
+        // P1.3 - Previously, if the selected place had no lat/lng AND the
+        // device had no GPS fix, we wrote {lat: 0, lng: 0} - which clusters
         // every such report at null-island off the west coast of Africa and
         // silently dropped them from every geo filter on the dashboard.
         // Now: only assign when we have actual coordinates. If a place was
@@ -7394,12 +7394,12 @@ function setupLocationAutocomplete() {
 
         if (q.length < 3) { closeSuggestions(); return; }
 
-        // Instant offline results — bundled DB + localStorage cache
+        // Instant offline results - bundled DB + localStorage cache
         const ps = (typeof placeSearch !== 'undefined') ? placeSearch : null;
         const instant = ps ? ps.search(q) : [];
         showSuggestions(instant, true);
 
-        // Background Nominatim enrichment — debounced 700ms, non-blocking
+        // Background Nominatim enrichment - debounced 700ms, non-blocking
         clearTimeout(remoteDebounce);
         remoteDebounce = setTimeout(() => {
             if (ps) {
@@ -7440,7 +7440,7 @@ function setupLocationAutocomplete() {
         });
     }
 
-    // Change button on selected pill — let user re-search
+    // Change button on selected pill - let user re-search
     if (changeBtn) {
         changeBtn.addEventListener('click', () => {
             hideSelectedPill();
@@ -7483,7 +7483,7 @@ function setupReviewStage() {
 
     // PR 6: infra-chip click now ALSO drives the inline severity
     // picker below the grid. Tapping the already-selected chip collapses
-    // the severity row (but keeps the stored damageClass — silent default
+    // the severity row (but keeps the stored damageClass - silent default
     // PARTIAL is preserved across collapses). Tapping a different chip
     // switches selection + keeps (or opens) the severity row.
     const infraSeverityWrap = document.getElementById('infra-severity');
@@ -7500,7 +7500,7 @@ function setupReviewStage() {
     //
     // UI v3 exception: the damage-severity picker lives on stage-where (an
     // earlier stage than stage-infra), so the "tap infra to reveal damage"
-    // tango doesn't apply — damage is chosen BEFORE the reporter gets here.
+    // tango doesn't apply - damage is chosen BEFORE the reporter gets here.
     // We short-circuit to plain selection behaviour, and migrateV3Blocks
     // has already force-displayed `#infra-severity` on stage-where.
     document.querySelectorAll('.chip-btn[data-type]').forEach(btn => {
@@ -7558,17 +7558,17 @@ function setupReviewStage() {
     setupLocationAutocomplete();
 
     // ── Phase 6: paginate the Review stage ──────────────────────
-    // UI v1 (default pre-Apr-2026): 2 pages — Details (all blocks) + Confirm
+    // UI v1 (default pre-Apr-2026): 2 pages - Details (all blocks) + Confirm
     //   (summary card). Filter by `[data-review-page]`.
-    // UI v2: 3 pages — "What happened?" (infra
+    // UI v2: 3 pages - "What happened?" (infra
     //   + damage + crisis chips) + "How bad + where?" (severity row +
     //   location + services) + "Describe + confirm" (textarea + building
     //   footprint + summary). Filter by `[data-v2-page]`.
     // The flag is read exactly once here so the page count stays stable
-    // across the lifetime of a single review entry — flipping localStorage
+    // across the lifetime of a single review entry - flipping localStorage
     // mid-flow would need a reload to rebind Next/Back anyway.
     state.reviewPage = 1;
-    // UI v3 — stage-review collapses to a single "confirm + submit" page.
+    // UI v3 - stage-review collapses to a single "confirm + submit" page.
     // All chip/input blocks have been reparented out of stage-review by
     // migrateV3Blocks, so the only thing on-screen is the summary card +
     // Submit button. No pager state machine needed: TOTAL=1 means Next/Back
@@ -7605,14 +7605,14 @@ function setupReviewStage() {
     function showReviewPage(n) {
         state.reviewPage = Math.min(Math.max(n, 1), TOTAL_REVIEW_PAGES);
         reviewRoot.setAttribute('data-review-page', String(state.reviewPage));
-        // UI v2.1 — broadcast so building-select.js (and any
+        // UI v2.1 - broadcast so building-select.js (and any
         // future page-aware listener) can react without reaching into
         // module-scope state. Detail carries the 1-based page number.
         try {
             document.dispatchEvent(new CustomEvent('review-page-changed', {
                 detail: { page: state.reviewPage },
             }));
-        } catch (_) { /* CustomEvent unsupported — safe to ignore */ }
+        } catch (_) { /* CustomEvent unsupported - safe to ignore */ }
 
         if (UI_V3_ENABLED) {
             // UI v3: stage-review collapses to a single "summary + submit"
@@ -7639,7 +7639,7 @@ function setupReviewStage() {
                 el.style.display = (p === state.reviewPage) ? '' : 'none';
             });
         } else {
-            // Legacy v1 — unchanged: show the single .review-page whose
+            // Legacy v1 - unchanged: show the single .review-page whose
             // `data-review-page` matches the current step.
             document.querySelectorAll('#stage-review .review-page').forEach(el => {
                 const p = parseInt(el.getAttribute('data-review-page') || '0', 10);
@@ -7662,7 +7662,7 @@ function setupReviewStage() {
         //   v1: page 1 → "Details", page 2 → "Confirm"
         //   v2: page 1 → "What happened?", page 2 → "How bad + where?",
         //       page 3 → "Review & send"
-        //   v3: single page → "Review and send" (stage8_title — see i18n).
+        //   v3: single page → "Review and send" (stage8_title - see i18n).
         const titleKeys = UI_V3_ENABLED
             ? ['stage8_title']
             : (UI_V2_ENABLED
@@ -7673,14 +7673,14 @@ function setupReviewStage() {
         const counter = document.getElementById('review-page-counter');
         if (counter) counter.textContent = `Step ${absoluteStep} of ${totalAbsolute}`;
 
-        // Button visibility — Submit shows on the LAST page only.
+        // Button visibility - Submit shows on the LAST page only.
         btnReviewBack.style.display = state.reviewPage === 1 ? 'none' : 'flex';
         btnReviewNext.style.display = state.reviewPage === TOTAL_REVIEW_PAGES ? 'none' : 'flex';
         btnReviewSubmit.style.display = state.reviewPage === TOTAL_REVIEW_PAGES ? 'flex' : 'none';
         // On the last page, render the live summary.
         if (state.reviewPage === TOTAL_REVIEW_PAGES) renderReviewSummary();
 
-        // Keep the flow-progress bar in sync with the in-stage page flip —
+        // Keep the flow-progress bar in sync with the in-stage page flip -
         // v2 uses steps 3/4/5 to mirror which review page is showing.
         try { updateFlowProgress('stage-review'); } catch (_) {}
     }
@@ -7692,13 +7692,13 @@ function setupReviewStage() {
         const ss = state.serviceStatus || {};
         const photoCount = (state.photoDataUrl ? 1 : 0) + (state.extraPhotos || []).length;
 
-        // UI v2.1 — translate every enum value that lands on
+        // UI v2.1 - translate every enum value that lands on
         // the confirm card. Before: raw `state.crisisType` ("FLOOD"),
         // `state.infraType` ("ROAD"), severity/damage/service-status
         // enums, and the joined `food, security` need keys all leaked
         // straight into the DOM as English uppercase. Field testers on
         // ZH/AR/RU saw an otherwise-translated page with ENGLISH values
-        // in the summary — classic half-translated UI. The map below
+        // in the summary - classic half-translated UI. The map below
         // routes each enum through the existing inline `I18N` dict.
         // Any value that doesn't map (e.g. a freshly-added enum a
         // locale hasn't translated yet) falls back to titlecased raw.
@@ -7714,7 +7714,7 @@ function setupReviewStage() {
                 ROAD:'road', HOSPITAL:'hospital', HOUSE:'house', POWER:'power',
                 WATER:'water', SCHOOL:'school', TELECOM:'telecom',
                 GOVERNMENT:'government', OTHER:'other',
-                // UNDP super-type synonyms — fall back to the nearest
+                // UNDP super-type synonyms - fall back to the nearest
                 // legacy chip label so non-EN locales still get a
                 // translated word even if a `public_spaces` key is
                 // not yet in the pack.
@@ -7746,7 +7746,7 @@ function setupReviewStage() {
             },
         };
         const tEnum = (raw, kind) => {
-            if (!raw) return t('summary_none') || '—';
+            if (!raw) return t('summary_none') || '-';
             const upper = String(raw).toUpperCase();
             const lookup = ENUM_KEY[kind] || {};
             const k = lookup[upper] || lookup[raw] || lookup[String(raw).toLowerCase()];
@@ -7759,9 +7759,9 @@ function setupReviewStage() {
         };
         const needsTxt = (ss.pressing_needs && ss.pressing_needs.length)
             ? ss.pressing_needs.map((n) => tEnum(n, 'need')).join(', ')
-            : (t('summary_none') || '—');
+            : (t('summary_none') || '-');
 
-        // Phase 3: both Edit links point to page 1 (Details) — that's now the
+        // Phase 3: both Edit links point to page 1 (Details) - that's now the
         // single editable page. The Incident card is kept as a visual block so
         // responders at a glance see the narrative bit separately from the
         // structured details.
@@ -7811,7 +7811,7 @@ function setupReviewStage() {
     document.addEventListener('stage-entered', (e) => {
         if (e.detail === 'stage-review') {
             showReviewPage(1);
-            // UI v2 — inject SVG chip icons once the stage is active. Idempotent:
+            // UI v2 - inject SVG chip icons once the stage is active. Idempotent:
             // each chip's `<span class="chip-ic">` is only populated on first
             // pass; subsequent entries skip the innerHTML writes so language
             // re-renders don't thrash the DOM.
@@ -7819,7 +7819,7 @@ function setupReviewStage() {
         }
     });
 
-    // UI v2 — scan every chip in #stage-review and prepend a `<span class="chip-ic">`
+    // UI v2 - scan every chip in #stage-review and prepend a `<span class="chip-ic">`
     // containing the Lucide SVG from `window.crispIconFor(key)`. Leaves the
     // legacy `<i class="fa-solid fa-...">` glyph in place (hidden via CSS
     // when body[data-ui-v2]) so the v1 fallback path stays byte-identical
@@ -7827,7 +7827,7 @@ function setupReviewStage() {
     function _renderReviewChipIcons() {
         if (typeof window.crispIconFor !== 'function') {
             // Icon pack failed to load (CDN down / CSP blocked). Fall back
-            // to the FontAwesome glyphs that are already in the DOM — UI
+            // to the FontAwesome glyphs that are already in the DOM - UI
             // still works, it just won't show the coloured SVG icons.
             return;
         }
@@ -7845,7 +7845,7 @@ function setupReviewStage() {
             btn.insertBefore(ic, btn.firstChild);
         });
     }
-    // Expose for Playwright — the E2E spec can jump straight to a given
+    // Expose for Playwright - the E2E spec can jump straight to a given
     // v2 review page without driving Next/Back clicks. Returns a Promise
     // that resolves on the next animation frame so the caller can await
     // the DOM settle before asserting.
@@ -7959,7 +7959,7 @@ function detectPWANetworkTier() {
         const ect = conn.effectiveType; // '4g', '3g', '2g', 'slow-2g'
         const dl = Number(conn.downlink); // Mbps estimate, 0 = "I don't know"
         // fix: Chrome DevTools throttling leaves `effectiveType` at '4g'
-        // regardless of the simulated speed, but DOES update `downlink` — so a
+        // regardless of the simulated speed, but DOES update `downlink` - so a
         // reading of `downlink: 0` on '4g' is the browser explicitly telling us
         // it has no reliable measurement. Treat that as "slow until proven
         // otherwise" rather than trusting the optimistic ECT alone. The real
@@ -7972,7 +7972,7 @@ function detectPWANetworkTier() {
         else                                      _pwaTier = 'VERY_SLOW';
     } else {
         // No Network Information API (Safari + several mobile browsers). Pre-probe
-        // default is SLOW — we'd rather pay a few extra round trips on a fast
+        // default is SLOW - we'd rather pay a few extra round trips on a fast
         // link than time out every chunk on a slow one.
         _pwaTier = 'SLOW';
     }
@@ -7993,23 +7993,23 @@ function detectPWANetworkTier() {
 // signal. The probe itself is cached for 60 s so re-probing every variant
 // of the same report is wasteful.
 
-// Phase L L.5 (May 2026) — probe size bumped 8 KB → 64 KB. The 8 KB
+// Phase L L.5 (May 2026) - probe size bumped 8 KB → 64 KB. The 8 KB
 // probe hit a latency floor: on cloudflare-tunneled traffic where
 // RTT can be 150–500 ms, 8 KB ÷ 200 ms ≈ 40 KB/s → SLOW tier →
 // ORIGINAL deferred per the defer matrix, even on a 100 Mbps phone.
 // With 64 KB, the same 200 ms RTT yields 64 KB ÷ 0.2 s = 320 KB/s →
 // MEDIUM tier → ORIGINAL ships. Slowest probe time at 2 Kbps =
-// 64 KB / 256 B/s ≈ 250 s — exceeds the 45 s timeout, but at that
+// 64 KB / 256 B/s ≈ 250 s - exceeds the 45 s timeout, but at that
 // point the link is unusable anyway and the timeout-fallback to
 // NavigatorConnection's tier (defaults to SLOW) is the correct
 // outcome. For everything FASTER than 2 Kbps, 64 KB is fine.
-const _PROBE_SIZE_BYTES = 65_536;      // 64 KB — clears the latency floor at typical RTTs
+const _PROBE_SIZE_BYTES = 65_536;      // 64 KB - clears the latency floor at typical RTTs
 const _PROBE_TIMEOUT_MS = 45_000;      // abort after 45 s even on garbage links
 const _PROBE_CACHE_MS = 60_000;        // re-probe at most once per minute
 
 let _lastProbeBytesPerSec = 0;
 let _lastProbeAt = 0;
-// Phase L L.5 — also remember probe round-trip time so
+// Phase L L.5 - also remember probe round-trip time so
 // pickTierFromBandwidth's latency-floor heuristic can short-circuit
 // to MEDIUM when RTT is < 100 ms (responsive network with
 // undersized-probe-induced low bps).
@@ -8034,16 +8034,16 @@ async function measureUploadBandwidth() {
         if (!res.ok) {
             if (timer) clearTimeout(timer);
             // 404 → probe endpoint not deployed yet (client ahead of backend).
-            // We don't treat that as a signal either way — fall through to
+            // We don't treat that as a signal either way - fall through to
             // NavigatorConnection-based detection.
-            console.warn(`[Probe] HTTP ${res.status} — ignoring`);
+            console.warn(`[Probe] HTTP ${res.status} - ignoring`);
             return { bytesPerSec: 0, elapsedMs: 0, error: `HTTP ${res.status}` };
         }
         await res.json();           // fully drain the response so the timer reflects complete round-trip
         const elapsedMs = performance.now() - start;
         if (timer) clearTimeout(timer);
         // Throughput over the upload leg only. We ignore the (tiny) JSON
-        // response size — it's ~50 bytes vs the 8192-byte payload.
+        // response size - it's ~50 bytes vs the 8192-byte payload.
         const bytesPerSec = elapsedMs > 0 ? (_PROBE_SIZE_BYTES / elapsedMs) * 1000 : 0;
         return { bytesPerSec, elapsedMs };
     } catch (e) {
@@ -8056,7 +8056,7 @@ async function measureUploadBandwidth() {
 /** Map a measured bytes/sec to one of the four tiers. Thresholds sized so
  *  the picked tier's chunk completes within ~15 s at the measured speed.
  *
- *  Phase L L.5 — `elapsedMs` opt-in: if the probe round-trip was
+ *  Phase L L.5 - `elapsedMs` opt-in: if the probe round-trip was
  *  short enough that the network is clearly responsive (< 100 ms),
  *  refuse to classify lower than MEDIUM regardless of computed bps.
  *  This prevents the latency-floor bug where a probe on a fast link
@@ -8065,12 +8065,12 @@ async function measureUploadBandwidth() {
  */
 function pickTierFromBandwidth(bytesPerSec, elapsedMs) {
     if (!Number.isFinite(bytesPerSec) || bytesPerSec <= 0) return 'VERY_SLOW';
-    // Phase L L.5 — RTT-bound floor. If the probe came back in
+    // Phase L L.5 - RTT-bound floor. If the probe came back in
     // < 100 ms, the network is responsive even if measured bps
     // looks low (probe was too small to amortize RTT). Floor at
     // MEDIUM so the defer matrix doesn't drop ORIGINAL on what's
     // really a perfectly capable connection. FAST stays gated on
-    // the ≥ 1 MB/s measurement — we only LIFT below-MEDIUM bps to
+    // the ≥ 1 MB/s measurement - we only LIFT below-MEDIUM bps to
     // MEDIUM, never promote to FAST without evidence.
     if (typeof elapsedMs === 'number' && elapsedMs > 0 && elapsedMs < 100) {
         if (bytesPerSec >= 1_000_000) return 'FAST';
@@ -8095,7 +8095,7 @@ async function adaptTierViaProbe(opts = {}) {
     const { force = false } = opts;
     const freshEnough = !force &&
         _lastProbeBytesPerSec > 0 &&
-        _lastProbeAt > 0 &&  // Phase L L.5 — cache-hydration sets _lastProbeAt=0 (see below)
+        _lastProbeAt > 0 &&  // Phase L L.5 - cache-hydration sets _lastProbeAt=0 (see below)
         (Date.now() - _lastProbeAt) < _PROBE_CACHE_MS;
     if (freshEnough) {
         _pwaTier = pickTierFromBandwidth(_lastProbeBytesPerSec, _lastProbeElapsedMs);
@@ -8112,7 +8112,7 @@ async function adaptTierViaProbe(opts = {}) {
             `(${elapsedMs.toFixed(0)} ms) → tier ${_pwaTier}`
         );
     } else {
-        // Probe failed — fall back to the browser hint (already conservative).
+        // Probe failed - fall back to the browser hint (already conservative).
         console.log(`[Probe] no measurement (${error || 'n/a'}); falling back to NavigatorConnection tier`);
         detectPWANetworkTier();
     }
@@ -8123,7 +8123,7 @@ async function adaptTierViaProbe(opts = {}) {
  * Compute a chunk-upload timeout scaled to actual measured throughput.
  * 3× the expected transfer time + 5 s fixed buffer, floored at 10 s.
  * When we don't have a measurement yet, falls back to the tier-table
- * default — but the outer probe should have run first, so this branch
+ * default - but the outer probe should have run first, so this branch
  * is hit only for the first probe itself or when probe failed.
  */
 function computeChunkTimeout(chunkSize, measuredBytesPerSec = null) {
@@ -8139,13 +8139,13 @@ function computeChunkTimeout(chunkSize, measuredBytesPerSec = null) {
 function getMeasuredBandwidth() { return _lastProbeBytesPerSec; }
 
 // ─── Phase-1 Adaptive Upgrades ────────────────────────────────────
-// 1. Per-device bandwidth cache — skip the first probe round-trip for
+// 1. Per-device bandwidth cache - skip the first probe round-trip for
 //    repeat sessions. Saves ~500 ms of cold-start latency on typical links.
-// 2. Mid-upload re-probe with hysteresis — detect "user walked into a
+// 2. Mid-upload re-probe with hysteresis - detect "user walked into a
 //    weak cell area" and switch tiers for remaining chunks. Hysteresis
 //    prevents flip-flop oscillation: only switch if measured bps differs
 //    from current by >2×.
-// 3. Packet-loss awareness — if a chunk needs >2 retries to land,
+// 3. Packet-loss awareness - if a chunk needs >2 retries to land,
 //    the link is effectively lossy. Shrink the tier one step for the
 //    rest of the session so smaller chunks = fewer timeouts / waste.
 
@@ -8170,7 +8170,7 @@ function _readCachedBandwidth() {
 function _writeCachedBandwidth(bps) {
     try {
         localStorage.setItem(_BANDWIDTH_CACHE_KEY, JSON.stringify({ bps, ts: Date.now() }));
-    } catch (_) { /* storage quota or disabled — no-op */ }
+    } catch (_) { /* storage quota or disabled - no-op */ }
 }
 
 /** Seed the probe state from the device-local cache so the first
@@ -8181,7 +8181,7 @@ function _hydrateBandwidthFromCache() {
     const bps = _readCachedBandwidth();
     if (bps > 0 && _lastProbeBytesPerSec === 0) {
         _lastProbeBytesPerSec = bps;
-        // Phase L L.5 — DON'T set _lastProbeAt here. Hydration is a
+        // Phase L L.5 - DON'T set _lastProbeAt here. Hydration is a
         // seed, not a measurement. Pre-L this set Date.now() so the
         // next adaptTierViaProbe() saw "fresh" cache and returned
         // the seeded value for 60 s WITHOUT a fresh probe. That's
@@ -8216,7 +8216,7 @@ async function midUploadReprobe() {
     const newBps = _lastProbeBytesPerSec;
     if (newBps > 0) _writeCachedBandwidth(newBps);
     // Hysteresis: if the new measurement is within 2× of the previous,
-    // don't switch — noise in the probe shouldn't make us flap between
+    // don't switch - noise in the probe shouldn't make us flap between
     // tiers mid-upload. Let the chunk loop continue with the prior tier.
     if (prevBps > 0 && newBps > 0) {
         const ratio = Math.max(prevBps, newBps) / Math.min(prevBps, newBps);
@@ -8225,7 +8225,7 @@ async function midUploadReprobe() {
             _pwaTier = prevTier;
             console.log(
                 `[Reprobe] ${Math.round(prevBps)}→${Math.round(newBps)} B/s ` +
-                `(ratio ${ratio.toFixed(2)}) — within hysteresis, staying on ${prevTier}`
+                `(ratio ${ratio.toFixed(2)}) - within hysteresis, staying on ${prevTier}`
             );
             return prevTier;
         }
@@ -8301,7 +8301,7 @@ function getCurrentPWATier() { return _pwaTier; }
 
 function getPWAAdaptiveConfig() { return PWA_NETWORK_TIERS[_pwaTier]; }
 
-// May 2026 — testability hook. The top-level `function` declarations
+// May 2026 - testability hook. The top-level `function` declarations
 // above SHOULD bind to window via classic-script semantics, but in
 // practice the e2e harness sometimes can't reach them (suspected: a
 // downstream IIFE or DCE pass). Explicit assignment makes the
@@ -8352,7 +8352,7 @@ function chunkBase64(b64str, chunkChars = 1024) {
     return chunks;
 }
 
-// djb2 checksum — must match Python djb2_checksum() on the backend (PRD §3.7)
+// djb2 checksum - must match Python djb2_checksum() on the backend (PRD §3.7)
 function simpleChecksum(str) {
     let h = 5381;
     for (let i = 0; i < str.length; i++) {
@@ -8369,9 +8369,9 @@ function genUUID() {
     });
 }
 
-// P3.4 — Lightweight telemetry wrapper for what used to be `catch(_) {}`.
+// P3.4 - Lightweight telemetry wrapper for what used to be `catch(_) {}`.
 // Records the last 100 swallowed errors (timestamp + context + message +
-// stack) so a debug screen — or a future Sentry hook — can surface them.
+// stack) so a debug screen - or a future Sentry hook - can surface them.
 // Never throws. Callers that truly want silence can still use a bare catch.
 window._crispTelemetry = window._crispTelemetry || { events: [] };
 function _silent(context, err) {
@@ -8388,9 +8388,9 @@ function _silent(context, err) {
 }
 
 // ── Progressive Upload Helper ────────────────────────────────────────────────
-// XHR-based sender with hard timeout. fetch() hangs on slow networks — XHR doesn't.
+// XHR-based sender with hard timeout. fetch() hangs on slow networks - XHR doesn't.
 function sendJSON(url, payload, timeoutMs = 30000) {
-    // POST for meta, chunk, thumbnail — PATCH for everything else
+    // POST for meta, chunk, thumbnail - PATCH for everything else
     const method = /\/(meta|chunk|thumbnail)$/.test(url) ? 'POST' : 'PATCH';
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
@@ -8412,7 +8412,7 @@ function sendJSON(url, payload, timeoutMs = 30000) {
 }
 
 // Retry wrapper: tries up to `retries` times with exponential backoff
-// K.4.c (May 2026, Phase K) — capped + jittered exponential backoff.
+// K.4.c (May 2026, Phase K) - capped + jittered exponential backoff.
 // Pre-fix the 5-retry exponential ladder summed to 2+4+8+16+32 = 62 s
 // across 5 attempts. On a Wi-Fi that flapped every 30 s (common in
 // field deployments), the entire retry window could land during
@@ -8444,7 +8444,7 @@ async function sendWithRetry(url, payload, retries = 7, timeoutMs = 30000) {
 }
 
 // ── UNDP §5 binary-chunk transport ──────────────────────
-// Master feature flag for the new transport. Default ON — every new build
+// Master feature flag for the new transport. Default ON - every new build
 // uses binary chunks. If the flag is off, every call-site falls back to the
 // legacy base64 path without any behavioural change.
 //
@@ -8454,17 +8454,17 @@ async function sendWithRetry(url, payload, retries = 7, timeoutMs = 30000) {
 function isBinaryChunksEnabled() {
     try {
         if (localStorage.getItem('crisp_binary_chunks') === 'off') return false;
-    } catch (_) { /* private-mode storage throws — default to ON */ }
+    } catch (_) { /* private-mode storage throws - default to ON */ }
     return true;
 }
 
 /**
  * djb2 hash over a byte sequence. Mirrors `djb2_bytes` in
  * `backend/app/api/endpoints/reports.py`. Used ONLY by the binary
- * chunk path — the legacy path keeps calling `simpleChecksum(string)`
+ * chunk path - the legacy path keeps calling `simpleChecksum(string)`
  * which is the text-alphabet variant.
  *
- * Same polynomial as the existing `simpleChecksum` — only the input
+ * Same polynomial as the existing `simpleChecksum` - only the input
  * type differs. For pure-ASCII inputs the two helpers produce identical
  * output (ord(char) === byte on ASCII).
  */
@@ -8481,14 +8481,14 @@ function djb2Bytes(bytes) {
  * networks the same way `sendJSON` does, so we match its pattern).
  * Returns the parsed JSON response body on 2xx; rejects with an
  * Error whose `.status` reflects the HTTP code so call-sites can
- * distinguish a 404 (legacy backend — fall back to base64) from
+ * distinguish a 404 (legacy backend - fall back to base64) from
  * a 5xx (retry).
  */
 function sendFormData(url, formData, timeoutMs = 30000, headers = null) {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', url, true);
-        // DO NOT set Content-Type — the browser needs to generate it
+        // DO NOT set Content-Type - the browser needs to generate it
         // with the multipart boundary. Setting it manually breaks the
         // upload silently.
         // Custom headers ARE safe (B-C ships X-Client-Face-Boxes here).
@@ -8525,12 +8525,12 @@ function sendFormData(url, formData, timeoutMs = 30000, headers = null) {
  * @param {string} params.mediaId
  * @param {number} params.seqNum
  * @param {number} params.totalChunks
- * @param {Blob|Uint8Array|ArrayBuffer} params.blob  — the raw-byte chunk payload
+ * @param {Blob|Uint8Array|ArrayBuffer} params.blob  - the raw-byte chunk payload
  * @param {'IMAGE'|'AUDIO'} params.type
  * @param {'SMALL'|'MEDIUM'|'ORIGINAL'} params.resolutionTier
  * @param {string|null} params.photoGroupId
  * @param {boolean} params.clientBlurApplied
- * @param {string|null} params.checksum  — hex djb2 over the raw bytes (null → skip)
+ * @param {string|null} params.checksum  - hex djb2 over the raw bytes (null → skip)
  * @param {number} [retries=5]
  * @param {number} [timeoutMs=30000]
  *
@@ -8546,10 +8546,10 @@ async function sendBinaryChunkWithRetry(reportId, params, retries = 5, timeoutMs
         mediaId, seqNum, totalChunks, blob, type,
         resolutionTier, photoGroupId, clientBlurApplied, checksum,
         fullAssetChecksum,
-        // B-C (May 2026) — optional list of normalized face boxes from
+        // B-C (May 2026) - optional list of normalized face boxes from
         // PWA's BlazeFace pass. Array of {x, y, w, h} in [0.0, 1.0].
         // Shipped to server via X-Client-Face-Boxes header (same value
-        // on every chunk for one media row — server stamps on row
+        // on every chunk for one media row - server stamps on row
         // create, ignores on later chunks). Falsy/empty values omit
         // the header entirely.
         clientFaceBoxes,
@@ -8568,14 +8568,14 @@ async function sendBinaryChunkWithRetry(reportId, params, retries = 5, timeoutMs
             fd.append('seq_num', String(seqNum));
             fd.append('total_chunks', String(totalChunks));
             fd.append('type', type);
-            // Phase L (May 2026) — canonical SMALL fallback. Pre-L
+            // Phase L (May 2026) - canonical SMALL fallback. Pre-L
             // was 'LOW' which the backend now rejects with 422 post-
             // Batch-1b cleanup.
             fd.append('resolution_tier', resolutionTier || 'SMALL');
             if (photoGroupId) fd.append('photo_group_id', photoGroupId);
             fd.append('client_blur_applied', clientBlurApplied ? 'true' : 'false');
             if (checksum) fd.append('checksum', checksum);
-            // Phase C.1 (May 2026) — whole-asset djb2 over the original full
+            // Phase C.1 (May 2026) - whole-asset djb2 over the original full
             // bytes; ONLY sent on chunk 0. Older backends without the field
             // ignore the extra form key, so this is safe to ship before all
             // backends are upgraded.
@@ -8593,10 +8593,10 @@ async function sendBinaryChunkWithRetry(reportId, params, retries = 5, timeoutMs
             if (Array.isArray(clientFaceBoxes) && clientFaceBoxes.length > 0) {
                 try {
                     _hdrs = { 'X-Client-Face-Boxes': JSON.stringify(clientFaceBoxes) };
-                } catch (_) { /* serialise failed — drop the header silently */ }
+                } catch (_) { /* serialise failed - drop the header silently */ }
             }
             const result = await sendFormData(url, fd, timeoutMs, _hdrs);
-            // Phase-2.1 — record the retry count for this chunk. 0 = first
+            // Phase-2.1 - record the retry count for this chunk. 0 = first
             // attempt succeeded; >_PACKET_LOSS_RETRY_THRESHOLD counts as a
             // "lossy" event. See _recordRetryCount in the adaptive block.
             try { _recordRetryCount(attempt - 1); } catch (_) {}
@@ -8605,13 +8605,13 @@ async function sendBinaryChunkWithRetry(reportId, params, retries = 5, timeoutMs
             // 404 means this backend doesn't know about /chunk-bin yet.
             // Switch the entire session to base64 and retry legacy.
             if (err.status === 404) {
-                console.warn('[BinaryChunks] /chunk-bin returned 404 — falling back to base64 for the rest of this session');
+                console.warn('[BinaryChunks] /chunk-bin returned 404 - falling back to base64 for the rest of this session');
                 _binaryChunkFallback404 = true;
                 return await _sendLegacyB64Chunk(reportId, params, retries, timeoutMs);
             }
             console.warn(`[BinaryChunks] attempt ${attempt}/${retries} failed for seq=${seqNum}: ${err.message}`);
             if (attempt === retries) throw err;
-            // K.4.c — capped exponential + jitter (shared with sendWithRetry).
+            // K.4.c - capped exponential + jitter (shared with sendWithRetry).
             await new Promise(r => setTimeout(r, _backoffDelayMs(attempt)));
         }
     }
@@ -8644,7 +8644,7 @@ async function _sendLegacyB64Chunk(reportId, params, retries, timeoutMs) {
             media_id: mediaId, type,
             seq_num: seqNum, total_chunks: totalChunks,
             data: b64, checksum: simpleChecksum(b64),
-            // Phase L (May 2026) — canonical SMALL fallback.
+            // Phase L (May 2026) - canonical SMALL fallback.
             resolution_tier: resolutionTier || 'SMALL',
             photo_group_id: photoGroupId || null,
             client_blur_applied: Boolean(clientBlurApplied),
@@ -8661,18 +8661,18 @@ async function _sendLegacyB64Chunk(reportId, params, retries, timeoutMs) {
  * @returns {Promise<{totalChunks:number}>}
  */
 async function uploadChunksBinary(reportId, mediaId, blob, {
-    // Phase L (May 2026) — canonical SMALL default. Pre-L was 'LOW'
+    // Phase L (May 2026) - canonical SMALL default. Pre-L was 'LOW'
     // which the backend now rejects with 422 post-Batch-1b cleanup.
     type = 'IMAGE', resolutionTier = 'SMALL', photoGroupId = null,
     clientBlurApplied = false, startSeq = 0,
     onProgress = null,
-    // B-C (May 2026) — optional list of normalized face boxes from
+    // B-C (May 2026) - optional list of normalized face boxes from
     // PWA's BlazeFace pass. Array of {x, y, w, h} in [0.0, 1.0].
     // Travels with each chunk (server stamps on row create, ignores
     // on later chunks). Falsy/empty omits the header.
     clientFaceBoxes = null,
 } = {}) {
-    // Sprint D (May 2026) — embed GPS EXIF into the JPEG bytes BEFORE
+    // Sprint D (May 2026) - embed GPS EXIF into the JPEG bytes BEFORE
     // chunking, so an external `exiftool` reader sees the same coords
     // we already persist on the backend Location row. Only applies to
     // IMAGE chunks; AUDIO / other types fall through untouched.
@@ -8699,7 +8699,7 @@ async function uploadChunksBinary(reportId, mediaId, blob, {
         const slice = blob.slice(start, end);
 
         // Compute djb2 over raw bytes so the server can verify integrity.
-        // `blob.slice` is zero-copy — we only read the bytes here to hash.
+        // `blob.slice` is zero-copy - we only read the bytes here to hash.
         const buf = new Uint8Array(await slice.arrayBuffer());
         const checksum = djb2Bytes(buf);
 
@@ -8719,13 +8719,13 @@ async function uploadChunksBinary(reportId, mediaId, blob, {
         // returns immediately when the 60 s probe cache is warm, and
         // packet-loss shrink is a pure in-memory comparison. Only actual
         // network traffic is the re-probe every _MID_UPLOAD_REPROBE_EVERY
-        // chunks — and even that is skipped on the fast path because the
+        // chunks - and even that is skipped on the fast path because the
         // cache hit short-circuits.
         try {
             if (window._crispAdaptive) {
                 window._crispAdaptive.maybeShrinkTierForLoss();
                 if ((seq + 1) % window._crispAdaptive.MID_UPLOAD_REPROBE_EVERY === 0) {
-                    // fire-and-forget — don't block the next chunk behind
+                    // fire-and-forget - don't block the next chunk behind
                     // the probe round-trip. If the probe discovers a new
                     // tier, the NEXT getPWAAdaptiveConfig() call picks it up.
                     window._crispAdaptive.midUploadReprobe().catch(() => {});
@@ -8736,18 +8736,18 @@ async function uploadChunksBinary(reportId, mediaId, blob, {
     return { totalChunks: total };
 }
 
-// K.4.b (May 2026, Phase K) — double-tap submit guard.
+// K.4.b (May 2026, Phase K) - double-tap submit guard.
 // Module-scope promise that holds the in-flight submitReport call.
 // Two rapid taps land BEFORE the first promise resolves; the second
 // returns the same promise instead of generating a new clientReportId
 // + queueing a duplicate report row.
 let _submitInFlight = null;
 
-// HC80 (May 2026) — bulletproof submit-once latch. K.4.b only dedups
+// HC80 (May 2026) - bulletproof submit-once latch. K.4.b only dedups
 // CONCURRENT calls (those that land while the first promise hasn't
 // resolved). After the first promise resolves, the latch is open
 // and the NEXT tap fires a fresh submitReport with a fresh
-// clientReportId — duplicating the report row server-side. Operator
+// clientReportId - duplicating the report row server-side. Operator
 // reproducer (2026-05-26): rapid Send taps generated 5 server-side
 // reports in 17 s because each tap landed AFTER the previous in-
 // flight promise had resolved.
@@ -8756,20 +8756,20 @@ let _submitInFlight = null;
 // submit has been committed for the current capture state. Subsequent
 // submitReport calls short-circuit with the cached promise / a
 // resolved success until the flag is cleared by resetApp (which
-// also clears state — i.e., a NEW report is being started).
+// also clears state - i.e., a NEW report is being started).
 let _submitCommitted = false;
 let _lastSubmitPromise = null;
 
 function submitReport() {
-    // HC80 — sticky latch. Once we've committed a submit for the
+    // HC80 - sticky latch. Once we've committed a submit for the
     // current capture state, every subsequent call returns the same
     // resolution (no fresh clientReportId, no fresh server row).
     // resetApp() opens the latch when starting a new flow.
     if (_submitCommitted) {
-        console.log('[Submit] HC80 dedup: latch closed — submit already committed for this capture state');
+        console.log('[Submit] HC80 dedup: latch closed - submit already committed for this capture state');
         return _lastSubmitPromise || Promise.resolve();
     }
-    // K.4.b — concurrent-tap dedup. Returns the SAME in-flight promise
+    // K.4.b - concurrent-tap dedup. Returns the SAME in-flight promise
     // so both callers observe the same resolution / failure. The
     // promise is cleared in the finally block once the first call
     // settles.
@@ -8780,14 +8780,14 @@ function submitReport() {
     _submitInFlight = (async () => {
         try {
             const out = await _submitReportInner();
-            // HC80 — close the latch. Subsequent submitReport calls
+            // HC80 - close the latch. Subsequent submitReport calls
             // for the same capture state are no-ops. Only resetApp()
             // re-opens it.
             _submitCommitted = true;
             _lastSubmitPromise = Promise.resolve(out);
             return out;
         } catch (err) {
-            // On failure we deliberately DO NOT close the latch — the
+            // On failure we deliberately DO NOT close the latch - the
             // user should be able to retry. The K.4.b concurrent-
             // tap guard still protects against rapid retries while
             // the next attempt is in flight.
@@ -8799,7 +8799,7 @@ function submitReport() {
     return _submitInFlight;
 }
 
-// HC80 — exposed for resetApp + for explicit clears (e.g. on the
+// HC80 - exposed for resetApp + for explicit clears (e.g. on the
 // success stage's "Report another" tap, the flow re-enters from a
 // clean state).
 function _openSubmitLatch() {
@@ -8815,7 +8815,7 @@ async function _submitReportInner() {
     if (sendBtn) sendBtn.disabled = true;
 
     try {
-        // B-E (May 2026) — submit-instant-return. Wait for the blur
+        // B-E (May 2026) - submit-instant-return. Wait for the blur
         // pool up to SUBMIT_BLUR_WAIT_MS so the user gets the best
         // possible variants if they arrive in time, but cap the wait
         // so submit returns within the no-lag budget when the user
@@ -8834,11 +8834,11 @@ async function _submitReportInner() {
             );
         }
 
-        // Generate idempotency key (use shared genUUID() — single source of truth)
+        // Generate idempotency key (use shared genUUID() - single source of truth)
         const clientReportId = genUUID();
 
-        // P3.2 — Stronger device hash. Previously `DEV-<8 hex chars>` used
-        // only 32 bits of entropy — theoretically a 1-in-65K birthday
+        // P3.2 - Stronger device hash. Previously `DEV-<8 hex chars>` used
+        // only 32 bits of entropy - theoretically a 1-in-65K birthday
         // collision across 10K devices, which would pollute badge + report
         // counts for the colliding devices. We now generate once (on first
         // use) a SHA-256 of {UUID + UA + screen + timezone + install time}
@@ -8858,7 +8858,7 @@ async function _submitReportInner() {
                 const hash = await crypto.subtle.digest('SHA-256', buf);
                 hex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
             } catch (_) {
-                // Very old browsers without SubtleCrypto — fall back to
+                // Very old browsers without SubtleCrypto - fall back to
                 // something stronger than the old 8-hex scheme: two UUIDs.
                 hex = (crypto?.randomUUID?.() || Math.random().toString(36).slice(2)) +
                       (crypto?.randomUUID?.() || Math.random().toString(36).slice(2));
@@ -8873,13 +8873,13 @@ async function _submitReportInner() {
             return id;
         })();
 
-        // Resilience #1 (prevention) — guarantee a photo-intended report always
+        // Resilience #1 (prevention) - guarantee a photo-intended report always
         // persists at least one uploadable byte source. A degraded capture (the
         // no-op-blur path) can leave `state.photoBlob` set but `state.photoDataUrl`
         // null; without this, `hasPhoto` below reads false → the captured photo is
         // silently dropped from the report (and, if variants ALSO failed, the
-        // drain wedges with no bytes to send). Encode the blob to a data-URL NOW —
-        // before `hasPhoto` is derived — so the legacy `item.photo` fallback is
+        // drain wedges with no bytes to send). Encode the blob to a data-URL NOW -
+        // before `hasPhoto` is derived - so the legacy `item.photo` fallback is
         // always present when a photo was captured. No-op on the happy path
         // (variants/blur already set `photoDataUrl`). Makes the "stuck at N%"
         // wedge unreachable from capture.
@@ -8897,7 +8897,7 @@ async function _submitReportInner() {
         const extraPhotoCount = state.extraPhotos.length;
         // Guaranteed-delivery: each photo with variants becomes 3 Media rows
         // on the backend (SMALL/MEDIUM/ORIGINAL) vs 1 without. Count accurately
-        // so `expected_media` matches what the server will ultimately see —
+        // so `expected_media` matches what the server will ultimately see -
         // otherwise the report never flips to SYNCED.
         //
         // P1 fix (May 2026, operator-reported): the count previously read
@@ -8907,7 +8907,7 @@ async function _submitReportInner() {
         // by 2 per affected photo (announced 1 tier instead of 3).
         // Sister bug: the queueItem snapshot at line ~8758 ALSO reads
         // these same fields, so it stayed consistent with expected_media
-        // — but if the user then re-took the photo / retried, the
+        // - but if the user then re-took the photo / retried, the
         // late-arriving variant got into the queueItem AFTER the
         // expected_media announcement, producing a divergence (operator
         // observed 6 Media rows but expected_media=4 in DB).
@@ -8915,7 +8915,7 @@ async function _submitReportInner() {
         // New approach: synchronously re-attempt variant generation for
         // ANY photo missing `.variants.small` after awaitPendingBlur.
         // The re-attempt blocks the submit click for at most a few seconds
-        // — much better than silently shipping a degraded count + 1-tier
+        // - much better than silently shipping a degraded count + 1-tier
         // photo.
         await _reattemptMissingVariants();
 
@@ -8928,7 +8928,7 @@ async function _submitReportInner() {
             (hasAudio ? 1 : 0);
         // P1 invariant check: for a 2-photo report with variants, this
         // MUST be 6 (or 7 with audio). If it's 4 something silently
-        // dropped — log + continue (don't block the submission, but
+        // dropped - log + continue (don't block the submission, but
         // surface the gap to operator + observability).
         if (hasPhoto && extraPhotoCount > 0 && expectedMedia < 3 + extraPhotoCount * 3) {
             console.warn(
@@ -8949,7 +8949,7 @@ async function _submitReportInner() {
         // the user who captured the data, even if they log out while the
         // queue drains. The token goes into `/reports/meta`'s auth
         // header at replay; server silently degrades to anonymous when
-        // expired beyond offline grace — never blocks.
+        // expired beyond offline grace - never blocks.
         const _authToken = (window.AuthStore && window.AuthStore.getAccessToken && window.AuthStore.getAccessToken()) || null;
         // ── Dynamic Crisis Forms ── When the geo-gated pack rendered for this
         // report (reporter inside a live crisis zone), attach the pack id +
@@ -8964,7 +8964,7 @@ async function _submitReportInner() {
             const _cp = state.crisisPack;
             if (_cp && _cp.schema) {
                 // Operation linkage (crisis_event_id) is a property of the MATCHED
-                // ZONE, not of the answers — echo it whenever a pack is active so
+                // ZONE, not of the answers - echo it whenever a pack is active so
                 // the report keeps its operation link even before any stock question
                 // is answered (e.g. right after a location edit cleared the answers
                 // and the reporter submits from review). The server VERIFIES/re-
@@ -8996,29 +8996,29 @@ async function _submitReportInner() {
         // Build queue item with all data
         const queueItem = {
             client_report_id: clientReportId,
-            auth_token: _authToken,     // Phase 1 — offline-grace: captured at enqueue
+            auth_token: _authToken,     // Phase 1 - offline-grace: captured at enqueue
             meta: {
                 client_report_id: clientReportId,
                 device_hash: deviceHash,
                 source: 'APP',
-                // v6.7 (May 2026) — read the V4-flow snake_case field names
+                // v6.7 (May 2026) - read the V4-flow snake_case field names
                 // FIRST, with the legacy v3 camelCase as a defensive fallback.
                 // Pre-v6.7 these read ONLY the legacy fields (state.infraType /
                 // state.crisisType / state.damageClass / state.infraName /
                 // state.severity / state.infraNameFromOsm), which v4-flow.js
-                // NEVER writes to — the legacy fields stayed at their
+                // NEVER writes to - the legacy fields stayed at their
                 // hardcoded reset defaults in _clearCaptureState (ROAD /
                 // FLOOD / PARTIAL / MODERATE), so every report submitted
                 // with the same four wrong classifiers regardless of what
                 // the user tapped. This violated 3 UNDP must-haves
                 // (damage / crisis / infra-type taxonomies) on every
-                // report between V3 retirement and v6.7. See CLAUDE.md
+                // report between V3 retirement and v6.7. See the project invariants
                 // "Classifier-state field naming" invariant.
-                // Phase F image-reliability follow-up (May 2026) — never
+                // Phase F image-reliability follow-up (May 2026) - never
                 // enqueue severity:null. The backend's Pydantic schema
                 // (`ReportMetaCreate.severity: SeverityEnum = UNKNOWN`)
                 // rejects explicit null with 422 even though it has a
-                // default — Pydantic doesn't substitute defaults for
+                // default - Pydantic doesn't substitute defaults for
                 // explicit null. Pre-fix, capture flows that didn't
                 // collect severity sent null → 422 → offline-queue
                 // retried the same payload every ~10s forever → report
@@ -9029,7 +9029,7 @@ async function _submitReportInner() {
                 //      damage-pick time, or any other flow that wrote it)
                 //   2. derive from damage_classification (matches the
                 //      v3 _v3AutoDeriveSeverity map verbatim)
-                //   3. UNKNOWN — the operator triages on the dashboard
+                //   3. UNKNOWN - the operator triages on the dashboard
                 severity:                     (state.severity || (
                     { MINIMAL: 'MINOR', NO_DAMAGE: 'MINOR',
                       PARTIAL: 'MODERATE',
@@ -9050,9 +9050,9 @@ async function _submitReportInner() {
                 // so an operator can resolve the free-text entry to a real OSM
                 // footprint later. Defaults to false when the field is missing
                 // (back-compat with pre-v3 clients).
-                // v6.7 — v4 snake_case first, legacy camelCase fallback.
+                // v6.7 - v4 snake_case first, legacy camelCase fallback.
                 infrastructure_name_from_osm: Boolean(state.infrastructure_name_from_osm ?? state.infraNameFromOsm),
-                // (UI v3 redesign Q14) — v4-flow.js writes to
+                // (UI v3 redesign Q14) - v4-flow.js writes to
                 // `debris_present` / `electricity_status` / `pressing_needs`
                 // on window.state, but the legacy v3 review form writes to
                 // `debrisClearing` / `serviceStatus`. Both shapes are now
@@ -9085,12 +9085,12 @@ async function _submitReportInner() {
                 // a polygon; the server's `_auto_assign_building_id` still
                 // runs as a coarse fallback when absent.
                 building_id: (typeof state.buildingId === 'string' && state.buildingId) || null,
-                // Phase-1 progressive-upload — compact DCT placeholder.
+                // Phase-1 progressive-upload - compact DCT placeholder.
                 // Dashboard renders this the instant this meta POST lands,
                 // BEFORE any media chunk arrives. Null for text-only reports
                 // or when the encoder failed (~never, but guarded).
                 blurhash: (typeof state.blurhash === 'string' && state.blurhash) || null,
-                // P1.3 — NEVER fall back to {latitude:0,longitude:0}. If no
+                // P1.3 - NEVER fall back to {latitude:0,longitude:0}. If no
                 // real coordinates are available, send location: null so the
                 // backend/dashboard handle it explicitly (pure text-based
                 // report) instead of plotting every missing-location report
@@ -9108,7 +9108,7 @@ async function _submitReportInner() {
                         device_location_name: (!state.userLocationName && state.locationName) ? state.locationName : null
                     }
                     : null,
-                // Dynamic Crisis Forms (geo-gated pack) — see assembly above.
+                // Dynamic Crisis Forms (geo-gated pack) - see assembly above.
                 // Null on the default flow → byte-identical standard report.
                 form_pack_id: _crisisPackId,
                 form_pack_version: _crisisPackVersion,
@@ -9120,12 +9120,12 @@ async function _submitReportInner() {
             // Truthful client_blur_applied for the legacy (no-variants)
             // upload path. Same pattern as the variant fields above.
             clientBlurApplied: Boolean(state.photoClientBlurApplied),
-            // Mode B recovery — retain the full-res source blob for any photo
+            // Mode B recovery - retain the full-res source blob for any photo
             // whose async ImageVariants.generate() hadn't finished within the
             // submit budget (variants still null at construction). The drain
             // regenerates tiers from these (see _regenerateMissingVariants) so a
             // slow-device / large-capture race never downgrades a photo to the
-            // legacy untiered path — or, in a MIXED multi-photo report, drops it
+            // legacy untiered path - or, in a MIXED multi-photo report, drops it
             // silently (the drain dispatch is `if(workUnits) … else if(item.photo)`,
             // so the legacy branch is skipped whenever ANY other photo has
             // variants). IDB persists Blobs natively (structured clone). Retained
@@ -9139,7 +9139,7 @@ async function _submitReportInner() {
             stages: { meta: false, text: false, photo: !hasPhoto, audio: !hasAudio },
             serverId: null,
             // Stable media IDs for idempotent chunked uploads (PRD §3.3).
-            // When variants are present, photoMediaId is unused — each tier
+            // When variants are present, photoMediaId is unused - each tier
             // carries its own mediaId in photoVariants.
             photoMediaId: hasPhoto ? genUUID() : null,
             audioMediaId: hasAudio ? genUUID() : null,
@@ -9160,7 +9160,7 @@ async function _submitReportInner() {
                 clientBlurApplied: Boolean(state.photoVariants.clientBlurApplied ?? state.photoClientBlurApplied),
                 small:    { dataUrl: null, mediaId: genUUID(), chunkProgress: 0, complete: false, size: state.photoVariants.small.bytes },
                 medium:   { dataUrl: null, mediaId: genUUID(), chunkProgress: 0, complete: false, size: state.photoVariants.medium.bytes },
-                // Phase L L.2.b — `originalStrategy` records which rung of the
+                // Phase L L.2.b - `originalStrategy` records which rung of the
                 // 5 MB ladder produced this blob: passthrough / quality_qNN /
                 // downscale_NNNNpx_q85. Forwarded to the queue + (future)
                 // dashboard chip so operators see "Original (compressed)"
@@ -9177,7 +9177,7 @@ async function _submitReportInner() {
             } : null),
         };
 
-        // BUGFIX May 2026 — drift detector. If the v4 thumb strip shows N
+        // BUGFIX May 2026 - drift detector. If the v4 thumb strip shows N
         // photos but only 1 made it through the variant pipeline, the user
         // sees their multi-photo capture silently submitted as a single-
         // photo report. The two-bug interaction in v4-flow.js (browse
@@ -9193,7 +9193,7 @@ async function _submitReportInner() {
         if (_v4Count > 1 && _queuedCount < _v4Count) {
             console.warn(
                 `[submit:drift] v4Photos has ${_v4Count} thumbnails but only ` +
-                `${_queuedCount} variant set(s) made it into the queue item — ` +
+                `${_queuedCount} variant set(s) made it into the queue item - ` +
                 `${_v4Count - _queuedCount} photo(s) will NOT upload. Most likely ` +
                 `cause: v4 ingest path didn't push to state.extraPhotos, or ` +
                 `state.extraPhotos was cleared between capture + submit.`,
@@ -9213,14 +9213,14 @@ async function _submitReportInner() {
                 // ORIGINAL is the large tier (up to the 5 MB cap). Running it
                 // through FileReader.readAsDataURL allocates a base64 string
                 // ~33% larger than the blob AND intermittently OOMs on
-                // memory-constrained devices — the throw was swallowed below,
+                // memory-constrained devices - the throw was swallowed below,
                 // leaving original.dataUrl=null so the tier uploaded no bytes
                 // and the ORIGINAL media row was never created (confirmed root
                 // cause of the intermittent multi-photo "no original" loss;
                 // SMALL/MEDIUM are tens–hundreds of KB and never hit this).
                 // IndexedDB persists Blobs natively (store.put = structured
                 // clone), so retain the Blob and let _uploadVariantTier slice
-                // it directly — no giant base64 string is ever created, IDB
+                // it directly - no giant base64 string is ever created, IDB
                 // footprint shrinks, and full original fidelity is kept.
                 if (tier === 'original') {
                     variantsObj.original.blob = src.blob;
@@ -9260,10 +9260,10 @@ async function _submitReportInner() {
             }
         }
 
-        // K.4.e (May 2026, Phase K) — proactive iOS HEIC quota guard.
+        // K.4.e (May 2026, Phase K) - proactive iOS HEIC quota guard.
         // iOS limits each web app to 50 MB of IndexedDB storage.
         // HEIC capture + re-encode + 3 variants per photo × N extras
-        // can push us past that threshold silently — the next
+        // can push us past that threshold silently - the next
         // enqueueReport then fails with QuotaExceededError and the
         // existing storage_full_toast fires, but at that point the
         // user has already lost their entire form. Surface a warning
@@ -9274,23 +9274,23 @@ async function _submitReportInner() {
             if (_wouldUse > _QUOTA_WARN_THRESHOLD_BYTES) {
                 console.warn(
                     `[K.4.e] queueItem ${clientReportId.slice(0, 8)} would write ` +
-                    `~${Math.round(_wouldUse / 1024 / 1024)} MB to IDB — over ` +
+                    `~${Math.round(_wouldUse / 1024 / 1024)} MB to IDB - over ` +
                     `the ${_QUOTA_WARN_THRESHOLD_BYTES / 1024 / 1024} MB warn ` +
                     `threshold. iOS PWA quota is 50 MB; user should clear ` +
                     `old reports if this submission errors.`,
                 );
                 try { showToast(t('storage_almost_full_toast')); } catch (_) {
-                    // i18n key not yet translated in this locale — fall back
+                    // i18n key not yet translated in this locale - fall back
                     showToast(
-                        'Device storage almost full — please clear old reports ' +
+                        'Device storage almost full - please clear old reports ' +
                         'from My Reports if this submission fails.',
                     );
                 }
             }
         } catch (_) { /* size-estimate best-effort; never blocks submit */ }
 
-        // ── SAVE TO QUEUE FIRST — this is the safety net ─────────────────────
-        // P1.4 — Previously the enqueue error was swallowed with `catch(_){}`,
+        // ── SAVE TO QUEUE FIRST - this is the safety net ─────────────────────
+        // P1.4 - Previously the enqueue error was swallowed with `catch(_){}`,
         // so if IndexedDB was full/quota-exceeded or corrupt, the user would
         // see "success" while nothing was actually persisted (silent data
         // loss including all extra photos held in memory). Now we await the
@@ -9301,15 +9301,15 @@ async function _submitReportInner() {
         } catch (persistErr) {
             console.error('[submitReport] enqueueReport failed:', persistErr);
             hideUploadOverlay();
-            // showToast is always defined — but keep a log fallback for any
+            // showToast is always defined - but keep a log fallback for any
             // unexpected environment where it's been unwired by a shim.
             showToast(t('storage_full_toast'));
             sendBtn.disabled = false;
             return;   // do NOT flip to success; user keeps the filled form
         }
 
-        // ── Show success to user IMMEDIATELY — don't wait for network ────────
-        // HC92 (Sprint 1C, May 2026) — every call below this point is
+        // ── Show success to user IMMEDIATELY - don't wait for network ────────
+        // HC92 (Sprint 1C, May 2026) - every call below this point is
         // individually try/catch-wrapped. The report is ALREADY safely
         // queued in IDB (line 9471). Everything that follows is UX
         // enhancement: id-pill text, success-stage navigation,
@@ -9323,7 +9323,7 @@ async function _submitReportInner() {
         // at the bottom of the try-block.
         try { showUploadOverlay(t('upload_sending')); } catch (e) { console.warn('[submit] showUploadOverlay failed:', e?.message || e); }
         try { updateUploadProgress(50, t('upload_saved')); } catch (e) { console.warn('[submit] updateUploadProgress failed:', e?.message || e); }
-        // HC87 — write to the HC79-redesigned success-stage IDs. The
+        // HC87 - write to the HC79-redesigned success-stage IDs. The
         // legacy `#report-id-text` / `#success-id-box` IDs targeted
         // here pre-redesign no longer exist in `index.html`, so
         // `getElementById(...).textContent = ...` was crashing with
@@ -9353,7 +9353,7 @@ async function _submitReportInner() {
         // Brief pause so user sees the overlay
         await new Promise(r => setTimeout(r, 800));
         try { showUploadSuccess(); } catch (e) { console.warn('[submit] showUploadSuccess failed:', e?.message || e); }
-        // HC92 — the goToStage callback fires AFTER this function
+        // HC92 - the goToStage callback fires AFTER this function
         // returns; an exception inside the deferred microtask would
         // be unhandled and the user would be stranded on v4 review.
         // Wrap the inner callback explicitly.
@@ -9365,13 +9365,13 @@ async function _submitReportInner() {
             }
         }, 1200);
 
-        // Phase 2.2 — V2 fetchBadge() removed; the V4 home-screen
+        // Phase 2.2 - V2 fetchBadge() removed; the V4 home-screen
         // chip (#home-badge-chip) refreshes itself on next paint.
 
         // UNDP reporter feedback channel. After the user has
         // just submitted (high-motivation moment), ask once for
         // notification permission so they get pinged when the report's
-        // status changes. Subsequent visits won't re-prompt — the helper
+        // status changes. Subsequent visits won't re-prompt - the helper
         // remembers via localStorage. iOS Safari without home-screen
         // install short-circuits inside the helper (no prompt burned).
         try {
@@ -9385,7 +9385,7 @@ async function _submitReportInner() {
                     ensurePushSubscription({ promptIfNeeded: true }).catch(() => {});
                 }, 2000);
             }
-        } catch (_) { /* localStorage unavailable — silently skip */ }
+        } catch (_) { /* localStorage unavailable - silently skip */ }
 
         // ── Now try to send in background (non-blocking) ─────────────────────
         try { trySendQueuedReport(queueItem); }
@@ -9394,25 +9394,25 @@ async function _submitReportInner() {
         // ── Clear capture state ──────────────────────────────────────────────
         // From here the report lives in IndexedDB; the UI state variables and
         // preview <img>.src values are no longer needed and actively harmful
-        // (prior-report bleed-through on the next capture). Clearing here —
-        // instead of only on the "Add another report" button — means every
+        // (prior-report bleed-through on the next capture). Clearing here -
+        // instead of only on the "Add another report" button - means every
         // downstream path to a new capture (btn-start, my-reports → home,
         // service-worker reload, browser back) starts from a clean slate.
-        // Pure state clear, no navigation — navigation is driven by the
+        // Pure state clear, no navigation - navigation is driven by the
         // setTimeout above.
         try { _clearCaptureState(); }
         catch (e) { console.warn('[submit] _clearCaptureState failed:', e?.message || e); }
 
     } catch (fatalErr) {
         console.error('submitReport fatal error:', fatalErr);
-        // HC92 (Sprint 1C, May 2026) — every recovery action here is
+        // HC92 (Sprint 1C, May 2026) - every recovery action here is
         // also individually wrapped. If hideUploadOverlay throws, we
         // still want to attempt the success-stage paint; if THAT
         // throws (HC87 class), we still want to re-enable the
         // submit button so the user can retry rather than getting
         // stuck on a frozen disabled state.
         try { hideUploadOverlay(); } catch (e) { console.warn('[submit:catch] hideUploadOverlay failed:', e?.message || e); }
-        // HC87 — same legacy-ID fix as the happy path above; the catch
+        // HC87 - same legacy-ID fix as the happy path above; the catch
         // handler used to crash AGAIN on these dead IDs, so even the
         // error-recovery `goToStage('stage-success')` call below was
         // never reached.  Null-guarded for the same reason.
@@ -9425,7 +9425,7 @@ async function _submitReportInner() {
             console.warn('[submit:catch] success-id paint failed:', e?.message || e);
         }
         try { goToStage('stage-success'); }
-        catch (e) { console.error('[submit:catch] goToStage failed too — user stranded; showing toast:', e?.message || e); try { showToast(t('upload_saved')); } catch (_) {} }
+        catch (e) { console.error('[submit:catch] goToStage failed too - user stranded; showing toast:', e?.message || e); try { showToast(t('upload_saved')); } catch (_) {} }
         try { sendBtn.disabled = false; } catch (_) {}
     }
 }
@@ -9443,7 +9443,7 @@ async function _submitReportInner() {
 // is idempotent on (media_id, seq_num) so re-sending a completed chunk is
 // a no-op.
 
-// Phase L (May 2026) — canonical 3-value SMALL/MEDIUM/ORIGINAL.
+// Phase L (May 2026) - canonical 3-value SMALL/MEDIUM/ORIGINAL.
 const _TIER_MAP = { small: 'SMALL', medium: 'MEDIUM', original: 'ORIGINAL' };
 
 function _buildVariantWork(item) {
@@ -9479,7 +9479,7 @@ function _buildVariantWork(item) {
     return out;
 }
 
-// Mode B recovery helper — build the queue-item variant structure from a fresh
+// Mode B recovery helper - build the queue-item variant structure from a fresh
 // ImageVariants.generate() result, mirroring the submit-time construction +
 // _encodeVariants: SMALL/MEDIUM as base64 dataUrls, ORIGINAL retained as a Blob
 // (to dodge the readAsDataURL OOM). Async because of the small/medium encode.
@@ -9495,12 +9495,12 @@ async function _queueVariantStructFromGenerated(gen) {
     return v;
 }
 
-// Mode B fix — regenerate tiers for any photo that was enqueued with NULL
+// Mode B fix - regenerate tiers for any photo that was enqueued with NULL
 // variants (its async ImageVariants.generate() didn't finish within the
 // 500 ms blur-wait + 1500 ms reattempt submit budget) from the retained
 // full-res source blob. Runs in the drain BEFORE _buildVariantWork, so a raced
 // photo recovers full SMALL/MEDIUM/ORIGINAL tiering + archival fidelity instead
-// of falling to the legacy untiered path — and, in a MIXED multi-photo report,
+// of falling to the legacy untiered path - and, in a MIXED multi-photo report,
 // is never silently dropped (the legacy `else if (item.photo)` branch is
 // skipped whenever any sibling photo has variants). With ImageVariants present,
 // generate() returns all tiers for any decodable blob (internal blurredSrc
@@ -9518,7 +9518,7 @@ async function _regenerateMissingVariants(item) {
         if (gen && gen.small) {
             item.photoGroupId = item.photoGroupId || genUUID();
             item.photoVariants = await _queueVariantStructFromGenerated(gen);
-            item.photoSourceBlob = null;   // reclaim IDB — bytes now live on the variant
+            item.photoSourceBlob = null;   // reclaim IDB - bytes now live on the variant
             changed = true;
             console.log('[regen] main photo: tiers regenerated in drain (Mode B recovery)');
         }
@@ -9547,15 +9547,15 @@ async function _regenerateMissingVariants(item) {
 }
 
 // ── Resilience #5 (stuck-chunk auto-recovery, Jun 2026) ──────────────
-// A chunk the backend permanently rejects — 410 Gone (media hard-
+// A chunk the backend permanently rejects - 410 Gone (media hard-
 // abandoned: checksum_mismatch / original_too_large), 409 (upload-
-// generation mismatch), or a persistent 400/422 on the same seq — makes
+// generation mismatch), or a persistent 400/422 on the same seq - makes
 // _uploadVariantTier resume from chunkProgress and re-POST that same
 // chunk every drain → HC90 cycles 1 h forever (HC90 is per-report; there
 // is no per-variant escape hatch). We track consecutive HARD-4xx failures
 // per (mediaId, seq); after K we regenerate the media row (a fresh
 // media_id resets chunkProgress, so the next drain uploads a CLEAN server
-// row that bypasses the corrupt/abandoned one — the backend creates a new
+// row that bypasses the corrupt/abandoned one - the backend creates a new
 // Media on the first chunk for an unknown id). Bounded by R
 // regenerations; after that the bytes are bad at source (oversize
 // ORIGINAL / genuine corruption), so we give up THAT tier: defer it,
@@ -9584,7 +9584,7 @@ function _errHttpStatus(err) {
 // stuck-chunk give-up (reason 'encode_failed') and the per-variant orphan
 // recovery (reason 'orphan_no_source'). Auth-free endpoint; idempotent +
 // non-fatal on 401/5xx/offline. NOTE: the backend only accepts the
-// reasons {bandwidth_tier_deferred, encode_failed, orphan_no_source} —
+// reasons {bandwidth_tier_deferred, encode_failed, orphan_no_source} -
 // any other value 422s, so callers MUST pass a valid one.
 async function _signalTierDeferred(item, reportId, unit, reason) {
     if (!reportId || !unit || !unit.groupId) return;
@@ -9602,7 +9602,7 @@ async function _signalTierDeferred(item, reportId, unit, reason) {
             body: JSON.stringify(body),
         });
         if (!res.ok) {
-            console.warn(`[mark-deferred:${reason}] HTTP ${res.status} for ${unit.label} — non-fatal`);
+            console.warn(`[mark-deferred:${reason}] HTTP ${res.status} for ${unit.label} - non-fatal`);
         }
     } catch (e) {
         console.warn(`[mark-deferred:${reason}] POST failed (non-fatal):`, e?.message || e);
@@ -9621,7 +9621,7 @@ async function _maybeRecoverStuckChunk(item, reportId, unit, seq, err) {
     const n = (_chunkHardFailCounts.get(key) || 0) + 1;
     _chunkHardFailCounts.set(key, n);
     if (n < CHUNK_HARD_FAIL_K) {
-        console.warn(`[ChunkRecover] ${unit.label} seq=${seq} hard HTTP ${status} (${n}/${CHUNK_HARD_FAIL_K}) — retry same row`);
+        console.warn(`[ChunkRecover] ${unit.label} seq=${seq} hard HTTP ${status} (${n}/${CHUNK_HARD_FAIL_K}) - retry same row`);
         return;
     }
     const regens = variant.mediaIdRegens || 0;
@@ -9645,7 +9645,7 @@ async function _maybeRecoverStuckChunk(item, reportId, unit, seq, err) {
         );
         return;
     }
-    // Exhausted R regens — the bytes are bad at source. Give up THIS tier.
+    // Exhausted R regens - the bytes are bad at source. Give up THIS tier.
     variant.deferred = true;
     variant.deferredReason = 'chunk_rejected';   // local label (never sent as a backend reason)
     variant.deferredAt = Date.now();
@@ -9665,17 +9665,17 @@ async function _maybeRecoverStuckChunk(item, reportId, unit, seq, err) {
 async function _uploadVariantTier(item, reportId, unit) {
     const { tier, groupId, variant, label, clientBlurApplied } = unit;
     if (variant.complete) return;
-    // Resilience #5 — a tier whose chunks the backend permanently rejected
+    // Resilience #5 - a tier whose chunks the backend permanently rejected
     // after K hard 4xx + R media-id regens. Bytes are bad at source; never
     // re-attempt (mark-deferred already told the backend; the report
-    // reconciles SYNCED on its landed tiers). Sticky flag — survives the
+    // reconciles SYNCED on its landed tiers). Sticky flag - survives the
     // deferred-clear lower down because it is checked here, before it.
     if (variant.chunkRejectedGiveUp) return;
     // A retained Blob (ORIGINAL tier, or a small/medium base64 fallback) is a
-    // valid byte source even with no dataUrl — don't treat it as an orphan.
+    // valid byte source even with no dataUrl - don't treat it as an orphan.
     const _hasBlobBytes = variant.blob instanceof Blob && variant.blob.size > 0;
     if (!variant.dataUrl && !_hasBlobBytes) {
-        // K.3.c (May 2026, Phase K) — re-encode fallback before
+        // K.3.c (May 2026, Phase K) - re-encode fallback before
         // silently skipping. Pre-fix, a missing dataUrl warned + returned;
         // the variant was permanently orphaned and never surfaced to the
         // operator. New behaviour:
@@ -9719,7 +9719,7 @@ async function _uploadVariantTier(item, reportId, unit) {
             variant.deferredReason = 'orphan_no_source';
             variant.deferredAt = variant.deferredAt || Date.now();
             try { await enqueueReport(item); } catch (_) {}
-            // Resilience #6 — once this orphaned tier is past the 10-min
+            // Resilience #6 - once this orphaned tier is past the 10-min
             // age gate (so no still-in-flight encode will populate the
             // dataUrl), signal the backend DIRECTLY for THIS tier/group so
             // expected_media decrements and the report reconciles to
@@ -9732,13 +9732,13 @@ async function _uploadVariantTier(item, reportId, unit) {
             if (reportId && _orphanAgeMs > 10 * 60 * 1000) {
                 await _signalTierDeferred(item, reportId, unit, 'orphan_no_source');
                 console.warn(
-                    `[VariantDrop:orphan] ${label}: no source after ${Math.round(_orphanAgeMs / 60000)} min — ` +
+                    `[VariantDrop:orphan] ${label}: no source after ${Math.round(_orphanAgeMs / 60000)} min - ` +
                     `signalled mark-deferred(orphan_no_source); report reconciles SYNCED on its landed tiers.`,
                 );
             } else {
                 console.warn(
                     `[Upload] ${label}: missing dataUrl AND no legacy source ` +
-                    `to recover from — marking deferred=orphan_no_source. ` +
+                    `to recover from - marking deferred=orphan_no_source. ` +
                     `Backend will receive 'mark-deferred' on next soft-drain ` +
                     `(K.3.a) and the dashboard will render the chip.`,
                 );
@@ -9751,18 +9751,18 @@ async function _uploadVariantTier(item, reportId, unit) {
     // `navigator.connection.effectiveType` (which Chrome DevTools
     // throttling doesn't update). Cached 60 s so three variants of the
     // same report share one probe. On probe failure the fallback hint
-    // from NavigatorConnection is used — both code paths update
+    // from NavigatorConnection is used - both code paths update
     // `_pwaTier` as a side effect.
     await adaptTierViaProbe();
 
-    // Defer model — final iteration (May 21, 2026 v240).
+    // Defer model - final iteration (May 21, 2026 v240).
     //
     // History:
     //   · Pre-v237: SLOW + ORIGINAL pre-emptively deferred. Operator
     //     hit "drops in max scenarios" on real 5G because the 64 KB
     //     probe routinely landed in SLOW from TCP cold-start / tunnel
     //     queueing.
-    //   · v237: relaxed — only VERY_SLOW pre-emptively defers MEDIUM
+    //   · v237: relaxed - only VERY_SLOW pre-emptively defers MEDIUM
     //     + ORIGINAL. SLOW now attempts all 3.
     //   · v240 (this commit): REMOVE pre-emptive defer entirely. Even
     //     on VERY_SLOW (< 80 Kbps), every tier attempts upload at
@@ -9801,7 +9801,7 @@ async function _uploadVariantTier(item, reportId, unit) {
         const submittedAt = item.timestamp || item.client_created_at_ms || Date.now();
         const ageMs = Date.now() - submittedAt;
         if (ageMs > _ONE_DAY_MS) {
-            // Resilience #6 — the 24-h cap is dropping this tier. Make it
+            // Resilience #6 - the 24-h cap is dropping this tier. Make it
             // VISIBLE (never a silent dequeue): signal the backend
             // immediately so expected_media reconciles + the dashboard
             // chip renders, and raise the calm needs-attention flag so a
@@ -9809,7 +9809,7 @@ async function _uploadVariantTier(item, reportId, unit) {
             // than vanishing. SMALL already gates stages.photo, so the
             // report stays delivered + SYNCED on its landed tiers.
             console.warn(
-                `[VariantDrop:24h] ${label}: 24h timeout (age=${Math.round(ageMs / 3600000)}h since submit) — ` +
+                `[VariantDrop:24h] ${label}: 24h timeout (age=${Math.round(ageMs / 3600000)}h since submit) - ` +
                 `dropping this tier. complete=${variant.complete}, chunkProgress=${variant.chunkProgress || 0}.`,
             );
             variant.deferred = true;
@@ -9829,12 +9829,12 @@ async function _uploadVariantTier(item, reportId, unit) {
     // No bandwidth-probe-based pre-emptive defer. The probe still informs
     // chunkSize + per-chunk timeout via netConfig below, but it no longer
     // gates whether we attempt the tier at all.
-    // Clear any prior deferral — we're actually uploading this time.
+    // Clear any prior deferral - we're actually uploading this time.
     if (variant.deferred) {
-        // Resilience #6 — instrument the recovery so a deferred tier that
+        // Resilience #6 - instrument the recovery so a deferred tier that
         // comes back to life (network recovered / source re-encoded) is
         // visible in logs instead of a silent state flip.
-        console.log(`[VariantRecover] ${label}: previously deferred (${variant.deferredReason || '?'}) — resuming upload.`);
+        console.log(`[VariantRecover] ${label}: previously deferred (${variant.deferredReason || '?'}) - resuming upload.`);
         variant.deferred = false;
         variant.deferredReason = null;
     }
@@ -9851,7 +9851,7 @@ async function _uploadVariantTier(item, reportId, unit) {
     const measuredBps = getMeasuredBandwidth();
     const dynamicTimeout = computeChunkTimeout(netConfig.chunkSize, measuredBps || null);
 
-    // UNDP §5 — binary-chunk transport. When the feature flag
+    // UNDP §5 - binary-chunk transport. When the feature flag
     // is enabled (default), upload the variant as raw bytes via
     // multipart/form-data. If the backend returns 404 on the new
     // endpoint, sendBinaryChunkWithRetry falls back to base64
@@ -9859,13 +9859,13 @@ async function _uploadVariantTier(item, reportId, unit) {
     // variants skip the 404 retry.
     if (isBinaryChunksEnabled()) {
         // Convert the stored dataUrl back into a Blob for zero-copy
-        // slicing. Ephemeral — doesn't replace the persisted dataUrl
+        // slicing. Ephemeral - doesn't replace the persisted dataUrl
         // (which stays JSON-serialisable for IndexedDB crash recovery).
-        // Prefer a retained Blob (ORIGINAL tier post-fix — never base64-encoded,
+        // Prefer a retained Blob (ORIGINAL tier post-fix - never base64-encoded,
         // to avoid the readAsDataURL OOM) and slice it directly. Fall back to
         // decoding the persisted dataUrl (small/medium, and pre-fix queue rows).
         const blob = _hasBlobBytes ? variant.blob : _dataUrlToBlob(variant.dataUrl);
-        // v241 (May 21, 2026) — FREEZE chunkSize + total on the variant
+        // v241 (May 21, 2026) - FREEZE chunkSize + total on the variant
         // after the first attempt. Pre-fix bug observed on cellular smoke
         // 5 (report 5b9823d4 group 62e25fd5): a variant uploaded chunks
         // 0-91 with chunkSize=1024 (VERY_SLOW probe → total=2105). Probe
@@ -9887,7 +9887,7 @@ async function _uploadVariantTier(item, reportId, unit) {
         const chunkSize = variant.frozenChunkSize;
         const total = variant.frozenTotalChunks;
 
-        // Phase C.1 (May 2026) — whole-asset djb2 over the full bytes
+        // Phase C.1 (May 2026) - whole-asset djb2 over the full bytes
         // BEFORE chunking. Shipped on chunk 0 ONLY; backend persists on
         // the Media row + re-verifies after concat assembly. Mismatch
         // flips status='failed' / abandon_reason='checksum_mismatch'.
@@ -9900,7 +9900,7 @@ async function _uploadVariantTier(item, reportId, unit) {
         // re-encode, then quality ladder if >5 MB, or a queue-resume
         // after IDB persistence that re-encodes from the cached
         // photoDataUrl). The cached fullAssetChecksum then reflects
-        // the OLD blob while the chunks come from the NEW blob —
+        // the OLD blob while the chunks come from the NEW blob -
         // every chunk passes its own per-chunk djb2 check, server
         // assembles cleanly, then the whole-asset djb2 mismatches
         // and the row hard-abandons.
@@ -9908,7 +9908,7 @@ async function _uploadVariantTier(item, reportId, unit) {
         // Operator hit this exactly: 3-photo iPhone report, photo #A's
         // ORIGINAL (`ae7300dd`) chunks all landed (100/100) but
         // assembly returned `assemble returned no url` 1 second
-        // later — that's the post-concat djb2 failing.
+        // later - that's the post-concat djb2 failing.
         //
         // The cache was an optimisation worth ~10 ms per resumed
         // upload (single djb2 pass over 5 MB). Dropping it
@@ -9941,7 +9941,7 @@ async function _uploadVariantTier(item, reportId, unit) {
                         // let BlazeFace failures leak unblurred PII.
                         clientBlurApplied: Boolean(clientBlurApplied),
                         checksum: djb2Bytes(buf),
-                        // Phase C.1 — full-asset checksum on chunk 0 only.
+                        // Phase C.1 - full-asset checksum on chunk 0 only.
                         // The endpoint silently ignores it on later chunks
                         // (we still send null then so the form field exists).
                         fullAssetChecksum: seq === 0 ? variant.fullAssetChecksum : null,
@@ -9952,14 +9952,14 @@ async function _uploadVariantTier(item, reportId, unit) {
                 // Wedge-detection support: stamp progress so resume hooks can
                 // tell a healthy retry loop from one wedged on a dead fetch.
                 _lastDrainTickAt = Date.now();
-                // Resilience #5 — chunk landed; clear its hard-fail counter
+                // Resilience #5 - chunk landed; clear its hard-fail counter
                 // so a later transient blip doesn't accumulate toward K.
                 _chunkHardFailCounts.delete(`${mediaId}:${seq}`);
             } catch (err) {
                 pwaNetworkDowngrade();
                 variant.chunkProgress = seq;
                 try { await enqueueReport(item); } catch (_) {}
-                // Resilience #5 — regen the media row after K hard 4xx, give
+                // Resilience #5 - regen the media row after K hard 4xx, give
                 // up the tier after R regens. No-op on transient errors.
                 try { await _maybeRecoverStuckChunk(item, reportId, unit, seq, err); } catch (_) {}
                 throw err;
@@ -9979,14 +9979,14 @@ async function _uploadVariantTier(item, reportId, unit) {
     // ORIGINAL post-fix carries a Blob (no dataUrl) to dodge the submit-time
     // readAsDataURL OOM; the binary path above slices that Blob directly. This
     // legacy fallback (binary disabled / endpoint 404) still needs base64, so
-    // derive it lazily from the Blob here. Rare path — any OOM is bounded by
+    // derive it lazily from the Blob here. Rare path - any OOM is bounded by
     // the existing chunk retry loop, far better than crashing on a null dataUrl.
     let _legacyDataUrl = variant.dataUrl;
     if (!_legacyDataUrl && _hasBlobBytes) {
         _legacyDataUrl = await _blobToDataUrl(variant.blob);
     }
     const b64 = _legacyDataUrl.includes(',') ? _legacyDataUrl.split(',')[1] : _legacyDataUrl;
-    // v241 — same freeze logic as the bin path above. See the long comment
+    // v241 - same freeze logic as the bin path above. See the long comment
     // there for why this matters (silent variant-skip on probe-tier shift).
     if (!variant.frozenChunkSize) {
         variant.frozenChunkSize = netConfig.chunkSize;
@@ -9994,7 +9994,7 @@ async function _uploadVariantTier(item, reportId, unit) {
     const chunks = chunkBase64(b64, variant.frozenChunkSize);
     const total = chunks.length;
 
-    // Phase C.1 — same whole-asset checksum for the legacy base64 transport.
+    // Phase C.1 - same whole-asset checksum for the legacy base64 transport.
     // We hash the base64 STRING here (not raw bytes) so it matches what the
     // backend computes via `djb2_checksum(...)` over the concatenated b64
     // payload via the same simpleChecksum-style polynomial. Backend re-
@@ -10033,7 +10033,7 @@ async function _uploadVariantTier(item, reportId, unit) {
             // Wedge-detection support: stamp progress so resume hooks can
             // tell a healthy retry loop from one wedged on a dead fetch.
             _lastDrainTickAt = Date.now();
-            // Resilience #5 — chunk landed; clear its hard-fail counter.
+            // Resilience #5 - chunk landed; clear its hard-fail counter.
             _chunkHardFailCounts.delete(`${mediaId}:${seq}`);
         } catch (err) {
             pwaNetworkDowngrade();
@@ -10041,7 +10041,7 @@ async function _uploadVariantTier(item, reportId, unit) {
             // retry picks up from `seq`, not from 0.
             variant.chunkProgress = seq;
             try { await enqueueReport(item); } catch (_) {}
-            // Resilience #5 — regen the media row after K hard 4xx, give up
+            // Resilience #5 - regen the media row after K hard 4xx, give up
             // the tier after R regens. No-op on transient errors.
             try { await _maybeRecoverStuckChunk(item, reportId, unit, seq, err); } catch (_) {}
             throw err;
@@ -10056,7 +10056,7 @@ async function _uploadVariantTier(item, reportId, unit) {
     try { await enqueueReport(item); } catch (_) {}
 }
 
-// Resilience #2 (backstop, Jun 2026) — terminal recovery for the
+// Resilience #2 (backstop, Jun 2026) - terminal recovery for the
 // "photo intended but zero uploadable bytes" wedge. Reached ONLY from
 // trySendQueuedReport's photo block when _buildVariantWork()===[] AND
 // item.photo is falsy on a serverId-set, photo-intended row. Prevention
@@ -10075,17 +10075,17 @@ async function _uploadVariantTier(item, reportId, unit) {
 //     null the (absent) byte fallbacks, re-enqueue. Reconcile dequeues
 //     on a later pass once the server shows it complete.
 //   • One honest toast (i18n upload_photo_unavailable) + a structured log.
-// Deliberately NOT status='failed' — the report IS delivered, just
+// Deliberately NOT status='failed' - the report IS delivered, just
 // without the photo; the dormant red terminal-failed UI stays dormant.
 async function _backstopPhotoIntendedNoBytes(item, reportId) {
     const ageMs = Date.now() - (item.timestamp || 0);
     if (ageMs < 10 * 60 * 1000) {
-        // Too young — a variant encode or an in-flight upload may still
+        // Too young - a variant encode or an in-flight upload may still
         // populate bytes on a later drain. Do nothing this pass; the row
         // stays queued and HC90 / heartbeat / periodic sweep re-drain it.
         console.log(
             `[Backstop:photo-no-bytes] ${String(reportId).slice(0, 8)} ` +
-            `age=${Math.round(ageMs / 1000)}s < 600s gate — deferring backstop`,
+            `age=${Math.round(ageMs / 1000)}s < 600s gate - deferring backstop`,
         );
         return;
     }
@@ -10113,7 +10113,7 @@ async function _backstopPhotoIntendedNoBytes(item, reportId) {
             if (!res.ok) {
                 console.warn(
                     `[Backstop:photo-no-bytes] mark-deferred HTTP ${res.status} ` +
-                    `for ${String(reportId).slice(0, 8)} — non-fatal; backend ` +
+                    `for ${String(reportId).slice(0, 8)} - non-fatal; backend ` +
                     `reconciliation catches it eventually`,
                 );
             }
@@ -10124,11 +10124,11 @@ async function _backstopPhotoIntendedNoBytes(item, reportId) {
     } else {
         console.warn(
             `[Backstop:photo-no-bytes] ${String(reportId).slice(0, 8)} has no ` +
-            `photoGroupId / extra groups to signal — flipping stages.photo anyway ` +
+            `photoGroupId / extra groups to signal - flipping stages.photo anyway ` +
             `so the drain stops looping`,
         );
     }
-    // Terminal local state — flip stages.photo so the block is never
+    // Terminal local state - flip stages.photo so the block is never
     // re-entered; free the (absent) byte fallbacks; persist.
     if (!item.stages) item.stages = {};
     item.stages.photo = true;
@@ -10142,12 +10142,12 @@ async function _backstopPhotoIntendedNoBytes(item, reportId) {
         `stages.photo forced true, ${Object.keys(tiersByGroup).length} group(s) ` +
         `mark-deferred(orphan_no_source). Report reconciles to SYNCED.`,
     );
-    // Honest one-time note — NOT a failure state.
+    // Honest one-time note - NOT a failure state.
     try {
         if (typeof showToast === 'function') {
             showToast(
                 (typeof t === 'function' ? t('upload_photo_unavailable') : null) ||
-                "Report sent — the photo couldn't be uploaded.",
+                "Report sent - the photo couldn't be uploaded.",
                 'info',
             );
         }
@@ -10309,12 +10309,12 @@ async function _uploadLegacyPhoto(item, reportId) {
 // so two distinct items can still process concurrently.
 const _inFlightReports = new Set();
 
-// HC90 (Sprint 2A, May 2026) — bound the per-row send-retry loop so
+// HC90 (Sprint 2A, May 2026) - bound the per-row send-retry loop so
 // a persistent 5xx / wedged backend / pathological media-id doesn't
 // retry forever. Counter increments on every trySendQueuedReport
 // invocation that does real work; resets on any stage progress (so a
 // genuinely-slow-but-progressing report never trips the cap).
-// After MAX_SEND_ATTEMPTS the row pauses 1 h, then auto-resumes — no
+// After MAX_SEND_ATTEMPTS the row pauses 1 h, then auto-resumes - no
 // data loss, no manual intervention needed. HC88 covered the verify
 // side; this covers the upload side.
 //   MAX_SEND_ATTEMPTS × 15 s = 20 × 15 = 300 s = 5 min of consecutive failures
@@ -10325,10 +10325,10 @@ const PAUSE_AFTER_EXHAUSTED_MS = 60 * 60 * 1000;
 async function trySendQueuedReport(item) {
     const crid = item.client_report_id || item.meta?.client_report_id;
     if (crid && _inFlightReports.has(crid)) {
-        console.log(`[Sync] ${crid.slice(0,8)} already in flight — skip duplicate pass`);
+        console.log(`[Sync] ${crid.slice(0,8)} already in flight - skip duplicate pass`);
         return;
     }
-    // HC90 — pause window check + auto-resume on expiry.
+    // HC90 - pause window check + auto-resume on expiry.
     const _hc90Now = Date.now();
     const _hc90ExhaustedAt = item.sendAttemptsExhaustedAt || 0;
     if (_hc90ExhaustedAt > 0) {
@@ -10338,17 +10338,17 @@ async function trySendQueuedReport(item) {
             console.log(`[Sync] ${crid?.slice(0, 8) || '?'} send-paused (~${remainingMin} min remaining); skip.`);
             return;
         }
-        // Pause window expired — auto-resume by clearing the counter.
+        // Pause window expired - auto-resume by clearing the counter.
         item.sendAttempts = 0;
         item.sendAttemptsExhaustedAt = 0;
         try { await enqueueReport(item); } catch (_) {}
         console.log(`[Sync] ${crid?.slice(0, 8) || '?'} send-pause expired; auto-resuming.`);
     }
-    // HC90 — increment send-attempts counter.
+    // HC90 - increment send-attempts counter.
     item.sendAttempts = (item.sendAttempts || 0) + 1;
     if (item.sendAttempts > MAX_SEND_ATTEMPTS) {
         item.sendAttemptsExhaustedAt = _hc90Now;
-        // Resilience #4 (flaky-backend escalation) — count how many full
+        // Resilience #4 (flaky-backend escalation) - count how many full
         // pause cycles this row has burned. After ≥3 (≈3 h against a
         // chronically-unreachable backend) raise a CALM soft flag so the
         // UI can surface "needs attention" WITHOUT ever stopping delivery
@@ -10361,14 +10361,14 @@ async function trySendQueuedReport(item) {
         console.warn(
             `[Sync] ${crid?.slice(0, 8) || '?'} send-attempts exhausted ` +
             `(${item.sendAttempts}/${MAX_SEND_ATTEMPTS}); pausing 1 h before auto-resume. ` +
-            `Persistent failure — backend 5xx, wedged media id, or unreachable network. ` +
+            `Persistent failure - backend 5xx, wedged media id, or unreachable network. ` +
             `pauseCycles=${item.pauseCycles}${item._needsAttention ? ' (needs-attention)' : ''}.`,
         );
         try { showToast(t('upload_paused_will_retry')); } catch (_) {}
         return;
     }
     if (crid) _inFlightReports.add(crid);
-    // HC90 — snapshot stage state at entry; if any stage flag flips
+    // HC90 - snapshot stage state at entry; if any stage flag flips
     // by the time we hit the finally-block, reset sendAttempts so the
     // cap only fires on consecutive *progress-free* failures.
     const _hc90StartStages = JSON.stringify(item.stages || {});
@@ -10380,13 +10380,13 @@ async function trySendQueuedReport(item) {
         // send pipeline so every stage (meta, text, chunks) gets a
         // timeout sized to actual throughput. Previously only the chunk
         // loop probed; meta+text used hardcoded 15s/20s timeouts that
-        // blow up on 2 Kbps links (confirmed by field test — meta took
+        // blow up on 2 Kbps links (confirmed by field test - meta took
         // 4 timeout-retries before finally succeeding).
         await adaptTierViaProbe();
         const measuredBps = getMeasuredBandwidth();
 
         // Stage 1: Metadata (< 1KB payload). Timeout sized to
-        // `computeChunkTimeout(2048, measuredBps)` — at 2 Kbps → ~30 s;
+        // `computeChunkTimeout(2048, measuredBps)` - at 2 Kbps → ~30 s;
         // at 2 Mbps → 10 s floor. Either way, well over what the request
         // physically needs.
         if (!stages.meta) {
@@ -10405,7 +10405,7 @@ async function trySendQueuedReport(item) {
         }
 
         // Stage 2: Text/Description (Tiny, but separate for 1KBPS bursts).
-        // Size the timeout to the description length — a reporter who
+        // Size the timeout to the description length - a reporter who
         // typed a 5 KB essay gets a longer window than one who typed
         // "help". +2 KB overhead for HTTP headers + JSON shell.
         if (!stages.text && reportId) {
@@ -10424,7 +10424,7 @@ async function trySendQueuedReport(item) {
             }
         }
 
-        // Stage 2: Photo — guaranteed-delivery tier ladder.
+        // Stage 2: Photo - guaranteed-delivery tier ladder.
         //
         // The new pipeline uploads SMALL of every photo (main + extras)
         // BEFORE any MEDIUM; then MEDIUM of every photo; then ORIGINAL. That
@@ -10437,7 +10437,7 @@ async function trySendQueuedReport(item) {
         // for reports queued before this feature shipped.
         if (!stages.photo && reportId) {
             try {
-                // Mode B recovery — regenerate tiers for any photo enqueued
+                // Mode B recovery - regenerate tiers for any photo enqueued
                 // with null variants (submit-budget race) from its retained
                 // source blob, BEFORE building the work list. Runs on the first
                 // pass (before stages.photo can flip), so a raced photo joins
@@ -10451,19 +10451,19 @@ async function trySendQueuedReport(item) {
                     for (const unit of workUnits) {
                         if (unit.variant.complete) continue;
                         // Deferred units are STILL re-attempted on every
-                        // pass — `_uploadVariantTier` re-probes the tier
+                        // pass - `_uploadVariantTier` re-probes the tier
                         // and either uploads (if bandwidth has improved)
                         // or re-defers. The deferred flag is a hint for
                         // dequeue + UI surfaces, not a permanent skip.
                         await _uploadVariantTier(item, reportId, unit);
                     }
-                    // BUGFIX May 2026 — SMALL-tier gates the photo stage.
+                    // BUGFIX May 2026 - SMALL-tier gates the photo stage.
                     //
                     // Previously `stages.photo` only flipped when ALL THREE
                     // tiers (SMALL+MEDIUM+LARGE) of every photo landed. On
                     // SLOW / VERY_SLOW networks `_uploadVariantTier`
                     // *deliberately defers* MEDIUM/LARGE (lines 7505-7517)
-                    // — leaving `complete=false` on those tiers indefinitely.
+                    // - leaving `complete=false` on those tiers indefinitely.
                     // The `allComplete` check was therefore false forever,
                     // `stages.photo` never flipped, the My Reports card
                     // showed "QUEUED 75%" forever even though the report
@@ -10547,7 +10547,7 @@ async function trySendQueuedReport(item) {
                                         if (!res.ok) {
                                             console.warn(
                                                 `[Upload:pre-emptive-defer] mark-deferred returned ` +
-                                                `HTTP ${res.status} — non-fatal; backend Action ③ will catch ` +
+                                                `HTTP ${res.status} - non-fatal; backend Action ③ will catch ` +
                                                 `eventually`,
                                             );
                                         }
@@ -10575,7 +10575,7 @@ async function trySendQueuedReport(item) {
                             clearLandedDataUrls(ev);
                         }
                         if (allComplete) {
-                            // Full delivery — free the legacy fallback blobs too.
+                            // Full delivery - free the legacy fallback blobs too.
                             item.photo = null;
                             item.extraPhotos = [];
                         }
@@ -10589,18 +10589,18 @@ async function trySendQueuedReport(item) {
                             console.log(
                                 `[Upload:verify] report ${reportId} photo SMALL ` +
                                 `landed; stages.photo=true. Pending higher tiers: ` +
-                                `[${pendingLabels}] — retrying in background ` +
+                                `[${pendingLabels}] - retrying in background ` +
                                 `without blocking My Reports.`,
                             );
                         }
                     } else if (anyDeferred) {
                         // Persist the deferred state so a page reload picks
-                        // it back up. Don't touch stages.photo — SMALL isn't
+                        // it back up. Don't touch stages.photo - SMALL isn't
                         // up yet, the report is still genuinely in flight.
                         try { await enqueueReport(item); } catch (_) {}
                         const deferredUnits = workUnits.filter(u => u.variant.deferred);
                         const deferredLabels = deferredUnits.map(u => u.label || u.tier);
-                        // Phase C.3 (May 2026) — structured deferred-tier log
+                        // Phase C.3 (May 2026) - structured deferred-tier log
                         // with the dominant deferred reason and next retry
                         // window so operators correlating console logs against
                         // network history have one line per defer event.
@@ -10618,7 +10618,7 @@ async function trySendQueuedReport(item) {
                     // Legacy single-photo path (no variants on this queue item).
                     await _uploadLegacyPhoto(item, reportId);
                 } else {
-                    // Resilience #2 (backstop) — a photo was intended (we entered
+                    // Resilience #2 (backstop) - a photo was intended (we entered
                     // this block ⇒ stages.photo was false ⇒ hasPhoto was true at
                     // submit) but there are NO uploadable bytes: _buildVariantWork()
                     // returned [] AND there is no legacy item.photo. Without this
@@ -10634,7 +10634,7 @@ async function trySendQueuedReport(item) {
             }
         }
 
-        // Stage 3: Audio — adaptive chunks
+        // Stage 3: Audio - adaptive chunks
         if (!stages.audio && item.audioBlob && reportId) {
             try {
                 const mediaId = item.audioMediaId || genUUID();
@@ -10699,12 +10699,12 @@ async function trySendQueuedReport(item) {
                 const reconciled = await _reconcileBeforeDequeue(item, reportId);
                 if (reconciled.ok) {
                     // BUGFIX May 2026 (operator-reported, "1 queued never
-                    // leaves") — soft-drain handoff. If reconcile is OK
+                    // leaves") - soft-drain handoff. If reconcile is OK
                     // because SMALL of every photo landed, but some
                     // MEDIUM/HIGH we thought we sent isn't on the server
                     // yet, mark those as `deferred` with a timestamp so
                     // the retry-loop's existing deferred-tier path picks
-                    // them up. We DEQUEUE the report regardless — it's
+                    // them up. We DEQUEUE the report regardless - it's
                     // visible on the dashboard with at least SMALL, which
                     // is the UNDP must-have. The Originals can finish
                     // later (the dashboard's "Original pending" pill
@@ -10724,7 +10724,7 @@ async function trySendQueuedReport(item) {
                                 m.variant.complete = false;
                             }
                         }
-                        // K.3.a (May 2026, Phase K) — tell the backend
+                        // K.3.a (May 2026, Phase K) - tell the backend
                         // explicitly which tiers we gave up on, so the
                         // Report's sync_status math reflects reality
                         // (not the PWA's original 3-tier expectation).
@@ -10734,7 +10734,7 @@ async function trySendQueuedReport(item) {
                         // decrements expected_media. Dashboard then
                         // renders an explicit "Original (slow network)"
                         // chip (K.5.a). Non-fatal: backend Action ③
-                        // sweep eventually catches stragglers anyway —
+                        // sweep eventually catches stragglers anyway -
                         // this just makes it instant. See backend
                         // K.2.d for endpoint contract.
                         try {
@@ -10768,15 +10768,15 @@ async function trySendQueuedReport(item) {
                         }
                     }
                     try { await dequeueReport(item.client_report_id); } catch (_) {}
-                    // Fix 3 — refresh the pill immediately on dequeue so
+                    // Fix 3 - refresh the pill immediately on dequeue so
                     // the operator-visible "N queued" count drops within
                     // a frame rather than waiting for the next retry-loop
                     // tick. The finally-block updateSyncBadge below also
                     // fires; this is the synchronous-after-dequeue belt.
                     try { updateSyncBadge(); } catch (_) {}
-                    // Phase C.3 (May 2026) — structured verification log.
+                    // Phase C.3 (May 2026) - structured verification log.
                     const expectedRows = reconciled.totalExpected || 0;
-                    // Phase L (May 2026) — sum canonical SMALL/MEDIUM/ORIGINAL.
+                    // Phase L (May 2026) - sum canonical SMALL/MEDIUM/ORIGINAL.
                     // Pre-L breakdown keys were LOW/MEDIUM/HIGH; the backend
                     // returns canonical names now, so the old key reads
                     // were silently 0 + 0 + 0 = "0 of N landed" log noise.
@@ -10803,12 +10803,12 @@ async function trySendQueuedReport(item) {
                         `MEDIUM=${reconciled.breakdown.MEDIUM || 0} ` +
                         `LARGE=${reconciled.breakdown.HIGH || 0}` +
                         (reconciled.softDrain
-                            ? ` — ${reconciled.missing.length} tier(s) deferred for background retry: ` +
+                            ? ` - ${reconciled.missing.length} tier(s) deferred for background retry: ` +
                               reconciled.missing.map(m => m.label).join(', ')
                             : ''),
                     );
                 } else if ((reconciled.smallMissing || []).length > 0) {
-                    // HC88 (HARD-FAIL — inverted gate) — was an else-
+                    // HC88 (HARD-FAIL - inverted gate) - was an else-
                     // branch that fired whenever `reconciled.ok` was
                     // false AND smallAssembling was 0.  That caught
                     // `softAssembling > 0` (MEDIUM/ORIGINAL on server
@@ -10817,8 +10817,8 @@ async function trySendQueuedReport(item) {
                     // re-uploaded already-landed chunks → server
                     // deduped quickly → reconcile still mid-assembly →
                     // HARD-FAIL again.  The HARD-FAIL log even read
-                    // "missing 0 SMALL tier(s) ()" — count zero, empty
-                    // list — but the rollback still fired.
+                    // "missing 0 SMALL tier(s) ()" - count zero, empty
+                    // list - but the rollback still fired.
                     //
                     // Now the gate is provably tight: HARD-FAIL fires
                     // iff SMALL chunks are genuinely missing on the
@@ -10836,12 +10836,12 @@ async function trySendQueuedReport(item) {
                     try { await enqueueReport(item); } catch (_) {}
                     const missLabels = reconciled.smallMissing.map(m => m.label).join(', ');
                     console.warn(
-                        `[Upload:verify HARD-FAIL] report ${reportId} reconcile FAIL — ` +
+                        `[Upload:verify HARD-FAIL] report ${reportId} reconcile FAIL - ` +
                         `backend missing ${reconciled.smallMissing.length} SMALL tier(s) (${missLabels}); ` +
                         `re-queued, next retry in ~15s.`,
                     );
                 } else {
-                    // HC88 (WAIT-ASSEMBLY — bounded) — SMALL is on the
+                    // HC88 (WAIT-ASSEMBLY - bounded) - SMALL is on the
                     // server. Whatever's not yet 'complete'
                     // (smallAssembling, softAssembling) will be flipped
                     // by the backend's async assembly worker, usually
@@ -10862,7 +10862,7 @@ async function trySendQueuedReport(item) {
                     const MAX_WAIT_TICKS = 12;          // × 15 s = 180 s = 3 min
                     if (item.reconcileWaitTicks > MAX_WAIT_TICKS) {
                         console.warn(
-                            `[Upload:verify WAIT-EXHAUSTED] report ${reportId} — ` +
+                            `[Upload:verify WAIT-EXHAUSTED] report ${reportId} - ` +
                             `${item.reconcileWaitTicks} tick(s) waiting on server-side ` +
                             `assembly. Promoting to soft-drain (mark-deferred + dequeue).`,
                         );
@@ -10911,18 +10911,18 @@ async function trySendQueuedReport(item) {
                         const labels = allAssembling.map(m => m.label).join(', ');
                         console.log(
                             `[Upload:verify WAIT-ASSEMBLY ${item.reconcileWaitTicks}/${MAX_WAIT_TICKS}] ` +
-                            `report ${reportId} — ${allAssembling.length} tier(s) on server ` +
+                            `report ${reportId} - ${allAssembling.length} tier(s) on server ` +
                             `but still assembling (${labels}); deferring dequeue 15s.`,
                         );
                         // Persist the tick count so it survives SW upgrade
-                        // / app reload — without this the counter would
+                        // / app reload - without this the counter would
                         // reset to 0 each session and the bound would
                         // never fire on a long-running stuck assembly.
                         try { await enqueueReport(item); } catch (_) {}
                     }
                 }
             } catch (e) {
-                // Reconciliation network call failed — leave the report
+                // Reconciliation network call failed - leave the report
                 // in the queue and try again on the next retry-loop pass.
                 console.warn(
                     `[Upload:verify] report ${reportId} reconcile network error: ${e.message}; ` +
@@ -10933,10 +10933,10 @@ async function trySendQueuedReport(item) {
     } catch (e) {
         console.warn('trySendQueuedReport error:', e);
     } finally {
-        // HC90 (Sprint 2A) — reset send-attempts counter if ANY stage
+        // HC90 (Sprint 2A) - reset send-attempts counter if ANY stage
         // flipped from false→true during this invocation. The cap is
         // there to catch "progress-free retry storms" (5xx loop, wedged
-        // media id) — not to penalise a genuinely slow but progressing
+        // media id) - not to penalise a genuinely slow but progressing
         // upload. Resetting here means a report that completes one
         // tier per pass on 2 Kbps will never trip the cap.
         try {
@@ -10944,7 +10944,7 @@ async function trySendQueuedReport(item) {
                 && (item.sendAttempts || 0) > 0) {
                 item.sendAttempts = 0;
                 item.sendAttemptsExhaustedAt = 0;
-                // Resilience #4 — a stage advanced this pass, so the
+                // Resilience #4 - a stage advanced this pass, so the
                 // backend is reachable and the report IS progressing.
                 // Clear the flaky-backend escalation so the calm
                 // "needs attention" surface resolves on its own.
@@ -10960,11 +10960,11 @@ async function trySendQueuedReport(item) {
     updateSyncBadge();
 }
 
-// ── Persistent Retry Loop — runs every 15 seconds ───────────────────────────
+// ── Persistent Retry Loop - runs every 15 seconds ───────────────────────────
 // This is the real workhorse. It keeps trying until everything is sent.
 let _retryLoopRunning = false;
 
-// K.4.a (May 2026, Phase K) — cross-tab/window drain mutex.
+// K.4.a (May 2026, Phase K) - cross-tab/window drain mutex.
 // The in-process `_retryLoopRunning` flag prevents the SAME tab from
 // starting two concurrent retry loops, but a second tab (or the
 // installed PWA + a browser tab on the same domain) has its own JS
@@ -10977,13 +10977,13 @@ let _retryLoopRunning = false;
 //   - `_acquireDrainLock()` returns true iff no other tab holds the lock
 //     (within the 120 s stale-lock window).
 //   - `_releaseDrainLock()` clears it on retry-loop exit (queue drained
-//     OR explicit stop). A stale lock (>120 s old) is reclaimable —
+//     OR explicit stop). A stale lock (>120 s old) is reclaimable -
 //     covers the crashed-tab edge case where the holder went away
 //     without releasing.
 //
 // localStorage writes are synchronously visible across tabs on the
 // same origin, so the check-and-set is effectively atomic per browser.
-// The SW's `syncAllReports` doesn't need this lock — it skips modern
+// The SW's `syncAllReports` doesn't need this lock - it skips modern
 // variant-shape items via `continue` (sw.js:2166) and only drains
 // legacy single-photo items that are being phased out.
 const _DRAIN_LOCK_KEY = 'crisp_drain_lock_at';
@@ -10999,7 +10999,7 @@ function _acquireDrainLock() {
         localStorage.setItem(_DRAIN_LOCK_KEY, String(now));
         return true;
     } catch (_) {
-        // localStorage unavailable (private-mode quota, disabled) —
+        // localStorage unavailable (private-mode quota, disabled) -
         // fall back to single-context behaviour (the in-process flag
         // is the only guard).
         return true;
@@ -11009,8 +11009,8 @@ function _releaseDrainLock() {
     try { localStorage.removeItem(_DRAIN_LOCK_KEY); } catch (_) {}
 }
 
-// May 21 2026 (cellular smoke 3 v3) — wedge-detection support.
-// LIVENESS clock. Stamped whenever the retry loop EXECUTES — every while-loop
+// May 21 2026 (cellular smoke 3 v3) - wedge-detection support.
+// LIVENESS clock. Stamped whenever the retry loop EXECUTES - every while-loop
 // iteration, before each per-item send, AND on every successful chunk POST
 // (bin + base64 paths). The wedge-recovery uses this to tell the difference
 // between "retry loop is alive (uploading OR cycling)" and "retry loop claims
@@ -11018,18 +11018,18 @@ function _releaseDrainLock() {
 // iOS Safari suspends background tabs and may kill the underlying TCP
 // connection while the JS task is awaiting `fetch`. On resume, the
 // awaited Promise never resolves and `_retryLoopRunning` stays `true`
-// forever — every subsequent startRetryLoop() returns immediately
+// forever - every subsequent startRetryLoop() returns immediately
 // without doing anything. Without this stamp + the wedge-detection
 // below, the only recovery was Safari-kill-and-reopen (operator
 // observed during smoke 3 v3).
 //
-// Jun 2026 — this MUST be a liveness signal, not a "last successful POST"
+// Jun 2026 - this MUST be a liveness signal, not a "last successful POST"
 // signal. A device that is simply OFFLINE (airplane mode, tunnel/cell loss)
 // keeps the loop alive and CYCLING but lands zero successful POSTs. If the
 // wedge clock only advanced on success, a >60 s offline stretch made the loop
 // look "wedged"; on reconnect a trigger (online/heartbeat) fired the
 // wedge-recovery, cleared the concurrency guards, and a SECOND drain pass ran
-// concurrently with the first — re-uploading in-progress tiers from chunk 0
+// concurrently with the first - re-uploading in-progress tiers from chunk 0
 // (idempotent on the backend, so no data loss/dupe rows, but ~2x bandwidth on
 // exactly the bad networks where it's scarcest). Stamping on every loop tick
 // (plus the offline-skip below) keeps an alive-but-offline loop "fresh", so
@@ -11040,7 +11040,7 @@ const _RETRY_LOOP_WEDGE_THRESHOLD_MS = 60_000;
 // Pure wedge-recovery decision (extracted + exported for regression tests).
 // A claimed-running loop is "wedged" (frozen on a dead awaited fetch) ONLY when:
 //   • it is running, AND
-//   • we are ONLINE (offline ≠ wedged — the false-wedge fix; an offline loop is
+//   • we are ONLINE (offline ≠ wedged - the false-wedge fix; an offline loop is
 //     alive and offline-skipping, it just lands no successful POSTs), AND
 //   • there is pending work, AND
 //   • it hasn't ticked (executed) within the threshold.
@@ -11054,7 +11054,7 @@ function _isLoopWedged({ running, lastTickAt, now, online, hasPending, threshold
 }
 
 async function startRetryLoop(force) {
-    // Test-isolation hook — unit specs that drive the queue manually
+    // Test-isolation hook - unit specs that drive the queue manually
     // (enqueue → assert → uploadVariantTier) set window.__crispSuppressAutoDrain
     // BEFORE boot so the background drain can't concurrently dequeue/mutate the
     // rows they're asserting on (the source of a ~30-40% read-after-enqueue
@@ -11067,14 +11067,14 @@ async function startRetryLoop(force) {
     // running-guard). If the loop claims to be running but hasn't TICKED
     // (executed a loop iteration / per-item send / successful POST) in 60 s
     // AND there's pending work AND we're ONLINE, the loop is frozen on a dead
-    // Promise — force-reset and proceed.
+    // Promise - force-reset and proceed.
     // Safe to clobber: the K.1.b backend-side IntegrityError catch makes
     // duplicate chunk POSTs idempotent, so the worst case is a few
     // wasted retries, not data corruption.
     //
     // The `_online` guard is the offline-false-wedge fix: a device offline for
     // >60 s keeps the loop alive but lands no successful POSTs. We must NOT treat
-    // that as wedged — otherwise reconnect spawns a 2nd concurrent drain pass
+    // that as wedged - otherwise reconnect spawns a 2nd concurrent drain pass
     // that re-uploads in-progress tiers (idempotent, but 2x bandwidth). `_online`
     // is belt-and-suspenders alongside the liveness clock + the offline-skip in
     // the loop body: offline ticks keep `_lastDrainTickAt` fresh, so the loop
@@ -11091,7 +11091,7 @@ async function startRetryLoop(force) {
                             online: _online, hasPending: hasPendingWork,
                             thresholdMs: _RETRY_LOOP_WEDGE_THRESHOLD_MS })) {
             console.warn(
-                `[Retry] wedge detected — _retryLoopRunning=true but loop has not ticked in ` +
+                `[Retry] wedge detected - _retryLoopRunning=true but loop has not ticked in ` +
                 `${Math.round(silentMs/1000)}s with queue non-empty + online; ` +
                 `force-resetting + re-arming. ` +
                 `Most likely iOS Safari killed an awaited TCP connection during suspension.`
@@ -11106,12 +11106,12 @@ async function startRetryLoop(force) {
             return;
         }
     }
-    // K.4.a — cross-tab mutex. If another tab already holds the lock,
+    // K.4.a - cross-tab mutex. If another tab already holds the lock,
     // skip this drain pass. The next periodic sweep / online event
     // will try again. Eventually the lock-holder finishes or its TTL
     // expires; the next caller wins.
     if (!_acquireDrainLock()) {
-        console.log('Retry loop: another tab holds the drain lock — skip');
+        console.log('Retry loop: another tab holds the drain lock - skip');
         return;
     }
     _retryLoopRunning = true;
@@ -11119,14 +11119,14 @@ async function startRetryLoop(force) {
 
     try {
         while (true) {
-            // Liveness tick — proves the loop is executing this iteration (the
+            // Liveness tick - proves the loop is executing this iteration (the
             // wedge-recovery reads _lastDrainTickAt). Updated again per-item below
             // so a long ONLINE drain of many items also stays "fresh".
             _lastDrainTickAt = Date.now();
             try {
                 // Cheap queue-empty check first (so an empty queue still exits,
                 // online or offline). Then the OFFLINE-SKIP: don't attempt doomed
-                // uploads while offline — they fail, waste battery, and a long
+                // uploads while offline - they fail, waste battery, and a long
                 // failing-retry could stretch one iteration past the wedge
                 // threshold (making an alive loop look frozen). Stay alive + keep
                 // ticking; resume seamlessly on reconnect from each tier's
@@ -11167,7 +11167,7 @@ async function startRetryLoop(force) {
                 console.warn('Retry loop error:', e);
             }
 
-            // K.4.a — refresh the lock at every tick so other tabs see
+            // K.4.a - refresh the lock at every tick so other tabs see
             // we're still active. Without this, on a slow drain of 100+
             // items the 120 s TTL could expire and another tab could
             // jump in mid-pass.
@@ -11195,13 +11195,13 @@ function triggerBackgroundSync() {
 
 // Legacy syncQueue replaced by IndexedDB-based syncQueueManual (defined above)
 
-// ── — W6 applicable-modules consumer ──────────────
+// ── - W6 applicable-modules consumer ──────────────
 // The backend exposes `GET /api/v1/modules/applicable?crisis_type=X&…` which
 // returns a list of modular form definitions relevant to the current capture.
 // PWA scope is small here: fetch + cache + expose on window so dashboards +
 // future renderers can consume without another network round-trip.
 //
-// The render side is deliberately minimal — we list each applicable module
+// The render side is deliberately minimal - we list each applicable module
 // title in a collapsible "More details" block on the review stage so the
 // reporter can SEE that their answers could be enriched by module questions.
 // Full inline renderers for each field type (single_select / multi_select /
@@ -11224,7 +11224,7 @@ async function fetchApplicableModules(crisisType, opts = {}) {
             return res.json();
         })
         .then((data) => {
-            // Normalise to an array — FastAPI returns `[]` on no match, not `{modules:[]}`.
+            // Normalise to an array - FastAPI returns `[]` on no match, not `{modules:[]}`.
             const list = Array.isArray(data) ? data : (Array.isArray(data?.modules) ? data.modules : []);
             state.applicableModules = list;
             try {
@@ -11248,7 +11248,7 @@ window.__crispFetchApplicableModules = fetchApplicableModules;
 window.__crispW6ModuleCache = _w6ModuleCache;
 
 
-// ── — free-text building-name fallback ────────────
+// ── - free-text building-name fallback ────────────
 // When the Leaflet map / Overpass fetch is unavailable, the reporter can type
 // the building name in any language. The submit handler already emits
 // `infrastructure_name` (see submitReport → `infrastructure_name: state.infraName`).
@@ -11258,7 +11258,7 @@ window.__crispW6ModuleCache = _w6ModuleCache;
 // Interplay with the OSM tap-select path (building-select.js):
 //   • OSM tap auto-fills `state.infraName` + sets `state.infraNameFromOsm = true`
 //     AND mirrors the value into the #input-infra-name-v3 textbox.
-//   • If the user then edits the text, we flip `infraNameFromOsm` to false —
+//   • If the user then edits the text, we flip `infraNameFromOsm` to false -
 //     user intent supersedes the OSM auto-fill.
 //   • Clearing the text clears `state.infraName` but NOT `state.buildingId`
 //     (the user may have renamed a legitimately picked building, which is
@@ -11278,7 +11278,7 @@ function setupBuildingFreeText() {
     input.addEventListener('input', () => {
         const v = input.value;
         state.infraName = v;
-        // Flip the OSM-source flag — user typed over whatever building-select
+        // Flip the OSM-source flag - user typed over whatever building-select
         // auto-filled. The dashboard uses this to distinguish "verified OSM
         // pick the user kept" from "user-typed free-text that needs mapping".
         state.infraNameFromOsm = false;
@@ -11295,19 +11295,19 @@ function setupBuildingFreeText() {
     }
 }
 
-// ── — 8-stage Continue/Back wiring ───────────────
+// ── - 8-stage Continue/Back wiring ───────────────
 // Hooks the Continue / Back buttons on the four new v3 stages (where,
 // infra, crisis, extras). Each button delegates to nextStageId / prevStageId
 // which walks STAGES_V3 so the chain stays in a single place.
 //
 // Lightweight validators per stage: damage chip must be chosen before
 // leaving stage-where, infra type before stage-infra, etc. These validators
-// short-circuit to a toast when unmet — matches the "Photo required" gate
+// short-circuit to a toast when unmet - matches the "Photo required" gate
 // on stage-photo in the legacy flow.
-// ── Phase 1 — UI wiring ────────────────
+// ── Phase 1 - UI wiring ────────────────
 // All state lives in AuthStore (auth.js); this function is purely DOM
 // glue: bind buttons, paint the header pill, navigate between the 3
-// login steps + Settings. Offline-safe — every handler exits silently
+// login steps + Settings. Offline-safe - every handler exits silently
 // when the network call fails so the reporting flow is never blocked.
 function setupAuthUI() {
     if (!window.AuthStore) return;
@@ -11322,10 +11322,10 @@ function setupAuthUI() {
     function paintHeader() {
         const nameEl = document.getElementById('account-name');
         const user = A.getUser();
-        if (nameEl && user) nameEl.textContent = user.displayName || user.id || '—';
+        if (nameEl && user) nameEl.textContent = user.displayName || user.id || '-';
         const settingsName = document.getElementById('settings-account-name');
-        if (settingsName && user) settingsName.textContent = user.displayName || user.id || '—';
-        // Tell home-screen.js to repaint immediately too — covers the
+        if (settingsName && user) settingsName.textContent = user.displayName || user.id || '-';
+        // Tell home-screen.js to repaint immediately too - covers the
         // race between AuthStore.init() and home-screen DOMContentLoaded.
         try {
             if (window.CrispHome && typeof window.CrispHome.paintIdentityBar === 'function') {
@@ -11341,7 +11341,7 @@ function setupAuthUI() {
     populateCountryCodes();
 
     // ── C. Landing-button bindings ───────────────────────────────────
-    // May 2026 (landing-icon cleanup pass) — the legacy full-width
+    // May 2026 (landing-icon cleanup pass) - the legacy full-width
     // #btn-login row was removed; the new round #btn-home-login-icon
     // (in #home-tools-row) carries the auth-entry behaviour. The
     // click is wired in home-screen.js (so the data-state attribute
@@ -11351,7 +11351,7 @@ function setupAuthUI() {
     window._resetLoginForm = _resetLoginForm;
     const btnLogin = document.getElementById('btn-login');
     if (btnLogin) btnLogin.addEventListener('click', () => {
-        // Defensive — #btn-login was removed from the home stage but
+        // Defensive - #btn-login was removed from the home stage but
         // a stray reference elsewhere (e.g. a deep-link button on
         // stage-history) might still resolve to it. Keep the old
         // behaviour for any such caller.
@@ -11372,7 +11372,7 @@ function setupAuthUI() {
         goToStage('stage-settings');
     });
 
-    // ── D. Login step 1 — channel picker + destination input ─────────
+    // ── D. Login step 1 - channel picker + destination input ─────────
     const channelPhone = document.getElementById('login-channel-phone');
     const channelEmail = document.getElementById('login-channel-email');
     const phoneRow = document.getElementById('login-phone-row');
@@ -11431,7 +11431,7 @@ function setupAuthUI() {
         }
     });
 
-    // ── E. Login step 2 — code verify ────────────────────────────────
+    // ── E. Login step 2 - code verify ────────────────────────────────
     const verifyBtn = document.getElementById('btn-login-verify');
     const verifyError = document.getElementById('login-verify-error');
     const backStep1 = document.getElementById('btn-login-back-step1');
@@ -11464,7 +11464,7 @@ function setupAuthUI() {
                 document.getElementById('login-step3').style.display = 'block';
                 document.getElementById('login-linkable-count').textContent = String(linkable);
             } else {
-                // No anonymous reports to link — straight back to home.
+                // No anonymous reports to link - straight back to home.
                 _completeLogin(0);
             }
         } catch (e) {
@@ -11475,7 +11475,7 @@ function setupAuthUI() {
         }
     });
 
-    // ── F. Login step 3 — link offer ─────────────────────────────────
+    // ── F. Login step 3 - link offer ─────────────────────────────────
     const linkBtn = document.getElementById('btn-login-link');
     const skipLinkBtn = document.getElementById('btn-login-skip-link');
     if (linkBtn) linkBtn.addEventListener('click', async () => {
@@ -11530,7 +11530,7 @@ function setupAuthUI() {
     const btnSettingsBack = document.getElementById('btn-settings-back');
     if (btnSettingsBack) btnSettingsBack.addEventListener('click', () => goToStage('stage-home'));
 
-    // AUDIT 2026-05-23 — Reader Mode toggle wiring (init from
+    // AUDIT 2026-05-23 - Reader Mode toggle wiring (init from
     // localStorage on first paint via the top-of-file IIFE; this
     // binds the change handler when the user reaches Settings).
     try { _wireReaderMode(); } catch (_) {}
@@ -11585,12 +11585,12 @@ function _startResendCountdown() {
 }
 
 // Populate the country-code <select> with device-default selection
-// (user spec answer 4: "default select device location based currency" —
+// (user spec answer 4: "default select device location based currency" -
 // interpreted as device locale-based country → E.164 country code).
 function populateCountryCodes() {
     const sel = document.getElementById('login-cc-select');
     if (!sel) return;
-    // Short common list — full 200 countries would be overkill for a crisis
+    // Short common list - full 200 countries would be overkill for a crisis
     // reporter app. Covers UNDP pilot geographies + common expat sources.
     const list = [
         { code: '+91',  cc: 'IN', label: 'India (+91)' },
@@ -11618,7 +11618,7 @@ function populateCountryCodes() {
         { code: '+52',  cc: 'MX', label: 'Mexico (+52)' },
     ];
     sel.innerHTML = list.map((c) => `<option value="${c.code}" data-cc="${c.cc}">${c.label}</option>`).join('');
-    // Device-locale default. navigator.language gives e.g. "en-IN" — we
+    // Device-locale default. navigator.language gives e.g. "en-IN" - we
     // take the region part for the country code match.
     try {
         const locale = (navigator.language || 'en-IN').replace('_', '-');
@@ -11673,7 +11673,7 @@ function setupV3StageNavigation() {
     document.addEventListener('gps-ready', () => _refreshV3AutoMeta());
 }
 
-/** Paint the stage-where auto-meta panel — purely client-side, zero-wait.
+/** Paint the stage-where auto-meta panel - purely client-side, zero-wait.
  *  Date/time comes from `new Date()` using the user's device locale +
  *  timezone; the location row shows the reverse-geocoded place name when
  *  available, or the raw lat/lng, or the localized "Detecting..." string
@@ -11691,7 +11691,7 @@ function _refreshV3AutoMeta() {
             timeEl.textContent = `${datePart} · ${timePart}`;
         } catch (_) {
             // Manual LOCAL fallback (the old toISOString fallback rendered
-            // UTC wall-clock unlabeled — off by the device offset).
+            // UTC wall-clock unlabeled - off by the device offset).
             const d = new Date();
             const p = (n) => String(n).padStart(2, '0');
             timeEl.textContent = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
@@ -11703,7 +11703,7 @@ function _refreshV3AutoMeta() {
     if (locEl) {
         try { _paintLocationDisplays(); } catch (_) {
             // Defensive fallback in case the helper isn't loaded yet
-            // (shouldn't happen — same module — but keep the panel
+            // (shouldn't happen - same module - but keep the panel
             // populated regardless).
             if (state.locationName) {
                 locEl.textContent = state.locationName;
@@ -11718,7 +11718,7 @@ function _refreshV3AutoMeta() {
     try { _renderLandmarkFallback(); } catch (e) { console.warn('[M9] fallback:', e); }
 }
 
-// ── M9 — landmark fallback when GPS fails ──────────────────────
+// ── M9 - landmark fallback when GPS fails ──────────────────────
 //
 // UNDP nice-to-have #4: "If GPS is denied or unavailable, the user must
 // still be able to submit a usable location." Citizens in dense urban
@@ -11733,7 +11733,7 @@ function _refreshV3AutoMeta() {
 // with "Near <Hospital>" etc., focuses the input, and opens the
 // keyboard so the user can type specifics ("Near St. Joseph's Hospital").
 // On submit, the existing place-search flow takes over and writes
-// `state.userLocationName` — feeding submitReport's payload exactly
+// `state.userLocationName` - feeding submitReport's payload exactly
 // the same way as a manually-picked location.
 function _renderLandmarkFallback() {
     const banner = document.getElementById('v3-landmark-fallback');
@@ -11783,11 +11783,11 @@ function _renderLandmarkFallback() {
 
 /** Gate the Continue button on each v3 stage. Returns true when the stage
  *  has enough data to move forward; shows a toast and returns false otherwise.
- *  The validators are intentionally light — we don't block on optional fields
+ *  The validators are intentionally light - we don't block on optional fields
  *  (building name, service status) but do require the headline chip pick so
  *  downstream stages have something meaningful to render. */
 function _validateV3Stage(stageId) {
-    // P1 (i18n audit, May 23) — was reusing `t('photo_required')` for
+    // P1 (i18n audit, May 23) - was reusing `t('photo_required')` for
     // all three validators, which resolved to "Please add a photo"
     // in every locale instead of the contextual message. Now wired
     // to dedicated keys + a safe EN fallback that only fires when
@@ -11795,7 +11795,7 @@ function _validateV3Stage(stageId) {
     if (stageId === 'stage-where') {
         // Damage class is pre-selected PARTIAL by default so this passes
         // unless the user deselects everything (unusual). Location is soft
-        // — users can submit without GPS on slow / no-signal devices.
+        // - users can submit without GPS on slow / no-signal devices.
         if (!state.damageClass) {
             try { showToast(t('v3_pick_damage_required') || 'Pick how bad the damage is to continue.', 'info'); } catch (_) {}
             return false;
@@ -11852,20 +11852,20 @@ function setupSendStage() {
     const _bs = document.getElementById('btn-send');
     if (_bs) _bs.addEventListener('click', submitReport);
     const _bsb = document.getElementById('btn-send-back');
-    // May 2026 — `stage-review` DOM deleted (V3 paginated review was
+    // May 2026 - `stage-review` DOM deleted (V3 paginated review was
     // the operator-requested cleanup; V4 has stage-v4-review). Back
     // from stage-send routes to the V4 review stage instead.
     if (_bsb) _bsb.addEventListener('click', () => goToStage('stage-v4-review'));
     document.getElementById('btn-new-report').addEventListener('click', () => {
         try { resetApp(); } catch (_) {}
-        // HC79 — Report another routes back to the photo step, NOT to
+        // HC79 - Report another routes back to the photo step, NOT to
         // home, so the user can immediately start a fresh capture flow
         // without an extra tap. The v4 capture stage is the canonical
         // entry point.
         try { goToStage('stage-v4-capture'); } catch (_) {}
     });
 
-    // HC79 (May 2026) — CRISP brand at the top of stage-success routes
+    // HC79 (May 2026) - CRISP brand at the top of stage-success routes
     // home (same behaviour as pre-HC79).
     const successBrandBtn = document.getElementById('btn-success-brand');
     if (successBrandBtn) {
@@ -11875,7 +11875,7 @@ function setupSendStage() {
         });
     }
 
-    // HC79 — devid pill in the success header opens the same devid
+    // HC79 - devid pill in the success header opens the same devid
     // bottom-sheet the home stage uses. The sheet element + opener
     // live in home-screen.js.
     const successDevidBtn = document.getElementById('btn-success-devid');
@@ -11908,28 +11908,28 @@ function setupSendStage() {
         });
     }
 
-    // HC79 — contribution / tier strip routes to the rewards page.
+    // HC79 - contribution / tier strip routes to the rewards page.
     const successContribStrip = document.getElementById('success-contribution-strip');
     if (successContribStrip) {
         successContribStrip.addEventListener('click', () => goToStage('stage-rewards'));
     }
 
-    // HC81 — the HC79 success-stage trigger pill + per-stage bottom
+    // HC81 - the HC79 success-stage trigger pill + per-stage bottom
     // sheet are gone. Ring taps in #success-nearby-rings are handled
     // by nearby.js's delegated listener inside _buildBucketRings;
     // they open the SHARED #nearby-list-sheet (the same sheet the
     // home stage opens). No per-stage open/close wiring needed here.
 
-    // ── M3 — UNDP Step 4 details flow ──────────
+    // ── M3 - UNDP Step 4 details flow ──────────
     // Soft prompt on stage-success: "Add 4 quick details · 30s". Opens a
     // dedicated post-submission stage-undp-details page with 5 modular
     // questions (debris / power / water / health / pressing-needs).
     // Submit PATCHes /reports/<id>/classify with the new fields. Skipping
-    // at any point preserves the base report — these are UNDP "of interest"
+    // at any point preserves the base report - these are UNDP "of interest"
     // (Appendix-1), not must-haves.
     setupUndpDetailsStage();
 
-    // M2 polish — fullscreen building-picker overlay + sliding
+    // M2 polish - fullscreen building-picker overlay + sliding
     // bottom sheet. UNDP must-have #6: the inline 280 px map is cramped
     // in dense urban areas. Tapping #btn-building-fs-open lifts the map
     // into the fullscreen overlay (Leaflet instance follows the DOM via
@@ -11939,7 +11939,7 @@ function setupSendStage() {
     // state.
     setupBuildingFullscreenPicker();
 
-    // ── Phase 5 — PWA My Reports screen ─────────────────────────
+    // ── Phase 5 - PWA My Reports screen ─────────────────────────
     // Parity port of crisp-mobile/App.tsx:969–982 (history screen).
     // Three sections: In-flight (IndexedDB), Submitted (status-since),
     // Impact (aggregated lives_impacted).
@@ -11947,7 +11947,7 @@ function setupSendStage() {
     const _mrBack = document.getElementById('btn-history-back');
     if (_mrBtn) _mrBtn.addEventListener('click', openMyReports);
     if (_mrBack) _mrBack.addEventListener('click', () => goToStage('stage-home'));
-    // May 2026 (reward-system v2 second pass) — Rewards shortcut on
+    // May 2026 (reward-system v2 second pass) - Rewards shortcut on
     // the My Reports controls row. Goes straight to stage-rewards.
     const _mrRewardsBtn = document.getElementById('btn-mr-rewards');
     if (_mrRewardsBtn) _mrRewardsBtn.addEventListener('click', () => goToStage('stage-rewards'));
@@ -11958,11 +11958,11 @@ function setupSendStage() {
         goToStage('stage-history');
         _renderSubmittedReports().catch(() => {});
     });
-    // "My Reports" spec — try to flush any queued deletes from
+    // "My Reports" spec - try to flush any queued deletes from
     // prior offline sessions as soon as the user opens the app.
     setTimeout(() => { _syncDeleteQueue().catch(() => {}); }, 2000);
 
-    // UX rewrite — "Delete all my reports" moved from the landing
+    // UX rewrite - "Delete all my reports" moved from the landing
     // screen's Delete-My-Data panel INTO the history screen. Keeps data
     // management in one place. Wraps the existing purge-device endpoint.
     const _daBtn = document.getElementById('btn-history-delete-all');
@@ -11981,7 +11981,7 @@ function setupSendStage() {
             const res = await fetch(`${API_BASE}/reports/device/${deviceHash}`, { method: 'DELETE' });
             if (res.ok) {
                 showToast(t('delete_all_success'), 'success');
-                // Refresh both history sections — they'll now show empty + the
+                // Refresh both history sections - they'll now show empty + the
                 // home impact metrics will re-fetch next time home is entered.
                 _renderPartialReports();
                 _renderSubmittedReports();
@@ -11998,7 +11998,7 @@ function setupSendStage() {
         }
     });
 
-    // Data-subject access right (UNDP Privacy Policy Annex 2 (f)) — download
+    // Data-subject access right (UNDP Privacy Policy Annex 2 (f)) - download
     // every report this device submitted as a JSON file. Reuses the same
     // public device-hash endpoint as "My Reports"; anonymous reporters can
     // exercise this without an account.
@@ -12008,7 +12008,7 @@ function setupSendStage() {
                            localStorage.getItem('crisp_device_hash') ||
                            localStorage.getItem('crisp_device_id') || '';
         if (!deviceHash) {
-            // showToast(message, duration) — the 2nd arg is the display
+            // showToast(message, duration) - the 2nd arg is the display
             // duration in ms, not a type. Use the default (3 s) so the
             // feedback is actually visible.
             showToast(t('export_empty'));
@@ -12064,12 +12064,12 @@ function setupSendStage() {
 
 async function openMyReports() {
     goToStage('stage-history');
-    // M6 — reset filter + view-toggle to defaults on every fresh
+    // M6 - reset filter + view-toggle to defaults on every fresh
     // entry so users always start on "All / List" (no surprise persistence
     // across sessions). Wire the controls bar once, idempotent.
     _mrFilter = 'all';
     _mrView = 'list';
-    // May 2026 — reset the accordion pagination state on every fresh
+    // May 2026 - reset the accordion pagination state on every fresh
     // entry so the "latest non-empty group expanded, others collapsed,
     // first 5 cards each" default is what greets the user.
     try { _mrResetPagination(); } catch (_) {}
@@ -12077,7 +12077,7 @@ async function openMyReports() {
         const ctrl = document.getElementById('mr-controls');
         if (ctrl) {
             // Filter dropdown reset (chip selectors below are legacy
-            // — they're now no-ops since the chip markup was removed
+            // - they're now no-ops since the chip markup was removed
             // in May 2026 but the calls stay harmless on a missing
             // selector. Kept as a defence-in-depth for any embedded
             // builds that still ship the old markup).
@@ -12095,7 +12095,7 @@ async function openMyReports() {
     // Hotfix: reconcile local IDB queue against server truth
     // BEFORE rendering. Fixes a class of bugs where a report reaches the
     // server successfully but one of the four client-side stage flags
-    // (`meta`/`text`/`photo`/`audio`) never flipped true — usually because
+    // (`meta`/`text`/`photo`/`audio`) never flipped true - usually because
     // the response body didn't return OK from a proxy, a chunk resumed
     // from a stale progress cursor, or a variant upload threw after the
     // server accepted the last chunk. The entry then sits in the
@@ -12112,15 +12112,15 @@ async function openMyReports() {
  * Safe: server sees the report in its authoritative list, so the client's
  * in-flight view is redundant. Called from openMyReports + the retry loop.
  * No-op if the device has no hash (no reports ever submitted) or the
- * status-since endpoint is unreachable (offline — keep everything queued).
+ * status-since endpoint is unreachable (offline - keep everything queued).
  */
 async function _reconcileQueueAgainstServer() {
     const deviceHash = _deviceHashForHistory();
     if (!deviceHash) return;
     let serverReports = [];
     try {
-        // HAR-driven dedupe — see _singleFlightFetch helper. Pass ttlMs=0
-        // because this runs on every openMyReports entry — same user-
+        // HAR-driven dedupe - see _singleFlightFetch helper. Pass ttlMs=0
+        // because this runs on every openMyReports entry - same user-
         // initiated semantics as _renderSubmittedReports below. A just-
         // submitted report must reconcile immediately, not after the
         // 10s cache TTL.
@@ -12128,7 +12128,7 @@ async function _reconcileQueueAgainstServer() {
         if (!res.ok) return;
         serverReports = await res.json();
     } catch (_) {
-        // Offline / backend down — do NOT dequeue; upload still pending.
+        // Offline / backend down - do NOT dequeue; upload still pending.
         return;
     }
     if (!Array.isArray(serverReports) || serverReports.length === 0) return;
@@ -12161,7 +12161,7 @@ async function _reconcileQueueAgainstServer() {
             : 0;
         const haveAll = Array.isArray(srv.media) ? srv.media.length : 0;
         if (expected > 0 && haveAll < expected) {
-            // BUGFIX May 2026 — staged reconcile.
+            // BUGFIX May 2026 - staged reconcile.
             //
             // The old "have < expected" gate kept the queue full forever
             // when the deliberately-deferred MEDIUM/LARGE tiers never made
@@ -12187,7 +12187,7 @@ async function _reconcileQueueAgainstServer() {
             if (photoCount > 0 && haveSmall < photoCount) {
                 console.log(
                     `[Reconcile] ${item.client_report_id.slice(0, 8)}: ` +
-                    `server has ${haveSmall}/${photoCount} SMALL — keep queued ` +
+                    `server has ${haveSmall}/${photoCount} SMALL - keep queued ` +
                     `to finish the dashboard-visible tier`,
                 );
                 continue;
@@ -12195,7 +12195,7 @@ async function _reconcileQueueAgainstServer() {
             // SMALL is up for every photo. The report is dashboard-visible
             // so the user-facing submission journey is complete.
             //
-            // BUGFIX May 2026 (operator audit) — pre-fix this branch
+            // BUGFIX May 2026 (operator audit) - pre-fix this branch
             // dequeued the IDB row right here, which silently abandoned
             // any MEDIUM/LARGE variants that were marked
             // `deferred=true` (waiting for a bandwidth-tier upgrade).
@@ -12215,12 +12215,12 @@ async function _reconcileQueueAgainstServer() {
             //      cleanly via the all-complete branch below.
             //   2. The sync-badge filter (see updateSyncBadge) ignores
             //      items where `_submissionLanded=true` so the user
-            //      doesn't see "1 queued" forever — addresses the
+            //      doesn't see "1 queued" forever - addresses the
             //      original "QUEUED 75% stuck" UX complaint.
             //   3. If `_deferredSince` is > 14 days old, give up and
             //      dequeue. The Original is permanently lost on this
             //      device (the dataUrl in IDB has likely been evicted
-            //      anyway). Backend cleanup job — separate change —
+            //      anyway). Backend cleanup job - separate change -
             //      flips the dashboard chip to "no Original" so
             //      operators stop expecting one.
             const _DEFERRED_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;  // 14 days
@@ -12236,7 +12236,7 @@ async function _reconcileQueueAgainstServer() {
                         console.log(
                             `[Reconcile] ${item.client_report_id.slice(0, 8)}: ` +
                             `SMALL of ${photoCount} photo(s) landed; deferred ` +
-                            `MEDIUM/LARGE still pending — keep queued for ` +
+                            `MEDIUM/LARGE still pending - keep queued for ` +
                             `background retry (age=${Math.round(age / 3600000)}h).`,
                         );
                         continue;
@@ -12244,27 +12244,27 @@ async function _reconcileQueueAgainstServer() {
                     console.warn(
                         `[Reconcile] ${item.client_report_id.slice(0, 8)}: ` +
                         `deferred variants exceeded 14-day timeout (age=` +
-                        `${Math.round(age / 86400000)}d) — giving up, ` +
+                        `${Math.round(age / 86400000)}d) - giving up, ` +
                         `dequeuing. Originals permanently lost on this device.`,
                     );
                 } else {
                     console.log(
                         `[Reconcile] ${item.client_report_id.slice(0, 8)}: ` +
                         `SMALL of all ${photoCount} photo(s) landed; no ` +
-                        `deferred variants pending — dequeue.`,
+                        `deferred variants pending - dequeue.`,
                     );
                 }
             } else {
                 console.log(
                     `[Reconcile] ${item.client_report_id.slice(0, 8)}: ` +
-                    `server has ${haveAll}/${expected} media — keep queued`,
+                    `server has ${haveAll}/${expected} media - keep queued`,
                 );
                 continue;
             }
         }
         try {
             await dequeueReport(item.client_report_id);
-            console.log(`[Reconcile] dequeued ${item.client_report_id.slice(0, 8)} — server has it (${haveAll}/${expected} media)`);
+            console.log(`[Reconcile] dequeued ${item.client_report_id.slice(0, 8)} - server has it (${haveAll}/${expected} media)`);
         } catch (e) {
             console.warn('[Reconcile] dequeue failed:', e);
         }
@@ -12274,7 +12274,7 @@ async function _reconcileQueueAgainstServer() {
 
 /**
  * Returns true if the queue item has at least one variant where
- * `deferred=true && complete=false` — i.e. the upload pipeline is
+ * `deferred=true && complete=false` - i.e. the upload pipeline is
  * still trying to ship a higher-tier image but is gated on a network
  * upgrade. Used by the reconciler to keep such items alive past the
  * "SMALL landed on backend" dequeue gate.
@@ -12311,7 +12311,7 @@ function _deviceHashForHistory() {
     // PWA assigns a device_hash on first capture and stores it in localStorage.
     // `crisp_device_id_v2` is the CURRENT key (SHA-256-based stable anonymous
     // id written by submitReport). Older users may have `crisp_device_hash`
-    // or `crisp_device_id` — keep those as fallbacks so their history still
+    // or `crisp_device_id` - keep those as fallbacks so their history still
     // resolves post-migration.
     //
     // HOTFIX: was previously reading only the legacy keys, which
@@ -12323,7 +12323,7 @@ function _deviceHashForHistory() {
 }
 
 function _historyEmpty(container, text, icon) {
-    // HC8 (humanitarian-grade home redesign 2026-05-23) — expand the
+    // HC8 (humanitarian-grade home redesign 2026-05-23) - expand the
     // empty state with guidance + a "Start your first report" CTA.
     // Pre-fix it was just "Nothing submitted yet" + an icon. Now a
     // first-time user sees a clear next-step rather than a dead-end.
@@ -12342,7 +12342,7 @@ function _historyEmpty(container, text, icon) {
     const isFirstTime = !text || text === titleText ||
         text === 'Nothing submitted yet.' || text === 'Nothing submitted yet';
     if (!isFirstTime) {
-        // Filter-empty / secondary empty — short single-line message.
+        // Filter-empty / secondary empty - short single-line message.
         container.innerHTML = `<div class="history-empty">
             <i class="fa-solid ${icon || 'fa-paper-plane'}"></i>
             <p>${text}</p>
@@ -12399,7 +12399,7 @@ async function _renderPartialReports() {
         const st = it.stages || {};
         return !(st.meta && st.photo && st.audio && st.text);
     });
-    // May 2026 (operator-reported, second pass) — the "IN FLIGHT"
+    // May 2026 (operator-reported, second pass) - the "IN FLIGHT"
     // tile at the top of My Reports was retired (the section header
     // below already carries the signal). The previous owner-of-the-
     // stat refactor that put this write here is preserved as a
@@ -12408,7 +12408,7 @@ async function _renderPartialReports() {
     // new shell.
     const _hiPending = document.getElementById('hi-pending');
     if (_hiPending) _hiPending.textContent = String(inflight.length);
-    // May 2026 (operator-reported) — hide the entire IN FLIGHT section
+    // May 2026 (operator-reported) - hide the entire IN FLIGHT section
     // when empty. Pre-fix the section header + a "Nothing in flight…"
     // empty-state still rendered, wasting ~120 px of vertical real
     // estate above the user's actual report list. The IN FLIGHT count
@@ -12432,9 +12432,9 @@ async function _renderPartialReports() {
             ? `<span class="hr-chip hr-chip-fail">${t('status_failed')}</span>`
             : status === 'syncing' ? `<span class="hr-chip hr-chip-sync">${t('status_uploading')}</span>`
             : `<span class="hr-chip hr-chip-queue">${t('status_queued')}</span>`;
-        const crisis = (it.meta && it.meta.crisis_type) || '—';
-        const infra = (it.meta && it.meta.infrastructure_type) || '—';
-        // May 21 2026 (audit Item 1) — surface a thumbnail for the
+        const crisis = (it.meta && it.meta.crisis_type) || '-';
+        const infra = (it.meta && it.meta.infrastructure_type) || '-';
+        // May 21 2026 (audit Item 1) - surface a thumbnail for the
         // in-flight card from the LOCAL SMALL-tier dataUrl. Pre-fix the
         // in-flight render had NO image preview at all: queued items
         // sat in IDB carrying photoVariants.small.dataUrl (the locally-
@@ -12445,9 +12445,9 @@ async function _renderPartialReports() {
         // report had a thumbnail. Inconsistent UX.
         //
         // Fall-through order:
-        //   1. `it.photoVariants.small.dataUrl` — main photo SMALL preview
-        //   2. `it.extraPhotosVariants[0].small.dataUrl` — first extra
-        //   3. `it.photo` — legacy single-photo dataUrl (pre-variant queue)
+        //   1. `it.photoVariants.small.dataUrl` - main photo SMALL preview
+        //   2. `it.extraPhotosVariants[0].small.dataUrl` - first extra
+        //   3. `it.photo` - legacy single-photo dataUrl (pre-variant queue)
         //   4. none → camera placeholder (same as submitted-card fallback)
         let _inflightThumbUrl = null;
         try {
@@ -12464,12 +12464,12 @@ async function _renderPartialReports() {
             if (!_inflightThumbUrl && typeof it.photo === 'string' && it.photo.startsWith('data:')) {
                 _inflightThumbUrl = it.photo;
             }
-        } catch (_) { /* defensive — never block the render */ }
+        } catch (_) { /* defensive - never block the render */ }
         const _inflightThumbHtml = _inflightThumbUrl
             ? `<img class="hr-thumb" src="${escapeHtmlSimple(_inflightThumbUrl)}" alt=""
                     onerror="this.outerHTML='<div class=&quot;hr-thumb hr-thumb-placeholder&quot;><i class=&quot;fa-solid fa-camera&quot;></i></div>'">`
             : `<div class="hr-thumb hr-thumb-placeholder"><i class="fa-solid fa-camera"></i></div>`;
-        // BUGFIX May 2026 — stuck-reason hint.
+        // BUGFIX May 2026 - stuck-reason hint.
         //
         // A QUEUED card with "75% · <id>" tells the user nothing about WHY
         // their report is in flight. Pre-fix: the user reported the same
@@ -12488,11 +12488,11 @@ async function _renderPartialReports() {
             const tpl = t('stuck_reason') || 'waiting: {stages}';
             return tpl.replace('{stages}', missing.join(', '));
         })();
-        // BUGFIX May 2026 — `data-client-report-id` enables the
+        // BUGFIX May 2026 - `data-client-report-id` enables the
         // click handler bound below. Without it the user could see a
         // queued report card but tapping it was a silent no-op (the
         // submitted-reports list at line 9301 had the equivalent
-        // wiring; in-flight had been shipped without it — an original
+        // wiring; in-flight had been shipped without it - an original
         // omission, never had click handling).
         return `<div class="history-row history-row-with-thumb" role="button" tabindex="0"
                      data-client-report-id="${escapeHtmlSimple(it.client_report_id)}">
@@ -12528,7 +12528,7 @@ async function _renderPartialReports() {
     });
 }
 
-// BUGFIX May 2026 — open the report-detail stage for a queued/in-flight
+// BUGFIX May 2026 - open the report-detail stage for a queued/in-flight
 // item that hasn't fully synced yet. Mirrors openReportDetail() but
 // reads from the LOCAL IndexedDB queue instead of _submittedCache /
 // the status-since aggregator (neither of which knows about
@@ -12536,7 +12536,7 @@ async function _renderPartialReports() {
 //
 // Resolution order:
 //   1) If the queue item already has a serverId (the meta POST landed
-//      and we got an id back), try openReportDetail(serverId) first —
+//      and we got an id back), try openReportDetail(serverId) first -
 //      that's the full backend-state-driven view.
 //   2) Otherwise (pure-offline or meta-not-yet-acked), synthesise a
 //      report-like object from item.meta + the captured state and
@@ -12553,7 +12553,7 @@ window.openQueuedReportDetail = async function (clientReportId) {
     } catch (e) {
         console.warn('[openQueuedReportDetail] IDB read failed:', e);
     }
-    // Path 1 — the meta POST landed already, so the backend knows
+    // Path 1 - the meta POST landed already, so the backend knows
     // about this report; defer to the canonical detail flow.
     if (queued && queued.serverId && typeof window.openReportDetail === 'function') {
         try { await window.openReportDetail(queued.serverId); return; } catch (_) {}
@@ -12565,7 +12565,7 @@ window.openQueuedReportDetail = async function (clientReportId) {
         try { await _renderPartialReports(); } catch (_) {}
         return;
     }
-    // Path 2 — synthesise a report-shaped object from the queue.
+    // Path 2 - synthesise a report-shaped object from the queue.
     // _synthesizeSubmittedReport already exists for the post-submit
     // optimistic path; we can't reuse it directly (it pulls from
     // window.state, not from the queue item), but we mirror its
@@ -12594,7 +12594,7 @@ window.openQueuedReportDetail = async function (clientReportId) {
         // of falling through to a generic Submitted state.
         status: queued.status === 'syncing' ? 'UPLOADING' : 'QUEUED',
         photo_group_id: meta.photo_group_id || null,
-        __queued: true,            // diagnostic flag — UI may key off this later
+        __queued: true,            // diagnostic flag - UI may key off this later
         __queue_pct: _inflightPct(queued),
     };
     try {
@@ -12613,7 +12613,7 @@ function _inflightPct(item) {
     return Math.round((done / total) * 100);
 }
 
-// ── "My Reports" spec — shared helpers ───────────────────────────
+// ── "My Reports" spec - shared helpers ───────────────────────────
 // Map the backend's two orthogonal fields (`status` enum + `reviewer_verdict`)
 // to a single 4-state user-facing view.
 //
@@ -12630,20 +12630,20 @@ function _inflightPct(item) {
 function _mapReportStatus(r) {
     const verdict = r.reviewer_verdict || 'NOT_REVIEWED';
     const status = (r.status || 'PENDING').toUpperCase();
-    // R3.a (May 2026) — surface upload-lifecycle states BEFORE the
+    // R3.a (May 2026) - surface upload-lifecycle states BEFORE the
     // review-lifecycle verdict. A report whose upload is paused /
     // recovering / permanently-failed is in a state the citizen can
     // ACT on; the reviewer-verdict states only matter after the
     // upload actually lands. Predicates read from media[].abandon_reason
     // and media[].recovered_at exposed in MediaResponse (R1).
     //
-    //   - FAILED_PERMANENT (red, tappable): hard-abandon — corrupt
+    //   - FAILED_PERMANENT (red, tappable): hard-abandon - corrupt
     //     bytes or already-rejected. Citizen must allocate a fresh
     //     submission; chunks can't fix this.
-    //   - RECOVERING (blue): soft-abandon + online — the page retry
+    //   - RECOVERING (blue): soft-abandon + online - the page retry
     //     loop / SW background sync is actively draining queued
     //     chunks against the bumped upload_generation.
-    //   - PAUSED (amber): soft-abandon + offline — chunks ARE
+    //   - PAUSED (amber): soft-abandon + offline - chunks ARE
     //     pending in IDB but the network is down. Will resume on
     //     reconnect.
     //
@@ -12675,7 +12675,7 @@ function _mapReportStatus(r) {
                      label: t('mr_status_recovering') || 'Recovering…' };
         }
         return { state: 'PAUSED', color: '#eab308', icon: '⏸',
-                 label: t('mr_status_paused') || 'Paused — waiting for network' };
+                 label: t('mr_status_paused') || 'Paused - waiting for network' };
     }
     if (verdict === 'ACCEPTED') {
         return { state: 'ACCEPTED', color: '#80EE98', icon: '🟢', label: t('rd_status_accepted') };
@@ -12689,7 +12689,7 @@ function _mapReportStatus(r) {
     return { state: 'SUBMITTED', color: '#9ca3af', icon: '⚪', label: t('rd_status_submitted') };
 }
 
-// ── M5 — ETA badge + mini-map for report-detail ────────────────
+// ── M5 - ETA badge + mini-map for report-detail ────────────────
 //
 // The ETA badge surfaces a next-step expectation derived from the current
 // status. Backend doesn't yet emit per-report ETAs (planned for v3.1 once
@@ -12704,7 +12704,7 @@ function _renderRdEta(r) {
     const status = (r.status || 'PENDING').toUpperCase();
     let key = null;
     if (r.help_arrived_at) {
-        // No ETA — help is already on-site.
+        // No ETA - help is already on-site.
         badge.style.display = 'none';
         return;
     }
@@ -12713,13 +12713,13 @@ function _renderRdEta(r) {
     } else if (verdict === 'ACCEPTED') {
         key = 'rd_eta_accepted';
     } else if (verdict === 'REJECTED' || status === 'FALSE_ALARM') {
-        // No ETA — terminal state.
+        // No ETA - terminal state.
         badge.style.display = 'none';
         return;
     } else if (status === 'RESPONDING') {
         key = 'rd_eta_under_review';
     } else {
-        // PENDING / VERIFIED-no-verdict — first-stage review.
+        // PENDING / VERIFIED-no-verdict - first-stage review.
         key = 'rd_eta_initial';
     }
     const txt = (typeof t === 'function' && t(key)) || '';
@@ -12728,13 +12728,13 @@ function _renderRdEta(r) {
     badge.style.display = 'inline-flex';
 }
 
-// May 21, 2026 — audit Item 1 visual differentiation: marker icons use
+// May 21, 2026 - audit Item 1 visual differentiation: marker icons use
 // distinct colors so the user can tell at a glance which markers are
 // their own submissions vs nearby community reports. Operator decision:
 //   own  → blue  (#3b82f6, Tailwind blue-500)
 //   nearby → orange (#f97316, Tailwind orange-500)
 // The svg is a teardrop pin with white outline + a small center dot.
-// Returns a Leaflet divIcon. Safe to call before/after Leaflet load —
+// Returns a Leaflet divIcon. Safe to call before/after Leaflet load -
 // caller guards on `typeof window.L`.
 const _CRISP_MARKER_OWN_COLOR = '#3b82f6';
 const _CRISP_MARKER_NEARBY_COLOR = '#f97316';
@@ -12773,8 +12773,8 @@ function _renderRdMiniMap(r) {
     const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
     if (!hasCoords) { wrap.style.display = 'none'; return; }
     if (typeof window.L === 'undefined') {
-        // Leaflet not yet loaded — kick off a lazy load via BuildingSelect
-        // (Phase 16 — was a hard exit; cold-opening My Reports / detail
+        // Leaflet not yet loaded - kick off a lazy load via BuildingSelect
+        // (Phase 16 - was a hard exit; cold-opening My Reports / detail
         // before visiting the capture flow never had Leaflet available).
         if (window.BuildingSelect && typeof window.BuildingSelect.ensureLeaflet === 'function') {
             window.BuildingSelect.ensureLeaflet().then(() => {
@@ -12814,7 +12814,7 @@ function _renderRdMiniMap(r) {
                 ? window.L.marker([lat, lng], { icon: _icon }).addTo(_rdMiniMapInstance)
                 : window.L.marker([lat, lng]).addTo(_rdMiniMapInstance);
         }
-        // Re-invalidate size on next paint — Leaflet under display:none
+        // Re-invalidate size on next paint - Leaflet under display:none
         // won't have computed its container width yet, so the tiles
         // render half-blank. setTimeout 0 schedules after the render.
         setTimeout(() => {
@@ -12839,14 +12839,14 @@ function _deriveActionTaken(r) {
         lines.push(t('rd_feedback_awaiting'));
     }
     if ((r.reviewer_verdict || '') === 'ACCEPTED' && r.action_taken && r.action_taken.trim()) {
-        // User-authored free-text from a reviewer — stored verbatim; NOT
+        // User-authored free-text from a reviewer - stored verbatim; NOT
         // translated (matches policy for user-generated content).
         lines.push(r.action_taken.trim());
     }
     return lines;
 }
 
-// Short-form time display for the card — "2 days ago", "5 min ago", etc.
+// Short-form time display for the card - "2 days ago", "5 min ago", etc.
 // The `t(key).replace('{n}', n)` pattern is our light-weight interpolation;
 // a real ICU message formatter would handle plural forms natively, but for
 // "N min ago" strings this is sufficient across the locales we support.
@@ -12947,17 +12947,17 @@ function _synthesizeSubmittedReport(clientReportId, extra) {
 // the Track button's open-detail path can be exercised without a real submit.
 window.__crispSynthesizeSubmittedReport = _synthesizeSubmittedReport;
 
-// ── M6 — My Reports filter + view-toggle state ──────────────────
+// ── M6 - My Reports filter + view-toggle state ──────────────────
 //
 // Two pieces of UI state that drive _renderSubmittedReports:
-//   _mrFilter — 'all' | 'review' | 'accepted' | 'help' | 'rejected'
-//   _mrView   — 'list' | 'map'
+//   _mrFilter - 'all' | 'review' | 'accepted' | 'help' | 'rejected'
+//   _mrView   - 'list' | 'map'
 // Reset to defaults on every fresh stage entry (see goToStage history hook
 // in setupHistoryStage). Non-persistent on purpose: users almost always
 // want to see their full inventory first.
 let _mrFilter = 'all';
 let _mrView = 'list';
-// May 2026 (operator-reported) — paginate the submitted-reports list
+// May 2026 (operator-reported) - paginate the submitted-reports list
 // inside date-grouped <details> accordions. `_mrGroupPage` maps a
 // bucket name ('today'/'yesterday'/'this_week'/'older') to the number
 // of cards currently rendered in that bucket. Initial value 5 (page
@@ -13022,7 +13022,7 @@ async function _renderSubmittedReports() {
     if (!list) return;
     // Submitted section is hidden by default (see index.html) so the
     // headers don't render before the empty state lands. Every commit
-    // path through this function must unhide it — including the
+    // path through this function must unhide it - including the
     // early-return empty branches below. Pre-fix the empty state drew
     // into a still-hidden section and the user saw "In flight" +
     // "Submitted" headers with no content for several frames.
@@ -13040,7 +13040,7 @@ async function _renderSubmittedReports() {
     }
     let reports = [];
     try {
-        // HAR-driven dedupe — see _singleFlightFetch helper. Pass ttlMs=0
+        // HAR-driven dedupe - see _singleFlightFetch helper. Pass ttlMs=0
         // because My Reports is a user-INITIATED surface: the user just
         // tapped "My Reports" expecting fresh data. A just-submitted
         // report MUST appear immediately, not after the 10s cache TTL
@@ -13051,19 +13051,19 @@ async function _renderSubmittedReports() {
     } catch (e) {
         console.warn('[MyReports] status-since failed:', e);
     }
-    // Phase 5e — celebratory delta notification. Compare each
+    // Phase 5e - celebratory delta notification. Compare each
     // report to the snapshot we saved last time My Reports was opened:
     //  - verdict NOT_REVIEWED → ACCEPTED       → "🎉 Your report was accepted!"
     //  - lives_impacted went up                 → "💚 You helped N more lives"
     //  - reward tier moved up (T1→T2 / T2→T3 / T3→T4)
     //                                          → "📣/⚡/🦸 Tier-up celebration"
     //
-    // Snapshot v2 (May 2026 reward-system rewrite) — wraps the legacy
+    // Snapshot v2 (May 2026 reward-system rewrite) - wraps the legacy
     // per-report block in `{ tier: ..., reports: { ... } }`. First read
     // at v2 ignores any v1 payload so the tier-up toast doesn't fire
     // a false positive on the migration boundary. Existing acceptance
     // + lives-delta toasts still fire with the new key (which is also
-    // localised — see Phase F i18n).
+    // localised - see Phase F i18n).
     try {
         const snapRaw = localStorage.getItem('crisp_mr_snapshot_v2');
         const snap = snapRaw ? JSON.parse(snapRaw) : null;
@@ -13084,7 +13084,7 @@ async function _renderSubmittedReports() {
         // endpoint is the single source of truth for the tier the home
         // chip just painted; we read the same value here so the
         // celebration toast matches the chip on screen. We tolerate a
-        // failed fetch — no tier toast in that case, but the report
+        // failed fetch - no tier toast in that case, but the report
         // deltas still fire below.
         let nowTier = null;
         try {
@@ -13114,7 +13114,7 @@ async function _renderSubmittedReports() {
             localStorage.removeItem('crisp_mr_snapshot_v1');
         } catch (_) {}
 
-        // Emit toasts (only if we had a prior snapshot — i.e. not first
+        // Emit toasts (only if we had a prior snapshot - i.e. not first
         // visit at v2). Tier-up takes precedence visually because it's
         // the bigger moment; acceptance + lives toasts stack underneath.
         if (snapRaw) {
@@ -13129,7 +13129,7 @@ async function _renderSubmittedReports() {
                 // English fallback for the three promotions; t() takes
                 // precedence when the i18n bundle has hydrated.
                 const TIER_FALLBACK = {
-                    t2_signal: "📣 You're a Signal now — your first report reached the team.",
+                    t2_signal: "📣 You're a Signal now - your first report reached the team.",
                     t3_changemaker: "⚡ Changemaker unlocked! Your report sent help.",
                     t4_lifekeeper: "🦸 You're a Lifekeeper. Tap the badge to share your story.",
                 };
@@ -13139,11 +13139,11 @@ async function _renderSubmittedReports() {
                 _showCelebration(localised);
             }
             if (acceptedN > 0) {
-                // Localised celebration — see Phase F i18n.
+                // Localised celebration - see Phase F i18n.
                 const key = acceptedN === 1 ? 'celebration_accepted_one' : 'celebration_accepted_many';
                 const fallback = acceptedN === 1
-                    ? '🎉 1 report accepted — thank you for reporting!'
-                    : `🎉 ${acceptedN} reports accepted — thank you for reporting!`;
+                    ? '🎉 1 report accepted - thank you for reporting!'
+                    : `🎉 ${acceptedN} reports accepted - thank you for reporting!`;
                 const tpl = (typeof t === 'function' && t(key) !== key) ? t(key) : fallback;
                 _showCelebration(String(tpl).replace('{n}', String(acceptedN)));
             }
@@ -13160,12 +13160,12 @@ async function _renderSubmittedReports() {
         console.warn('[MyReports] delta check failed:', e);
     }
     // Impact summary.
-    // May 2026 (operator-reported, second pass) — single-stat card.
+    // May 2026 (operator-reported, second pass) - single-stat card.
     // Was a 3-tile card (RESOLVED / LIVES IMPACTED / IN FLIGHT); the
     // first and third tiles were dropped from the markup, so we no
     // longer compute or write `resolved`. `hi-pending` is also gone
     // (the in-flight section header below already carries that
-    // signal). Only `lives_impacted` survives — analyst-set on the
+    // signal). Only `lives_impacted` survives - analyst-set on the
     // dashboard, summed across the device's reports.
     const livesTotal = reports.reduce((n, r) => n + (Number.isFinite(r.lives_impacted) ? r.lives_impacted : 0), 0);
     if (impactCard) {
@@ -13173,10 +13173,10 @@ async function _renderSubmittedReports() {
         if (livesEl) livesEl.textContent = String(livesTotal);
         impactCard.style.display = 'flex';
     }
-    // v6.6 (May 2026) — the `#mr-lives-badge` painter that ran here has
+    // v6.6 (May 2026) - the `#mr-lives-badge` painter that ran here has
     // been REMOVED. The lives-saved value is surfaced exclusively on the
-    // Lifekeeper pill (#home-badge-chip painter in home-screen.js) — see
-    // CLAUDE.md "My Reports tile" invariant. The element no longer
+    // Lifekeeper pill (#home-badge-chip painter in home-screen.js) - see
+    // the project invariants "My Reports tile" invariant. The element no longer
     // exists in index.html. The `livesTotal` aggregate is still used by
     // the #hi-lives painter just above (impact-card surface), which
     // stays.
@@ -13187,7 +13187,7 @@ async function _renderSubmittedReports() {
         if (ctrl) ctrl.style.display = 'none';
         return;
     }
-    // "My Reports" spec — cards show thumbnail + location + date
+    // "My Reports" spec - cards show thumbnail + location + date
     // + single colored status chip. Tapping a card opens the detail view.
     // Data for the detail view is cached in _submittedCache so the tap
     // doesn't round-trip to the server again.
@@ -13202,7 +13202,7 @@ async function _renderSubmittedReports() {
         }
     } catch (_) {}
 
-    // M6 — show the filter + view-toggle controls now that we
+    // M6 - show the filter + view-toggle controls now that we
     // have at least one report. The controls bar is hidden when empty.
     const ctrl = document.getElementById('mr-controls');
     if (ctrl) ctrl.style.display = 'flex';
@@ -13210,7 +13210,7 @@ async function _renderSubmittedReports() {
     // and re-renders.
     const filtered = reports.filter((r) => _matchesMrFilter(r, _mrFilter));
 
-    // M6 — view toggle. List view paints the cards; map view delegates to
+    // M6 - view toggle. List view paints the cards; map view delegates to
     // _renderMyReportsMap with the SAME filtered set so the user always
     // sees coherent state across both surfaces.
     const mapWrap = document.getElementById('mr-map-wrap');
@@ -13225,13 +13225,13 @@ async function _renderSubmittedReports() {
         return;
     }
     if (mapWrap) mapWrap.style.display = 'none';
-    // May 2026 second pass — DO NOT override `inflightSec.style.display`
+    // May 2026 second pass - DO NOT override `inflightSec.style.display`
     // here. The in-flight section's visibility is owned exclusively by
     // `_renderPartialReports` (which sets it to 'none' when the queue
     // is empty + back to '' when reports land). Resetting it
     // unconditionally here was a race against the parallel partial
     // renderer in `Promise.all([_renderPartialReports(),
-    // _renderSubmittedReports()])` — the addition of a tier-up /profile
+    // _renderSubmittedReports()])` - the addition of a tier-up /profile
     // fetch in this function nudged the timing enough to make the race
     // manifest reliably in spec 59's "empty IN FLIGHT" test.
     if (submittedSec) submittedSec.style.display = '';
@@ -13241,7 +13241,7 @@ async function _renderSubmittedReports() {
         return;
     }
 
-    // M6 — group by date so users with many reports get a scannable
+    // M6 - group by date so users with many reports get a scannable
     // hierarchy (Today / Yesterday / This week / Older). The card
     // markup is identical to the previous flat list; only the wrapping
     // <div class="mr-date-group"> + section title are new.
@@ -13256,7 +13256,7 @@ async function _renderSubmittedReports() {
     const renderCard = (r) => {
         const st = _mapReportStatus(r);
         const loc = r.location || {};
-        // (UI v3 redesign Q4) — prefer human place names; only fall
+        // (UI v3 redesign Q4) - prefer human place names; only fall
         // back to coords as a last resort, and even then prefix with "📍" so
         // the user knows it's a coordinate, not random numbers. Old reports
         // with no place_name reverse-geocode lazily on dashboard; here we
@@ -13271,7 +13271,7 @@ async function _renderSubmittedReports() {
         // placeholder if the URL fails (covers presigned-URL expiry /
         // CORS / 404 cases so judges never see leaking alt text).
         //
-        // May 21 2026 (audit Item 1) — REMOVED `loading="lazy"`. The
+        // May 21 2026 (audit Item 1) - REMOVED `loading="lazy"`. The
         // attribute caused silent thumbnail failures when the user
         // scrolled past a card faster than the lazy fetch fired: the
         // <img> element rendered but its network request never went
@@ -13292,7 +13292,7 @@ async function _renderSubmittedReports() {
                 (r.lives_impacted === 1 ? t('rd_people_helped_one') : t('rd_people_helped_many'))
                     .replace('{n}', String(r.lives_impacted)))}</span>`
             : '';
-        // Queued-delete indicator — set when the user deleted offline.
+        // Queued-delete indicator - set when the user deleted offline.
         const pendingDelete = _isDeleteQueued(r.id || r.client_report_id)
             ? `<div class="mr-card-pending"><i class="fa-solid fa-clock-rotate-left"></i> ${escapeHtmlSimple(t('rd_delete_queued'))}</div>`
             : '';
@@ -13303,7 +13303,7 @@ async function _renderSubmittedReports() {
         // translators catch up). Raw "WILDFIRE · HOSPITAL" becomes the
         // native-language equivalent: "جنگل کی آگ · ہسپتال" in Urdu.
         const _translateEnum = (raw, keyFn) => {
-            if (!raw) return '—';
+            if (!raw) return '-';
             const k = keyFn(raw);
             const en = I18N.en || {};
             const locale = I18N[state.lang] || {};
@@ -13332,7 +13332,7 @@ async function _renderSubmittedReports() {
         </button>`;
     };
 
-    // May 2026 (operator-reported) — date-grouped <details> accordions
+    // May 2026 (operator-reported) - date-grouped <details> accordions
     // with "Load 5 more" lazy-render per group.
     //
     // Pre-fix: every non-empty bucket rendered ALL its cards at once
@@ -13402,7 +13402,7 @@ async function _renderSubmittedReports() {
     }).join('');
     list.innerHTML = html;
 
-    // Card-click handlers — bind to every rendered card.
+    // Card-click handlers - bind to every rendered card.
     list.querySelectorAll('.mr-card').forEach((el) => {
         const id = el.getAttribute('data-report-id');
         el.addEventListener('click', () => openReportDetail(id));
@@ -13426,7 +13426,7 @@ async function _renderSubmittedReports() {
         });
     });
 
-    // "Load 5 more" buttons — append the next page of cards in that
+    // "Load 5 more" buttons - append the next page of cards in that
     // bucket. We re-render the whole list (cheap at our scale) so the
     // accordion + page counters stay coherent.
     list.querySelectorAll('.mr-load-more').forEach((btn) => {
@@ -13441,7 +13441,7 @@ async function _renderSubmittedReports() {
     });
 }
 
-// ── M6 — My Reports map view ───────────────────────────────────
+// ── M6 - My Reports map view ───────────────────────────────────
 //
 // Renders all (filtered) reports as Leaflet markers in a 360 px container.
 // Tapping a marker opens the report-detail page directly (skips the
@@ -13534,7 +13534,7 @@ function _renderMyReportsMap(reports) {
     setTimeout(() => { try { _mrMapInstance.invalidateSize(false); } catch (_) {} }, 60);
 }
 
-// M6 — wire the filter chips + view-toggle once at page load. Every
+// M6 - wire the filter chips + view-toggle once at page load. Every
 // click flips the in-memory state and re-renders. Stage-history setup
 // resets _mrFilter / _mrView to defaults on every fresh entry so users
 // always start on "All / List".
@@ -13542,18 +13542,18 @@ function setupMyReportsControls() {
     const ctrl = document.getElementById('mr-controls');
     if (!ctrl || ctrl.dataset.wired === '1') return;
     ctrl.dataset.wired = '1';
-    // May 2026 — filter dropdown replaces the chip row. Single `change`
+    // May 2026 - filter dropdown replaces the chip row. Single `change`
     // listener handles all 5 options; legacy `.mr-filter-chip` markup
     // has been removed from index.html.
     const filterSelect = document.getElementById('mr-filter-select');
     if (filterSelect) {
-        // Re-sync the <select> with whatever _mrFilter is on entry —
+        // Re-sync the <select> with whatever _mrFilter is on entry -
         // stage-history re-init resets _mrFilter to 'all' (app.js:9046)
         // so the dropdown value should reflect that.
         filterSelect.value = _mrFilter || 'all';
         filterSelect.addEventListener('change', () => {
             _mrFilter = filterSelect.value || 'all';
-            // Reset pagination state — a fresh filter means a fresh
+            // Reset pagination state - a fresh filter means a fresh
             // view, so the latest non-empty group is expanded again
             // and per-group page counters start from 5.
             try { _mrResetPagination(); } catch (_) {}
@@ -13586,7 +13586,7 @@ function escapeHtmlSimple(s) {
     return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// ── "My Reports" spec — individual report detail + delete ─────────
+// ── "My Reports" spec - individual report detail + delete ─────────
 
 const _DELETE_QUEUE_KEY = 'crisp_report_delete_queue_v1';
 
@@ -13602,7 +13602,7 @@ function _isDeleteQueued(id) {
 }
 
 /** Add a delete request to the offline queue. De-duplicated on id.
- *  Captures the current auth token (if any) at enqueue time — same
+ *  Captures the current auth token (if any) at enqueue time - same
  *  offline-grace pattern the queued-report path uses (app.js:7012).
  *  This lets `_syncDeleteQueue` send the right bearer even if the
  *  user logged out between deletion + reconnect. */
@@ -13635,7 +13635,7 @@ function _dequeueDelete(id) {
     } catch(_) {}
 }
 
-/** Flush queued deletes when the network comes back. Idempotent — safe
+/** Flush queued deletes when the network comes back. Idempotent - safe
  *  to call on every 'online' event + on app boot. */
 async function _syncDeleteQueue() {
     let q = [];
@@ -13645,18 +13645,18 @@ async function _syncDeleteQueue() {
     } catch { return; }
     if (!q.length) return;
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-    // BUGFIX May 2026 (HAR-driven) — surface from `/Users/pks/Desktop/logs-1.har`
+    // BUGFIX May 2026 (HAR-driven) - surface from `/Users/pks/Desktop/logs-1.har`
     // showed every delete-queue replay returning 401:
     //   DELETE /api/v1/reports/<id>  → 401 Unauthorized (19 ms)
     //   DELETE /api/v1/reports/<id>  → 401 Unauthorized ( 4 ms)
-    // Net effect: queued deletes NEVER drained — they retried on every
+    // Net effect: queued deletes NEVER drained - they retried on every
     // reconnect, accumulating forever in localStorage and polluting the
     // network log on every page load. Root cause: the fetch below was
     // sent without an Authorization header. The backend's DELETE
     // endpoint requires an authenticated user (the device-hash-based
     // ownership check was never wired). Captured token (if any) lives
     // on `entry.auth_token` for tokens that existed AT THE TIME OF
-    // DELETION (offline-grace pattern — same shape as the queued-report
+    // DELETION (offline-grace pattern - same shape as the queued-report
     // path at line ~7016). Falls back to the current AuthStore token
     // for entries that pre-dated the offline-grace wiring.
     function _bearerForDeleteEntry(entry) {
@@ -13676,17 +13676,17 @@ async function _syncDeleteQueue() {
                 method: 'DELETE',
                 headers,
             });
-            // 200/204 = success; 404 = already gone (server purged) — both OK.
-            // 401 = the captured token expired AND there's no live one —
+            // 200/204 = success; 404 = already gone (server purged) - both OK.
+            // 401 = the captured token expired AND there's no live one -
             // the entry stays in the queue but we stop retrying noisily.
             if (res.ok || res.status === 204 || res.status === 404) {
                 _dequeueDelete(entry.id);
             } else if (res.status === 401) {
                 // Loud once-per-session warning so operators tailing
                 // devtools know why their delete isn't landing. Don't
-                // dequeue — the user may log back in and the retry
+                // dequeue - the user may log back in and the retry
                 // will succeed.
-                console.warn(`[DeleteQueue] 401 on ${entry.id} — login required for the delete to land`);
+                console.warn(`[DeleteQueue] 401 on ${entry.id} - login required for the delete to land`);
             }
         } catch (e) {
             console.warn('[DeleteQueue] sync failed:', entry.id, e);
@@ -13703,15 +13703,15 @@ window.addEventListener('online', () => { _syncDeleteQueue().catch(() => {}); })
 // The post-submission "UNDP details" screen (stage-undp-details) lets
 // the reporter add power/water/health/debris/pressing-needs context
 // after the main report has landed. The save handler used to do a
-// raw `fetch` PATCH and show "Couldn't save — please try again" on
+// raw `fetch` PATCH and show "Couldn't save - please try again" on
 // any failure (offline OR a 5xx blip). Operator: "After saving it
 // says could not save. Ideally based on internet speed this should
 // also reach the dashboard."
 //
 // Mirrors the delete-queue pattern above:
-//   · `_enqueueDetails({reportId, payload, auth_token?})` — captures
+//   · `_enqueueDetails({reportId, payload, auth_token?})` - captures
 //     the patch + auth at the moment of save
-//   · `_syncDetailsQueue()` — drains on `online` + on boot
+//   · `_syncDetailsQueue()` - drains on `online` + on boot
 //   · 401 → keep queued (user may re-login)
 //   · 4xx (other) → dequeue (bad payload won't succeed on retry)
 //   · 5xx / network error → keep queued for next attempt
@@ -13733,7 +13733,7 @@ function _enqueueDetails(entry) {
         } catch (_) {}
     }
     entry.queuedAt = entry.queuedAt || Date.now();
-    // De-dup by reportId — latest save wins. The PATCH endpoint is
+    // De-dup by reportId - latest save wins. The PATCH endpoint is
     // idempotent + merges fields, so a single drained entry per
     // report is sufficient.
     q = q.filter(e => e.reportId !== entry.reportId);
@@ -13755,12 +13755,12 @@ function _dequeueDetails(reportId) {
     try { if (typeof updateSyncBadge === 'function') updateSyncBadge(); } catch (_) {}
 }
 
-// BUGFIX May 2026 (operator-reported, "1 queued never leaves") — a
+// BUGFIX May 2026 (operator-reported, "1 queued never leaves") - a
 // stuck UNDP-details patch from a previous session was inflating the
 // unified "N queued" pill even though no new report was actually
 // pending. Add a hard 24-hour TTL: any entry older than that gets
 // purged from localStorage. The PATCH endpoint is idempotent and
-// merges fields, so worst-case a 24h-stale patch is lost — the
+// merges fields, so worst-case a 24h-stale patch is lost - the
 // report itself is already on the dashboard with everything else.
 const _DETAILS_QUEUE_TTL_MS = 24 * 60 * 60 * 1000;  // 24 hours
 
@@ -13783,7 +13783,7 @@ function _purgeStaleDetails() {
             localStorage.setItem(_DETAILS_QUEUE_KEY, JSON.stringify(fresh));
             try { updateSyncBadge(); } catch (_) {}
         }
-    } catch (_) { /* localStorage corruption — leave it alone */ }
+    } catch (_) { /* localStorage corruption - leave it alone */ }
 }
 
 async function _syncDetailsQueue() {
@@ -13815,13 +13815,13 @@ async function _syncDetailsQueue() {
                 _dequeueDetails(entry.reportId);
                 console.log(`[DetailsQueue] synced ${entry.reportId}`);
             } else if (res.status === 401) {
-                // Stay queued — auth issue, user may re-login + retry.
-                console.warn(`[DetailsQueue] 401 on ${entry.reportId} — login required`);
+                // Stay queued - auth issue, user may re-login + retry.
+                console.warn(`[DetailsQueue] 401 on ${entry.reportId} - login required`);
             } else if (res.status >= 400 && res.status < 500) {
-                // 4xx other than 401 — payload won't succeed on retry.
+                // 4xx other than 401 - payload won't succeed on retry.
                 // Dequeue to avoid an infinite loop on a permanently-
                 // bad row (e.g. report was hard-deleted server-side).
-                console.warn(`[DetailsQueue] ${res.status} on ${entry.reportId} — dropping unredeemable entry`);
+                console.warn(`[DetailsQueue] ${res.status} on ${entry.reportId} - dropping unredeemable entry`);
                 _dequeueDetails(entry.reportId);
             }
             // 5xx → leave in queue, retry next time.
@@ -13833,7 +13833,7 @@ async function _syncDetailsQueue() {
 }
 
 window.addEventListener('online', () => { _syncDetailsQueue().catch(() => {}); });
-// Best-effort boot drain — kicks off on next macrotask so we don't
+// Best-effort boot drain - kicks off on next macrotask so we don't
 // block the initial render. Most users will be online at boot, so
 // this lands any stragglers from a prior offline session.
 setTimeout(() => { _syncDetailsQueue().catch(() => {}); }, 2000);
@@ -13852,7 +13852,7 @@ window.openReportDetail = async function (id) {
         const deviceHash = _deviceHashForHistory();
         if (deviceHash) {
             try {
-                // HAR-driven dedupe — see _singleFlightFetch helper.
+                // HAR-driven dedupe - see _singleFlightFetch helper.
                 const res = await _singleFlightFetch(`${API_BASE}/reports/device/${deviceHash}/status-since?since=1970-01-01T00:00:00Z`);
                 if (res.ok) {
                     const arr = await res.json();
@@ -13870,7 +13870,7 @@ window.openReportDetail = async function (id) {
     goToStage('stage-report-detail');
 };
 
-/** Render the detail view. Pure DOM mutation — no state changes. */
+/** Render the detail view. Pure DOM mutation - no state changes. */
 function renderReportDetail(r) {
     // Stash the last-rendered report so applyI18n() can re-invoke on
     // language change without needing to re-fetch.
@@ -13891,7 +13891,7 @@ function renderReportDetail(r) {
         dateMeta.textContent = iso ? _fmtLocalDateTime(iso) : '';
     }
 
-    // Timeline — 4 stops: Submitted → Under Review → Accepted → Help Sent.
+    // Timeline - 4 stops: Submitted → Under Review → Accepted → Help Sent.
     // Done vs upcoming is derived from timestamps so the visual always
     // matches the canonical backend state.
     const tl = document.getElementById('rd-timeline');
@@ -13916,7 +13916,7 @@ function renderReportDetail(r) {
         const visibleSteps = steps.filter(s => !s.hidden);
         // M5: identify the most recently completed step (the "current"
         // anchor) so its dot can pulse. Falls back to the first step
-        // when nothing is done yet — mirrors the user's intuition that
+        // when nothing is done yet - mirrors the user's intuition that
         // "I just submitted" should highlight Submitted.
         let currentIdx = -1;
         for (let i = visibleSteps.length - 1; i >= 0; i--) {
@@ -13938,19 +13938,19 @@ function renderReportDetail(r) {
         }).join('');
     }
 
-    // M5 — ETA badge below the status chip. Heuristic-based; we don't
+    // M5 - ETA badge below the status chip. Heuristic-based; we don't
     // have backend ETAs (feature-flagged for v3.1) so we map the current
     // status to an approximate next-step expectation.
     try { _renderRdEta(r); } catch (e) { console.warn('[M5] eta:', e); }
-    // M5 — mini-map: a 130px Leaflet view with a single marker showing
-    // the report's coordinates. Best-effort — needs (a) Leaflet loaded
+    // M5 - mini-map: a 130px Leaflet view with a single marker showing
+    // the report's coordinates. Best-effort - needs (a) Leaflet loaded
     // and (b) non-zero coords. Hidden gracefully otherwise.
     try { _renderRdMiniMap(r); } catch (e) { console.warn('[M5] mini-map:', e); }
 
     // Photo (fallback to placeholder).
     // (a) URL routed through window._resolveMediaUrl so any
     // future s3:// regression surfaces a placeholder cleanly. (b) Added
-    // onerror swap matching the card-thumb pattern (was missing — broken
+    // onerror swap matching the card-thumb pattern (was missing - broken
     // URLs used to surface the literal "Report photo" alt text in giant
     // grey letters, Delta-S2 in the audit). (c) Photo node is
     // re-built on every render so a previous placeholder swap doesn't
@@ -13990,10 +13990,10 @@ function renderReportDetail(r) {
         }
     }
 
-    // Metadata grid — labels translated; values are enum names (we also
+    // Metadata grid - labels translated; values are enum names (we also
     // translate those via lowercase-key lookup when a match exists, otherwise
     // show the raw enum with underscores replaced so the user still gets the
-    // info — e.g. "WILDFIRE" → "Wildfire" / "ಕಾಳ್ಗಿಚ್ಚು").
+    // info - e.g. "WILDFIRE" → "Wildfire" / "ಕಾಳ್ಗಿಚ್ಚು").
     const grid = document.getElementById('rd-meta-grid');
     if (grid) {
         const loc = r.location || {};
@@ -14036,7 +14036,7 @@ function renderReportDetail(r) {
         </div>`).join('') || `<div style="color:#94a3b8;font-size:12px;">${escapeHtmlSimple(t('rd_no_details'))}</div>`;
     }
 
-    // Feedback (green block) — only when accepted.
+    // Feedback (green block) - only when accepted.
     const fb = document.getElementById('rd-feedback');
     const fbTitle = document.getElementById('rd-feedback-title');
     const fbSub = document.getElementById('rd-feedback-sub');
@@ -14057,7 +14057,7 @@ function renderReportDetail(r) {
         }
     }
 
-    // Rejection reason — `action_taken` is reviewer-authored free text,
+    // Rejection reason - `action_taken` is reviewer-authored free text,
     // stored verbatim and NOT translated (matches user-generated content
     // policy). Fall back to a localized default when no text exists.
     const rej = document.getElementById('rd-rejection');
@@ -14131,7 +14131,7 @@ async function confirmDeleteReport(r) {
             throw new Error(`HTTP ${res.status}`);
         }
     } catch (e) {
-        // Likely network failure — enqueue and leave a clear note.
+        // Likely network failure - enqueue and leave a clear note.
         console.warn('[Delete] failed, queueing:', e);
         _enqueueDelete({ id, clientReportId: r.client_report_id, queuedAt: Date.now() });
         showToast(t('delete_offline_queued'), 'info');
@@ -14145,7 +14145,7 @@ async function confirmDeleteReport(r) {
     }
 }
 
-/** Phase 5e — green celebratory toast. Stacks cleanly if multiple fire. */
+/** Phase 5e - green celebratory toast. Stacks cleanly if multiple fire. */
 function _showCelebration(message) {
     const host = (() => {
         let el = document.getElementById('celebration-stack');
@@ -14172,7 +14172,7 @@ function _showCelebration(message) {
     }, 3200);
 }
 
-// ── M2 polish — Fullscreen building-picker + bottom sheet ───────
+// ── M2 polish - Fullscreen building-picker + bottom sheet ───────
 //
 // Goal: take the inline `#building-map` (a cramped 260 px box on small
 // phones) and let users tap a CTA to expand it into a viewport-filling
@@ -14215,7 +14215,7 @@ function setupBuildingFullscreenPicker() {
     let _originalParent = null;       // where #building-map lived before we lifted it
     let _selectionAtOpen = null;      // snapshot of state.buildingId on open (for Cancel revert)
     let _isOpen = false;
-    // HC67 (May 2026) — track where the free-text "type the building
+    // HC67 (May 2026) - track where the free-text "type the building
     // name" block lived before we lifted it into the fullscreen sheet.
     // HC66 hid the inline free-text block on review; HC67 makes it
     // reachable via the fullscreen picker (operator: "Inside the
@@ -14233,7 +14233,7 @@ function setupBuildingFullscreenPicker() {
     function _setSheetSelected(name) {
         if (promptEl) promptEl.style.display = 'none';
         if (nameRow) nameRow.hidden = false;
-        if (nameEl) nameEl.textContent = name || '—';
+        if (nameEl) nameEl.textContent = name || '-';
         if (confirmBtn) confirmBtn.disabled = false;
     }
 
@@ -14243,7 +14243,7 @@ function setupBuildingFullscreenPicker() {
     function _refreshSheetFromState() {
         const sel = (window.state && window.state.buildingOsmElement) || null;
         if (sel) {
-            const name = sel.name || (sel.id ? `#${sel.id}` : '—');
+            const name = sel.name || (sel.id ? `#${sel.id}` : '-');
             _setSheetSelected(name);
         } else {
             _setSheetIdle();
@@ -14262,10 +14262,10 @@ function setupBuildingFullscreenPicker() {
         _selectionAtOpen = (window.state && window.state.buildingId) || null;
 
         // Move the live map into the overlay mount. Leaflet's internal
-        // canvas + tile layer follow via appendChild — we just need to
+        // canvas + tile layer follow via appendChild - we just need to
         // call invalidateSize after the layout settles.
         mount.appendChild(map);
-        // HC67 — also lift the free-text "type the building name"
+        // HC67 - also lift the free-text "type the building name"
         // block into the fullscreen sheet so users have the offline
         // fallback there. Mounts at the bottom of the sheet body
         // (above the actions row).
@@ -14283,7 +14283,7 @@ function setupBuildingFullscreenPicker() {
             // its parent (`.v4-stage #v4-building-mount #building-
             // select-box > .building-free-text`). Once reparented out
             // of `#building-select-box`, that descendant selector no
-            // longer matches — the block paints normally.
+            // longer matches - the block paints normally.
         }
         overlay.hidden = false;
         // Force one paint frame before applying the open class so the
@@ -14295,7 +14295,7 @@ function setupBuildingFullscreenPicker() {
 
         _refreshSheetFromState();
 
-        // Multi-stage invalidateSize — the same dance building-select.js
+        // Multi-stage invalidateSize - the same dance building-select.js
         // uses on first init. iOS Safari sometimes needs a second tick
         // to settle layout after a transform-then-detransform ancestor.
         const _kick = () => {
@@ -14331,7 +14331,7 @@ function setupBuildingFullscreenPicker() {
             if (map && _originalParent && _originalParent.isConnected) {
                 _originalParent.appendChild(map);
             }
-            // HC67 — restore the free-text block to its original
+            // HC67 - restore the free-text block to its original
             // parent (`#building-select-box`). The HC66 CSS rule
             // re-applies and hides it on review.
             const freeText = document.getElementById('building-free-text-block');
@@ -14359,7 +14359,7 @@ function setupBuildingFullscreenPicker() {
         // open, clear that selection so we go back to the
         // _selectionAtOpen state. Cleanest path is the existing
         // #btn-building-clear which routes through _clearSelection in
-        // building-select.js — same code path the inline cancel uses.
+        // building-select.js - same code path the inline cancel uses.
         const currentSel = (window.state && window.state.buildingId) || null;
         if (currentSel && currentSel !== _selectionAtOpen) {
             const clearBtn = document.getElementById('btn-building-clear');
@@ -14373,7 +14373,7 @@ function setupBuildingFullscreenPicker() {
     if (cancelBtn) cancelBtn.addEventListener('click', cancelOverlay);
     if (confirmBtn) confirmBtn.addEventListener('click', closeOverlay);
 
-    // Esc key closes the overlay (treats Esc as Cancel — keyboard users
+    // Esc key closes the overlay (treats Esc as Cancel - keyboard users
     // shouldn't lose their original selection by pressing the escape key
     // mid-browse).
     document.addEventListener('keydown', (e) => {
@@ -14385,12 +14385,12 @@ function setupBuildingFullscreenPicker() {
 
     // Wire to the custom events emitted by building-select.js's
     // _commitSelection / _clearSelection. The bottom sheet only updates
-    // when the overlay is open — when closed, the events are still
+    // when the overlay is open - when closed, the events are still
     // dispatched but we no-op.
     document.addEventListener('crisp:building-selected', (e) => {
         if (!_isOpen) return;
         const detail = (e && e.detail) || {};
-        _setSheetSelected(detail.name || (detail.osmId ? `#${detail.osmId}` : '—'));
+        _setSheetSelected(detail.name || (detail.osmId ? `#${detail.osmId}` : '-'));
     });
     document.addEventListener('crisp:building-cleared', () => {
         if (!_isOpen) return;
@@ -14398,7 +14398,7 @@ function setupBuildingFullscreenPicker() {
     });
 }
 
-// ── UNDP Step 4 — post-submission details ────
+// ── UNDP Step 4 - post-submission details ────
 //
 // Soft prompt shown on stage-success after every successful submit (when
 // the user hasn't already filled debris + service_status during capture).
@@ -14410,7 +14410,7 @@ function setupBuildingFullscreenPicker() {
 //   5. Most pressing needs (multi-select chips)
 //
 // On Save, the answers are PATCHed via /reports/<id>/classify (which
-// already accepts service_status + debris_clearing_needed — see
+// already accepts service_status + debris_clearing_needed - see
 // backend/app/api/endpoints/reports.py:1732). On Skip, the base report
 // stays as-is. Optional throughout: UNDP's brief calls these "of
 // interest", not must-haves; forcing them hurts speed.
@@ -14510,7 +14510,7 @@ function setupUndpDetailsStage() {
         });
     });
 
-    // ── Save handler — PATCH the report with the 5 fields ──
+    // ── Save handler - PATCH the report with the 5 fields ──
     const saveBtn = document.getElementById('btn-undp-save');
     if (saveBtn) {
         saveBtn.addEventListener('click', async () => {
@@ -14532,9 +14532,9 @@ function setupUndpDetailsStage() {
                     pressing_needs: _state.pressing_needs.slice(),
                 },
             };
-            // BUGFIX May 2026 (operator-reported) — offline-first save.
+            // BUGFIX May 2026 (operator-reported) - offline-first save.
             //
-            // Pre-fix: a raw `fetch` PATCH with "Couldn't save — please
+            // Pre-fix: a raw `fetch` PATCH with "Couldn't save - please
             // try again" on any failure (offline OR a transient 5xx).
             // User filled the form on a flaky connection, hit Save,
             // saw the failure toast, navigated home → DATA LOST. The
@@ -14569,7 +14569,7 @@ function setupUndpDetailsStage() {
                     immediateOk = true;
                     _dequeueDetails(reportId);
                 } else if (res.status >= 400 && res.status < 500 && res.status !== 401) {
-                    // Bad-payload class — dequeue so we don't loop on a
+                    // Bad-payload class - dequeue so we don't loop on a
                     // permanently-bad submission (e.g. report hard-
                     // deleted server-side). 401 stays queued in case
                     // the user re-logs in.
@@ -14579,7 +14579,7 @@ function setupUndpDetailsStage() {
                 console.warn('[undp-details] immediate PATCH failed; queued for retry:', e);
             }
             if (immediateOk) {
-                if (typeof showToast === 'function') showToast(t('undp_details_saved') || 'Details saved — thank you!');
+                if (typeof showToast === 'function') showToast(t('undp_details_saved') || 'Details saved - thank you!');
             } else {
                 // Queued for retry. Frame the toast as a success ("will
                 // sync when you're online") rather than a failure, because
@@ -14588,7 +14588,7 @@ function setupUndpDetailsStage() {
                 if (typeof showToast === 'function') {
                     showToast(
                         t('undp_details_queued') ||
-                        'Saved offline — we\'ll sync these details as soon as you\'re back online.',
+                        'Saved offline - we\'ll sync these details as soon as you\'re back online.',
                         'info'
                     );
                 }
@@ -14600,19 +14600,19 @@ function setupUndpDetailsStage() {
     }
 }
 
-// ── M4 — submission-success motion + impact strip ──────────────
+// ── M4 - submission-success motion + impact strip ──────────────
 //
 // Goal: turn the "your report was sent" moment from a static heart into
 // a small celebration. Two complementary pieces:
-//   1. Motion — a single ripple ring + 6 confetti dots on stage-success.
+//   1. Motion - a single ripple ring + 6 confetti dots on stage-success.
 //      Plays once per stage entry. Reduce-motion users get the heart
-//      pulse only (CSS handles that — see styles.css).
-//   2. Community-impact strip — a soft green pill below the headline
-//      that surfaces "Your 4th report — thank you!" using the user's
+//      pulse only (CSS handles that - see styles.css).
+//   2. Community-impact strip - a soft green pill below the headline
+//      that surfaces "Your 4th report - thank you!" using the user's
 //      own profile (auth-free `/reports/profile/<device_hash>` endpoint
 //      already exists). Encourages return engagement without pushing
 //      raw volume incentives (UNDP §3.8 frowns on those).
-// ── HC79 (May 2026) — stage-success render helpers ───────────────
+// ── HC79 (May 2026) - stage-success render helpers ───────────────
 //
 // Holistic redesign of the post-submit experience. Replaces:
 //   * _triggerSuccessMotion (heart + confetti + ripple animation)
@@ -14630,7 +14630,7 @@ function setupUndpDetailsStage() {
 // call the helpers below.
 
 // Shared timer handle so the time-ago ticker can be stopped on stage
-// exit. Module-scoped — there's at most one active ticker at a time.
+// exit. Module-scoped - there's at most one active ticker at a time.
 let _successTimeAgoIntervalId = null;
 let _successSubmittedAt = null;          // Date when the user landed on stage-success
 
@@ -14647,7 +14647,7 @@ function _paintSuccessDevidPill() {
         el.textContent = 'CRISP-…';
         return;
     }
-    // CRISP-AABB — short slug. The full hash lives in the devid
+    // CRISP-AABB - short slug. The full hash lives in the devid
     // bottom-sheet (tap pill → _openDevidSheet).
     const short = String(hash).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) || '…';
     el.textContent = `CRISP-${short}`;
@@ -14677,11 +14677,11 @@ function _renderSuccessStatusPill() {
     if (labelEl) {
         const tt = (k, fb) => (typeof window.t === 'function' ? (window.t(k) || fb) : fb);
         labelEl.textContent = isOffline
-            ? tt('success_queued_for_sync', 'Queued — will sync when online')
+            ? tt('success_queued_for_sync', 'Queued - will sync when online')
             : tt('success_under_review', 'Under review');
     }
-    // HC86 — Report ID hidden until backend assigns it. No em-dash leak
-    // (previously rendered "— · just now" when no ID was present).
+    // HC86 - Report ID hidden until backend assigns it. No em-dash leak
+    // (previously rendered "- · just now" when no ID was present).
     const id = window._lastSubmittedClientId || window._lastSubmittedServerId || '';
     if (idEl && idWrap) {
         if (id) {
@@ -14693,9 +14693,9 @@ function _renderSuccessStatusPill() {
             idWrap.hidden = true;
         }
     }
-    // HC86 — paint local time + IANA timezone on first paint + every
+    // HC86 - paint local time + IANA timezone on first paint + every
     // tick so the user sees "14:23 IST · 10 sec ago" rather than just
-    // "— · 10 sec ago". `Intl.DateTimeFormat` resolves both the time
+    // "- · 10 sec ago". `Intl.DateTimeFormat` resolves both the time
     // string and the TZ short name from the user's locale + device TZ.
     _renderSuccessLocalTime();
     // Time-ago ticker. Reset every time we enter stage-success.
@@ -14709,11 +14709,11 @@ function _renderSuccessStatusPill() {
             timeEl.textContent = _formatSuccessTimeAgo(Date.now() - _successSubmittedAt);
         }
         _renderSuccessLocalTime();      // keep clock fresh on each tick
-    }, 10000);     // 10 s cadence is sufficient — bucket boundaries are second / minute
+    }, 10000);     // 10 s cadence is sufficient - bucket boundaries are second / minute
 }
 
 /**
- * HC86 — paint local "HH:mm TZ" into #success-local-time. Uses
+ * HC86 - paint local "HH:mm TZ" into #success-local-time. Uses
  * Intl.DateTimeFormat with the user's resolved locale + device tz,
  * so the same code emits "14:23 IST" / "10:23 PST" / "10:23 GMT+5:30"
  * depending on the device + locale. RTL locales (ar/ur) get
@@ -14803,7 +14803,7 @@ function _renderSuccessContributionStrip() {
         fill.style.width = `${pct}%`;
         meta.textContent = `${reportCount} / ${next.threshold}`;
     } else {
-        // At top of ladder — show the current emoji on both sides + max
+        // At top of ladder - show the current emoji on both sides + max
         // out the bar.
         nextEmoji.textContent = current.emoji;
         nextEmoji.classList.add('sc-tier-next-unlocked');
@@ -14831,7 +14831,7 @@ function _renderSuccessMyReportsCount() {
     el.textContent = (n !== null) ? String(n) : '';
 }
 
-// HC81 (May 2026) — success stage's nearby module now renders the
+// HC81 (May 2026) - success stage's nearby module now renders the
 // SAME concentric distance-bucket rings the home stage uses.  Single
 // SVG with up to 5 nested rings (1/5/10/20/100 km), each tappable to
 // open the SHARED #nearby-list-sheet filtered to that bucket.
@@ -14842,7 +14842,7 @@ function _renderSuccessMyReportsCount() {
 async function _bootSuccessNearby() {
     const mount = document.getElementById('success-nearby-intel');
     if (!mount) return;
-    // Initial loading state — keep the mount empty (no skeleton; rings
+    // Initial loading state - keep the mount empty (no skeleton; rings
     // typically paint within 500 ms on localhost and < 2 s on PROD).
     mount.innerHTML = '';
     // Resolve last-known GPS from cache. Same key NearbyIntel uses.
@@ -14868,7 +14868,7 @@ async function _bootSuccessNearby() {
         const url = new URL(`${API_BASE}/reports/nearby`);
         url.searchParams.set('lat', String(Math.round(coords.lat * 1000) / 1000));
         url.searchParams.set('lng', String(Math.round(coords.lng * 1000) / 1000));
-        // HC81 — bumped from 5 to 100 km so all 5 distance buckets
+        // HC81 - bumped from 5 to 100 km so all 5 distance buckets
         // can populate.
         url.searchParams.set('radius_km', '100');
         url.searchParams.set('limit', '50');
@@ -14899,7 +14899,7 @@ function _paintSuccessNearby(groups) {
     const mount = document.getElementById('success-nearby-intel');
     if (!mount) return;
     mount.innerHTML = '';
-    // HC84 — paint the SAME aggregate-number block the home stage uses,
+    // HC84 - paint the SAME aggregate-number block the home stage uses,
     // via the shared NearbyIntel.buildNumberBlock helper. Single
     // interaction model: tap → opens #nearby-list-sheet with bucket-
     // grouped rows. If the payload has no groups, fall back to the
@@ -14935,7 +14935,7 @@ function _renderSuccessNearbyEmpty() {
             `${_escapeHtml(tt('success_nearby_first_eyes', "You're the first eyes here"))}` +
             `</div>` +
             `<div class="success-nearby-empty-sub">` +
-            `${_escapeHtml(tt('success_nearby_first_eyes_sub', 'No nearby reports yet — your signal matters'))}` +
+            `${_escapeHtml(tt('success_nearby_first_eyes_sub', 'No nearby reports yet - your signal matters'))}` +
             `</div>` +
         `</div>`;
 }
@@ -14949,10 +14949,10 @@ function _renderSuccessResponderStrip(groups) {
         0,
     );
     if (active > 0) {
-        const tmpl = tt('success_responders_active', 'Responders reviewing — {n} active nearby');
+        const tmpl = tt('success_responders_active', 'Responders reviewing - {n} active nearby');
         el.innerHTML = tmpl.replace('{n}', `<strong>${active}</strong>`);
     } else {
-        el.textContent = tt('success_responders_standby', 'Responders standing by — report received');
+        el.textContent = tt('success_responders_standby', 'Responders standing by - report received');
     }
 }
 
@@ -14967,7 +14967,7 @@ function _escapeHtml(s) {
 function _triggerSuccessMotion() { /* HC79: superseded by CSS-driven radar pulse */ }
 async function _renderSuccessImpactStrip() { /* HC79: replaced by _renderSuccessContributionStrip */ }
 
-// HC79 — expose the paint helpers on window so specs can seed the
+// HC79 - expose the paint helpers on window so specs can seed the
 // success stage deterministically without depending on the
 // cross-origin /reports/nearby fetch. Pure paint surface; safe to
 // expose publicly.
@@ -15005,22 +15005,22 @@ function maybeShowUndpDetailsPrompt() {
     promptSub.style.display = showPrompt ? 'block' : 'none';
 }
 
-// ── Phase 2.2 (May 2026) — `fetchBadge` removed ─────────────────────────────
+// ── Phase 2.2 (May 2026) - `fetchBadge` removed ─────────────────────────────
 //
 // The legacy success-page #badge-card surfaced the V2 NEWCOMER / HELPER
 // / GUARDIAN / HERO ladder with its own emoji + progress wiring. The
 // home-screen V4 chip (`#home-badge-chip`, see home-screen.js
-// `_renderBadgeChip`) replaced this — same /reports/profile fetch,
+// `_renderBadgeChip`) replaced this - same /reports/profile fetch,
 // uses canonical T1_SCOUT…T4_LIFEKEEPER ids from `window.CRISP_TIERS`,
 // shares the sessionStorage cache used by the Rewards page.
 //
 // Keeping two surfaces in sync was the source of UI v3 redesign bug Q5
 // ("Newcomer · 16 reports · Next: Helper (3)"). Phase 2.2 deletes the
 // V2 surface entirely:
-//   * `fetchBadge()` (was here)            — deleted, no longer called
-//   * `fetchBadge(deviceHash)` call-site   — deleted at line ~7684
-//   * `#badge-card` DOM in index.html      — deleted
-//   * `.badge-card` CSS rules              — deleted
+//   * `fetchBadge()` (was here)            - deleted, no longer called
+//   * `fetchBadge(deviceHash)` call-site   - deleted at line ~7684
+//   * `#badge-card` DOM in index.html      - deleted
+//   * `.badge-card` CSS rules              - deleted
 // Tier-up toasts on submit are still fired by the V4 home-screen path
 // (see the TIER_ORDER block in the success path of submitReport).
 
@@ -15055,7 +15055,7 @@ function showToast(message, duration = 3000) {
 // This helper mirrors the existing `#image-delete-confirm` modal pattern
 // (see index.html lines 97-106): a centred sheet with Cancel + Confirm
 // buttons, backdrop click closes as Cancel, Escape closes as Cancel.
-// Returns a Promise<boolean> — `true` for confirm, `false` for cancel.
+// Returns a Promise<boolean> - `true` for confirm, `false` for cancel.
 function crispConfirm(message, yesKey, noKey) {
     return new Promise((resolve) => {
         const yesLabel = (yesKey && t(yesKey)) || t('confirm_yes');
@@ -15129,7 +15129,7 @@ window.crispConfirm = crispConfirm;
 // the success screen, so navigating away by any other route (My
 // Reports → Home, browser back, service-worker
 // refresh, IndexedDB sync-on-boot then btn-start) would land on stage-photo
-// with stale `state.*` and — crucially — with `<img>.src` still pointing at
+// with stale `state.*` and - crucially - with `<img>.src` still pointing at
 // the previous photo's data URL.
 //
 // Fix has two halves:
@@ -15143,7 +15143,7 @@ window.crispConfirm = crispConfirm;
 //
 // Additions over the previous resetApp() surface:
 //   - `<img>.src = ''` on every preview surface (photo-preview,
-//     review-photo-thumb, summary-photo, image-viewer-img) — before this
+//     review-photo-thumb, summary-photo, image-viewer-img) - before this
 //     they still held the prior data-URL even when state was null.
 //   - `extra-photos-scroll` innerHTML cleared (was only cleared lazily when
 //     stage-photo re-rendered, which didn't happen if the user took no
@@ -15153,7 +15153,7 @@ window.crispConfirm = crispConfirm;
 //     capture's recorder / camera wiring.
 //   - state.buildingId cleared so OSM footprint selection doesn't carry.
 function reportLifecycleReset() {
-    // ── State fields — SINGLE SOURCE OF TRUTH (see _freshReportState) ─────────
+    // ── State fields - SINGLE SOURCE OF TRUTH (see _freshReportState) ─────────
     // Free live handles BEFORE the reset so a running recording timer or a
     // speech-recognition session from the previous report can't fire into the
     // next one (the factory only drops the references).
@@ -15162,10 +15162,10 @@ function reportLifecycleReset() {
     // Reset EVERY report-scoped field in one shot. This is the whole point of the
     // factory: no field can be missed. Adding a capture field? Put it in
     // _freshReportState() (resets per report) or _PRESERVED_STATE_KEYS (survives)
-    // — scripts/validate-report-reset.mjs FAILS CI if a state.* field is in
+    // - scripts/validate-report-reset.mjs FAILS CI if a state.* field is in
     // neither set, so this class of bug cannot silently return.
     // NOTE: only in-memory `state` resets here. The IndexedDB queue
-    // (pending-reports) is NEVER touched — queued reports must survive
+    // (pending-reports) is NEVER touched - queued reports must survive
     // (offline-first). DOM is reset below; the v4 stages also render-from-state.
     Object.assign(state, _freshReportState());
 
@@ -15173,19 +15173,19 @@ function reportLifecycleReset() {
     // Every lookup is guarded because elements in this list have been added/
     // removed over successive sprints. A single missing ID (#photo-skip-link
     // was the historical offender after Phase 2 made photos mandatory) used
-    // to throw and abort resetApp before goToStage — which left the user
+    // to throw and abort resetApp before goToStage - which left the user
     // stranded on the success screen when they tapped "Add another report".
     // Guarded lookups make reset crash-free regardless of which DOM elements
     // the active build still has.
     const _photoPreview = document.getElementById('photo-preview');
     if (_photoPreview) {
         _photoPreview.style.display = 'none';
-        // Clear .src — previously left pointing at the prior data URL even
+        // Clear .src - previously left pointing at the prior data URL even
         // after display:none, which meant any code path that unhid the
         // element (stage-photo re-entry, accessibility announcement) showed
         // the previous report's image. This is the core bleed-through fix.
         _photoPreview.src = '';
-        // Drop the privacy-note overlay too — it's re-added by showPreview().
+        // Drop the privacy-note overlay too - it's re-added by showPreview().
         const _privNote = _photoPreview.parentElement && _photoPreview.parentElement.querySelector('.photo-privacy-note');
         if (_privNote) _privNote.remove();
     }
@@ -15201,10 +15201,10 @@ function reportLifecycleReset() {
     // element is absent.
     const _skipLink = document.getElementById('photo-skip-link');
     if (_skipLink) _skipLink.style.display = 'block';
-    // Helper text (shown until a photo is captured) — restore.
+    // Helper text (shown until a photo is captured) - restore.
     const _helperText = document.getElementById('photo-helper');
     if (_helperText) _helperText.style.display = 'block';
-    // Collapse the extras strip (multi-photo panel) — it's only visible
+    // Collapse the extras strip (multi-photo panel) - it's only visible
     // once the primary photo exists.
     const _extrasStrip = document.getElementById('extra-photos-strip');
     if (_extrasStrip) _extrasStrip.style.display = 'none';
@@ -15215,12 +15215,12 @@ function reportLifecycleReset() {
     // thumbs. Belt-and-braces privacy: clear the container now.
     const _extrasScroll = document.getElementById('extra-photos-scroll');
     if (_extrasScroll) _extrasScroll.innerHTML = '';
-    // Review-page thumb — populated by populateReview() on stage-review
+    // Review-page thumb - populated by populateReview() on stage-review
     // entry. Not re-cleared if state.photoDataUrl is null (populateReview
     // only hides the row). Clear .src explicitly so the old bytes leave DOM.
     const _reviewThumb = document.getElementById('review-photo-thumb');
     if (_reviewThumb) _reviewThumb.src = '';
-    // Summary-page photo — same story as review-photo-thumb.
+    // Summary-page photo - same story as review-photo-thumb.
     const _summaryPhoto = document.getElementById('summary-photo');
     if (_summaryPhoto) _summaryPhoto.src = '';
     // Full-screen image viewer. _closeImageViewer() clears this on close,
@@ -15249,12 +15249,12 @@ function reportLifecycleReset() {
     const _brs = document.getElementById('btn-review-submit');
     if (_brs) _brs.disabled = false;
 
-    // BUGFIX May 2026 — v4-flow Send button + upload overlay + chip
+    // BUGFIX May 2026 - v4-flow Send button + upload overlay + chip
     // statuses. The v4 review screen ships its OWN send button
     // (#btn-v4-send) which sets `disabled=true` + `.is-sending` class
     // on submit and clears them ONLY on error (v4-flow.js:_onSend).
     // After a successful submit + "Add another report", the button DOM
-    // persists across the stage transitions in stuck state — next
+    // persists across the stage transitions in stuck state - next
     // submit attempt is a silent no-op because click lands on a
     // disabled button. Same pattern for #upload-overlay (auto-hides
     // after 1.2 s on success but if the user taps "Add another report"
@@ -15266,7 +15266,7 @@ function reportLifecycleReset() {
     if (_bv4s) {
         _bv4s.disabled = false;
         _bv4s.classList.remove('is-sending');
-        // Reset innerHTML to the original "Send to UNDP" markup — the
+        // Reset innerHTML to the original "Send to UNDP" markup - the
         // submit handler replaces this with a spinner + "Sending…"
         // label which would otherwise persist.
         _bv4s.innerHTML = '<i class="fa-solid fa-paper-plane"></i> <span data-i18n="v4_send">Send to UNDP</span>';
@@ -15278,7 +15278,7 @@ function reportLifecycleReset() {
     if (_upov) _upov.style.display = 'none';
     // v4 captured-chip badges (text + voice). Without clearing, the
     // green-dot indicator from the previous report's voice/text capture
-    // shows on the new clean capture screen — operator-confusing.
+    // shows on the new clean capture screen - operator-confusing.
     for (const id of ['v4-cap-chip-voice', 'v4-cap-chip-text']) {
         const el = document.getElementById(id);
         if (el) el.classList.remove('is-captured', 'is-expanded');
@@ -15287,21 +15287,21 @@ function reportLifecycleReset() {
         const el = document.getElementById(id);
         if (el) el.classList.remove('is-on');
     }
-    // v4 panels under the chips — collapse them so the next capture
+    // v4 panels under the chips - collapse them so the next capture
     // session opens with the same minimal-by-default layout as a
     // fresh load.
     for (const id of ['v4-cap-voice-panel', 'v4-cap-text-panel']) {
         const el = document.getElementById(id);
         if (el) el.setAttribute('hidden', '');
     }
-    // v4 thumbnail strip — _renderThumbs reads state.v4Photos which we
+    // v4 thumbnail strip - _renderThumbs reads state.v4Photos which we
     // cleared above, but the DOM was painted before the reset. Force a
     // repaint via the existing window hook so the strip clears.
     if (typeof window.__crispV4RefreshSectionBadges === 'function') {
         try { window.__crispV4RefreshSectionBadges(); } catch (_) {}
     }
     // v4-flow.js exposes a thumb-strip re-render hook on
-    // window.__crispV4RefreshCapStrip — also call it (defensively
+    // window.__crispV4RefreshCapStrip - also call it (defensively
     // typeof-checked since the v4 flow may not be active in v3 mode).
     if (typeof window.__crispV4RefreshCapStrip === 'function') {
         try { window.__crispV4RefreshCapStrip(); } catch (_) {}
@@ -15309,7 +15309,7 @@ function reportLifecycleReset() {
     // Drop the v4Photos array so the strip's render sees empty state.
     state.v4Photos = [];
     // The __crispV4RefreshCapStrip hook above only re-evaluates the
-    // capture-stage Continue button — it does NOT repaint #v4-thumbs (the
+    // capture-stage Continue button - it does NOT repaint #v4-thumbs (the
     // photo thumbnail strip). _renderThumbs is the only thing that does, and
     // it isn't reachable from here. Clear the strip's DOM directly so the
     // previous report's photo can't bleed onto the next capture screen after
@@ -15318,7 +15318,7 @@ function reportLifecycleReset() {
     const _v4ThumbsRow = document.getElementById('v4-thumbs');
     if (_v4ThumbsRow) { _v4ThumbsRow.innerHTML = ''; _v4ThumbsRow.style.display = 'none'; }
 
-    // BUGFIX May 2026 — broadcast a "capture state cleared" event so
+    // BUGFIX May 2026 - broadcast a "capture state cleared" event so
     // module-scoped state living OUTSIDE app.js (v4-flow.js's
     // `_classifyStep` cursor, `_crisisGroup` drill-down, the UNDP-
     // details prompt's local flags, etc.) can reset itself too.
@@ -15326,11 +15326,11 @@ function reportLifecycleReset() {
     // The user-visible bug this closes: after "Add Another Report",
     // the v4 classify stage was re-entered with `_classifyStep` still
     // pointing at 'crisis' from the previous report. The DOM showed
-    // the crisis sub-step (3 of 3 — "What caused it?") even though
+    // the crisis sub-step (3 of 3 - "What caused it?") even though
     // the user expected to start over at 'damage' (1 of 3). Worse,
     // the Continue button's enable/disable state was last evaluated
     // when crisis_type was set, so it remained whatever value the
-    // PRIOR report ended on — clicking a fresh crisis chip didn't
+    // PRIOR report ended on - clicking a fresh crisis chip didn't
     // visibly change anything from the user's perspective.
     //
     // Listeners pattern (v4-flow.js mirrors this): the receiver
@@ -15340,14 +15340,14 @@ function reportLifecycleReset() {
         document.dispatchEvent(new CustomEvent('crisp-capture-state-cleared'));
     } catch (_) {}
 
-    // Dev/test self-check — assert the reset returned every report field to its
+    // Dev/test self-check - assert the reset returned every report field to its
     // _freshReportState() default. Any mismatch logs a structured
     // `[reset-leak] <field>` line; the e2e matrix asserts ZERO such errors, so a
     // future un-reset field fails the suite loudly, by name. No-op in production.
     try { _assertReportStateClean(); } catch (_) {}
 }
 
-// Back-compat alias — existing call sites (submitReport, resetApp), the window
+// Back-compat alias - existing call sites (submitReport, resetApp), the window
 // export, and e2e specs all use `_clearCaptureState`. `reportLifecycleReset` is
 // the canonical name.
 function _clearCaptureState() { return reportLifecycleReset(); }
@@ -15366,7 +15366,7 @@ function _assertReportStateClean() {
     };
     for (const k of Object.keys(fresh)) {
         // crisis_type is legitimately re-applied AFTER the reset from an active
-        // crisis-zone pack (_ensureZoneCrisisType; UNDP must-have #5 — the zone
+        // crisis-zone pack (_ensureZoneCrisisType; UNDP must-have #5 - the zone
         // drives the cause). That re-apply is intended, not a leak: accept it
         // when it matches the preserved crisisPack's crisis_type.
         if (k === 'crisis_type' && state.crisisPack && state.crisis_type === state.crisisPack.crisis_type) continue;
@@ -15384,13 +15384,13 @@ window._clearCaptureState = _clearCaptureState;
 
 function resetApp() {
     _clearCaptureState();
-    // HC80 — opening the latch only on resetApp ensures the user can
+    // HC80 - opening the latch only on resetApp ensures the user can
     // submit ONLY ONCE per capture flow. Fresh flow → fresh latch.
     try { _openSubmitLatch(); } catch (_) {}
     goToStage('stage-home');
 }
 
-// Image viewer wiring — close + delete-confirm handlers attached once at boot.
+// Image viewer wiring - close + delete-confirm handlers attached once at boot.
 // Separate from setupPhotoStage so the viewer can be opened from anywhere
 // (stage-photo thumbs today, future places like review/detail).
 function setupImageViewer() {
@@ -15401,7 +15401,7 @@ function setupImageViewer() {
     const confirmCancel = document.getElementById('btn-idc-cancel');
     const confirmOk = document.getElementById('btn-idc-confirm');
     if (!overlay) return;
-    // Close button — dismisses the viewer without deleting.
+    // Close button - dismisses the viewer without deleting.
     if (closeBtn) closeBtn.addEventListener('click', () => window.__crispCloseImageViewer());
     // Tap backdrop (not the image or buttons) → close.
     overlay.addEventListener('click', (e) => {
@@ -15417,7 +15417,7 @@ function setupImageViewer() {
     if (confirmOverlay) confirmOverlay.addEventListener('click', (e) => {
         if (e.target === confirmOverlay) confirmOverlay.style.display = 'none';
     });
-    // Confirmed delete — act on the stored viewer context (primary vs extra).
+    // Confirmed delete - act on the stored viewer context (primary vs extra).
     if (confirmOk) confirmOk.addEventListener('click', () => {
         const ctx = window.__crispViewerContext && window.__crispViewerContext();
         if (confirmOverlay) confirmOverlay.style.display = 'none';
@@ -15432,10 +15432,10 @@ function setupImageViewer() {
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────────────
-// (UI v3 redesign Q11) — first-run welcome + device-ID disclosure.
+// (UI v3 redesign Q11) - first-run welcome + device-ID disclosure.
 // Renders TWO overlays in sequence on first visit:
-//   1. #welcome-overlay   — anonymous (recommended) vs sign-in choice
-//   2. #devid-overlay     — shown after anonymous tap; displays the
+//   1. #welcome-overlay   - anonymous (recommended) vs sign-in choice
+//   2. #devid-overlay     - shown after anonymous tap; displays the
 //                            CRISP-XXXX-XXXX reporter ID with copy button
 // Returning users (with crisp_welcome_acknowledged in localStorage) skip
 // both overlays. Signed-in users (with crisp_token) skip the welcome too.
@@ -15504,7 +15504,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try { document.dispatchEvent(new CustomEvent('crisp-deviceid-ready')); } catch (_) {}
     } catch (e) { console.warn('[boot] device-id gen failed:', e); }
 
-    // UI v2 — flag the body so CSS can scope v2-only chip / header styles
+    // UI v2 - flag the body so CSS can scope v2-only chip / header styles
     // without a runtime media-query check. Setting before setupPhotoStage
     // ensures the `body[data-ui-v2] .chip-btn { min-height: 96px }` rule
     // applies before the first paint of the review chips.
@@ -15515,7 +15515,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.body.dataset.uiV3 = 'on';
         // relocate the chip + service + location blocks
         // out of stage-review into the new v3 stages BEFORE setupReviewStage
-        // binds its handlers. Same DOM nodes, different parents — handlers
+        // binds its handlers. Same DOM nodes, different parents - handlers
         // attach to the right elements in their final resting place.
         try { migrateV3Blocks(); } catch (e) { console.warn('[v3] block migration failed:', e); }
     }
@@ -15524,13 +15524,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupCameraModal();
     setupImageViewer();
     setupAudioStage();
-    // May 2026 — stage-review DOM deleted (V3 paginated review). The
+    // May 2026 - stage-review DOM deleted (V3 paginated review). The
     // setup fn touches #btn-review-back / #btn-review-next /
     // #btn-review-submit which no longer exist; calling it would throw
     // and abort the rest of boot (i18n etc.). Guard so a missing DOM
     // is a clean no-op. The other V3 stages (stage-photo / audio /
     // where / infra / crisis / extras) remain in the DOM because V4
-    // inherits helper functions from them — those setups still run.
+    // inherits helper functions from them - those setups still run.
     if (document.getElementById('stage-review')) setupReviewStage();
     setupSendStage();
     // wire the free-text building-name fallback.
@@ -15551,7 +15551,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 2. Start language detection (it will call applyI18n when ready or fallback)
     detectAndSetupLanguage();
 
-    // 2b. Consent gate moved inline to home-screen.js (— the
+    // 2b. Consent gate moved inline to home-screen.js (- the
     //     legacy full-screen overlay was deleted; consent is now a small
     //     checkbox above the Start CTA on #stage-home).
 
@@ -15577,7 +15577,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // payload is empty + no serverId" rows from a prior session whose
     // submission was interrupted mid-flight (page close, JS error). Runs
     // BEFORE startRetryLoop so the retry loop doesn't waste a tick
-    // pounding on a row it can't make progress on. Idempotent — the
+    // pounding on a row it can't make progress on. Idempotent - the
     // 10-min age gate inside _isOrphanQueueRow protects in-flight rows.
     // Suppressed in queue-isolation unit specs (see startRetryLoop) so the
     // boot-time self-heal can't dequeue rows the test is asserting on.
@@ -15585,12 +15585,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         try { await _selfHealOrphans(); } catch (e) { _silent('selfHealOrphans:boot', e); }
     }
 
-    // 3c. Resilience #3 (boot reconcile, Jun 2026) — front-load one
+    // 3c. Resilience #3 (boot reconcile, Jun 2026) - front-load one
     // pass of _reconcileQueueAgainstServer at startup, AFTER self-heal
     // and BEFORE startRetryLoop. A report that fully landed at the
     // backend in a prior session (e.g. the tab was closed in the
     // window between the final upload and the dequeue) otherwise lingers
-    // in IndexedDB until the first periodic/heartbeat reconcile fires —
+    // in IndexedDB until the first periodic/heartbeat reconcile fires -
     // showing a stale "queued" chip and wasting an early retry tick.
     // Reconciling here dequeues already-complete rows immediately on the
     // next boot. Idempotent + offline-safe (early-returns when offline /
@@ -15608,7 +15608,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateSyncBadge();
 
     // Seed the 🟢/🔴 connectivity dot from the browser hint. The happy
-    // path (navigator.onLine === true) requires NO active probing —
+    // path (navigator.onLine === true) requires NO active probing -
     // zero idle traffic. We only kick off a probe if navigator lies
     // and reports offline; the 30-s recovery loop then detects
     // reconnection and self-stops on first success.
@@ -15622,7 +15622,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Tap-to-re-check: users can force an immediate probe by tapping the
-    // dot. Always works regardless of online/offline state — useful for a
+    // dot. Always works regardless of online/offline state - useful for a
     // user who just re-joined WiFi but the dot hasn't updated yet.
     const _dotEl = document.getElementById('connectivity-dot');
     if (_dotEl) {
@@ -15632,19 +15632,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // When the tab becomes visible again (tab-switch, laptop wake), do a
     // single probe only if we were offline. Still no polling if everything
-    // is already green — just a one-shot confirmation that the dot reflects
+    // is already green - just a one-shot confirmation that the dot reflects
     // current reality.
     //
-    // May 21 2026 (cellular smoke 5 follow-up) — also force a fresh
+    // May 21 2026 (cellular smoke 5 follow-up) - also force a fresh
     // bandwidth re-probe on every visibility-resume. Rationale: when iOS
     // Safari suspends a tab mid-upload, in-flight chunk POSTs die.
     // Each killed POST runs through `pwaNetworkDowngrade()` (chunk-loop
     // catch block), one-way ratcheting `_pwaTier` MEDIUM → SLOW →
     // VERY_SLOW. The downgrade is a bandwidth proxy, but the failure
-    // wasn't bandwidth — it was iOS killing JS. After resume, `_pwaTier`
+    // wasn't bandwidth - it was iOS killing JS. After resume, `_pwaTier`
     // sits at VERY_SLOW on a perfectly capable cellular link, and
     // `_uploadVariantTier`'s v237 defer rule then mark-deferreds every
-    // MEDIUM + ORIGINAL it's about to upload — false-positive defer.
+    // MEDIUM + ORIGINAL it's about to upload - false-positive defer.
     // Forcing `adaptTierViaProbe({force:true})` here measures actual
     // current bandwidth and OVERWRITES `_pwaTier` (bypassing the
     // ratchet). Matches what the `online` handler already does for
@@ -15659,7 +15659,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Connectivity event listeners.
     window.addEventListener('online', async () => {
-        console.log('Back online — triggering sync');
+        console.log('Back online - triggering sync');
         _applyOnlineDot(true);
         _stopConnectivityProbe();
         // Force a fresh bandwidth probe so any deferred-tier variants
@@ -15674,7 +15674,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     window.addEventListener('offline', () => {
-        console.log('Device went offline — reports will queue silently');
+        console.log('Device went offline - reports will queue silently');
         _applyOnlineDot(false);
         // One immediate probe to double-check (navigator can be wrong).
         // If probe succeeds, _probeConnectivity flips green and stops.
@@ -15693,7 +15693,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // SW saw a `sync` event with modern variant-shape items
                 // in the queue. Run our retry loop from the page side,
                 // which owns the chunked-variant + deferred-tier logic.
-                console.log(`[SW wake] ${data.count} queued report(s) — running retry loop`);
+                console.log(`[SW wake] ${data.count} queued report(s) - running retry loop`);
                 try { adaptTierViaProbe({ force: true }).catch(() => {}); } catch (_) {}
                 try { startRetryLoop(); } catch (_) {}
             }
@@ -15734,7 +15734,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     try { _startPeriodicSweep(); } catch (e) { _silent('periodicSweep', e); }
 
-    // v241 (May 21, 2026) — JS-paused-but-visible self-heartbeat.
+    // v241 (May 21, 2026) - JS-paused-but-visible self-heartbeat.
     //
     // The 5-min periodic sweep above + the visibilitychange handler only
     // re-fire startRetryLoop on visibility transitions or every 5 min.
@@ -15752,10 +15752,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // a startRetryLoop call. The wedge-recovery inside startRetryLoop
     // (v238) then handles a stuck `_retryLoopRunning=true` flag.
     //
-    // Note: this is a one-step recovery — when iOS resumes JS after a
+    // Note: this is a one-step recovery - when iOS resumes JS after a
     // pause, setInterval ticks fire on resume. So even if the heartbeat
     // was suspended during the pause, the first post-resume tick is what
-    // kicks the loop back to life. No "polling during suspension" — that's
+    // kicks the loop back to life. No "polling during suspension" - that's
     // not a thing iOS allows.
     const _HEARTBEAT_INTERVAL_MS = 30 * 1000;
     const _HEARTBEAT_SILENCE_THRESHOLD_MS = 60 * 1000;
@@ -15765,7 +15765,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!navigator.onLine) return;
             const silentMs = Date.now() - (_lastDrainTickAt || 0);
             if (silentMs < _HEARTBEAT_SILENCE_THRESHOLD_MS) return;
-            // Only kick if there's actually pending work — otherwise
+            // Only kick if there's actually pending work - otherwise
             // healthy quiet-queue would burn IDB reads forever.
             let hasPending = false;
             try { hasPending = (await getAllQueued()).length > 0; }
@@ -15790,7 +15790,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         goToStage(UI_V3_ENABLED ? 'stage-where' : 'stage-photo');
     });
 
-    // 9. Delete My Data — check if device has reports, show/hide button
+    // 9. Delete My Data - check if device has reports, show/hide button
     const delBtn = document.getElementById('btn-delete-my-data');
     const ddpPanel = document.getElementById('delete-data-panel');
     const ddpList = document.getElementById('ddp-list');
@@ -15808,7 +15808,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 delBtn.style.display = reports.length > 0 ? 'inline-flex' : 'none';
                 delBtn._reports = reports;
             }
-        } catch (_) { /* offline — hide button */ }
+        } catch (_) { /* offline - hide button */ }
     }
     _checkDeviceReports();
 
@@ -15843,9 +15843,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             return `<div class="ddp-item ${isPending ? 'ddp-item-pending' : ''}" data-id="${r.id}">
                 <div class="ddp-item-info">
-                    <div class="ddp-item-type"><i class="fa-solid fa-triangle-exclamation" style="color:${r.severity === 'SEVERE' ? '#ef4444' : r.severity === 'MODERATE' ? '#f59e0b' : '#80EE98'};"></i> ${r.infrastructure_type} — ${r.severity}</div>
+                    <div class="ddp-item-type"><i class="fa-solid fa-triangle-exclamation" style="color:${r.severity === 'SEVERE' ? '#ef4444' : r.severity === 'MODERATE' ? '#f59e0b' : '#80EE98'};"></i> ${r.infrastructure_type} - ${r.severity}</div>
                     <div class="ddp-item-meta">${loc} · ${time}</div>
-                    ${isPending ? `<div class="ddp-pending-label"><i class="fa-solid fa-clock"></i> Deletion scheduled — ${countdown}</div>` : `
+                    ${isPending ? `<div class="ddp-pending-label"><i class="fa-solid fa-clock"></i> Deletion scheduled - ${countdown}</div>` : `
                     <div class="ddp-item-media">
                         ${hasImg ? '<span><i class="fa-solid fa-image"></i> Photo</span>' : ''}
                         ${hasAudio ? '<span><i class="fa-solid fa-microphone"></i> Audio</span>' : ''}

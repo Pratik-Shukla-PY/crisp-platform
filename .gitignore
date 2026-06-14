@@ -1,7 +1,7 @@
 # Environment & secrets
 .env
 .env.*
-# Allow template files (e.g. .env.production.example) — these are
+# Allow template files (e.g. .env.production.example) - these are
 # checked in to document required prod env vars with blank values.
 !.env.*.example
 
@@ -24,7 +24,7 @@ test-results/
 # part of the UNDP-submission build.
 e2e/screenshots/
 
-# Lighthouse CI output — regenerated on every run, archived to the
+# Lighthouse CI output - regenerated on every run, archived to the
 # `lighthouse-history` orphan branch by scripts/lighthouse-publish.mjs.
 .lighthouseci/
 # If we ever `git checkout origin/lighthouse-history -- <sha>` to
@@ -62,13 +62,14 @@ backend/uploads_test/
 *.pth
 *.pt
 *.bin
-# Vendored TF.js model weights (BlazeFace) — small enough to track,
+# Vendored TF.js model weights (BlazeFace) - small enough to track,
 # eliminates the Kaggle CORS 404 PII-blur production bug.
 !mobile-app/src/vendor/blazeface/*.bin
 
 # Local developer notes (untracked working files; not part of the product)
 CLAUDE.md
-# Internal design references + scratch planning — kept on disk for
+.claude/
+# Internal design references + scratch planning - kept on disk for
 # the operator, NEVER deployed. Anything we generate as scratch
 # planning, walkthroughs, or runbooks belongs here, not on origin.
 # Add new entries to this block.

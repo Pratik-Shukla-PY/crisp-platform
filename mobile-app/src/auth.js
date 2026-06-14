@@ -1,6 +1,6 @@
 /* global API_BASE, showToast, t, state, goToStage */
 // ─────────────────────────────────────────────────────────────────────────────
-//  CRISP AuthStore — Phase 1 Optional reporter login.
+//  CRISP AuthStore - Phase 1 Optional reporter login.
 //
 //  Anonymous-first design:
 //    * Reporting NEVER blocks on login.
@@ -13,18 +13,18 @@
 //      touching the network when the user is offline.
 //
 //  Exposed via `window.AuthStore`:
-//    init()                    — call once on boot; hydrates from IDB.
-//    isLoggedIn()              — truthy when we have a non-expired session
+//    init()                    - call once on boot; hydrates from IDB.
+//    isLoggedIn()              - truthy when we have a non-expired session
 //                                OR we're within the 30-day offline grace.
-//    getUser()                 — { id, displayName, channel } | null
-//    getAccessToken()          — current bearer or null (may be stale-but-
+//    getUser()                 - { id, displayName, channel } | null
+//    getAccessToken()          - current bearer or null (may be stale-but-
 //                                usable within offline grace).
 //    requestOtp(destination, channel, purpose)
 //    verifyOtp(destination, channel, code, purpose)
-//    linkDevice(deviceHash)    — claim anonymous reports.
+//    linkDevice(deviceHash)    - claim anonymous reports.
 //    unlinkDevice(deviceHash)
-//    logout()                  — strong (server revokes + local clears).
-//    fetchWithAuth(path, opts) — fetch wrapper; adds Bearer + refreshes on 401.
+//    logout()                  - strong (server revokes + local clears).
+//    fetchWithAuth(path, opts) - fetch wrapper; adds Bearer + refreshes on 401.
 //
 //  Dependencies: `API_BASE` (global from app.js), nothing else.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -157,7 +157,7 @@
         return null;
     }
 
-    // Internals — persist tokens from a verify/refresh response.
+    // Internals - persist tokens from a verify/refresh response.
     async function _acceptTokens(resp) {
         const now = Date.now();
         const accessMs = 15 * 60 * 1000;           // 15 min (user spec)
@@ -234,7 +234,7 @@
                 });
                 if (!res.ok) {
                     if (res.status === 401 || res.status === 403) {
-                        // Refresh token revoked or expired — silently degrade.
+                        // Refresh token revoked or expired - silently degrade.
                         await logoutLocal();
                     }
                     return null;

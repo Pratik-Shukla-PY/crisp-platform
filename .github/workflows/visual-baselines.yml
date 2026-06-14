@@ -7,7 +7,7 @@ name: Update visual-regression baselines
 #
 # Why this is a separate workflow:
 #   * Linux-PNG baselines are platform-specific (anti-aliasing). The
-#     committed-baselines policy is "Linux only" — generating them on
+#     committed-baselines policy is "Linux only" - generating them on
 #     a contributor's local macOS / Windows box yields the wrong
 #     pixel diff.
 #   * The main CI workflow soft-warns on baseline drift but never
@@ -23,7 +23,7 @@ on:
         type: boolean
         default: false
 
-# Cancel an in-flight refresh if the user dispatches again — only the
+# Cancel an in-flight refresh if the user dispatches again - only the
 # latest baselines should land.
 concurrency:
   group: visual-baselines
@@ -52,7 +52,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
-          # v2 qualifier (May 2026) — see deploy.yml for the rationale.
+          # v2 qualifier (May 2026) - see deploy.yml for the rationale.
           key: playwright-v2-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
 
       - name: Install Playwright + Chromium
@@ -66,10 +66,10 @@ jobs:
           else
             npx playwright install --with-deps chromium
           fi
-          # Defence-in-depth — re-install if the binary is missing
+          # Defence-in-depth - re-install if the binary is missing
           # from the cache (catches Playwright version drift).
           if ! npx playwright install --dry-run chromium | grep -q 'is already installed'; then
-            echo "::warning::Playwright chromium binary missing from cache — installing"
+            echo "::warning::Playwright chromium binary missing from cache - installing"
             npx playwright install chromium
           fi
 
@@ -117,7 +117,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add e2e/tests/pwa/42-visual-regression.spec.ts-snapshots/
           if git diff --cached --quiet; then
-            echo "no baseline changes — nothing to commit"
+            echo "no baseline changes - nothing to commit"
             exit 0
           fi
           git commit -m "chore(qa): refresh visual-regression baselines (linux)"

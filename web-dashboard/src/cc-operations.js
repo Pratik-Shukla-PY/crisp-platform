@@ -1,4 +1,4 @@
-/* cc-operations.js — Operations workspace (CRISP dashboard, Phase 2d).
+/* cc-operations.js - Operations workspace (CRISP dashboard, Phase 2d).
  *
  *   #/operations        → operations LIST (all operations, worst-first, + the
  *                          un-operationalised critical "Launch operation here" row)
@@ -35,12 +35,12 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
-  const fmtNum = (n) => (n == null ? '—' : Number(n).toLocaleString());
+  const fmtNum = (n) => (n == null ? '-' : Number(n).toLocaleString());
   function timeAgo(s) {
-    if (!s) return '—';
+    if (!s) return '-';
     const norm = (window.__ccEnsureUTC || ((x) => x))(s);
     const t = new Date(norm).getTime();
-    if (isNaN(t)) return '—';
+    if (isNaN(t)) return '-';
     const sec = Math.max(0, Math.round((Date.now() - t) / 1000));
     if (sec < 60) return 'just now';
     if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
@@ -111,19 +111,19 @@
     _injectCss() {
       if (el('crisp-opcard-styles')) return;
       const css = `
-      /* === Operation card — full-width 3-col grid: identity | KPI strip(grows) | situation === */
+      /* === Operation card - full-width 3-col grid: identity | KPI strip(grows) | situation === */
       .opc{display:grid;grid-template-columns:minmax(196px,1.05fr) minmax(0,2.4fr) auto;
         align-items:center;gap:16px;padding:11px 14px;background:#101a2e;border:1px solid #233149;
         border-radius:12px;cursor:pointer;position:relative;overflow:hidden;transition:border-color .12s,background .12s}
       .opc:hover{border-color:#418FDE;background:#13203a}
       .opc:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
-      /* unattended / inactive accent — inset shadow keeps border-radius valid */
+      /* unattended / inactive accent - inset shadow keeps border-radius valid */
       .opc-attn{box-shadow:inset 3px 0 0 0 #fbbf24}
       .opc-unatt{box-shadow:inset 3px 0 0 0 #f87171;border-color:#5a1f1f}
       .opc-unatt:hover{border-color:#f87171;background:#16100f}
       .opc-inact{border-color:#5a4410}
       .opc-inact:hover{border-color:#fbbf24}
-      /* LEFT — identity */
+      /* LEFT - identity */
       .opc-id{min-width:0;display:flex;flex-direction:column;gap:3px}
       .opc-id-r1{display:flex;align-items:center;gap:7px;min-width:0}
       .opc-ic{font-size:15px;flex:0 0 auto}
@@ -135,7 +135,7 @@
       .opc-flag{font-weight:600}
       .opc-flag.flag-att{color:#f87171}
       .opc-flag.flag-idle{color:#fb923c}
-      /* CENTER — equal-width KPI chip strip that grows to fill the row */
+      /* CENTER - equal-width KPI chip strip that grows to fill the row */
       .opc-kpis{display:flex;gap:7px;min-width:0;flex-wrap:nowrap}
       .opc-kpis-empty{visibility:hidden}
       .opc-chip{flex:1 1 0;min-width:46px;display:flex;flex-direction:column;align-items:center;
@@ -151,7 +151,7 @@
       .opc-chip.resp b{color:#7db8ef}
       .opc-chip.resp.unattended{background:#1d1113;border-color:#7f1d1d}
       .opc-chip.resp.unattended b{color:#f87171}
-      /* RIGHT — situation: health pill · trend · mini-map(desktop) · arrow */
+      /* RIGHT - situation: health pill · trend · mini-map(desktop) · arrow */
       .opc-sit{display:flex;align-items:center;gap:12px;flex:0 0 auto}
       .opc-pill{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:800;letter-spacing:.05em;
         padding:3px 9px;border-radius:999px;color:var(--hc,#4ade80);background:rgba(255,255,255,.04);border:1px solid var(--hc,#4ade80);white-space:nowrap}
@@ -224,9 +224,9 @@
     typeIcon(o) { return TYPE_ICON[String(o && o.crisis_type || '').toUpperCase()] || '⚠'; },
     statusBadge(o) {
       const s = String(o && o.status || '').toUpperCase();
-      const sty = STATUS_STYLE[s] || [s || '—', '#9fb3d1'];
+      const sty = STATUS_STYLE[s] || [s || '-', '#9fb3d1'];
       if (!STATUS_STYLE[s] && s) console.warn('[ops] unexpected operation status:', s);
-      // A LIVE op past its ended_at window is matcher-inactive but not yet ENDED —
+      // A LIVE op past its ended_at window is matcher-inactive but not yet ENDED -
       // surface that genuine state without re-introducing a third badge colour.
       const windowClosed = (s === 'LIVE' && o && o.ended_at &&
         new Date((window.__ccEnsureUTC || ((x) => x))(o.ended_at)) < new Date());
@@ -235,7 +235,7 @@
     },
     // Inline-SVG schematic: centre dot + radius ring (sized by radius_km), in the
     // crisis-type colour, over a faint graticule. Honest + cheap; the human "where"
-    // is the place_name line. No tiles, no Leaflet — safe at 100 cards.
+    // is the place_name line. No tiles, no Leaflet - safe at 100 cards.
     miniMap(o) {
       const col = opColor(o);
       const r = Math.max(8, Math.min(22, (Number(o && o.radius_km) || 30) * 0.55));
@@ -253,7 +253,7 @@
             ? Number(o.center_lat).toFixed(2) + ', ' + Number(o.center_lng).toFixed(2) : '');
       const form = o.form_name ? '📋 ' + esc(o.form_name) : '';
       const st = _fmtDate(o.started_at), en = _fmtDate(o.ended_at);
-      const dates = (st || en) ? ('Started ' + (st || '—') + (en ? ' · Ended ' + en : ' · Open')) : '';
+      const dates = (st || en) ? ('Started ' + (st || '-') + (en ? ' · Ended ' + en : ' · Open')) : '';
       return [form, place ? '📍 ' + place : '', dates].filter(Boolean).join('  ·  ');
     },
     // ── pure client-side helpers (no network) for the redesigned card ──────────
@@ -266,9 +266,9 @@
     _trend(o) {
       const curr = Number(o && o.new_24h) || 0;
       const prev = o && o.new_prev_24h;                 // absent until the backend field ships
-      if (prev == null || !isFinite(Number(prev))) return { gly: '·', col: '#5b6b86', label: '—' };
+      if (prev == null || !isFinite(Number(prev))) return { gly: '·', col: '#5b6b86', label: '-' };
       const p = Number(prev);
-      if (curr === 0 && p === 0) return { gly: '·', col: '#5b6b86', label: '—' };
+      if (curr === 0 && p === 0) return { gly: '·', col: '#5b6b86', label: '-' };
       if (curr > p * 1.1)        return { gly: '▲', col: '#f87171', label: 'Rising' };
       if (curr < p * 0.9)        return { gly: '▼', col: '#4ade80', label: 'Falling' };
       return { gly: '▬', col: '#9fb3d1', label: 'Stable' };
@@ -303,12 +303,12 @@
       const age = this._opAge(o);
       const isLive = String(o && o.status || '').toUpperCase() === 'LIVE';
       const total = Number(o && o.total) || 0, ver = Number(o && o.verified) || 0;
-      const unver = Math.max(0, total - ver);                 // client math — no backend
+      const unver = Math.max(0, total - ver);                 // client math - no backend
       const unatt = isLive && fl.unattended;                  // never flag ENDED ops
       const inactive = isLive && fl.inactive;
       const attn = unatt || inactive;
       const ageCol = age === 'Day 1' ? '#fbbf24' : '#8aa0bf';
-      // Identity line 3 — unattended > inactive > last-activity (precedence).
+      // Identity line 3 - unattended > inactive > last-activity (precedence).
       let line3 = '';
       if (unatt) line3 = `<div class="opc-meta opc-flag flag-att">⚠ Unattended${fl.sinceTxt ? ' · ' + esc(fl.sinceTxt) : ''}</div>`;
       else if (inactive) line3 = `<div class="opc-meta opc-flag flag-idle">◷ Inactive · ${esc(fl.sinceTxt)}</div>`;
@@ -319,11 +319,11 @@
       const respChip = `<span class="opc-chip resp${unatt ? ' unattended' : ''}"><b>${fmtNum(o.responders_active)}</b><span>Resp</span></span>`;
       return `<div class="opc${attn ? ' opc-attn' : ''}${unatt ? ' opc-unatt' : (inactive ? ' opc-inact' : '')}"
           data-op="${esc(o.id)}" role="link" tabindex="0"
-          aria-label="${esc(o.name)} — ${esc(o.health || '')} health, ${fmtNum(o.critical)} critical, ${fmtNum(o.responders_active)} responders${unatt ? ', unattended critical' : ''} — open operation">
+          aria-label="${esc(o.name)} - ${esc(o.health || '')} health, ${fmtNum(o.critical)} critical, ${fmtNum(o.responders_active)} responders${unatt ? ', unattended critical' : ''} - open operation">
         <div class="opc-id">
           <div class="opc-id-r1"><span class="opc-ic">${this.typeIcon(o)}</span>
             <span class="opc-name">${esc(o.name)}</span>${this.statusBadge(o)}${ageBadge}</div>
-          <div class="opc-meta">${this._placeLine(o) || '—'}</div>
+          <div class="opc-meta">${this._placeLine(o) || '-'}</div>
           ${line3}
         </div>
         <div class="opc-kpis" role="group" aria-label="report metrics">
@@ -342,7 +342,7 @@
         </div>
       </div>`;
     },
-    // The "Start New Operation" entry card (redesign v2) — reskinned onto the grid.
+    // The "Start New Operation" entry card (redesign v2) - reskinned onto the grid.
     _startNewCard() {
       return `<div class="opc opc-newop" data-new="1" role="button" tabindex="0" aria-label="Start a new operation">`
         + `<div class="opc-id"><div class="opc-id-r1"><span class="opc-newop-ic" aria-hidden="true">+</span>`
@@ -443,7 +443,7 @@
     .cco-cluster{border-style:dashed;border-color:#7f1d1d;background:#1b1113}
     .cco-cluster:hover{border-color:#f87171;background:#241416}
     .cco-cluster .cco-op-name{color:#fca5a5}
-    /* detail — banner */
+    /* detail - banner */
     .cco-banner{display:flex;align-items:center;gap:14px;padding:12px 16px;border-radius:12px;margin-bottom:14px;
       border:1px solid #233149;background:#101a2e;border-left:5px solid var(--op-accent,#418FDE)}
     .cco-bc{font-size:11.5px;color:#8aa0bf}
@@ -483,7 +483,7 @@
     .cco-btn:hover{border-color:#418FDE;color:#fff}
     .cco-btn.primary{background:#1d4ed8;border-color:#2563eb;color:#fff}
     .cco-empty{padding:26px;text-align:center;color:#8aa0bf;font-size:13px}
-    /* local conditions — weather + hazard alerts */
+    /* local conditions - weather + hazard alerts */
     .cco-src{font-size:10px;font-weight:600;color:#5b6b86;text-transform:none;letter-spacing:0;margin-left:6px}
     #cco-weather{padding:14px 16px}
     .cco-wx{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
@@ -544,7 +544,7 @@
     renderRows(el('cco-list'), ops);
   }
 
-  // Thin wrapper over the shared card (CrispOpCard) — the list + the home rail
+  // Thin wrapper over the shared card (CrispOpCard) - the list + the home rail
   // render the SAME card now (was a separate, drifted implementation). The
   // /operations page shows the LIVE header + the Start-New card.
   function renderRows(host, ops) {
@@ -573,7 +573,7 @@
     const op = (ops || []).find((o) => o.id === id) || { id, name: 'Operation', crisis_type: null };
     const accent = opColor(op);
     const c = (summary && summary.counts) || {};
-    // 2e — drive the shell's operation context (colored chrome + banner).
+    // 2e - drive the shell's operation context (colored chrome + banner).
     try { window.__crispShell && window.__crispShell.setOpContext &&
           window.__crispShell.setOpContext(id, op.name, accent); } catch (_e) {}
 
@@ -588,7 +588,7 @@
       <div class="cco-banner" style="--op-accent:${accent}">
         <span class="cco-health" style="background:${healthColor(op)}" title="${esc(op.health_reason || op.health || '')}"></span>
         <div class="cco-bc">CRISP / Operations / <b>${esc(op.name)}</b></div>
-        <span class="cco-status">${esc(op.status || (op.is_active ? 'ACTIVE' : '—'))}</span>
+        <span class="cco-status">${esc(op.status || (op.is_active ? 'ACTIVE' : '-'))}</span>
         <span class="cco-resp">🚑 ${fmtNum(op.responders_active || 0)} responder${(op.responders_active || 0) === 1 ? '' : 's'}</span>
         <button class="cco-exit" id="cco-exit">← Exit to global</button>
       </div>
@@ -624,7 +624,7 @@
     el('cco-act-export').addEventListener('click', () => {
       // Stash THIS operation's id so the Export Center scopes the download to it.
       // The router's global hideAll() clears the live op scope (setOperationScope
-      // null) BEFORE /exports opens, so getOperationScope() is already null there —
+      // null) BEFORE /exports opens, so getOperationScope() is already null there -
       // capture it at click time instead.
       try { window.__crispExportCtx = { crisis_event_id: id }; } catch (_e) {}
       navTo('/exports');
@@ -637,7 +637,7 @@
     loadWeather(id);
   }
 
-  // ── local conditions (weather + hazard alerts) — backend-proxied + cached ──
+  // ── local conditions (weather + hazard alerts) - backend-proxied + cached ──
   async function loadWeather(id) {
     const box = el('cco-weather');
     if (!box) return;
@@ -650,19 +650,19 @@
       return;
     }
     const w = ctx.weather, alerts = ctx.alerts || [];
-    const r = (n, suf) => (n == null ? '—' : Math.round(n) + suf);
+    const r = (n, suf) => (n == null ? '-' : Math.round(n) + suf);
     let html = '';
     if (w) {
       html += `<div class="cco-wx">
         <div class="cco-wx-now"><div class="cco-wx-t">${r(w.temperature_c, '°C')}</div>
-          <div class="cco-wx-s">${esc(w.summary || '—')}</div></div>
+          <div class="cco-wx-s">${esc(w.summary || '-')}</div></div>
         <div class="cco-wx-m">
-          <span>💧 ${w.humidity_pct != null ? w.humidity_pct + '%' : '—'}</span>
-          <span>🌧 ${w.precipitation_mm != null ? w.precipitation_mm + ' mm' : '—'}</span>
+          <span>💧 ${w.humidity_pct != null ? w.humidity_pct + '%' : '-'}</span>
+          <span>🌧 ${w.precipitation_mm != null ? w.precipitation_mm + ' mm' : '-'}</span>
           <span>💨 ${r(w.wind_kmh, ' km/h')}</span></div>
         <div class="cco-wx-days">${(w.daily || []).map((d) => `<div class="cco-wx-day">
           <b>${esc(String(d.date || '').slice(5))}</b>
-          <span>${d.t_max_c != null ? Math.round(d.t_max_c) : '—'}° / ${d.t_min_c != null ? Math.round(d.t_min_c) : '—'}°</span>
+          <span>${d.t_max_c != null ? Math.round(d.t_max_c) : '-'}° / ${d.t_min_c != null ? Math.round(d.t_min_c) : '-'}°</span>
           <small>${esc(d.summary || '')}</small></div>`).join('')}</div>
       </div>`;
     }

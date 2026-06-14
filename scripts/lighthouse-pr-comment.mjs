@@ -11,35 +11,35 @@
 //
 // Writes:
 //   .lighthouseci/pr-comment.md  (Markdown body for the PR comment)
-//   .lighthouseci/violations.json (machine-readable list — CI uses for
+//   .lighthouseci/violations.json (machine-readable list - CI uses for
 //                                  threshold gate exit code)
 //
 // Env vars:
-//   GITHUB_REPOSITORY     — e.g. owner/repo (CI-injected, used in HTML link)
-//   GITHUB_SHA            — current commit SHA (CI-injected)
-//   LIGHTHOUSE_APPROVED   — '1' or 'true' if the override label is present.
+//   GITHUB_REPOSITORY     - e.g. owner/repo (CI-injected, used in HTML link)
+//   GITHUB_SHA            - current commit SHA (CI-injected)
+//   LIGHTHOUSE_APPROVED   - '1' or 'true' if the override label is present.
 //                           When set, threshold violations don't exit 1
 //                           (the comment still flags them for visibility).
 //
 // Exit codes:
-//   0 — pass (or warn-only)
-//   1 — block (threshold violation AND no override label) —
+//   0 - pass (or warn-only)
+//   1 - block (threshold violation AND no override label) -
 //       this fails the CI step which fails the status check which
 //       blocks the PR merge.
 //
 // Used by: .github/workflows/lighthouse.yml
 //
-// Threshold matrix — MUST mirror the FLOOR values in lhci.config.cjs.
+// Threshold matrix - MUST mirror the FLOOR values in lhci.config.cjs.
 // (The LHCI config is the source of truth; this script duplicates the
 // numbers for the human-friendly Markdown rendering + regression delta.)
 //
-//   pwa-home (current FLOOR — ratchet up as fixes land):
+//   pwa-home (current FLOOR - ratchet up as fixes land):
 //     performance      ≥ 45   (block)
 //     accessibility    ≥ 70   (block)   target: 90
 //     best-practices   ≥ 85   (block)
 //     pwa              ≥ 80   (block)
 //   dashboard:
-//     performance      ≥ 55   (block — under mobile throttle)
+//     performance      ≥ 55   (block - under mobile throttle)
 //     accessibility    ≥ 85   (block)
 //     best-practices   ≥ 85   (block)
 //     pwa              n/a    (dashboard is not a PWA)
@@ -91,7 +91,7 @@ function loadBaseline() {
             stdio: 'pipe',
         });
         // The history branch's tree is one folder per SHA. We want the
-        // most recent commit's summary.json — `git ls-tree HEAD` gives
+        // most recent commit's summary.json - `git ls-tree HEAD` gives
         // us the top-level folders sorted by tree order, and the most
         // recently committed one is at HEAD's tree.
         //
@@ -111,7 +111,7 @@ function loadBaseline() {
         ).toString();
         return JSON.parse(content);
     } catch (e) {
-        // Branch missing or unreadable — first run. Return null and let
+        // Branch missing or unreadable - first run. Return null and let
         // the comment render without deltas.
         return null;
     }
@@ -207,7 +207,7 @@ function renderViolations(violations) {
                 v.reason,
             ];
             if (v.delta != null) parts.push(`Δ ${v.delta >= 0 ? '+' : ''}${v.delta} vs baseline`);
-            md += `- ${parts.join(' — ')}\n`;
+            md += `- ${parts.join(' - ')}\n`;
         }
         md += '\n';
     }
@@ -242,7 +242,7 @@ function renderApprovalBlock(violations) {
 }
 
 function renderComment(current, baseline, violations) {
-    let md = `## 🚦 Lighthouse — \`${current.sha}\`\n\n`;
+    let md = `## 🚦 Lighthouse - \`${current.sha}\`\n\n`;
     md += renderScoreTable(current, baseline);
     md += '\n';
     md += renderViolations(violations);
@@ -252,7 +252,7 @@ function renderComment(current, baseline, violations) {
     md += `- **Form factor**: mobile (Slow 4G + 4× CPU slowdown), Moto G Power UA\n`;
     md += `- **Runs per URL**: ${Object.values(current.pages)[0]?.run_count || 'n/a'} (median picked)\n`;
     md += `- **URLs**:\n`;
-    for (const [k, info] of Object.entries(current.pages)) md += `  - \`${k}\` — \`${info.url}\`\n`;
+    for (const [k, info] of Object.entries(current.pages)) md += `  - \`${k}\` - \`${info.url}\`\n`;
     md += `- **Baseline**: ${baseline ? `commit \`${baseline.sha}\` (${baseline.ts})` : 'none yet (first ever run)'}\n`;
     md += `</details>\n\n`;
     if (REPO) {
@@ -298,7 +298,7 @@ function main() {
     }
     if (blockerCount > 0 && APPROVED) {
         console.log(
-            `\n⚠ ${blockerCount} blocker(s) found but \`lighthouse-approved\` label is set — gate bypassed.`,
+            `\n⚠ ${blockerCount} blocker(s) found but \`lighthouse-approved\` label is set - gate bypassed.`,
         );
     }
 }

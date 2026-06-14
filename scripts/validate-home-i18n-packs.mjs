@@ -9,7 +9,7 @@
  *      `__meta` + every supported locale present.
  *   3. Each pack's `__checksum` matches a fresh sha256(pack content).
  *   4. Each pack's `__version` matches the source i18n/<lang>.json hash.
- *   5. Key coverage is consistent — every key in EN's pack is present
+ *   5. Key coverage is consistent - every key in EN's pack is present
  *      in every other pack (EN-fallback substitution is allowed, but
  *      the KEY must exist so the walker can resolve it).
  *   6. Pack version matches the matching i18n/<lang>.json hash in
@@ -94,7 +94,7 @@ async function main() {
     } else {
         const meta = packs.__meta;
         if (!Array.isArray(meta.locales) || meta.locales.length !== SUPPORTED_LOCALES.length) {
-            fail(`__meta.locales length mismatch — expected ${SUPPORTED_LOCALES.length}, got ${meta.locales?.length}`);
+            fail(`__meta.locales length mismatch - expected ${SUPPORTED_LOCALES.length}, got ${meta.locales?.length}`);
         }
         if (!meta.buildTs) fail("__meta.buildTs missing");
         if (!meta.scriptVersion) fail("__meta.scriptVersion missing");
@@ -118,7 +118,7 @@ async function main() {
         const { __version, __checksum, ...content } = pack;
         const recomputed = sha256(JSON.stringify(content)).slice(0, 16);
         if (recomputed !== __checksum) {
-            fail(`${code}: __checksum mismatch — stored=${__checksum} computed=${recomputed}`);
+            fail(`${code}: __checksum mismatch - stored=${__checksum} computed=${recomputed}`);
         }
 
         // __version matches sha256 of the source locale JSON.
@@ -126,18 +126,18 @@ async function main() {
             const sourceRaw = await readFile(join(I18N_DIR, `${code}.json`));
             const sourceHash = sha256(sourceRaw).slice(0, 12);
             if (sourceHash !== __version) {
-                fail(`${code}: __version drift — pack has ${__version}, current i18n/${code}.json hashes to ${sourceHash}. Re-run gen-script.`);
+                fail(`${code}: __version drift - pack has ${__version}, current i18n/${code}.json hashes to ${sourceHash}. Re-run gen-script.`);
             }
             // 5. Pack version should also match the SW manifest entry.
             if (swManifest[code] && swManifest[code] !== sourceHash) {
                 warn(`${code}: sw.js manifest hash ${swManifest[code]} differs from current source ${sourceHash}. Run scripts/sync-release-tags.mjs to refresh manifest.`);
             }
         } catch (e) {
-            fail(`${code}: failed to verify version — ${e.message}`);
+            fail(`${code}: failed to verify version - ${e.message}`);
         }
     }
 
-    // 6. Key coverage — every key in EN pack must exist in every other pack.
+    // 6. Key coverage - every key in EN pack must exist in every other pack.
     const enPack = packs.en;
     if (enPack) {
         const { __version: _v, __checksum: _c, ...enKeys } = enPack;
@@ -161,7 +161,7 @@ async function main() {
         ok(`all 22 inline packs valid (${Object.keys(packs.en || {}).length - 2} keys per pack, checksums + versions verified)`);
         process.exit(0);
     } else {
-        console.error(`\n${RED}FAIL${RESET} — ${errors.length} drift problem(s) in inline i18n packs.`);
+        console.error(`\n${RED}FAIL${RESET} - ${errors.length} drift problem(s) in inline i18n packs.`);
         console.error(`Run \`node scripts/generate-home-i18n-inline.mjs\` to regenerate.`);
         process.exit(1);
     }

@@ -9,7 +9,7 @@ deploying organisation.
 The org settings are editable by an admin via the dashboard Organisation
 Settings module: GET/PATCH /config/org + POST/GET /config/org/logo. They are
 persisted as a JSON blob through the storage abstraction (see
-``app.services.org_config``) — NO database table, NO migration. CRISP is a
+``app.services.org_config``) - NO database table, NO migration. CRISP is a
 single-organisation platform; there is no tenant concept here.
 """
 from datetime import datetime, timezone
@@ -54,7 +54,7 @@ def get_config(response: Response) -> dict:
     blob carries org BRANDING (name/colour/logo), which must be authoritative.
     The old `max-age=300` made the Home/shell show a STALE org name for up to
     5 minutes after an admin saved it (while the admin panel, which uses
-    `no-store`, showed the new value) — the "saved successfully but reverts on
+    `no-store`, showed the new value) - the "saved successfully but reverts on
     navigation" report. The payload is tiny and fetched once per page load, so
     revalidation cost is negligible."""
     response.headers["Cache-Control"] = "no-cache"
@@ -78,7 +78,7 @@ def get_config(response: Response) -> dict:
             "watermark_enabled": settings.CRISP_GEOTAG_WATERMARK_ENABLED,
             "exif_enabled": settings.CRISP_GEOTAG_EXIF_ENABLED,
         },
-        # B6 — single-org identity/branding (public-safe subset).
+        # B6 - single-org identity/branding (public-safe subset).
         "org": org_config.public_org_block(),
     }
 
@@ -124,7 +124,7 @@ async def upload_org_logo(
 
 @router.get("/org/logo")
 def get_org_logo() -> Response:
-    """Serve the org logo bytes (public — branding is not a secret)."""
+    """Serve the org logo bytes (public - branding is not a secret)."""
     cfg = org_config.read_org_config()
     key = cfg.get("org_logo_key")
     if not key:

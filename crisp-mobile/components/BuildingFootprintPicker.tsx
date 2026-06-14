@@ -1,5 +1,5 @@
 /**
- * BuildingFootprintPicker — RN parity for the PWA's `building-select.js`.
+ * BuildingFootprintPicker - RN parity for the PWA's `building-select.js`.
  *
  * UNDP Appendix 1 requires a reporter to be able to pin an incident to a
  * specific building footprint (not just GPS coordinates). The PWA ships
@@ -16,7 +16,7 @@
  *   5. User taps a polygon → WebView posts `{ osmId: 'osm:way:<id>' }`
  *      via ReactNativeWebView.postMessage → parent calls onSelect + close.
  *
- * The Overpass fetch is best-effort — if it fails (no network, timeout,
+ * The Overpass fetch is best-effort - if it fails (no network, timeout,
  * rate-limited) the map still shows the GPS pin so the user knows where
  * they are even though they can't select a specific building.
  *
@@ -24,7 +24,7 @@
  *   - Same `osm:way:<id>` string format used by the PWA + backend.
  *   - Same 200 m radius (building-select.js `OVERPASS_RADIUS_M`).
  *   - Same polygon styling (purple 2px border, 10 % fill).
- *   - Same cache key convention — deferred. The PWA caches Overpass
+ *   - Same cache key convention - deferred. The PWA caches Overpass
  *     responses in IndexedDB for offline replay; RN equivalent would
  *     use AsyncStorage but is out of scope for this sprint (network
  *     needed anyway since the map tiles themselves aren't cached).
@@ -41,17 +41,17 @@ type Props = {
   /**
    * Fired when the reporter taps a building polygon.
    *
-   * `osmId` — the canonical OSM reference (e.g. `osm:way:123456`), used
+   * `osmId` - the canonical OSM reference (e.g. `osm:way:123456`), used
    * as the backend `building_id` for dedup/versioning.
    *
-   * `osmName` — the best human-readable label from the OSM tags
+   * `osmName` - the best human-readable label from the OSM tags
    * (`name` > `name:en` > amenity-type > building-type fallback); null
    * when no name tag exists. UNDP-required: the dashboard admin sees
    * this label beside the building-history pill instead of just the
    * bare numeric ID, so operators know WHICH building was flagged.
    */
   onSelect: (osmId: string, osmName: string | null) => void;
-  /** Current GPS — used to centre the map + scope the Overpass query. */
+  /** Current GPS - used to centre the map + scope the Overpass query. */
   lat: number;
   lng: number;
 };
@@ -63,7 +63,7 @@ type Props = {
  *
  * SECURITY: we template lat/lng into a JS literal. Both are numbers
  * before they reach this function (TypeScript-enforced), so there's
- * no injection surface — but we still guard by calling `Number()`
+ * no injection surface - but we still guard by calling `Number()`
  * one more time at the boundary to assert runtime sanity.
  */
 function buildMapHtml(lat: number, lng: number): string {
@@ -81,7 +81,7 @@ function buildMapHtml(lat: number, lng: number): string {
 </style>
 </head><body>
 <div id="map"></div>
-<div id="empty" class="empty">No building footprints found in range — tap Cancel and submit without a building tag.</div>
+<div id="empty" class="empty">No building footprints found in range - tap Cancel and submit without a building tag.</div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (function(){
@@ -92,7 +92,7 @@ function buildMapHtml(lat: number, lng: number): string {
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 20,
     // OSM tile usage policy requires attribution, but Leaflet's own
-    // attribution control is hidden here to keep the UI clean — we
+    // attribution control is hidden here to keep the UI clean - we
     // surface it inside the native modal header instead.
   }).addTo(map);
   L.marker([LAT, LNG]).addTo(map).bindPopup('Your location').openPopup();
@@ -117,7 +117,7 @@ function buildMapHtml(lat: number, lng: number): string {
         fillColor: '#7c3aed',
       }).addTo(map);
       poly.on('click', function(){
-        // Visual feedback before the modal closes — highlight the chosen polygon.
+        // Visual feedback before the modal closes - highlight the chosen polygon.
         poly.setStyle({ fillOpacity: 0.4, color: '#22c55e', weight: 3 });
         // Pick the best human-readable name for the dashboard, same
         // precedence as the PWA's building-select.js: name > name:en >
@@ -136,7 +136,7 @@ function buildMapHtml(lat: number, lng: number): string {
     }
     post({ loaded: true, count: count });
   }).catch(function(e){
-    // Overpass can be flaky / rate-limited — surface a friendly notice.
+    // Overpass can be flaky / rate-limited - surface a friendly notice.
     document.getElementById('empty').style.display = 'block';
     document.getElementById('empty').textContent = 'Could not load buildings. Tap Cancel and submit without a building tag.';
     post({ error: String(e && e.message || e) });
@@ -162,7 +162,7 @@ export default function BuildingFootprintPicker({ visible, onClose, onSelect, la
         setTimeout(onClose, 250);
       }
     } catch {
-      // Silent — any malformed message is ignorable diagnostic chatter.
+      // Silent - any malformed message is ignorable diagnostic chatter.
     }
   };
 
@@ -199,7 +199,7 @@ export default function BuildingFootprintPicker({ visible, onClose, onSelect, la
           mixedContentMode="always"
           // Disable the JS console forwarder noise in dev.
           setSupportMultipleWindows={false}
-          // Accessibility — tell a11y tree this is a map.
+          // Accessibility - tell a11y tree this is a map.
           accessibilityRole="image"
           accessibilityLabel="Building footprint map"
         />

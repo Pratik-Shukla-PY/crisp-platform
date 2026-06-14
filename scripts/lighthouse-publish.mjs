@@ -20,17 +20,17 @@
 //   <sha>/<page-key>/median.html
 //
 // Env vars:
-//   GITHUB_SHA          — commit SHA (CI-injected). Falls back to git rev-parse HEAD.
-//   GITHUB_REF          — branch ref (CI-injected, used in summary metadata).
-//   GITHUB_ACTOR        — author (CI-injected, used in summary metadata).
-//   LHCI_HISTORY_REMOTE — git remote name (default: 'origin').
-//   LHCI_DRY_RUN        — set to '1' to skip git push (build summary.json only).
+//   GITHUB_SHA          - commit SHA (CI-injected). Falls back to git rev-parse HEAD.
+//   GITHUB_REF          - branch ref (CI-injected, used in summary metadata).
+//   GITHUB_ACTOR        - author (CI-injected, used in summary metadata).
+//   LHCI_HISTORY_REMOTE - git remote name (default: 'origin').
+//   LHCI_DRY_RUN        - set to '1' to skip git push (build summary.json only).
 //
 // Exit codes:
-//   0 — published (or dry-run-completed) successfully
-//   1 — fatal error (e.g. no .lighthouseci dir, git push failed)
+//   0 - published (or dry-run-completed) successfully
+//   1 - fatal error (e.g. no .lighthouseci dir, git push failed)
 //
-// Used by: .github/workflows/lighthouse.yml — runs after `lhci collect`.
+// Used by: .github/workflows/lighthouse.yml - runs after `lhci collect`.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -61,7 +61,7 @@ function urlToPageKey(url) {
         const p = u.pathname + u.search;
         if (p.match(/\/mobile-app\/src\//))         return 'pwa-home';
         if (p.match(/\/web-dashboard\/src\//))      return 'dashboard';
-        // Fallback — should never hit if URL list in lhci.config.cjs
+        // Fallback - should never hit if URL list in lhci.config.cjs
         // matches this map.
         return 'other-' + p.replace(/[^a-z0-9]/gi, '_').replace(/^_+|_+$/g, '');
     } catch {
@@ -139,7 +139,7 @@ function buildSummary(runs) {
         const key = urlToPageKey(url);
         const median = pickMedian(urlRuns);
         // Round 0-1 LH scores to 0-100 ints (the conventional Lighthouse
-        // display format). null stays null (categorical N/A — e.g. PWA
+        // display format). null stays null (categorical N/A - e.g. PWA
         // for the dashboard).
         const round = (v) => (v == null ? null : Math.round(v * 100));
         pages[key] = {
@@ -177,7 +177,7 @@ function findHtmlReportFor(jsonPath, _url) {
     if (!fs.existsSync(OUTPUT_DIR)) return null;
     const outputs = fs.readdirSync(OUTPUT_DIR).filter((f) => f.endsWith('.html'));
     if (!outputs.length) return null;
-    // Last-resort: pick any HTML report (better than nothing — they're
+    // Last-resort: pick any HTML report (better than nothing - they're
     // all from this run anyway).
     return path.join(OUTPUT_DIR, outputs[0]);
 }
@@ -185,7 +185,7 @@ function findHtmlReportFor(jsonPath, _url) {
 // ── Git: ensure lighthouse-history branch exists, then add + push ──────────
 function publishToHistoryBranch(summary) {
     if (DRY_RUN) {
-        console.log('[publish] LHCI_DRY_RUN=1 — skipping git push.');
+        console.log('[publish] LHCI_DRY_RUN=1 - skipping git push.');
         return;
     }
     const worktreeDir = path.join(os.tmpdir(), `crisp-lh-history-${Date.now()}`);
@@ -215,7 +215,7 @@ function publishToHistoryBranch(summary) {
             stdio: 'pipe',
         });
     } catch {
-        // Remote branch doesn't exist — create the orphan locally.
+        // Remote branch doesn't exist - create the orphan locally.
         execSync(`git worktree add --detach "${worktreeDir}" HEAD`, {
             cwd: REPO_ROOT,
             stdio: 'pipe',
@@ -234,7 +234,7 @@ function publishToHistoryBranch(summary) {
         // empty trees; the first commit needs at least one file).
         fs.writeFileSync(
             path.join(worktreeDir, 'README.md'),
-            '# CRISP — Lighthouse history\n\n' +
+            '# CRISP - Lighthouse history\n\n' +
                 'Auto-generated archive of Lighthouse CI runs, one folder per\n' +
                 'commit SHA. **Do not edit by hand.**\n\n' +
                 '- Each `<sha>/summary.json` has the at-a-glance scores per page.\n' +
@@ -343,7 +343,7 @@ try {
 } catch (e) {
     console.error('[publish] FATAL:', e.message);
     if (process.env.LHCI_VERBOSE) console.error(e.stack);
-    // Soft-fail by default — the publish step is bookkeeping, not a
+    // Soft-fail by default - the publish step is bookkeeping, not a
     // gate. The audit (lhci assert) is what gates the deploy. If the
     // history-branch push fails (lacks write permission, network
     // hiccup, etc.) we don't want that to block the deploy.
@@ -352,7 +352,7 @@ try {
         process.exit(1);
     }
     console.error(
-        '[publish] (Soft-fail — publish failure does not block the gate. ' +
+        '[publish] (Soft-fail - publish failure does not block the gate. ' +
             'Set LHCI_PUBLISH_FAIL_ON_ERROR=1 to enforce strict failure.)',
     );
     process.exit(0);

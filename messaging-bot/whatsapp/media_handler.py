@@ -1,5 +1,5 @@
 """
-WhatsApp Media Handler — Downloads media from Meta Cloud API servers,
+WhatsApp Media Handler - Downloads media from Meta Cloud API servers,
 encodes to base64 for CRISP backend consumption.
 """
 import os

@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>CRISP — Login</title>
+    <title>CRISP - Login</title>
     <meta name="crisp-sentry-dsn" content="">
-    <meta name="crisp-release" content="crisp-dashboard@v52">
+    <meta name="crisp-release" content="crisp-dashboard@v53">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <!-- May 2026 (Lighthouse perf fix) — pinned to 6.4.0 to match
+    <!-- May 2026 (Lighthouse perf fix) - pinned to 6.4.0 to match
          index.html. Was 6.5.1 here, 6.4.0 there → users visiting both
          pages downloaded both versions (~150 KB wasted FA payload).
          Added meta description + robots for SEO score. -->
-    <meta name="description" content="CRISP login — secure access to the QRT Operations Dashboard for crisis-response analysts. UNDP × CRISP.">
-    <!-- May 2026 (LCP perf fix) — self-hosted Outfit + JetBrains Mono +
+    <meta name="description" content="CRISP login - secure access to the QRT Operations Dashboard for crisis-response analysts. UNDP × CRISP.">
+    <!-- May 2026 (LCP perf fix) - self-hosted Outfit + JetBrains Mono +
          Font Awesome. Eliminates two third-party CDN round-trips +
          lets us preload the critical Outfit-900 woff2 used by the
-         gradient <h1> (the LCP element). Subsetted to latin-only —
+         gradient <h1> (the LCP element). Subsetted to latin-only -
          see web-dashboard/src/fonts/fonts.css. -->
     <link rel="preload" as="font" type="font/woff2" href="fonts/outfit-900.woff2" crossorigin>
     <link rel="stylesheet" href="fonts/fontawesome/all.min.css">
@@ -24,7 +24,7 @@
         :root { --bg: #080c14; --surface: #111827; --border: rgba(255,255,255,0.08); --accent: #7c3aed; --text: #f1f5f9; --dim: #64748b; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { min-height: 100%; }
-        /* Jun 2026 redesign — full-height column: back-arrow → big logo hero
+        /* Jun 2026 redesign - full-height column: back-arrow → big logo hero
            → form card → home-style footer. Replaces the single centered card
            so the page fills the viewport with balanced vertical spacing. The
            form fields, IDs and auth <script> are unchanged. */
@@ -44,7 +44,7 @@
                 max(18px, env(safe-area-inset-left));
         }
 
-        /* Main — flex-fills the space above the footer, centering
+        /* Main - flex-fills the space above the footer, centering
            the logo hero + the form card with generous vertical breathing room. */
         .login-main {
             flex: 1 1 auto;
@@ -52,7 +52,7 @@
             gap: 32px; padding: 24px 0;
         }
 
-        /* Hero / logo — bigger brand mark + wordmark. */
+        /* Hero / logo - bigger brand mark + wordmark. */
         .login-hero { text-align: center; }
         .logo-mark {
             width: 112px; height: 112px; margin: 0 auto 16px; border-radius: 26px;
@@ -104,7 +104,7 @@
         .pw-toggle { position: relative; }
         .pw-toggle i { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--dim); cursor: pointer; }
 
-        /* Footer — mirrors the PWA home footer (Privacy · Help · CRISP version). */
+        /* Footer - mirrors the PWA home footer (Privacy · Help · CRISP version). */
         .login-footer {
             flex: 0 0 auto;
             display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
@@ -125,8 +125,8 @@
 <body>
     <main class="login-main">
         <div class="login-hero">
-            <!-- May 2026 — inlined ripple-tile brand mark (renders during first
-                 paint without an extra HTTP fetch). Jun 2026 — enlarged. -->
+            <!-- May 2026 - inlined ripple-tile brand mark (renders during first
+                 paint without an extra HTTP fetch). Jun 2026 - enlarged. -->
             <div class="logo-mark" aria-hidden="true">
                 <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CRISP">
                     <defs>
@@ -151,7 +151,7 @@
         <div class="login-card">
             <div id="msg" class="msg"></div>
 
-            <!-- Apr 2026 — single-admin lockdown. Self-service registration and
+            <!-- Apr 2026 - single-admin lockdown. Self-service registration and
                  Enterprise SSO are intentionally disabled for the dashboard;
                  the tabs are kept in the DOM (display:none) so legacy switchTab
                  callsites don't throw, and so the original layout is one
@@ -163,7 +163,7 @@
                 <button class="tab" onclick="switchTab('sso')">Enterprise SSO</button>
             </div>
 
-            <!-- LOGIN TAB — Apr 2026 single-admin lockdown:
+            <!-- LOGIN TAB - Apr 2026 single-admin lockdown:
                  Password + TOTP authenticator code (Google Authenticator / Authy /
                  1Password). Email-OTP login path retained in the DOM under
                  #step-otp for the existing verifyOTP() machinery (kept for the
@@ -183,14 +183,14 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Authenticator code <span style="color:var(--dim);font-size:12px;font-weight:normal;">— from Google Authenticator / Authy / 1Password</span></label>
+                        <label class="form-label">Authenticator code <span style="color:var(--dim);font-size:12px;font-weight:normal;">- from Google Authenticator / Authy / 1Password</span></label>
                         <input type="text" id="login-totp" class="form-input" placeholder="123456" maxlength="6" minlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" style="letter-spacing:6px;font-family:monospace;font-size:18px;text-align:center;">
                     </div>
                     <button class="btn-primary" onclick="loginWithPassword()">
                         <i class="fa-solid fa-right-to-bracket"></i> Login
                     </button>
                 </div>
-                <!-- Email-OTP step — kept for back-compat with the PWA reporter
+                <!-- Email-OTP step - kept for back-compat with the PWA reporter
                      verify flow that posts into the same /auth/otp/* endpoints.
                      Hidden in dashboard lockdown mode. -->
                 <div id="step-otp" style="display:none;">
@@ -222,7 +222,7 @@
                     <input type="text" id="reg-name" class="form-input" placeholder="Your name">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Password (optional — can use OTP only)</label>
+                    <label class="form-label">Password (optional - can use OTP only)</label>
                     <input type="password" id="reg-password" class="form-input" placeholder="Min 8 chars, upper+lower+digit+special">
                 </div>
                 <div class="gdpr-check">
@@ -252,7 +252,7 @@
                 </div>
             </div>
 
-            <!-- Apr 2026 — registration link hidden for the lockdown posture.
+            <!-- Apr 2026 - registration link hidden for the lockdown posture.
                  Kept in DOM (display:none) for parity with the tabs strip above. -->
             <div class="link-row" id="link-row" style="display:none;">
                 Don't have an account? <a onclick="switchTab('register')">Register</a>
@@ -260,7 +260,7 @@
         </div>
     </main>
 
-    <!-- Footer — same shape as the citizen home page (Privacy · Help · version). -->
+    <!-- Footer - same shape as the citizen home page (Privacy · Help · version). -->
     <footer class="login-footer" aria-label="Footer">
         <a class="login-footer-link" href="/mobile-app/src/">Privacy</a>
         <span class="login-footer-sep" aria-hidden="true">·</span>
@@ -269,11 +269,11 @@
         <span class="login-footer-version" id="login-footer-version">CRISP v35</span>
     </footer>
 
-    <!-- Sentry observability — May 2026 audit fix. -->
+    <!-- Sentry observability - May 2026 audit fix. -->
     <script src="vendor/sentry.min.js?v=8.30.0"></script>
     <script src="sentry-init.js?v=1"></script>
     <script>
-    // Apr 2026 — origin-aware API base. Dev: localhost:8000, Prod: same origin
+    // Apr 2026 - origin-aware API base. Dev: localhost:8000, Prod: same origin
     // as the page (nginx proxies /api/ → backend internally).
     const _isLocalDev = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
     const _BACKEND_HOST = _isLocalDev
@@ -365,7 +365,7 @@
     }
 
     async function loginWithPassword() {
-        // Apr 2026 — single-admin lockdown. Email + password + TOTP code
+        // Apr 2026 - single-admin lockdown. Email + password + TOTP code
         // (Google Authenticator / Authy / 1Password) sent in one request.
         // Backend rejects with 401 if password or TOTP code is wrong; on
         // success returns an access/refresh JWT pair.
@@ -432,7 +432,7 @@
         } catch (e) { showMsg('Network error', 'error'); }
     }
 
-    // Footer version label — keep in sync with the crisp-release meta tag.
+    // Footer version label - keep in sync with the crisp-release meta tag.
     (function () {
         try {
             const m = document.querySelector('meta[name="crisp-release"]');

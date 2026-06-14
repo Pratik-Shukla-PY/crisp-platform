@@ -6,11 +6,11 @@ PostgreSQL (full-switch production and dev-via-brew path). The previous
 implementation hard-coded `sqlite3.connect("crisp_local.db")` which died
 the moment `DATABASE_URL=postgresql://...` was exported.
 
-Behaviour unchanged — inserts 4 reports (ROAD/HOSPITAL/WATER/HOUSE),
+Behaviour unchanged - inserts 4 reports (ROAD/HOSPITAL/WATER/HOUSE),
 each with a location row, a seeded media row (legacy schema; modern
 chunked-upload flow doesn't use this), and an AI-analysis row. Idempotent
 on a per-device basis via a stable `seed-device-123` device_hash: re-runs
-append new reports, they don't update existing ones — if you want a
+append new reports, they don't update existing ones - if you want a
 clean slate, drop + recreate the DB first.
 
 Run via:
@@ -30,7 +30,7 @@ from app.models.report import (
 
 
 def _ensure_device(db, device_hash: str, platform: str = "SEEDER") -> Device:
-    """Idempotent device lookup — matches the existing-device bootstrap
+    """Idempotent device lookup - matches the existing-device bootstrap
     logic in app.api.endpoints.reports so seeded rows aren't dissociated
     from the real device flow."""
     existing = db.query(Device).filter(Device.device_hash == device_hash).first()
@@ -61,7 +61,7 @@ def _add_report(db, device: Device, infra_type: InfraTypeEnum,
     db.add(report)
     db.flush()
 
-    # Rough-distributed test coordinates — not remotely accurate, fine for
+    # Rough-distributed test coordinates - not remotely accurate, fine for
     # dashboard smoke tests + heatmap debugging.
     db.add(Location(
         report_id=report.id,
@@ -93,13 +93,13 @@ def _add_report(db, device: Device, infra_type: InfraTypeEnum,
 
 
 def main():
-    # Smoke check — if the tables haven't been created yet (either by
+    # Smoke check - if the tables haven't been created yet (either by
     # `alembic upgrade head` or the dev-mode `Base.metadata.create_all`),
     # bail instead of crashing with an opaque IntegrityError.
     from sqlalchemy import inspect
     inspector = inspect(engine)
     if "reports" not in inspector.get_table_names():
-        print("Tables not present — run `alembic upgrade head` first.")
+        print("Tables not present - run `alembic upgrade head` first.")
         return
 
     db = SessionLocal()

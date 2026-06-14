@@ -1,4 +1,4 @@
-"""building_notes — Phase H.4 operator notes thread
+"""building_notes - Phase H.4 operator notes thread
 
 Revision ID: 0031_building_notes
 Revises: 0030_building_responders
@@ -6,12 +6,12 @@ Create Date: 2026-05-18
 
 Per-building notes thread written by operators. Notes are the long-
 form context channel that BuildingEvent (audit log) and Building.ai_summary
-(machine-generated brief) deliberately don't try to be — free text,
+(machine-generated brief) deliberately don't try to be - free text,
 pinnable, edit + soft-delete + visibility ENUM (ALL_OPERATORS vs
 ADMIN_ONLY).
 
 Storage is intentionally thin: rows just sit on the building, ordered
-by created_at DESC + pinned-first. There is no thread / parent_id —
+by created_at DESC + pinned-first. There is no thread / parent_id -
 each note stands alone. If conversational replies become a real need
 they get layered on top later (out-of-scope this round).
 """
@@ -74,7 +74,7 @@ def upgrade() -> None:
         sa.Column("edited_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
     )
-    # Composite index — the timeline query is always
+    # Composite index - the timeline query is always
     # "for building X, give me pinned notes first, then by created_at desc".
     op.create_index(
         "ix_building_notes_building_pinned_created",

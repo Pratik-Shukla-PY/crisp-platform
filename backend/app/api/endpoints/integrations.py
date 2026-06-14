@@ -27,7 +27,7 @@ request model is intentionally a strict subset of Appendix-1 so a
 RAPIDA field engineer can fill in any of our columns without needing
 the full `ReportMetaCreate` contract.
 
-Security: requires a bearer token with ADMIN or SUPER_ADMIN role —
+Security: requires a bearer token with ADMIN or SUPER_ADMIN role -
 the endpoint is intended for server-to-server calls, not citizens.
 Rate-limited 300 events/min per token.
 """
@@ -66,11 +66,11 @@ class RAPIDAEvent(BaseModel):
     denominator across UNDP's post-crisis assessment tools. Richer
     Appendix-1 fields (`service_status`, `pressing_needs`, modules)
     can be submitted through our native `POST /reports/meta` which
-    uses the full schema — RAPIDA's ingestion doesn't need them.
+    uses the full schema - RAPIDA's ingestion doesn't need them.
     """
     # Stable id supplied by the partner. Second POST with the same
     # event_id returns the previously-created report without a new
-    # row — this lets lossy retry loops (common in disaster comms)
+    # row - this lets lossy retry loops (common in disaster comms)
     # converge without duplicating.
     event_id: str = Field(..., min_length=1, max_length=128)
 
@@ -81,12 +81,12 @@ class RAPIDAEvent(BaseModel):
     severity: Optional[SeverityEnum] = None
     description: Optional[str] = Field(None, max_length=4000)
 
-    # Location — either GPS (preferred) or a free-text descriptor.
+    # Location - either GPS (preferred) or a free-text descriptor.
     latitude:  Optional[float] = Field(None, ge=-90,  le=90)
     longitude: Optional[float] = Field(None, ge=-180, le=180)
     location_name: Optional[str] = Field(None, max_length=200)
 
-    # Provenance — the partner can stamp either a person or a system.
+    # Provenance - the partner can stamp either a person or a system.
     reporter: Optional[str] = Field(None, max_length=200)
     captured_at: Optional[str] = Field(None, max_length=64)   # ISO-8601
 
@@ -121,7 +121,7 @@ def ingest_rapida_event(
     db: Session = Depends(get_db),
     admin=Depends(require_admin),
 ):
-    # Rate limit — 300 events/min per auth subject (system-to-system
+    # Rate limit - 300 events/min per auth subject (system-to-system
     # call, so IP isn't a good bucket).
     from app.main import check_rate_limit
     key = f"rapida-ingest:{getattr(admin, 'id', 'anon')}"
@@ -221,8 +221,8 @@ def rapida_schema():
             "latitude":              "locations.latitude (WGS84)",
             "longitude":             "locations.longitude (WGS84)",
             "location_name":         "locations.user_location_name",
-            "reporter":              "(not persisted — logged only; use auth token for provenance)",
-            "captured_at":           "(not persisted — backend stamps server_created_at on receipt)",
+            "reporter":              "(not persisted - logged only; use auth token for provenance)",
+            "captured_at":           "(not persisted - backend stamps server_created_at on receipt)",
             "building_id":           "reports.building_id (osm:way:<id> preferred)",
         },
         "idempotency": {

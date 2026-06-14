@@ -1,23 +1,23 @@
 /**
- * CRISP Badge Studio — May 2026 reward-system v2.
+ * CRISP Badge Studio - May 2026 reward-system v2.
  *
  * In-app Canvas composer that lets reporters who've reached
  * T3_CHANGEMAKER / T4_LIFEKEEPER generate a share-ready badge image
  * for LinkedIn / WhatsApp / Instagram / etc. Three templates:
  *
- *   1. ring  — 1080×1080 transparent PNG. Circular crop of optional
+ *   1. ring  - 1080×1080 transparent PNG. Circular crop of optional
  *              user photo with a tier-coloured ring; "Open to work"-
  *              style ribbon at the bottom. Works as a profile photo
  *              on LinkedIn / WhatsApp.
- *   2. wa    — 1080×1080 opaque PNG. Same composition but with a
+ *   2. wa    - 1080×1080 opaque PNG. Same composition but with a
  *              navy/teal gradient backdrop, tier badge enlarged so
  *              it reads at WhatsApp's thumbnail sizes.
- *   3. story — 1080×1920 portrait PNG. Full bleed mint→teal gradient,
+ *   3. story - 1080×1920 portrait PNG. Full bleed mint→teal gradient,
  *              tier emoji + name dominant, counts below, CRISP
  *              wordmark + share URL at the bottom. Suitable for
  *              Insta Story / WA Status / LinkedIn share.
  *
- * Composition is pure Canvas — no upload of the user's photo to any
+ * Composition is pure Canvas - no upload of the user's photo to any
  * server. Optional face blur reuses the existing pii-blur.js
  * BlazeFace pipeline (UNDP must-have #7).
  *
@@ -44,7 +44,7 @@
 
     // ── Tier metadata ──
     //
-    // Phase 2.1 (May 2026) — source of truth is `shared/tier-config.json`,
+    // Phase 2.1 (May 2026) - source of truth is `shared/tier-config.json`,
     // exposed at `window.CRISP_TIERS_BY_ID` by `tier-config.js`
     // (loaded before this script in `index.html`). We build a flat
     // {emoji, label, ringStart, ringEnd} shape because the canvas
@@ -79,9 +79,9 @@
         lives: 0,
         reports: 0,
         responded: 0,
-        // May 2026 — character picker + share-message picker added
+        // May 2026 - character picker + share-message picker added
         // alongside the futuristic backdrop.
-        // Phase 2.4 — Caped Guardian was a comic-archetype slug; the
+        // Phase 2.4 - Caped Guardian was a comic-archetype slug; the
         // refined pack only ships responder characters. Default to
         // the T1-tier responder; the BS open path will upgrade this
         // via `crispCharacterPack.defaultForTier(state.tier)` once
@@ -138,17 +138,17 @@
     function _paintBackground(ctx, template, tier) {
         const { w, h } = _dimensions(template);
         if (template === 'ring') {
-            // Transparent — exit early. Profile-photo template uses
+            // Transparent - exit early. Profile-photo template uses
             // transparency outside the circle so the avatar reads as
             // a true profile photo on LinkedIn / WhatsApp.
             ctx.clearRect(0, 0, w, h);
             return;
         }
         if (template === 'wa') {
-            // Phase 2.3 (May 2026) — tier-aware base gradient. T4
+            // Phase 2.3 (May 2026) - tier-aware base gradient. T4
             // gets a warm amber-orange wash; lower tiers keep the
             // navy/teal "command center" palette. This is the visual
-            // payoff for reaching Lifekeeper — distinguishable at a
+            // payoff for reaching Lifekeeper - distinguishable at a
             // glance in a LinkedIn feed.
             const isT4 = tier === 'T4_LIFEKEEPER';
             const g = ctx.createLinearGradient(0, 0, w, h);
@@ -186,7 +186,7 @@
     }
 
     /**
-     * Phase 2.3 (May 2026) — glassmorphism panel behind the avatar.
+     * Phase 2.3 (May 2026) - glassmorphism panel behind the avatar.
      *
      * Canvas has no real `backdrop-filter` so we EMULATE the frosted
      * glass effect with:
@@ -215,7 +215,7 @@
         ctx.shadowColor = 'rgba(0, 0, 0, 0.42)';
         ctx.shadowBlur = 60;
         ctx.shadowOffsetY = 16;
-        // The "frosted glass" base — translucent off-white tinted with
+        // The "frosted glass" base - translucent off-white tinted with
         // the tier accent. T4 gets a warmer-gold tint so the pane feels
         // like brushed bronze instead of cool glass.
         const isT4 = tier === 'T4_LIFEKEEPER';
@@ -226,7 +226,7 @@
         ctx.fill();
         ctx.restore();
 
-        // Inner top-edge highlight — a single stroke at the upper
+        // Inner top-edge highlight - a single stroke at the upper
         // border to fake the glassy "glint" you'd get from a real CSS
         // backdrop-filter + border-top: 1px rgba(white,0.3).
         ctx.save();
@@ -279,7 +279,7 @@
 
         ctx.save();
 
-        // 1. Hex-grid pattern — sparse cells across the whole canvas.
+        // 1. Hex-grid pattern - sparse cells across the whole canvas.
         ctx.strokeStyle = 'rgba(70, 223, 177, 0.07)'; // tier-mint, very low alpha
         ctx.lineWidth = 2;
         const hexR = 38;
@@ -310,7 +310,7 @@
         });
         ctx.globalAlpha = 1;
 
-        // 3. Diagonal sweep glow — soft radial highlight 30° top-left.
+        // 3. Diagonal sweep glow - soft radial highlight 30° top-left.
         const sweepGrad = ctx.createRadialGradient(
             w * 0.20, h * 0.15, 10,
             w * 0.20, h * 0.15, Math.max(w, h) * 0.7,
@@ -407,7 +407,7 @@
         ctx.arc(cx, cy, radius * 0.92, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
-        // 3. Character silhouette — coloured via the character pack's
+        // 3. Character silhouette - coloured via the character pack's
         // own gradient end-stop so each character has a distinct
         // accent. Defer-loaded; if it fails we fall through to the
         // emoji placeholder so the canvas never has a hole.
@@ -466,13 +466,13 @@
         const x = cx - pillW / 2;
         const y = cy;
         const r = pillH / 2;
-        // Phase 2.3 (May 2026) — layered shadows. Two-pass:
+        // Phase 2.3 (May 2026) - layered shadows. Two-pass:
         //   1. Soft ambient shadow underneath (blurry, offset down)
         //   2. Tier-coloured glow halo (no offset, blurry)
-        // Both passes paint INVISIBLE pill shapes — only the shadows
+        // Both passes paint INVISIBLE pill shapes - only the shadows
         // remain. The actual gradient pill paints on top in pass 3.
         ctx.save();
-        // Pass 1 — ambient.
+        // Pass 1 - ambient.
         ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
         ctx.shadowBlur = 36 * scale;
         ctx.shadowOffsetY = 12 * scale;
@@ -489,7 +489,7 @@
         ctx.fillStyle = '#000';
         ctx.fill();
         ctx.restore();
-        // Pass 2 — tier glow.
+        // Pass 2 - tier glow.
         ctx.save();
         ctx.shadowColor = meta.ringEnd;
         ctx.shadowBlur = 48 * scale;
@@ -503,7 +503,7 @@
         ctx.closePath();
         ctx.fill();
         ctx.restore();
-        // Pass 3 — visible gradient pill body (no shadow).
+        // Pass 3 - visible gradient pill body (no shadow).
         const g = ctx.createLinearGradient(x, y, x + pillW, y);
         g.addColorStop(0, meta.ringStart);
         g.addColorStop(1, meta.ringEnd);
@@ -548,7 +548,7 @@
     ];
 
     function _resolveShareMessage(idx) {
-        // -1 = Surprise me — deterministic per ~minute so the preview
+        // -1 = Surprise me - deterministic per ~minute so the preview
         // is stable but tomorrow's session pulls a different message.
         const pickIdx = (idx < 0 || idx >= SHARE_MESSAGES.length)
             ? Math.floor((Date.now() / 60000) % SHARE_MESSAGES.length)
@@ -576,7 +576,7 @@
         const lives = Number.isFinite(stats.lives) ? stats.lives : 0;
         const reps  = Number.isFinite(stats.reports) ? stats.reports : 0;
         ctx.fillText(`${reps} reports · ${lives} lives saved`, cx, h * 0.52);
-        // GenZ share message — bold, identity-forward.
+        // GenZ share message - bold, identity-forward.
         const msg = _resolveShareMessage(
             typeof messageIdx === 'number' ? messageIdx : state.selectedMessageIdx
         );
@@ -589,11 +589,11 @@
         ctx.fillText('CRISP', cx, h * 0.84);
         ctx.font = `500 36px "Inter", system-ui, sans-serif`;
         ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
-        const tagline = _t('badge_studio_share_card_tagline', 'Report what you see — crisplabs.tech');
+        const tagline = _t('badge_studio_share_card_tagline', 'Report what you see - crisplabs.tech');
         ctx.fillText(tagline, cx, h * 0.89);
     }
 
-    /** Simple word-wrap text painter — splits on spaces, keeps lines
+    /** Simple word-wrap text painter - splits on spaces, keeps lines
      *  under `maxWidth`. Up to 3 lines centred at `(cx, y)`. */
     function _wrapText(ctx, text, cx, y, maxWidth, lineHeight) {
         const words = String(text || '').split(/\s+/);
@@ -615,14 +615,14 @@
         lines.forEach((ln, i) => ctx.fillText(ln, cx, yStart + i * lineHeight));
     }
 
-    // Phase 2.7 (May 2026) — DPR-aware canvas. On a Retina / OLED phone
+    // Phase 2.7 (May 2026) - DPR-aware canvas. On a Retina / OLED phone
     // (devicePixelRatio = 2 or 3), the badge studio's 1080-backed canvas
     // ends up downscaled by the OS share pipeline AND by the user's
     // device when re-displayed → blurry edges on rings + text. Painting
     // at backing-size × DPR fixes that. We cap DPR at 2 because (a) 3×
     // exports balloon file size 9× without a corresponding visual
     // improvement on most share targets, and (b) the LinkedIn OG embed
-    // cap is 100 KB — a 3× export blows that budget.
+    // cap is 100 KB - a 3× export blows that budget.
     const _dpr = () => Math.min(
         (typeof window !== 'undefined' && window.devicePixelRatio) || 1,
         2,
@@ -635,7 +635,7 @@
      *
      * The visible preview canvas also sets ``canvas.style.{width,height}``
      * so CSS sizing (`.badge-studio-canvas { max-width: 320px }`) keeps
-     * working — without this, doubling the backing buffer would also
+     * working - without this, doubling the backing buffer would also
      * double the displayed size and overflow the wrapper.
      */
     function _setupDprCanvas(canvas, w, h, isPreview) {
@@ -667,7 +667,7 @@
         // 1. Background (now carries the futuristic backdrop).
         _paintBackground(ctx, template, tier);
 
-        // 2. Avatar — photo > character > emoji placeholder.
+        // 2. Avatar - photo > character > emoji placeholder.
         if (template !== 'story') {
             const cx = w / 2;
             const cy = h * 0.42;
@@ -684,7 +684,7 @@
             // 4. Tier badge pill below the ring.
             _drawTierBadge(ctx, cx, cy + radius + 100, template === 'wa' ? 1.05 : 1.0, tier);
         } else {
-            // Story template — no profile photo; full content block.
+            // Story template - no profile photo; full content block.
             _drawStoryContent(ctx, w, h, tier, stats, messageIdx);
         }
 
@@ -703,7 +703,7 @@
         const canvas = document.getElementById('bs-canvas');
         if (!canvas) return;
         const { w, h } = _dimensions(state.template);
-        // Phase 2.7 (May 2026) — DPR-aware. The preview canvas now
+        // Phase 2.7 (May 2026) - DPR-aware. The preview canvas now
         // backs at (w × DPR, h × DPR) so rings + text stay crisp on
         // Retina / OLED devices. ``canvas.style.width/.height`` is
         // pinned to (w, h) logical pixels so the existing CSS rule
@@ -740,7 +740,7 @@
         if (emojiEl) emojiEl.textContent = meta.emoji;
         if (nameEl) nameEl.textContent = _t(`tier_${state.tier.toLowerCase()}_label`, meta.label);
         if (statsEl) {
-            // Phase 2.5 (May 2026) — counter roll-up. First time we
+            // Phase 2.5 (May 2026) - counter roll-up. First time we
             // paint the stats line, animate from 0 to the user's
             // real (reports, lives) values; subsequent paints just
             // update the text. The animation runs in ~600 ms with a
@@ -751,15 +751,15 @@
     }
 
     /**
-     * Phase 2.5 (May 2026) — animated counter roll-up.
+     * Phase 2.5 (May 2026) - animated counter roll-up.
      *
      * Animates two numbers (reports, lives) from 0 to their final
      * values on the FIRST paint of the badge studio. Skips animation
      * on subsequent renders (e.g. template switches) because the
-     * numbers haven't changed — re-rolling would feel jittery.
+     * numbers haven't changed - re-rolling would feel jittery.
      *
      * Gated by `prefers-reduced-motion: reduce` per WCAG 2.1 §2.3.3
-     * — vestibular-motion-sensitive users get the final value
+     * - vestibular-motion-sensitive users get the final value
      * instantly without the count-up.
      */
     let _statsRolledUp = false;
@@ -815,7 +815,7 @@
         try {
             // pii-blur.js's `applyPiiBlur` returns
             //   { blob, blurred, facesDetected, skipped, error }
-            // — NOT a Blob/canvas directly. Pre-fix this function
+            // - NOT a Blob/canvas directly. Pre-fix this function
             // duck-typed for Blob|canvas, missed every real return
             // value, and silently returned the original bitmap →
             // blur looked like it was working but actually never ran
@@ -834,7 +834,7 @@
             const result = await window.applyPiiBlur(inputBlob);
             if (!result || typeof result !== 'object') return bitmap;
             if (result.skipped) {
-                // Model load / detect failed — fall back to the original
+                // Model load / detect failed - fall back to the original
                 // bitmap + tell the user we couldn't blur this time.
                 _toast(_t('photo_blur_unavailable',
                     'Face blur unavailable; using the original photo.'), 'info');
@@ -855,13 +855,13 @@
     function _shareText() {
         const meta = TIER_META[state.tier] || TIER_META.T4_LIFEKEEPER;
         const tierLabel = _t(`tier_${state.tier.toLowerCase()}_label`, meta.label);
-        // Phase 2.9 (May 2026) — personalize off the user's real counts.
+        // Phase 2.9 (May 2026) - personalize off the user's real counts.
         // Pre-Phase-2.9 the text was always the same "I'm a CRISP X. Report
         // what you see → crisplabs.tech" regardless of impact; now we lead
         // with the most-affecting number the user has earned.
         //
         // Priority order (highest-impact first):
-        //   1. lives > 0  → "X lives helped" — strongest social pull
+        //   1. lives > 0  → "X lives helped" - strongest social pull
         //   2. reports > 0 + reports verified → reported "X verified reports"
         //   3. reports > 0 (any status) → "X reports submitted"
         //   4. fallback → static "Report what you see"
@@ -946,14 +946,14 @@
                 });
                 return;
             }
-            // Fallback — download + copy text to clipboard so the user
+            // Fallback - download + copy text to clipboard so the user
             // can paste into their share target manually.
             _downloadBlob(blob, `crisp-${state.tier.toLowerCase()}.png`);
             try { await navigator.clipboard.writeText(_shareText()); } catch (_) {}
             _toast(_t('badge_studio_share_hint',
-                'Image saved + caption copied — open your share target and paste.'), 'info');
+                'Image saved + caption copied - open your share target and paste.'), 'info');
         } catch (e) {
-            // User cancelled the native share — that's not an error.
+            // User cancelled the native share - that's not an error.
             if (e && e.name === 'AbortError') return;
             console.warn('[BadgeStudio] share failed:', e);
             _toast(_t('badge_studio_share_failed', 'Could not share'), 'error');
@@ -971,7 +971,7 @@
             const text = encodeURIComponent(_shareText());
             window.open(`https://wa.me/?text=${text}`, '_blank', 'noopener');
             _toast(_t('badge_studio_wa_hint',
-                'Image saved — attach it from your camera roll in WhatsApp.'), 'info');
+                'Image saved - attach it from your camera roll in WhatsApp.'), 'info');
         } catch (e) {
             console.warn('[BadgeStudio] WhatsApp share failed:', e);
             _toast(_t('badge_studio_share_failed', 'Could not share'), 'error');
@@ -981,7 +981,7 @@
     async function _handleInstagram() {
         // Instagram on Android Chrome is a registered share target via
         // Web Share API; on iOS it isn't (no Web Share to Insta on
-        // iOS Safari) — fall back to download + hint.
+        // iOS Safari) - fall back to download + hint.
         try {
             const blob = await _composeForShare();
             const file = new File([blob], `crisp-${state.tier.toLowerCase()}.png`, { type: 'image/png' });
@@ -991,7 +991,7 @@
             }
             _downloadBlob(blob, `crisp-${state.tier.toLowerCase()}.png`);
             _toast(_t('badge_studio_insta_hint',
-                'Image saved — open Instagram → Story → upload from camera roll.'), 'info');
+                'Image saved - open Instagram → Story → upload from camera roll.'), 'info');
         } catch (e) {
             if (e && e.name === 'AbortError') return;
             console.warn('[BadgeStudio] Insta share failed:', e);
@@ -1001,25 +1001,25 @@
 
     async function _handleLinkedIn() {
         // LinkedIn's share dialog does NOT accept image attachments via
-        // URL — it only scrapes Open Graph meta from the share URL.
+        // URL - it only scrapes Open Graph meta from the share URL.
         // We mint a signed token via POST /api/v1/share/mint and
         // deep-link LinkedIn at /api/v1/share/<token> so the rendered
         // page carries the user's badge as og:image.
         //
         // Fallback path: if the mint endpoint is unreachable (offline,
         // backend down, mint returns non-2xx), fall back to the
-        // crisplabs.tech landing page so the share still works — just
+        // crisplabs.tech landing page so the share still works - just
         // with the generic OG preview instead of the per-user badge.
         try {
             const blob = await _composeForShare();
-            // Always download the PNG too — LinkedIn's scraper can fail
+            // Always download the PNG too - LinkedIn's scraper can fail
             // on data URLs >50 KB and the user may want to attach the
             // image manually as a backup.
             _downloadBlob(blob, `crisp-${state.tier.toLowerCase()}.png`);
 
             // Convert the PNG blob to a data URL for OG embed. Cap at
             // ~100 KB (LinkedIn scraper limit + backend mint endpoint
-            // limit) — if larger, send null and let the share page
+            // limit) - if larger, send null and let the share page
             // render with the default brand image.
             let imgDataUrl = null;
             if (blob.size <= 100_000) {
@@ -1056,7 +1056,7 @@
                     shareUrl = `${origin}${signedPath}`;
                 } else {
                     console.warn('[BadgeStudio] /share/mint returned', mintRes.status,
-                        '— falling back to crisplabs.tech');
+                        '- falling back to crisplabs.tech');
                 }
             } catch (e) {
                 console.warn('[BadgeStudio] /share/mint unreachable, using crisplabs.tech fallback', e);
@@ -1065,7 +1065,7 @@
             const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`;
             window.open(url, '_blank', 'noopener');
             _toast(_t('badge_studio_linkedin_hint',
-                'Image saved — attach it to your LinkedIn post manually.'), 'info');
+                'Image saved - attach it to your LinkedIn post manually.'), 'info');
         } catch (e) {
             console.warn('[BadgeStudio] LinkedIn share failed:', e);
             _toast(_t('badge_studio_share_failed', 'Could not share'), 'error');
@@ -1101,13 +1101,13 @@
         }
     }
 
-    // ── Phase A — character picker ─────────────────────────────────
+    // ── Phase A - character picker ─────────────────────────────────
 
     function _buildCharacterGrid() {
         const grid = document.getElementById('bs-char-grid');
         if (!grid || !window.crispCharacterPack) return;
         const chars = window.crispCharacterPack.list();
-        // Phase 2.6 (May 2026) — tier-gated character picker. A tile
+        // Phase 2.6 (May 2026) - tier-gated character picker. A tile
         // is "locked" if the user's current tier hasn't unlocked it
         // yet; clicking it does nothing except show a tooltip. The
         // default selectedCharacter at first-open is the user's
@@ -1131,7 +1131,7 @@
             tile.setAttribute('data-slug', c.slug);
             const ariaLabel = unlocked
                 ? c.label_en
-                : `${c.label_en} — locked, reach ${(window.CRISP_TIERS_BY_ID?.[c.unlocks_at]?.label || c.unlocks_at)} to unlock`;
+                : `${c.label_en} - locked, reach ${(window.CRISP_TIERS_BY_ID?.[c.unlocks_at]?.label || c.unlocks_at)} to unlock`;
             tile.setAttribute('aria-label', ariaLabel);
             tile.setAttribute('title', ariaLabel);
             if (!unlocked) tile.setAttribute('aria-disabled', 'true');
@@ -1162,7 +1162,7 @@
 
     function _selectCharacter(slug) {
         state.selectedCharacter = slug;
-        // Picking a character disables photo-mode automatically — the
+        // Picking a character disables photo-mode automatically - the
         // user is signalling they want a hero, not their selfie.
         state.usePhotoInsteadOfCharacter = false;
         state.lastPngBlob = null;
@@ -1170,7 +1170,7 @@
         _renderPreview();
     }
 
-    // ── Phase B — share-message picker ─────────────────────────────
+    // ── Phase B - share-message picker ─────────────────────────────
 
     function _selectMessage(idx) {
         const n = Number(idx);
@@ -1179,7 +1179,7 @@
         _renderPreview();
     }
 
-    // ── Phase C — photo consent modal + thumbnail ──────────────────
+    // ── Phase C - photo consent modal + thumbnail ──────────────────
 
     const PHOTO_CONSENT_KEY = 'crisp_photo_studio_consent_v1';
 
@@ -1191,7 +1191,7 @@
     }
 
     function _openPhotoConsentModal() {
-        // May 2026 — toggle ONLY via the `hidden` attribute; the
+        // May 2026 - toggle ONLY via the `hidden` attribute; the
         // CSS (`.photo-consent-overlay[hidden] { display: none }`)
         // handles visibility. Setting `style.display = 'flex'`
         // previously masked the original bug (where `.upload-overlay`
@@ -1255,14 +1255,14 @@
         document.querySelectorAll('.badge-studio-tabs .bs-tab').forEach((b) => {
             b.addEventListener('click', () => _setActiveTab(b.getAttribute('data-template')));
         });
-        // Character picker — populated on first stage entry.
+        // Character picker - populated on first stage entry.
         _buildCharacterGrid();
         // Share-message picker.
         const msgSel = document.getElementById('bs-message-select');
         if (msgSel) {
             msgSel.addEventListener('change', () => _selectMessage(msgSel.value));
         }
-        // Photo input — handler stays, but the trigger is now the
+        // Photo input - handler stays, but the trigger is now the
         // consent-modal-OK button (or direct file picker if previously
         // consented).
         const photoIn = document.getElementById('bs-photo-input');
@@ -1272,7 +1272,7 @@
                 if (f) _onPhotoSelected(f);
             });
         }
-        // "Choose photo" entry button — gates through consent modal.
+        // "Choose photo" entry button - gates through consent modal.
         const btnPhoto = document.getElementById('btn-bs-photo');
         if (btnPhoto) btnPhoto.addEventListener('click', _onChoosePhotoClicked);
         // Thumbnail clear button.
@@ -1317,12 +1317,12 @@
         }
     }
 
-    // ── Public entry — called by home-screen.js on chip tap (T3+) ──
+    // ── Public entry - called by home-screen.js on chip tap (T3+) ──
     window.openBadgeStudio = function () {
         const cache = _loadTierFromCache();
         const tier = cache ? cache.tier : 'T1_SCOUT';
         if (!TIERS_UNLOCKED.has(tier)) {
-            // Locked path — toast and bail.
+            // Locked path - toast and bail.
             _toast(_t('badge_studio_lock_t1_t2',
                 'Reach Changemaker to unlock Badge Studio'), 'info');
             return;
@@ -1343,9 +1343,9 @@
         _setActiveTab(state.template || 'ring');
     };
 
-    // ── Boot — initialise stage handlers on DOMContentLoaded ──
+    // ── Boot - initialise stage handlers on DOMContentLoaded ──
     //
-    // May 2026 (second pass) — the home badge chip is DECORATIVE-ONLY.
+    // May 2026 (second pass) - the home badge chip is DECORATIVE-ONLY.
     // Badge Studio is now reached via the dedicated #btn-rewards →
     // stage-rewards → #btn-rewards-open-studio path wired in
     // home-screen.js (`_wireRewardsNav` / `_openRewardsStage`).

@@ -1,21 +1,21 @@
 /**
- * V4CaptureScreen — RN port of the PWA's #stage-v4-capture.
+ * V4CaptureScreen - RN port of the PWA's #stage-v4-capture.
  *
- * May 2026 — Phase 3 of the 8-phase RN ↔ PWA parity plan.
+ * May 2026 - Phase 3 of the 8-phase RN ↔ PWA parity plan.
  * Replaces the legacy split `'photo'` + `'audio'` screens with a
  * single multi-modal capture page matching the PWA's redesigned v4
  * flow:
  *
- *   §A  Header        — back button + 3-step progress bar (Step 1 of 3)
- *   §B  Meta card     — location row (text + refresh + edit) + timestamp
- *   §C  Title         — "Show what you see."
- *   §D  Photo section — camera button (primary) + gallery button +
+ *   §A  Header        - back button + 3-step progress bar (Step 1 of 3)
+ *   §B  Meta card     - location row (text + refresh + edit) + timestamp
+ *   §C  Title         - "Show what you see."
+ *   §D  Photo section - camera button (primary) + gallery button +
  *                       thumb strip when photos land
- *   §E  Voice + Text  — compact chips that expand inline panels
- *   §F  Tips card     — 3 smart-contextual tips + impact line; dims
+ *   §E  Voice + Text  - compact chips that expand inline panels
+ *   §F  Tips card     - 3 smart-contextual tips + impact line; dims
  *                       a tip when the matching capture lands and
  *                       reveals a green check
- *   §G  Footer        — Continue button (disabled until ≥ 1 photo)
+ *   §G  Footer        - Continue button (disabled until ≥ 1 photo)
  *
  * Props-first: the screen RENDERS state and FIRES callbacks; it
  * doesn't own the camera, recorder, or location pipelines. App.tsx
@@ -35,7 +35,7 @@
  *   · Touch targets ≥ 44 px (WCAG 2.5.5)
  *
  * The PWA exposes a location-edit inline input, an OSM building
- * picker, and a precise three-line timestamp — those are richer in
+ * picker, and a precise three-line timestamp - those are richer in
  * the PWA than they need to be in v1 of the RN port. We surface
  * `locationText / locationCoords / timeLabel / timeLocal` as plain
  * strings and let the caller decide how rich to make them.
@@ -108,7 +108,7 @@ export default function V4CaptureScreen(props: V4CaptureScreenProps) {
   const photoCount = props.photoThumbs.length;
   const canContinue = photoCount > 0;
 
-  // (May 2026 — Fix-R2) — measure footer height at runtime so the
+  // (May 2026 - Fix-R2) - measure footer height at runtime so the
   // ScrollView's bottom padding adapts to the actual rendered footer.
   // The previous `+ 76` was a baked-in assumption that broke under
   // accessibility font scaling (iOS Dynamic Type Large, Android 1.3×+)
@@ -121,7 +121,7 @@ export default function V4CaptureScreen(props: V4CaptureScreenProps) {
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [textOpen, setTextOpen] = useState(false);
 
-  // §F smart-contextual tips state — derived from props, no extra
+  // §F smart-contextual tips state - derived from props, no extra
   // state machinery. Each tip dims + shows a green check when its
   // matching capture has landed.
   const tipsDone = useMemo(() => ({
@@ -131,7 +131,7 @@ export default function V4CaptureScreen(props: V4CaptureScreenProps) {
   }), [photoCount, props.hasVoice, props.textValue]);
 
   return (
-    // (May 2026 — Fix-R3) — KeyboardAvoidingView wraps the screen so
+    // (May 2026 - Fix-R3) - KeyboardAvoidingView wraps the screen so
     // the soft keyboard doesn't occlude the inline text-input panel
     // (line ~411) or the absolute-positioned Continue footer below.
     // iOS uses `padding` behavior (the only mode that actually pushes
@@ -144,7 +144,7 @@ export default function V4CaptureScreen(props: V4CaptureScreenProps) {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
     <View style={[styles.stage, { backgroundColor: Colors.bg }]}>
-      {/* ── §A Header — back + 3-step progress ────────────────── */}
+      {/* ── §A Header - back + 3-step progress ────────────────── */}
       <View style={[styles.header, { paddingTop: Math.max(8, insets.top) }]}>
         <TouchableOpacity
           style={styles.backBtn}
@@ -174,7 +174,7 @@ export default function V4CaptureScreen(props: V4CaptureScreenProps) {
         style={{ flex: 1 }}
         contentContainerStyle={{
           paddingHorizontal: 20,
-          // (Fix-R2) — runtime-measured footer height so font scaling
+          // (Fix-R2) - runtime-measured footer height so font scaling
           // / RTL line-height changes don't push content under the
           // Continue button.
           paddingBottom: Math.max(12, insets.bottom) + footerHeight,
@@ -182,7 +182,7 @@ export default function V4CaptureScreen(props: V4CaptureScreenProps) {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* ── §B Meta card — location + timestamp ─────────────── */}
+        {/* ── §B Meta card - location + timestamp ─────────────── */}
         <View style={styles.metaCard} testID="v4cap-meta-card">
           <View style={styles.metaLocRow}>
             <Svg viewBox="0 0 24 24" width={18} height={18}

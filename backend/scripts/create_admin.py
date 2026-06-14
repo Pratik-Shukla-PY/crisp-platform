@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Provision a single admin user with password + TOTP authenticator MFA.
 
-Apr 2026 — Single-admin dashboard lockdown helper.
+Apr 2026 - Single-admin dashboard lockdown helper.
 
 Run inside the backend container:
 
@@ -13,8 +13,8 @@ The script will:
   1. Prompt for a password (twice for confirmation, hidden input).
   2. Validate password strength (min 8, upper+lower+digit+special).
   3. Generate a base32-encoded TOTP shared secret (RFC 4648/6238).
-  4. Either create the User row OR — if --update is passed and the user
-     already exists — rotate their password and TOTP secret.
+  4. Either create the User row OR - if --update is passed and the user
+     already exists - rotate their password and TOTP secret.
   5. Mark the user `role=SUPER_ADMIN`, `mfa_enabled=True`,
      `is_active=True`, `is_verified=True`.
   6. Print the otpauth:// URI plus an ASCII QR code that you scan with
@@ -22,7 +22,7 @@ The script will:
      base32 secret as a fallback in case the QR doesn't render in your
      terminal.
 
-The QR / secret is shown ONCE — there's no recovery path. If you lose
+The QR / secret is shown ONCE - there's no recovery path. If you lose
 it, re-run with --update to rotate.
 
 Exit codes:
@@ -40,7 +40,7 @@ from datetime import datetime, timezone
 
 # When invoked as `python scripts/create_admin.py` (rather than
 # `python -m scripts.create_admin`), only the script's directory ends
-# up on sys.path — which means `from app.db.session import ...` further
+# up on sys.path - which means `from app.db.session import ...` further
 # down would fail with ModuleNotFoundError. Insert the backend root
 # (the parent of scripts/) so both invocations work the same.
 _BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -65,7 +65,7 @@ def _print_qr_ascii(uri: str) -> None:
 
 def _save_qr_png(uri: str, path: str) -> None:
     """Save the otpauth URI as a real PNG file (sharper than the ASCII
-    rendering — useful for embedding in submission docs / sharing with
+    rendering - useful for embedding in submission docs / sharing with
     judges so they can scan from their phone)."""
     img = qrcode.make(uri)
     img.save(path)
@@ -108,11 +108,11 @@ def main() -> None:
         "--qr-png-path",
         default=None,
         help="If set, also save the TOTP QR as a PNG at this path (e.g. /app/backend/demo-qr.png). "
-             "Useful for submission packages — judges scan the PNG with their phone.",
+             "Useful for submission packages - judges scan the PNG with their phone.",
     )
     args = ap.parse_args()
 
-    # Late imports — only do them once the CLI has parsed, so --help works
+    # Late imports - only do them once the CLI has parsed, so --help works
     # without a configured DB.
     from app.db.session import SessionLocal
     from app.models.auth import User, RoleEnum
@@ -127,7 +127,7 @@ def main() -> None:
 
     ok, msg = validate_password_strength(pw)
     if not ok:
-        print(f"ERROR: weak password — {msg}", file=sys.stderr)
+        print(f"ERROR: weak password - {msg}", file=sys.stderr)
         sys.exit(1)
 
     db = SessionLocal()

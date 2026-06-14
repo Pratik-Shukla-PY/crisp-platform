@@ -1,5 +1,5 @@
 """
-nearby_lifecycle — transition detector + event emitter for the
+nearby_lifecycle - transition detector + event emitter for the
 Nearby Reports pipeline.
 
 Phase 2 (May 2026, docs §3.7) adds lifecycle tracking on top of the
@@ -8,21 +8,21 @@ fresh aggregation; this module compares the fresh aggregation against
 the prior cached aggregation for the same cache key and emits a
 NearbyGroupEvent row for each transition observed:
 
-  • promote   — group's tier moved up (weak → emerging → verified)
-  • downgrade — group's tier moved down
-  • acute_on  — group flipped is_acute=false → true
-  • acute_off — group flipped is_acute=true → false
-  • fading    — group's count dropped + no recent activity
-  • resolved  — group reached kind='resolved_recent' (a closure)
-  • created   — a new group_id appeared this poll
-  • removed   — a previously-present group_id disappeared
+  • promote   - group's tier moved up (weak → emerging → verified)
+  • downgrade - group's tier moved down
+  • acute_on  - group flipped is_acute=false → true
+  • acute_off - group flipped is_acute=true → false
+  • fading    - group's count dropped + no recent activity
+  • resolved  - group reached kind='resolved_recent' (a closure)
+  • created   - a new group_id appeared this poll
+  • removed   - a previously-present group_id disappeared
 
 Why diff-based detection instead of in-aggregation hooks: the
 aggregator is a pure function and we want to keep it that way.
 Persistence + side effects live in this module + are called from
 the endpoint AFTER the response is computed.
 
-The detector does NOT block the response — it's called from a
+The detector does NOT block the response - it's called from a
 post-response hook so a slow DB write can't delay the user's
 request. Phase 3 may move this into a background worker once trust
 scoring (Phase 3) adds enough additional state.
@@ -54,8 +54,8 @@ class GroupEventKind:
     ACUTE_OFF = "acute_off"
     FADING    = "fading"
     RESOLVED  = "resolved"
-    MERGE     = "merge"      # Phase 2.5+ — reserved
-    SPLIT     = "split"      # Phase 2.5+ — reserved
+    MERGE     = "merge"      # Phase 2.5+ - reserved
+    SPLIT     = "split"      # Phase 2.5+ - reserved
 
 
 _TIER_RANK = {"weak": 1, "emerging": 2, "verified": 3}
@@ -75,12 +75,12 @@ def diff_groups(
 ) -> List[dict]:
     """Pure diff. Returns a list of {group_id, event_kind, from_*,
     to_*, payload} dicts ready to materialise as NearbyGroupEvent
-    rows. Pure function — no DB, no side effects."""
+    rows. Pure function - no DB, no side effects."""
     prior_by_id = {g.id: g for g in prior}
     current_by_id = {g.id: g for g in current}
     events: List[dict] = []
 
-    # CREATED — groups that appeared this poll.
+    # CREATED - groups that appeared this poll.
     for gid in current_by_id.keys() - prior_by_id.keys():
         g = current_by_id[gid]
         events.append({
@@ -93,7 +93,7 @@ def diff_groups(
             "payload": {"kind": g.kind, "is_acute": g.is_acute},
         })
 
-    # REMOVED — groups that vanished this poll.
+    # REMOVED - groups that vanished this poll.
     for gid in prior_by_id.keys() - current_by_id.keys():
         g_prior = prior_by_id[gid]
         events.append({
@@ -158,7 +158,7 @@ def diff_groups(
                 "payload": {"prior_kind": g_from.kind},
             })
 
-        # Fading — count dropped + no burst + not acute
+        # Fading - count dropped + no burst + not acute
         if (g_to.count < g_from.count and
                 not g_to.is_burst and not g_to.is_acute):
             events.append({
@@ -175,7 +175,7 @@ def diff_groups(
 def persist_events(db: Session, events: Iterable[dict]) -> int:
     """Write events to the DB. Returns the number of rows inserted.
 
-    Best-effort — errors are logged and swallowed so a DB write
+    Best-effort - errors are logged and swallowed so a DB write
     failure can never poison a user-facing nearby response.
     """
     n = 0

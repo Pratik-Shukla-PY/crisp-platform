@@ -1,5 +1,5 @@
 // ╭──────────────────────────────────────────────────────────────────╮
-// │ AUTO-GENERATED — DO NOT EDIT BY HAND                            │
+// │ AUTO-GENERATED - DO NOT EDIT BY HAND                            │
 // │ Source: shared/tier-config.json                                  │
 // │ Regenerate with: node scripts/sync-tier-config.mjs               │
 // │ CI verifies with: node scripts/sync-tier-config.mjs --check      │
@@ -30,7 +30,7 @@ export const TIERS: TierConfig[] = [
             "start": "#80EE98",
             "end": "#46DFB1"
         },
-        "criterion": "Default — no submissions yet"
+        "criterion": "Default - no submissions yet"
     },
     {
         "id": "T2_SIGNAL",
@@ -43,7 +43,7 @@ export const TIERS: TierConfig[] = [
             "start": "#46DFB1",
             "end": "#09D1C7"
         },
-        "criterion": "≥1 report submitted (any status) — one-time participation badge"
+        "criterion": "≥1 report submitted (any status) - one-time participation badge"
     },
     {
         "id": "T3_CHANGEMAKER",
@@ -56,7 +56,7 @@ export const TIERS: TierConfig[] = [
             "start": "#09D1C7",
             "end": "#15919B"
         },
-        "criterion": "≥1 report dispatched (RESPONDING or RESOLVED) — analyst action required"
+        "criterion": "≥1 report dispatched (RESPONDING or RESOLVED) - analyst action required"
     },
     {
         "id": "T4_LIFEKEEPER",
@@ -69,7 +69,7 @@ export const TIERS: TierConfig[] = [
             "start": "#fcd34d",
             "end": "#f59e0b"
         },
-        "criterion": "sum(lives_impacted) ≥ 1 across the device's reports — downstream impact required"
+        "criterion": "sum(lives_impacted) ≥ 1 across the device's reports - downstream impact required"
     }
 ] as const;
 

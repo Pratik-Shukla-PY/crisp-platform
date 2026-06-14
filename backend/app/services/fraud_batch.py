@@ -1,8 +1,8 @@
 """
-fraud_batch — async batch worker for the heavier abuse-detection
+fraud_batch - async batch worker for the heavier abuse-detection
 signals.
 
-Phase 5 (docs/NEARBY_REPORTS_PIPELINE.md §6.2 + §6.4) — the signals
+Phase 5 (docs/NEARBY_REPORTS_PIPELINE.md §6.2 + §6.4) - the signals
 too expensive for the synchronous hot path:
 
   • Emulator-farm fingerprinting (UA + device telemetry pattern
@@ -13,26 +13,26 @@ too expensive for the synchronous hot path:
     consistently report the same buildings within seconds of each
     other).
 
-This module exposes a single entry point — `run_batch_scan()` —
+This module exposes a single entry point - `run_batch_scan()` -
 that the deployment's job scheduler (cron / Celery / RQ /
 docker-compose) calls every CRISP_TRUST_ASYNC_INTERVAL_MIN minutes
 (default 15). Inside the scan:
 
   1. Pick devices touched in the last interval (devices.updated_at
-     IS NULL guard means "any device that submitted recently" —
+     IS NULL guard means "any device that submitted recently" -
      covers v0 devices without that column).
   2. Run each heuristic against the device's recent submission
      history.
   3. For each signal that fires: append to spam_signals, bump
      spam_score, and emit a webhook to subscribed deployment
-     partners (Phase 5 — operator decision in docs §6.4: CRISP
+     partners (Phase 5 - operator decision in docs §6.4: CRISP
      hosts the framework, partners integrate via webhooks).
 
-The worker is IDEMPOTENT — re-running on the same device-window
+The worker is IDEMPOTENT - re-running on the same device-window
 slice doesn't double-bump spam_score (we union signals; weight
 becomes max).
 
-Phase 5 is a SCAFFOLD — the actual ML / fingerprinting heuristics
+Phase 5 is a SCAFFOLD - the actual ML / fingerprinting heuristics
 are pluggable hooks (functions in DETECTORS list). Real
 implementations land as separate commits per UNDP rubric Item 12
 (scale-readiness; UNDP cap 500k reports/crisis).
@@ -77,13 +77,13 @@ _PHASE5_SIGNAL_WEIGHTS = {
 SIGNAL_WEIGHTS.update(_PHASE5_SIGNAL_WEIGHTS)
 
 
-# ── Heuristic detectors (Phase 5 scaffold — real ML lands in followups) ──
+# ── Heuristic detectors (Phase 5 scaffold - real ML lands in followups) ──
 #
 # Each detector takes (db, device, recent_reports) and returns a
 # list of BatchSignal constants that fired. Add new detectors here;
 # the worker auto-iterates all DETECTORS for each device.
 
-# ── Emulator fingerprinting (Phase 5.1 — real telemetry, docs §6.2) ──
+# ── Emulator fingerprinting (Phase 5.1 - real telemetry, docs §6.2) ──
 #
 # The Phase 5 scaffold only matched substrings in `device.platform`.
 # Trivially defeated. The real implementation reads
@@ -95,7 +95,7 @@ SIGNAL_WEIGHTS.update(_PHASE5_SIGNAL_WEIGHTS)
 # to see which signals contributed (logged via spam_signals[]).
 
 # Well-known software / emulator WebGL renderer fragments. These are
-# never seen on real iOS / Android devices in the wild — real mobile
+# never seen on real iOS / Android devices in the wild - real mobile
 # GPUs are Adreno / Mali / Apple / PowerVR.
 _SOFTWARE_RENDERER_NEEDLES: tuple[str, ...] = (
     "swiftshader",   # Chromium fallback (BlueStacks default)
@@ -120,7 +120,7 @@ def _detect_emulator_farm(
     """Phase 5.1 real implementation (docs §6.2). Reads the device's
     captured telemetry_summary and scores emulator likelihood. Falls
     back to the cheap UA-substring check when no telemetry has been
-    captured yet — devices that predate the capture roll-out still
+    captured yet - devices that predate the capture roll-out still
     get flagged on obvious patterns.
 
     Scoring rules (any combination summing ≥ 1.0 → fires):
@@ -134,7 +134,7 @@ def _detect_emulator_farm(
            Pixel-2 Android Studio default; 375×667 dpr=2.0 is iOS
            Simulator's iPhone 8 default)
 
-    Public count still floors at distinct-device count (per §10) — this
+    Public count still floors at distinct-device count (per §10) - this
     detector only feeds the device's spam_score / spam_signals; it does
     NOT change how the report appears to citizens. Citizens see the
     same group regardless of whether a contributing device fingerprints
@@ -161,7 +161,7 @@ def _detect_emulator_farm(
         # mobile. Static accelerometer is normal in absolute terms (the
         # phone sitting on a desk reports ~9.8 on Z), so the PWA only
         # sets accel_active=true when it sees the values CHANGE between
-        # samples — the kind of variance you only get when a real device
+        # samples - the kind of variance you only get when a real device
         # is being handled.
         accel_active = telem.get("accel_active")
         platform_ua = (telem.get("platform_ua") or "").lower()
@@ -208,7 +208,7 @@ def _detect_emulator_farm(
     return []
 
 
-# ── Narrative similarity (Phase 5.1) — real MinHash-based Jaccard ────────
+# ── Narrative similarity (Phase 5.1) - real MinHash-based Jaccard ────────
 #
 # The Phase-5 scaffold flagged only IDENTICAL descriptions; a real spam
 # farm trivially defeats that by adding a random suffix. This is the
@@ -223,10 +223,10 @@ def _detect_emulator_farm(
 # so pairwise comparison is O(K) instead of O(|n-grams|) per pair.
 #
 # Tuning (env-overridable):
-#   CRISP_NARRATIVE_JACCARD_THRESHOLD  default 0.7   — pairwise sim floor
-#   CRISP_NARRATIVE_MIN_REPORTS        default 3     — clique-size floor
-#   CRISP_NARRATIVE_NGRAM              default 5     — 5-grams per docs
-#   CRISP_NARRATIVE_MINHASH_K          default 32    — signature size
+#   CRISP_NARRATIVE_JACCARD_THRESHOLD  default 0.7   - pairwise sim floor
+#   CRISP_NARRATIVE_MIN_REPORTS        default 3     - clique-size floor
+#   CRISP_NARRATIVE_NGRAM              default 5     - 5-grams per docs
+#   CRISP_NARRATIVE_MINHASH_K          default 32    - signature size
 #
 # At K=32 the standard error of the Jaccard estimator is ~1/sqrt(K) ≈
 # 0.18, which is more than tight enough for a 0.7 trigger threshold.
@@ -244,7 +244,7 @@ _NARRATIVE_MINHASH_K = int(os.environ.get("CRISP_NARRATIVE_MINHASH_K", "32"))
 
 _TOKEN_RE = re.compile(r"[a-z0-9']+")
 
-# Small stopword list — short enough not to over-strip non-English
+# Small stopword list - short enough not to over-strip non-English
 # reports, big enough to drop the high-frequency English noise that
 # inflates similarity on legitimately-different reports.
 _STOPWORDS: frozenset[str] = frozenset({
@@ -411,7 +411,7 @@ DETECTORS: List[Callable[[Session, Device, Sequence[Report]], List[str]]] = [
 ]
 
 
-# ── Outbound webhook delivery (Phase 5 — docs §6.4) ────────────────
+# ── Outbound webhook delivery (Phase 5 - docs §6.4) ────────────────
 
 def _webhook_endpoints() -> List[str]:
     """Read deployment-configured webhook destinations from env.
@@ -425,7 +425,7 @@ def _webhook_endpoints() -> List[str]:
 def emit_webhook(event: dict, *, timeout_sec: float = 5.0) -> None:
     """POST a JSON payload to every configured webhook URL.
 
-    Best-effort delivery — failures are logged + swallowed. Phase 5.5+
+    Best-effort delivery - failures are logged + swallowed. Phase 5.5+
     will replace this with a retry/backoff queue. The current scaffold
     is enough for a deployment partner (UNDP / others) to observe live
     appeal-decision events without polling.

@@ -1,10 +1,10 @@
-"""devices.telemetry_summary jsonb — emulator-fingerprint capture
+"""devices.telemetry_summary jsonb - emulator-fingerprint capture
 
 Revision ID: 0024_device_telemetry_summary
 Revises: 0023_postgis_geospatial
 Create Date: 2026-05-16
 
-Phase 5.1 (docs/NEARBY_REPORTS_PIPELINE.md §6.2) — upgrades the
+Phase 5.1 (docs/NEARBY_REPORTS_PIPELINE.md §6.2) - upgrades the
 emulator_farm detector from the Phase-5 UA-substring scaffold to a
 real telemetry-driven check.
 
@@ -15,19 +15,19 @@ to the old UA-substring rule when absent (backward compatible).
 
 WHY A NULLABLE JSON BLOB, NOT A NORMALISED TABLE?
 
-  The shape is OPEN — we expect to add new probe values (e.g. canvas
+  The shape is OPEN - we expect to add new probe values (e.g. canvas
   fingerprint, performance.memory) without rolling a migration each
   time. JSON also lets the detector evolve the scoring logic without
   having to teach the schema. The summary is small (< 1 KB / row) and
-  query patterns are always "give me this device's summary" — no need
+  query patterns are always "give me this device's summary" - no need
   to scan or aggregate across telemetry fields at the DB level.
 
 WHY NULLABLE?
 
   - Pre-existing devices have no captured telemetry. NULL means "no
-    data" not "no signals" — the detector treats NULL as inconclusive
+    data" not "no signals" - the detector treats NULL as inconclusive
     and falls back to the cheap UA-substring check.
-  - The capture is best-effort client-side — if BatteryAPI / WebGL /
+  - The capture is best-effort client-side - if BatteryAPI / WebGL /
     DeviceMotion access is denied or fails, the client may post a
     partial summary or skip entirely. NULL is the cleanest sentinel.
 
@@ -59,7 +59,7 @@ def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
     existing = {c["name"] for c in inspector.get_columns("devices")}
-    # Idempotent — re-runs in dev shouldn't error.
+    # Idempotent - re-runs in dev shouldn't error.
     if "telemetry_summary" not in existing:
         op.add_column(
             "devices",

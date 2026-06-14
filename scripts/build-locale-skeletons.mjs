@@ -33,13 +33,13 @@ const DRY_RUN = process.argv.includes('--dry-run');
 // Tier metadata. Order here also drives the picker render order
 // downstream (UN tier-1 first, then tier-2, then tier-3).
 const ALL_LOCALES = [
-    // Tier 1 — UN official
+    // Tier 1 - UN official
     { code: 'ar', tier: 1, name: 'Arabic',     native: 'العربية' },
     { code: 'zh', tier: 1, name: 'Mandarin',   native: '中文' },
     { code: 'es', tier: 1, name: 'Spanish',    native: 'Español' },
     { code: 'fr', tier: 1, name: 'French',     native: 'Français' },
     { code: 'ru', tier: 1, name: 'Russian',    native: 'Русский' },
-    // Tier 2 — UNDP submission set
+    // Tier 2 - UNDP submission set
     { code: 'hi', tier: 2, name: 'Hindi',      native: 'हिन्दी' },
     { code: 'pt', tier: 2, name: 'Portuguese', native: 'Português' },
     { code: 'bn', tier: 2, name: 'Bengali',    native: 'বাংলা' },
@@ -49,7 +49,7 @@ const ALL_LOCALES = [
     { code: 'ko', tier: 2, name: 'Korean',     native: '한국어' },
     { code: 'id', tier: 2, name: 'Indonesian', native: 'Bahasa Indonesia' },
     { code: 'ur', tier: 2, name: 'Urdu',       native: 'اردو' },
-    // Tier 3 — Indian sub-national
+    // Tier 3 - Indian sub-national
     { code: 'kn', tier: 3, name: 'Kannada',    native: 'ಕನ್ನಡ' },
     { code: 'ta', tier: 3, name: 'Tamil',      native: 'தமிழ்' },
     { code: 'te', tier: 3, name: 'Telugu',     native: 'తెలుగు' },
@@ -84,7 +84,7 @@ for (const loc of ALL_LOCALES) {
         existing = JSON.parse(readFileSync(path, 'utf8'));
         preexisting = true;
     }
-    // Strip any pre-existing __meta__ — we rebuild it below.
+    // Strip any pre-existing __meta__ - we rebuild it below.
     delete existing.__meta__;
 
     // For each en-key:
@@ -190,5 +190,5 @@ console.log(
 console.log();
 
 if (DRY_RUN) {
-    console.log('Dry run — no files written.');
+    console.log('Dry run - no files written.');
 }

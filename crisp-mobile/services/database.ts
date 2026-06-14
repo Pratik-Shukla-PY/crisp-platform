@@ -1,5 +1,5 @@
 /**
- * CRISP SQLite Database — Offline-first report queue.
+ * CRISP SQLite Database - Offline-first report queue.
  * All actions write locally first. Sync engine uploads when online.
  */
 import * as SQLite from 'expo-sqlite';
@@ -8,10 +8,10 @@ const DB_NAME = 'crisp_offline.db';
 
 let db: SQLite.SQLiteDatabase | null = null;
 let dbReady = false;
-// Apr 2026 — memoise the whole open-and-init PROMISE, not just the resolved
+// Apr 2026 - memoise the whole open-and-init PROMISE, not just the resolved
 // handle. The old guard (`if (db && dbReady) return db`) had a race window:
 // between `db = await openDatabaseAsync()` and `dbReady = true`, a parallel
-// caller would see `db` unset and start a SECOND open — one of which ended
+// caller would see `db` unset and start a SECOND open - one of which ended
 // up null-rejecting `prepareAsync` with the NullPointerException that showed
 // up in the field logs. Sharing one promise across concurrent callers kills
 // the race.
@@ -26,14 +26,14 @@ async function _openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
       status TEXT DEFAULT 'draft', server_id TEXT,
       photo_chunk_progress INTEGER DEFAULT 0, audio_chunk_progress INTEGER DEFAULT 0,
       retry_count INTEGER DEFAULT 0, created_at INTEGER, updated_at INTEGER,
-      -- P2.13: JSON {'0': 524288, '1': 0, ...} — byte offset reached for each
+      -- P2.13: JSON {'0': 524288, '1': 0, ...} - byte offset reached for each
       -- extra photo so a crash-and-resume doesn't re-upload completed extras.
       extra_photos_progress TEXT
     );
   `);
   // Idempotent migration for existing DBs created before extra_photos_progress.
   try { await opened.execAsync(`ALTER TABLE reports ADD COLUMN extra_photos_progress TEXT`); } catch {}
-  // Guaranteed-delivery pipeline — per-variant state for main + extra photos.
+  // Guaranteed-delivery pipeline - per-variant state for main + extra photos.
   // photo_variants: JSON blob {small:{mediaId,base64,chunkProgress,complete,bytes}, medium:{...}, large:{...}}
   // photo_group_id: UUID linking the three variant rows on the backend.
   // extra_photos_variants: JSON array of the same shape per extra photo (each carrying its own groupId).
@@ -98,7 +98,7 @@ export interface QueuedReport {
   retry_count: number;
   created_at: number;
   updated_at: number;
-  /** P2.13 — JSON map (e.g. `{"0":524288,"1":0}`) of byte offset reached per
+  /** P2.13 - JSON map (e.g. `{"0":524288,"1":0}`) of byte offset reached per
    *  extra photo index. Absent or empty on freshly-queued reports. */
   extra_photos_progress: string | null;
   /** Guaranteed-delivery: JSON shape
@@ -151,7 +151,7 @@ export async function getPendingReports(): Promise<QueuedReport[]> {
   );
 }
 
-/** Every report still in-flight or queued — used by the "My Reports" screen
+/** Every report still in-flight or queued - used by the "My Reports" screen
  *  to show sync progress alongside already-synced history. Includes 'syncing'
  *  which getPendingReports() excludes (syncEngine sets it mid-upload). */
 export async function getInFlightReports(): Promise<QueuedReport[]> {
@@ -226,7 +226,7 @@ export interface HistoryReport {
   synced_at: number;
   last_status_update: number;
   deletion_requested: number;
-  // Phase 5 (Apr 2026) — reviewer workflow fields mirrored from the backend
+  // Phase 5 (Apr 2026) - reviewer workflow fields mirrored from the backend
   // on each pollStatus() tick so My Reports renders them offline too.
   reviewer_verdict?: string | null;         // NOT_REVIEWED | ACCEPTED | REJECTED
   action_taken?: string | null;

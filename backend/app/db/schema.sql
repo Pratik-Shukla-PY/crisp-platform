@@ -12,7 +12,7 @@ CREATE TYPE source_enum AS ENUM ('APP', 'WHATSAPP', 'TELEGRAM');
 CREATE TYPE severity_enum AS ENUM ('MINOR', 'MODERATE', 'SEVERE', 'UNKNOWN');
 CREATE TYPE infra_type_enum AS ENUM ('ROAD', 'HOSPITAL', 'HOUSE', 'POWER', 'WATER', 'OTHER');
 CREATE TYPE media_type_enum AS ENUM ('IMAGE', 'AUDIO');
--- Phase L (May 2026) — canonical 3-value taxonomy. Pre-L vocabulary
+-- Phase L (May 2026) - canonical 3-value taxonomy. Pre-L vocabulary
 -- was LOW/MEDIUM/HIGH/ORIGINAL; alembic 0035 backfilled LOW→SMALL +
 -- HIGH→ORIGINAL, 0036 dropped LOW/HIGH from the enum.
 CREATE TYPE resolution_enum AS ENUM ('SMALL', 'MEDIUM', 'ORIGINAL');

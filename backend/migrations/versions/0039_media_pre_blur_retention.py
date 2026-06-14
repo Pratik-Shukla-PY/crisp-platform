@@ -1,4 +1,4 @@
-"""media_pre_blur_retention — Batch B-F retroactive-upgrade store
+"""media_pre_blur_retention - Batch B-F retroactive-upgrade store
 
 Revision ID: 0039_media_pre_blur_retention
 Revises: 0038_media_client_face_boxes
@@ -10,7 +10,7 @@ Adds two columns supporting Batch B-F's retroactive blur upgrade:
     `pre_blur/` prefix used by storage.save_internal) pointing at
     the pre-blur assembled bytes. NULL when the row was already
     'complete_clean' (no PII detected, original bytes ARE the
-    canonical public bytes — retention is unnecessary). NULL also
+    canonical public bytes - retention is unnecessary). NULL also
     when the retention window expired and the recovery sweep purged
     the bytes.
   - ``pre_blur_retained_until``: TIMESTAMP after which the internal
@@ -30,7 +30,7 @@ How the retroactive upgrade works:
      ?v= cache buster. SMALL is now redacted at MEDIUM-recall.
   4. After pre_blur_retained_until, sweep purges the internal bytes
      and nulls these columns. Retroactive upgrade is no longer
-     possible — operator is told the tier is "sealed".
+     possible - operator is told the tier is "sealed".
 
 Retention rationale: 24 h covers the realistic MEDIUM/ORIGINAL
 arrival window on operationally-slow networks. Longer retention
@@ -79,7 +79,7 @@ def upgrade() -> None:
             ),
         ),
     )
-    # Index for the sweep — query is `WHERE pre_blur_retained_until < now`
+    # Index for the sweep - query is `WHERE pre_blur_retained_until < now`
     # filtering to rows still holding pre-blur bytes.
     op.create_index(
         "ix_media_pre_blur_retained_until",

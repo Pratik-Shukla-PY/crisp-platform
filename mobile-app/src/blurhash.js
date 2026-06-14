@@ -1,5 +1,5 @@
 /**
- * blurhash.js — Minimal vendored implementation of the BlurHash algorithm.
+ * blurhash.js - Minimal vendored implementation of the BlurHash algorithm.
  *
  * BlurHash encodes a compact ~28–32-char string representing a blurred
  * colour impression of an image (4x3 DCT). Decoding produces a low-res
@@ -14,7 +14,7 @@
  * Why vendor it (not npm):
  *   - No external dependency graph in a classic-script PWA.
  *   - Offline-first: the SW precaches this file; no CDN fetch required.
- *   - Dashboard shares the same file verbatim — copy on deploy, symlink
+ *   - Dashboard shares the same file verbatim - copy on deploy, symlink
  *     in dev.
  *
  * Exposes: `window.BlurHash = { encode, decode, encodeFromCanvas }`
@@ -26,7 +26,7 @@
   'use strict';
 
   // Base-83 alphabet used by the BlurHash spec. Each character encodes 0..82.
-  // Order matters — do NOT sort.
+  // Order matters - do NOT sort.
   const BASE83 =
     '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$%*+,-.:;=?@[]^_{|}~';
 
@@ -185,7 +185,7 @@
       colors.push(_decodeAC(_decode83(hash.substring(start, start + 2)), realMaxAC * punch));
     }
     const pixels = new Uint8ClampedArray(width * height * 4);
-    // Precompute the cosine basis for each row and column — same as encode
+    // Precompute the cosine basis for each row and column - same as encode
     // but now per-component: ~width*componentX + height*componentY multiplies.
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -213,7 +213,7 @@
   /**
    * Convenience: encode directly from an HTMLCanvasElement or OffscreenCanvas.
    * Caller is responsible for downscaling the source image to a small
-   * working canvas BEFORE calling this — encoding a 4K image at full
+   * working canvas BEFORE calling this - encoding a 4K image at full
    * resolution costs ~2 s and blocks the main thread. A 32x32 working
    * canvas is plenty for a 4x3 DCT.
    */

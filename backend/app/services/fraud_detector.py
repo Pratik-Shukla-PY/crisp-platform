@@ -1,30 +1,30 @@
 """
-fraud_detector — synchronous abuse-signal detection for the Nearby
+fraud_detector - synchronous abuse-signal detection for the Nearby
 Reports pipeline.
 
 Phase 3 (May 2026, docs/NEARBY_REPORTS_PIPELINE.md §6.2) implements
-the THREE hot signals — the ones cheap enough to run inline with
+the THREE hot signals - the ones cheap enough to run inline with
 every report submission:
 
-  • GPS spoofing       — many distinct device hashes report identical
+  • GPS spoofing       - many distinct device hashes report identical
                          coords (≤ 5 m) within 60 s
-  • Impossible movement — same device_hash reports from coords > 10 km
+  • Impossible movement - same device_hash reports from coords > 10 km
                          apart within 30 s
-  • Rate-limit burst   — single device submits ≥ 5 reports in 60 s
+  • Rate-limit burst   - single device submits ≥ 5 reports in 60 s
 
 Heavier signals (emulator fingerprinting, narrative-similarity
 hashing, cross-device coordination) are deferred to Phase 5's async
-batch worker — too expensive for the request-blocking hot path.
+batch worker - too expensive for the request-blocking hot path.
 
 How it integrates:
   • Called from the report-submission endpoints (POST /reports/meta
     + report-update paths) right BEFORE the report is committed.
   • Bumps `devices.spam_score` and appends to `devices.spam_signals`
-    when a signal fires. Doesn't BLOCK the request — the report is
+    when a signal fires. Doesn't BLOCK the request - the report is
     still accepted; the signal just downgrades the device's future
     contribution weight in `aggregate_nearby` (docs §6.1).
   • Hard signals (the "weight → 0" cases per §6.3) are NOT enforced
-    here — they're enforced in the aggregator at read time so a
+    here - they're enforced in the aggregator at read time so a
     later state change can reinstate a device without re-writing
     history.
 
@@ -46,7 +46,7 @@ from app.models.report import Device, Location, Report
 log = logging.getLogger(__name__)
 
 
-# ── Constants (Phase 3 — docs §6.2) ─────────────────────────────────
+# ── Constants (Phase 3 - docs §6.2) ─────────────────────────────────
 
 #: Two reports from DIFFERENT devices at coords within this many
 #: METRES, within `GPS_SPOOF_WINDOW_SEC` seconds → GPS spoof
@@ -57,8 +57,8 @@ GPS_SPOOF_DISTINCT_DEVICES = 3
 
 #: Same device reporting from coords > this many METRES apart within
 #: `IMPOSSIBLE_MOVE_WINDOW_SEC` seconds → impossible movement.
-#: 10 km in 30 s would require 1 200 km/h — faster than a passenger
-#: jet — clear GPS-jitter or spoofing.
+#: 10 km in 30 s would require 1 200 km/h - faster than a passenger
+#: jet - clear GPS-jitter or spoofing.
 IMPOSSIBLE_MOVE_DISTANCE_M = 10_000.0
 IMPOSSIBLE_MOVE_WINDOW_SEC = 30
 
@@ -69,7 +69,7 @@ RATE_BURST_WINDOW_SEC = 60
 
 #: How much each hot signal adds to `devices.spam_score`. The
 #: aggregator drops contribution to 0.0 once `spam_score >= 1.0`
-#: (docs §6.1 — "suspicious"). One rate burst alone reaches the
+#: (docs §6.1 - "suspicious"). One rate burst alone reaches the
 #: threshold; impossible movement + GPS spoof get larger weights
 #: to flag bot infrastructure faster.
 SIGNAL_WEIGHTS = {
@@ -84,7 +84,7 @@ SUSPICIOUS_SCORE_FLOOR = 1.0
 
 
 def _haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    """Haversine in METRES — cheaper to keep separate from the km
+    """Haversine in METRES - cheaper to keep separate from the km
     helper in nearby_aggregator."""
     import math
     R = 6_371_000.0
@@ -174,7 +174,7 @@ def evaluate_submission(
     Returns the list of signal-type strings that fired (for logging /
     return-to-caller). Never raises.
 
-    The report itself is NOT blocked here — the aggregator handles
+    The report itself is NOT blocked here - the aggregator handles
     the privacy-protected suppression at READ time, so a late
     reinstatement (admin clears spam_score) takes effect on the
     next poll without rewriting history.
@@ -243,7 +243,7 @@ def device_trust_weight(device: Optional[Device]) -> float:
 
     The "verified responder" (3.0) and "account-linked civilian"
     (1.5) tiers from docs §6.1 are driven by JWT context, NOT the
-    device row — they're applied in the aggregator's caller, not
+    device row - they're applied in the aggregator's caller, not
     here. This helper covers the DEVICE-only tiers.
     """
     if device is None:

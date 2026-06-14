@@ -10,7 +10,7 @@ The baseline migration (7964f14c120d) captures the schema AFTER the
 April-2026 UNDP-alignment sprint added ``reports.crisis_category``.
 Fresh deployments therefore get the column on ``alembic upgrade head``.
 
-Existing CRISP dev/staging databases predate Alembic entirely — they
+Existing CRISP dev/staging databases predate Alembic entirely - they
 were created by SQLAlchemy's ``create_all()`` at app boot. Those DBs
 are missing the column. Stamping them to ``head`` without running a
 DDL step would leave the column absent and break the taxonomy hook.
@@ -53,7 +53,7 @@ def upgrade() -> None:
             batch_op.add_column(sa.Column("crisis_category", sa.String(length=20), nullable=True))
 
     # 2. Backfill using the same mapping the app uses at write time.
-    # Mirrors app.core.taxonomy.CRISIS_CATEGORY_OF — kept inline so the
+    # Mirrors app.core.taxonomy.CRISIS_CATEGORY_OF - kept inline so the
     # migration is self-contained and doesn't depend on future refactors
     # of that module.
     mapping = {
@@ -87,7 +87,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # No safe downgrade — dropping the column is destructive and the
+    # No safe downgrade - dropping the column is destructive and the
     # label rewrite is a one-way normalisation. A downgrade would need
     # the original damage-class strings, which are lost after upgrade.
     # Operators who truly need to roll back should restore from backup.

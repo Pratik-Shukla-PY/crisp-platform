@@ -4,10 +4,10 @@ WORKDIR /app
 
 # Install system dependencies for faster-whisper + MediaPipe.
 #
-# Apr 2026 — MediaPipe (the server-side face-detection engine in
+# Apr 2026 - MediaPipe (the server-side face-detection engine in
 # pii_blur.py) needs OpenGL ES 2 + GLib at import time. Without these,
 # `import mediapipe` raises `libGLESv2.so.2: cannot open shared object
-# file` and the server-side PII blur falls back to OCR-only — face
+# file` and the server-side PII blur falls back to OCR-only - face
 # blur silently SKIPS for any upload where the client-side BlazeFace
 # also failed. Discovered via /api/v1/health/pii returning
 # {"face_detector":{"available":false,
@@ -17,7 +17,7 @@ WORKDIR /app
 # `libgles2-mesa` was renamed to plain `libgles2` (the `-mesa` suffix
 # was dropped because the package became a transitional metapackage).
 # Earlier deploy with `libgles2-mesa` failed with "Unable to locate
-# package" — fixed by switching to the trixie name.
+# package" - fixed by switching to the trixie name.
 #
 # libgles2     → libGLESv2.so.2 (the import-time blocker)
 # libegl1      → EGL bindings, MediaPipe also touches these
@@ -35,12 +35,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Apr 2026 — copy messaging-bot/ BEFORE backend/ so the symlink at
+# Apr 2026 - copy messaging-bot/ BEFORE backend/ so the symlink at
 # `backend/messaging_bot -> ../messaging-bot` has its target available
 # at the moment Docker COPYs backend/. Without this, every prod build
 # silently shipped a dangling symlink, which made the Telegram /
 # WhatsApp / SMS / IVR bots fail their import at startup with
-# `No module named 'messaging_bot'` — and silently degraded
+# `No module named 'messaging_bot'` - and silently degraded
 # `/api/v1/reports/geocode/describe` (which imports
 # `messaging_bot.sms.geocoder`). Discovered Apr-27 via prod-log
 # review of `Telegram bot not loaded: No module named 'messaging_bot'`.

@@ -4,7 +4,7 @@ May 2026).
 UNDP must-have #1 says every channel produces the same `Report` row
 shape. The PWA + RN clients capture the full V4 enrichment
 (`service_status`, `pressing_needs`); chat / SMS / IVR clients leave
-those NULL (documented as "App-only" in CLAUDE.md).
+those NULL (documented as "App-only" in the project invariants).
 
 The risk Phase 2.2 pins: a future schema change that adds a NOT NULL
 constraint or required-field validation on a V4 column would silently
@@ -73,7 +73,7 @@ class TestChannelMetaContract:
         assert res.status_code == 201, res.text
         body = res.json()
         # Chat-channel rows MUST land with the V4 enrichment columns
-        # NULL — they're "App-only" per CLAUDE.md. Confirm the
+        # NULL — they're "App-only" per the project invariants. Confirm the
         # backend isn't auto-populating them with garbage defaults.
         assert body["service_status"] is None
         # debris_clearing_needed came from the channel payload — keep.

@@ -1,7 +1,7 @@
 {
   "name": "CRISP - Crisis Report",
   "short_name": "CRISP",
-  "description": "Community-driven Rapid Infrastructure Sensing Platform — report incidents quickly",
+  "description": "Community-driven Rapid Infrastructure Sensing Platform - report incidents quickly",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

@@ -6,7 +6,7 @@ Create Date: 2026-05-12
 
 Defence-in-depth for the original-tier delivery path. Per-chunk djb2
 already protects each chunk on the wire, and the `UniqueConstraint`
-on `(media_id, seq_num)` rejects duplicate-seq writes — so wire
+on `(media_id, seq_num)` rejects duplicate-seq writes - so wire
 fidelity is solid today.
 
 What this column buys: a guard against future regressions inside
@@ -14,14 +14,14 @@ What this column buys: a guard against future regressions inside
 PWA computes `djb2_bytes(originalBytes)` ONCE before chunking each
 variant and sends it on chunk 0; the backend stores it here. After
 assembly, the backend re-computes djb2 over the final file bytes
-and compares — mismatch => assembly_status='failed' + Prometheus
+and compares - mismatch => assembly_status='failed' + Prometheus
 counter. Catches a whole class of "assembler shipped garbage" bugs
 before they reach the dashboard.
 
-Optional column — legacy rows + clients without the new field write
+Optional column - legacy rows + clients without the new field write
 NULL and skip the check. Backward compatible.
 
-Idempotent — re-running is a no-op once the column exists.
+Idempotent - re-running is a no-op once the column exists.
 """
 from alembic import op
 import sqlalchemy as sa
@@ -38,12 +38,12 @@ def upgrade() -> None:
     # generous (room for a future bump to djb2_64 or sha256-truncated
     # without another migration).
     #
-    # Idempotency guard (May 2026 hotfix) — the docstring claimed the
+    # Idempotency guard (May 2026 hotfix) - the docstring claimed the
     # migration was a no-op on re-run, but op.add_column doesn't have
     # an IF NOT EXISTS semantic. tests/test_migrations.py broke
     # cross-test because pytest reuses the same Postgres DB and the
     # column persists between runs. Pattern borrowed from
-    # 0013_push_subscriptions.py — inspect the live schema first.
+    # 0013_push_subscriptions.py - inspect the live schema first.
     bind = op.get_bind()
     inspector = sa.inspect(bind)
     existing_cols = {c["name"] for c in inspector.get_columns("media")}
@@ -56,7 +56,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Same idempotent shape on the down path — drop only if present.
+    # Same idempotent shape on the down path - drop only if present.
     bind = op.get_bind()
     inspector = sa.inspect(bind)
     existing_cols = {c["name"] for c in inspector.get_columns("media")}

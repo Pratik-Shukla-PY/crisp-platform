@@ -1,4 +1,4 @@
-/* cc-exports.js — CRISP Export Center (route: #/exports).
+/* cc-exports.js - CRISP Export Center (route: #/exports).
  *
  * Jun 2026 export-audit IA rework (docs/export-audit-2026-06.md §5):
  * exports are a first-class capability with ONE discoverable home, not a
@@ -13,7 +13,7 @@
  * exactly what they are about to download before any bytes move.
  *
  * Exposed:
- *   window.openExportCenter(fromRoute?)   — router dispatch entry
+ *   window.openExportCenter(fromRoute?)   - router dispatch entry
  *   window.__ccExports = { openOverlay, closeOverlay }
  */
 (function () {
@@ -151,7 +151,7 @@
         box.querySelector('.l').textContent = `report(s) match · ${scopeLabel()}`;
       } catch (_e) {
         S.count = null;
-        box.querySelector('.n').textContent = '—';
+        box.querySelector('.n').textContent = '-';
         box.querySelector('.l').textContent = 'count unavailable';
       } finally {
         S.counting = false;
@@ -184,7 +184,7 @@
     } catch (e) {
       btn.innerHTML = old;
       const d = btn.querySelector('.d');
-      if (d) d.textContent = `Failed (${e.message}) — try again`;
+      if (d) d.textContent = `Failed (${e.message}) - try again`;
       btn.removeAttribute('disabled');
       return;
     }
@@ -208,7 +208,7 @@
       const fmtTime = window.__ccFmtDateTime || ((x) => x || '');
       box.innerHTML = `<table><tbody>${rows.map((r) => `
         <tr>
-          <td>${esc(r.user_email || '—')}</td>
+          <td>${esc(r.user_email || '-')}</td>
           <td class="fmt">${esc(r.format || '?')}</td>
           <td>${r.row_count != null ? esc(String(r.row_count)) + ' rows' : ''}</td>
           <td>${esc(Object.entries(r.filters || {}).map(([k, v]) => `${k}=${v}`).join(' ') || 'all data')}</td>
@@ -286,7 +286,7 @@
         <div class="cc-ex-body">
           <div class="cc-ex-scope">
             <p class="cc-ex-sec">Scope</p>
-            ${S.crisisEventId ? '<div class="cc-ex-opscope">📍 This operation only — the scope below filters within it.</div>' : ''}
+            ${S.crisisEventId ? '<div class="cc-ex-opscope">📍 This operation only - the scope below filters within it.</div>' : ''}
             ${radio('all', S.crisisEventId ? 'All of this operation' : 'All data')}
             ${S.from === '/incidents' ? radio('current', 'Current filters (what I see)') : ''}
             ${radio('24h', 'Last 24 hours')}
@@ -305,7 +305,7 @@
             <div class="cc-ex-cards" id="cc-ex-briefing">${BRIEFING_CARDS.map(card).join('')}</div>
             <div class="cc-ex-note">
               <strong>Per-incident packages:</strong> every report's detail panel has an
-              <em>Evidence bundle (ZIP)</em> — photos, audio, satellite snapshots and the
+              <em>Evidence bundle (ZIP)</em> - photos, audio, satellite snapshots and the
               verification JSON for offline review. Building consoles export per-building
               dossiers (PDF / GeoJSON / CSV).
             </div>
@@ -344,7 +344,7 @@
     if (ov) ov.classList.remove('cc-ex-open');
   }
   function closeToOrigin() {
-    // Navigate back to wherever the center was opened from — the router's
+    // Navigate back to wherever the center was opened from - the router's
     // dispatch will close this overlay via hideAll() and restore the origin
     // surface (landing or ops). No context loss in either direction.
     go(S.from || '/');

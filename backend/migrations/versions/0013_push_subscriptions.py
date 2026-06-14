@@ -4,7 +4,7 @@ Revision ID: 0013_push_subs
 Revises: 0012_undp_infra
 Create Date: 2026-04-27
 
-Apr 2026 — closes the report→response loop without N reporters
+Apr 2026 - closes the report→response loop without N reporters
 polling. Each row holds one browser-issued PushSubscription
 (endpoint URL, p256dh ECDH public key, auth secret) tied to a
 reporter identity (`device_hash` and/or `user_id`).
@@ -15,7 +15,7 @@ column. `endpoint` is unique (browser → push provider pair) and
 indexed for the GC path: when the provider returns 410 for a
 stale subscription, we drop that one row by endpoint.
 
-Idempotent — `IF NOT EXISTS` semantics on table create + index
+Idempotent - `IF NOT EXISTS` semantics on table create + index
 create. Re-running this migration on a DB that already has the
 table is a no-op.
 """

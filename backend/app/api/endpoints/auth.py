@@ -1,5 +1,5 @@
 """
-Auth Endpoints — Registration, Login, OTP, Token Refresh, GDPR, Admin, SSO stubs.
+Auth Endpoints - Registration, Login, OTP, Token Refresh, GDPR, Admin, SSO stubs.
 Enterprise-grade identity system with brute force protection and audit logging.
 """
 import os
@@ -46,8 +46,8 @@ ALLOW_REGISTRATION = os.getenv("ALLOW_REGISTRATION", "true").lower() == "true"
 
 # Test-only: let /auth/register honor the requested role so the e2e harness can
 # mint an ANALYST/ADMIN (otherwise every test user is a VIEWER and the reviewer/
-# dispatch endpoints correctly 403). DOUBLE-GATED — only when CRISP_TESTING is set
-# AND APP_ENV is not production — so a stray flag can never enable self-service
+# dispatch endpoints correctly 403). DOUBLE-GATED - only when CRISP_TESTING is set
+# AND APP_ENV is not production - so a stray flag can never enable self-service
 # privilege escalation on a real deployment. Off by default everywhere.
 _REGISTER_HONORS_ROLE = (
     os.getenv("CRISP_TESTING", "").lower() in ("1", "true")
@@ -73,7 +73,7 @@ class RegisterRequest(BaseModel):
 # an alias path that the endpoint auto-promotes to EMAIL+destination
 # (back-compat with the dashboard operator login flow).
 class OTPRequest(BaseModel):
-    # Legacy alias — dashboard operators' existing login flow sends email.
+    # Legacy alias - dashboard operators' existing login flow sends email.
     email: Optional[EmailStr] = None
     # New: generalised destination (email OR E.164 phone like "+919876543210").
     destination: Optional[str] = Field(None, max_length=255)
@@ -97,13 +97,13 @@ class OTPVerify(BaseModel):
 
 
 class LinkDeviceRequest(BaseModel):
-    """POST /auth/link-device body — claims every anonymous report from
+    """POST /auth/link-device body - claims every anonymous report from
     the given device_hash for the currently-authenticated user."""
     device_hash: str = Field(..., min_length=1, max_length=255)
 
 
 class UnlinkDeviceRequest(BaseModel):
-    """POST /auth/unlink-device — reverts rows attributed to the caller
+    """POST /auth/unlink-device - reverts rows attributed to the caller
     via this device back to anonymous AND removes the user_device_link
     row so the device stops appearing in the user's "My Reports" merged
     feed."""
@@ -189,7 +189,7 @@ def _issue_tokens(user: User, db: Session, request: Request) -> dict:
 def register(req: RegisterRequest, request: Request, db: Session = Depends(get_db)):
     """Register a new user. Sends OTP for email verification.
 
-    Apr 2026 — locked down by default in prod via ``ALLOW_REGISTRATION``
+    Apr 2026 - locked down by default in prod via ``ALLOW_REGISTRATION``
     env var. When ``ALLOW_REGISTRATION=false`` we return 410 Gone with a
     clear admin-contact message. The single-admin dashboard model means
     new accounts must be provisioned via ``scripts/create_admin.py``,
@@ -214,7 +214,7 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
         pw_hash = hash_password(req.password)
 
     # New accounts are VIEWER by default. Only when the double-gated test flag is
-    # on (CRISP_TESTING + non-prod) is a valid requested role honored — so the e2e
+    # on (CRISP_TESTING + non-prod) is a valid requested role honored - so the e2e
     # harness can create an ANALYST/ADMIN; prod stays VIEWER-only always.
     _role = RoleEnum.VIEWER.value
     if _REGISTER_HONORS_ROLE and req.role and req.role in {r.value for r in RoleEnum}:
@@ -265,7 +265,7 @@ def _resolve_destination(req) -> tuple[str, str]:
     channel = (getattr(req, "channel", None) or "").upper() or None
     dest = getattr(req, "destination", None)
     if not dest and getattr(req, "email", None):
-        # Legacy path — email-only caller.
+        # Legacy path - email-only caller.
         dest = str(req.email)
         channel = channel or "EMAIL"
     if not dest:
@@ -278,7 +278,7 @@ def _resolve_destination(req) -> tuple[str, str]:
     elif channel == "EMAIL":
         dest = dest.strip().lower()
     else:
-        # Channel unspecified — infer from destination shape.
+        # Channel unspecified - infer from destination shape.
         if dest.startswith("+") and not ("@" in dest):
             try:
                 dest = validate_e164(dest)
@@ -301,7 +301,7 @@ def _find_user_by_destination(db: Session, destination: str, channel: str) -> Op
 def request_otp(req: OTPRequest, request: Request, db: Session = Depends(get_db)):
     """Send a new OTP code to the reporter's email OR phone.
 
-    Phase 1 (Apr 2026 — Optional reporter login) generalised:
+    Phase 1 (Apr 2026 - Optional reporter login) generalised:
       - Accepts `{destination, channel}` (EMAIL or PHONE) OR the legacy
         `{email}` shape for backward-compat with dashboard operators.
       - Rate-limits are applied per-destination + per-IP with identical
@@ -316,7 +316,7 @@ def request_otp(req: OTPRequest, request: Request, db: Session = Depends(get_db)
     one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
     client_ip = _get_ip(request)
 
-    # Layer 1 — per-destination.
+    # Layer 1 - per-destination.
     recent = db.query(OTPRecord).filter(
         OTPRecord.destination == destination,
         OTPRecord.created_at >= ten_min_ago,
@@ -324,7 +324,7 @@ def request_otp(req: OTPRequest, request: Request, db: Session = Depends(get_db)
     if recent >= OTP_RATE_LIMIT:
         raise HTTPException(status_code=429, detail="Too many OTP requests. Try again in a few minutes.")
 
-    # Layer 2 — per-IP across all destinations.
+    # Layer 2 - per-IP across all destinations.
     if client_ip and client_ip not in ("127.0.0.1", "::1", "unknown"):
         from_ip = db.query(OTPRecord).filter(
             OTPRecord.ip_address == client_ip,
@@ -383,12 +383,12 @@ def verify_otp(req: OTPVerify, request: Request, db: Session = Depends(get_db)):
     and issues tokens. Returns `linkable_report_count` so the client can
     paint the post-login "Link N reports?" card.
 
-    Phase 1 (Apr 2026 — Optional reporter login):
+    Phase 1 (Apr 2026 - Optional reporter login):
       - Lookup by `(destination, channel)` for phone-or-email OTP.
       - Auto-CREATE a REPORTER user on first LOGIN with a new destination
         (OTP proof-of-ownership is sufficient signup credential).
       - Bind the user to the reporting device via `user_device_link`.
-      - Return `linkable_report_count` — number of anonymous reports on
+      - Return `linkable_report_count` - number of anonymous reports on
         this device_hash the reporter can claim via /auth/link-device.
     """
     destination, channel = _resolve_destination(req)
@@ -408,12 +408,12 @@ def verify_otp(req: OTPVerify, request: Request, db: Session = Depends(get_db)):
     if now > exp:
         raise HTTPException(status_code=400, detail="Code expired. Request a new one.")
 
-    # Check attempts — local (this OTP record)
+    # Check attempts - local (this OTP record)
     otp.attempts = (otp.attempts or 0) + 1
     if otp.attempts > OTP_MAX_ATTEMPTS:
         raise HTTPException(status_code=400, detail="Too many attempts. Request a new code.")
 
-    # P2.6 — global attempt cap across all OTP records for this destination
+    # P2.6 - global attempt cap across all OTP records for this destination
     # in the last 30 minutes. Same rationale as the legacy email-only path.
     thirty_min_ago = datetime.now(timezone.utc) - timedelta(minutes=30)
     global_attempts = db.query(OTPRecord).filter(
@@ -440,7 +440,7 @@ def verify_otp(req: OTPVerify, request: Request, db: Session = Depends(get_db)):
     is_new_user = False
 
     # Auto-create a reporter user on first LOGIN through mobile (email- or
-    # phone-channel). SIGNUP path stays explicit — dashboard operator
+    # phone-channel). SIGNUP path stays explicit - dashboard operator
     # creation still requires the /register endpoint.
     if not user and req.purpose == "LOGIN":
         is_new_user = True
@@ -519,7 +519,7 @@ def _linkable_report_count(db: Session, device_hash: Optional[str], user_id: str
     if not device_hash:
         return 0
     device = db.query(Report.device_id).filter(Report.device_id.isnot(None)).first()
-    # We need the devices table — Report.device_id is the PK of Device,
+    # We need the devices table - Report.device_id is the PK of Device,
     # but clients submit the `device_hash` string, not the id. Look up.
     from app.models.report import Device  # local import avoids cycle
     d = db.query(Device).filter(Device.device_hash == device_hash).first()
@@ -537,7 +537,7 @@ def _linkable_report_count(db: Session, device_hash: Optional[str], user_id: str
 def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     """Login with email + password. Issues JWT tokens.
 
-    Apr 2026: email lookup is case-insensitive — Postgres `varchar` is
+    Apr 2026: email lookup is case-insensitive - Postgres `varchar` is
     case-sensitive by default, which meant a user registered as
     `admin@crisp.org` couldn't log in with `Admin@crisp.org` (common
     after mobile-OS autocapitalisation). `ILIKE` with escaped
@@ -578,7 +578,7 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account disabled")
 
-    # MFA check — single-admin lockdown: TOTP authenticator app
+    # MFA check - single-admin lockdown: TOTP authenticator app
     # (Google Authenticator / Authy / 1Password) instead of the legacy
     # email-OTP fallback. The shared secret was generated during admin
     # provisioning (scripts/create_admin.py) and is stored in
@@ -611,7 +611,7 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
             _audit(db, user.id, req.email, "FAILED_LOGIN", request, details={"reason": "totp_invalid"})
             db.commit()
             raise HTTPException(status_code=401, detail="Invalid authenticator code")
-        # Successful TOTP — fall through to issue tokens.
+        # Successful TOTP - fall through to issue tokens.
 
     _audit(db, user.id, req.email, "LOGIN", request, details={"method": "password+totp" if user.mfa_enabled else "password"})
     return _issue_tokens(user, db, request)
@@ -654,7 +654,7 @@ def refresh_token(req: RefreshRequest, db: Session = Depends(get_db)):
 def logout(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Revoke ALL active sessions for this user (strong logout, per user
     Phase 1 spec answer 7). Other logged-in devices lose their refresh
-    ability on the next refresh — they'll degrade to anonymous once the
+    ability on the next refresh - they'll degrade to anonymous once the
     access token's 15 min expires. A fresh OTP login re-establishes
     presence on any device that still wants it."""
     # Strong logout: revoke every active session, not just the current one.
@@ -683,7 +683,7 @@ def link_device(
       - UPSERT user_device_link(me, device_hash) so the My-Reports feed
         on ANY of this user's future devices surfaces this device's reports.
 
-    Already-claimed rows (user_id IS NOT NULL) are never touched — the
+    Already-claimed rows (user_id IS NOT NULL) are never touched - the
     "WHERE user_id IS NULL" guard makes this safe to call on a shared
     device where a prior user already linked some rows.
     """
@@ -748,9 +748,9 @@ def my_reports(
       - user_id = me  (explicitly claimed), OR
       - device_id ∈ { devices from user_device_link(me) } AND user_id IS NULL
         (anonymous reports submitted from one of my bound devices that I
-        haven't explicitly linked yet — so the user sees them on device B
+        haven't explicitly linked yet - so the user sees them on device B
         after binding device A's hash to the account).
-    De-duped by id, latest-first. No pagination yet — the typical reporter
+    De-duped by id, latest-first. No pagination yet - the typical reporter
     has < 100 rows; we'll add it when a 500-row feed surfaces.
     """
     from app.models.report import Device
@@ -959,7 +959,7 @@ def list_sso_providers(db: Session = Depends(get_db)):
 
 @router.get("/sso/login")
 def sso_login_redirect(domain: str, db: Session = Depends(get_db)):
-    """Initiate SSO login — redirect to IdP. Architecture ready for Okta/Auth0/Azure AD/Keycloak."""
+    """Initiate SSO login - redirect to IdP. Architecture ready for Okta/Auth0/Azure AD/Keycloak."""
     org = db.query(Organization).filter(Organization.domain == domain, Organization.is_active == True).first()
     if not org or not org.sso_provider:
         raise HTTPException(status_code=404, detail="No SSO configured for this domain")
@@ -976,7 +976,7 @@ def sso_login_redirect(domain: str, db: Session = Depends(get_db)):
 
 @router.post("/sso/callback")
 def sso_callback(request: Request, payload: dict, db: Session = Depends(get_db)):
-    """Process SSO callback — JIT user provisioning + token issuance.
+    """Process SSO callback - JIT user provisioning + token issuance.
     Architecture ready for SAML assertions and OIDC tokens."""
     email = payload.get("email")
     name = payload.get("name", "")

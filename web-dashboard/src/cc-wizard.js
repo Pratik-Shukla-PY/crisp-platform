@@ -1,11 +1,11 @@
 /**
- * cc-wizard.js — "Start New Operation" wizard (Operations redesign v2, P2).
+ * cc-wizard.js - "Start New Operation" wizard (Operations redesign v2, P2).
  *
  * A 4-step modal that creates and launches an operation:
- *   1. Select Form    — pick a curated template (published pack) OR start a new form
- *   2. Create / Edit  — toggle question blocks (reuses window.CrispFormKit data)
- *   3. Preview        — mobile-style phone frame: exactly what the reporter sees
- *   4. Launch         — name / region / dates / crisis type → publish
+ *   1. Select Form    - pick a curated template (published pack) OR start a new form
+ *   2. Create / Edit  - toggle question blocks (reuses window.CrispFormKit data)
+ *   3. Preview        - mobile-style phone frame: exactly what the reporter sees
+ *   4. Launch         - name / region / dates / crisis type → publish
  *
  * NO DRAFT PERSISTENCE: every step's state lives in the in-memory `wiz` object;
  * nothing is written to the DB until Step 4's single atomic call
@@ -78,7 +78,7 @@
     const known = new Set();
     wiz.blocks.core.forEach((b) => { known.add(b.field.key); if (!b.locked) b.on = keys.has(b.field.key); });
     wiz.blocks.stock.forEach((b) => { known.add(b.field.key); b.on = keys.has(b.field.key); });
-    // hand-authored fields the curated kit doesn't manage — carried through verbatim
+    // hand-authored fields the curated kit doesn't manage - carried through verbatim
     wiz.extraFields = [...keys].filter((kk) => !known.has(kk)).map((kk) => ({ field: byKey[kk].field, stage: byKey[kk].stage || 2 }));
   }
   function selectedBlocks() {
@@ -239,7 +239,7 @@
     loadTemplates();
   }
   function close() {
-    wiz = null;                       // discard everything — no DB writes happened
+    wiz = null;                       // discard everything - no DB writes happened
     const ov = el('cc-wiz-overlay');
     if (ov) ov.classList.remove('open');
   }
@@ -291,7 +291,7 @@
     wiz.step += 1; render();
   }
 
-  // ── Step 1 — Select form ─────────────────────────────────────────────────────
+  // ── Step 1 - Select form ─────────────────────────────────────────────────────
   function renderStep1(b) {
     const kit = KIT();
     const starters = Object.keys(kit.STOCK_PACKS || {});
@@ -337,7 +337,7 @@
     wiz.step = 2; render();
   }
 
-  // ── Step 2 — Build / edit ────────────────────────────────────────────────────
+  // ── Step 2 - Build / edit ────────────────────────────────────────────────────
   function renderStep2(b) {
     const kit = KIT();
     const stockSel = Object.keys(kit.STOCK_PACKS || {}).map((k) =>
@@ -393,7 +393,7 @@
       if (res && res.valid) { showErrs([]); toast('Schema is valid.', 'ok'); }
       else showErrs((res && res.errors) || ['Unknown validation error']);
     } catch (err) {
-      if (err.status === 403) { showErrs([]); toast('Validation needs admin — it will be checked on launch.', ''); }
+      if (err.status === 403) { showErrs([]); toast('Validation needs admin - it will be checked on launch.', ''); }
       else showErrs([err.message]);
     }
   }
@@ -403,7 +403,7 @@
       `<div class="cc-wiz-errs"><strong>${errs.length} problem(s):</strong><ul>${errs.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>`;
   }
 
-  // ── Step 3 — Preview ─────────────────────────────────────────────────────────
+  // ── Step 3 - Preview ─────────────────────────────────────────────────────────
   function renderStep3(b) {
     b.innerHTML = `
       <p class="cc-wiz-sub">This is exactly how the form appears to field reporters in the mobile app, inside this operation's zone.</p>
@@ -416,7 +416,7 @@
     const fields = (schema.sections || []).reduce((acc, sec) => acc.concat(sec.fields || []), []);
     if (!fields.length) { m.innerHTML = `<div class="cc-wiz-pv-head">▾ inside the operation zone ▾</div><div class="cc-wiz-empty">No questions selected yet.</div>`; return; }
     m.innerHTML = `<div class="cc-wiz-pv-head">▾ inside the operation zone ▾</div>`
-      + `<div class="cc-wiz-stage">Stage 2 · 3 — crisis pack</div>`
+      + `<div class="cc-wiz-stage">Stage 2 · 3 - crisis pack</div>`
       + fields.map((f) => `<div class="cc-wiz-q"><div class="cc-wiz-qt">${esc(f.label || f.key)}${f.required ? ' <span style="color:#f87171">*</span>' : ''}</div>${appControl(f)}</div>`).join('');
   }
   function appControl(f) {
@@ -430,10 +430,10 @@
     if (f.type === 'building') return `<div class="cc-wiz-stub">🏗 Tap a building footprint or type a name</div>`;
     if (f.type === 'location') return `<div class="cc-wiz-stub">📍 Confirm location on the map</div>`;
     if (f.type === 'severity') return `<span class="cc-wiz-opt">Minor</span><span class="cc-wiz-opt sel">Moderate</span><span class="cc-wiz-opt">Severe</span>`;
-    return `<div class="cc-wiz-stub">—</div>`;
+    return `<div class="cc-wiz-stub">-</div>`;
   }
 
-  // ── Step 4 — Launch ──────────────────────────────────────────────────────────
+  // ── Step 4 - Launch ──────────────────────────────────────────────────────────
   function renderStep4(b) {
     const L = wiz.launch;
     const ctOpts = (KIT().EVENT_CRISIS_TYPES || []).map(([v, lbl]) =>
@@ -443,7 +443,7 @@
       <div class="cc-wiz-fld"><label class="cc-wiz-lbl">Operation name *</label>
         <input class="cc-wiz-in" id="cc-wiz-name" placeholder="e.g. Bandipur Wildfire Response" value="${esc(L.name)}"></div>
       <div class="cc-wiz-fld"><label class="cc-wiz-lbl">Crisis type</label>
-        <select class="cc-wiz-sel" id="cc-wiz-ct"><option value="">— select —</option>${ctOpts}</select></div>
+        <select class="cc-wiz-sel" id="cc-wiz-ct"><option value="">- select -</option>${ctOpts}</select></div>
       <div class="cc-wiz-fld"><label class="cc-wiz-lbl">Region / place</label>
         <div class="cc-wiz-geo"><input class="cc-wiz-in" id="cc-wiz-place" placeholder="Type a place name, then Find" value="${esc(L.place_name)}">
           <button class="cc-wiz-btn" id="cc-wiz-find">Find</button></div>
@@ -479,7 +479,7 @@
         wiz.launch.center_lng = Number(r.longitude).toFixed(6);
         if (r.location_name) wiz.launch.place_name = r.location_name;
         renderStep4(el('cc-wiz-body'));
-      } else { toast('Could not resolve that place — enter coordinates manually.', 'err'); }
+      } else { toast('Could not resolve that place - enter coordinates manually.', 'err'); }
     } catch (err) { toast('Lookup failed.', 'err'); }
     finally { btn.textContent = old; btn.disabled = false; }
   }
@@ -496,7 +496,7 @@
     if (isNaN(lat) || lat < -90 || lat > 90 || isNaN(lng) || lng < -180 || lng > 180) { toast('Enter a valid latitude & longitude (use Find).', 'err'); return; }
     if (isNaN(rad) || rad <= 0) { toast('Enter a radius greater than 0.', 'err'); return; }
     const schema = buildSchema();
-    if (!schema.sections.length) { toast('Your form has no questions — go back and add some.', 'err'); return; }
+    if (!schema.sections.length) { toast('Your form has no questions - go back and add some.', 'err'); return; }
     wiz.busy = true; renderFooter();
     try {
       const resp = await api('POST', '/operations/launch-with-form', {

@@ -1,10 +1,10 @@
-"""users.mfa_secret — TOTP authenticator-app shared secret
+"""users.mfa_secret - TOTP authenticator-app shared secret
 
 Revision ID: 0011_mfa
 Revises: 0010_auth
 Create Date: 2026-04-25
 
-Apr 2026 — Single-admin dashboard lockdown. Adds the column that stores
+Apr 2026 - Single-admin dashboard lockdown. Adds the column that stores
 the base32-encoded TOTP shared secret per RFC 6238. Verified via
 ``pyotp.TOTP(secret).verify(code)`` in the /auth/login endpoint when
 ``users.mfa_enabled = True``.
@@ -12,7 +12,7 @@ the base32-encoded TOTP shared secret per RFC 6238. Verified via
 Additive-only:
   - New column is nullable (existing rows keep `mfa_secret = NULL`,
     which combined with `mfa_enabled = False` means they're unaffected).
-  - No data backfill — only the operator(s) who explicitly enrol via
+  - No data backfill - only the operator(s) who explicitly enrol via
     the provisioning script populate this column.
   - Idempotent: re-running on a DB that already has the column is a
     no-op (we inspect the live schema first).

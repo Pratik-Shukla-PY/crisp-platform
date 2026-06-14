@@ -1,5 +1,5 @@
 // ── voice-readout.js ─────────────────────────────────────────────────
-// CRISP UI v3 redesign — Phase 5.
+// CRISP UI v3 redesign - Phase 5.
 //
 // Purpose: every <element data-voice="<i18n-key>"> in the DOM gets a
 // 🔊 button auto-prepended. Tapping reads the question text aloud in
@@ -10,7 +10,7 @@
 // core requirements. This module unlocks the lowest-literacy band.
 //
 // Implementation:
-//   - Web Speech API (synthesis) — present in every modern browser
+//   - Web Speech API (synthesis) - present in every modern browser
 //     (Chrome, Safari, Firefox, Edge, Samsung Internet). Uses the
 //     device's pre-installed TTS voices, so it works offline.
 //   - Lang code mapping: app.js's `state.lang` (e.g. "en", "kn", "hi")
@@ -92,7 +92,7 @@
     function _resolveText(el) {
         const key = el.getAttribute('data-voice');
         if (!key) return '';
-        // Prefer the live i18n lookup — that way switching language
+        // Prefer the live i18n lookup - that way switching language
         // re-speaks in the new language without re-rendering.
         if (typeof window.t === 'function') {
             try {
@@ -131,7 +131,7 @@
                 btn.classList.remove('voice-readout-speaking');
             };
             // SpeechSynthesisUtterance fires onend when finished. Hook it
-            // generically by polling speaking — simpler than wiring through
+            // generically by polling speaking - simpler than wiring through
             // speakText's local Utterance var.
             const poll = setInterval(() => {
                 if (!utt.speaking) {
@@ -172,7 +172,7 @@
         init();
     }
 
-    // Public surface — used by other modules + e2e tests.
+    // Public surface - used by other modules + e2e tests.
     window.VoiceReadout = {
         speak: speakText,
         rescan: _scanAndAttach,

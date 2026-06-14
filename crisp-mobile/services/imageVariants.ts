@@ -1,5 +1,5 @@
 /**
- * CRISP Mobile — Client-side image variant generator.
+ * CRISP Mobile - Client-side image variant generator.
  *
  * For every photo captured by the RN app, produce three JPEG variants on
  * the device BEFORE any network activity:
@@ -17,14 +17,14 @@
  * face-redacted. The 0.85 confidence filter added in Sprint 3 keeps this
  * cheap when the photo has no faces.
  *
- * Uses `expo-image-manipulator` which is already in package.json — no new
+ * Uses `expo-image-manipulator` which is already in package.json - no new
  * native dep required.
  */
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { blurFacesBase64 } from './piiBlur';
 import { encode as blurhashEncode } from './blurhash';
 
-// jpeg-js is CommonJS, same approach as piiBlur.ts — use require so
+// jpeg-js is CommonJS, same approach as piiBlur.ts - use require so
 // Metro resolves it correctly.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const jpeg = require('jpeg-js') as {
@@ -48,7 +48,7 @@ export interface PhotoVariants {
    * Phase-1 progressive-upload placeholder. Compact DCT encoding (~28–32 chars)
    * threaded through submitReport() into the meta POST payload. Dashboard
    * decodes it for an instant time-to-first-visual placeholder, BEFORE any
-   * media chunk lands. `null` on any encode failure — never breaks upload.
+   * media chunk lands. `null` on any encode failure - never breaks upload.
    */
   blurhash: string | null;
 }
@@ -57,7 +57,7 @@ export interface PhotoVariants {
 // Phase L (May 2026): backend ResolutionEnum was tightened to exactly
 // SMALL/MEDIUM/ORIGINAL; LOW + HIGH were dropped from the Postgres enum in
 // alembic 0036. Pre-Phase-L this map emitted LOW/HIGH and the backend now
-// 422s those payloads — the entire RN upload pipeline was broken until the
+// 422s those payloads - the entire RN upload pipeline was broken until the
 // rename. The internal RN tier names stay 'small'/'medium'/'large' for
 // historical reasons; only the WIRE name changes.
 export const TIER_TO_RESOLUTION: Record<VariantTier, 'SMALL' | 'MEDIUM' | 'ORIGINAL'> = {
@@ -66,7 +66,7 @@ export const TIER_TO_RESOLUTION: Record<VariantTier, 'SMALL' | 'MEDIUM' | 'ORIGI
   large: 'ORIGINAL',
 };
 
-// Apr 2026: LARGE is now a passthrough tier — no resize, no re-encode. The
+// Apr 2026: LARGE is now a passthrough tier - no resize, no re-encode. The
 // raw captured bytes (after PII blur) ship directly so responders get
 // archival-quality source material. SMALL/MEDIUM stay downscaled for fast
 // progressive delivery on narrow pipes.
@@ -90,16 +90,16 @@ const TIER_SPEC: Array<{ tier: VariantTier; maxDim?: number; quality?: number; p
  *    every variant shares the same redaction.
  *
  * On failure of any tier, fall back to the raw base64 for that tier so
- * the sync engine always gets three fields — the partial-delivery
+ * the sync engine always gets three fields - the partial-delivery
  * guarantee relies on the SMALL variant always existing.
  *
- * @param rawUri The file:// URI of the original captured image. Required —
+ * @param rawUri The file:// URI of the original captured image. Required -
  *   expo-image-manipulator operates on URIs, not base64.
  * @param rawBase64 The raw base64 payload (used for the single blur pass
  *   and as fallback if resize fails).
  */
 export async function generateVariants(rawUri: string, rawBase64: string): Promise<PhotoVariants> {
-  // Step 1 — blur ONCE on the original base64. blurFacesBase64 returns
+  // Step 1 - blur ONCE on the original base64. blurFacesBase64 returns
   // the input unchanged when no confident faces are detected, so this is
   // cheap on typical infrastructure-damage photos.
   let blurredB64 = rawBase64;
@@ -109,7 +109,7 @@ export async function generateVariants(rawUri: string, rawBase64: string): Promi
     console.warn('[imageVariants] PII blur skipped on source:', (e as Error)?.message || e);
   }
 
-  // Step 2 — if blur produced a new base64 (faces were found and
+  // Step 2 - if blur produced a new base64 (faces were found and
   // redacted), write it to a temp file so expo-image-manipulator can
   // resize from URI. If nothing was blurred, reuse the original URI.
   let sourceUri = rawUri;
@@ -123,11 +123,11 @@ export async function generateVariants(rawUri: string, rawBase64: string): Promi
       sourceUri = tmpUri;
     } catch (e) {
       console.warn('[imageVariants] temp-file write failed, resizing from original URI:', (e as Error)?.message || e);
-      // sourceUri stays as rawUri — server-side blur is the safety net.
+      // sourceUri stays as rawUri - server-side blur is the safety net.
     }
   }
 
-  // Step 3 — resize the (blurred or original) source to all three tiers.
+  // Step 3 - resize the (blurred or original) source to all three tiers.
   // No per-tier blur call; redaction was applied once in step 1.
   const out: Partial<PhotoVariants> = {};
   const fallback: Variant = { base64: blurredB64, bytes: blurredB64.length };
@@ -135,7 +135,7 @@ export async function generateVariants(rawUri: string, rawBase64: string): Promi
   for (const spec of TIER_SPEC) {
     // LARGE (passthrough) ships the blurred source bytes as-is. No
     // expo-image-manipulator call means no resize, no JPEG re-encode,
-    // no quality loss — archival-quality copy for responders.
+    // no quality loss - archival-quality copy for responders.
     if (spec.passthrough) {
       out[spec.tier] = fallback;
       continue;
@@ -158,7 +158,7 @@ export async function generateVariants(rawUri: string, rawBase64: string): Promi
     }
   }
 
-  // Step 4 — blurhash placeholder (Phase-1 progressive-upload).
+  // Step 4 - blurhash placeholder (Phase-1 progressive-upload).
   //
   // Decode a 32x32 downscale via expo-image-manipulator → jpeg-js → encode
   // via the vendored TS blurhash. Best-effort: any failure falls through
@@ -167,7 +167,7 @@ export async function generateVariants(rawUri: string, rawBase64: string): Promi
   // We don't reuse the 320-px SMALL variant because blurhash encode at that
   // size costs ~100 ms on low-end devices (O(w*h*numX*numY)). Downscaling
   // to 32x32 first takes ~10 ms via native image-manipulator and makes the
-  // blurhash encode ~5 ms total — inside the already-deferred
+  // blurhash encode ~5 ms total - inside the already-deferred
   // _runAfterInteractions wrapper so the UI stays responsive.
   let blurhash: string | null = null;
   try {

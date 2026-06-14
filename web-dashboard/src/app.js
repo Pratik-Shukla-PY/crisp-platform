@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════════════════════
-// CRISP — Crisis Intelligence Control Panel  v3.0
+// CRISP - Crisis Intelligence Control Panel  v3.0
 // Hierarchical, decision-focused, scalable dashboard for UN crisis response
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -16,7 +16,7 @@ const _crispToken = localStorage.getItem('crisp_token');
 const _crispUser = (() => { try { return JSON.parse(localStorage.getItem('crisp_user')); } catch { return null; } })();
 
 // ══════════════════════════════════════════════════════════════════════
-// Phase F.7 (May 2026) — Dashboard i18n bootstrap (UNDP must-have #2)
+// Phase F.7 (May 2026) - Dashboard i18n bootstrap (UNDP must-have #2)
 // ══════════════════════════════════════════════════════════════════════
 // Six UN languages: English (default), Spanish, French, Russian,
 // Chinese (Simplified), Arabic. Locale chosen from localStorage,
@@ -26,7 +26,7 @@ const _crispUser = (() => { try { return JSON.parse(localStorage.getItem('crisp_
 // and writes the matching string. Title/aria/placeholder variants
 // covered via `data-i18n-title`, `data-i18n-aria-label`,
 // `data-i18n-placeholder`. Reporter-supplied content (descriptions,
-// transcripts, location names) stays in its source language — i18n
+// transcripts, location names) stays in its source language - i18n
 // only touches operator-facing chrome.
 //
 // RTL: Arabic flips the document direction via `dir="rtl"` on
@@ -165,7 +165,7 @@ if (!_crispToken && !window.location.pathname.includes('login')) {
 }
 
 // ── Config ───────────────────────────────────────────────────────────────────
-// Apr 2026 — origin-aware backend host detection. In dev (page served at
+// Apr 2026 - origin-aware backend host detection. In dev (page served at
 // localhost:8080 with backend on :8000) we point at :8000 directly. In prod
 // (page served via nginx proxy at the same origin as the API) we use the
 // page origin so HTTPS + same-host work without mixed-content / CORS drama.
@@ -185,7 +185,7 @@ const BACKEND_HOST = _isLocalDev
     ? `http://${window.location.hostname}:8000`
     : window.location.origin;
 const API = `${BACKEND_HOST}/api/v1/reports`;
-// Phase H (May 2026) — Building endpoints live at /api/v1/buildings,
+// Phase H (May 2026) - Building endpoints live at /api/v1/buildings,
 // NOT under /api/v1/reports/. Keep a sibling constant so the Phase H
 // fetch sites don't accidentally double-prefix and 404.
 const BUILDINGS_API = `${BACKEND_HOST}/api/v1/buildings`;
@@ -209,14 +209,14 @@ window.fetch = function(url, opts = {}) {
 };
 const POLL_INTERVAL        = 4000;  // normal polling
 const POLL_INTERVAL_ACTIVE = 1200;  // fast polling while any image is uploading
-// Phase J.6 (May 2026) — decision-mode polling slowdown.
+// Phase J.6 (May 2026) - decision-mode polling slowdown.
 // When the operator has a report open AND has been interacting
 // recently AND no verdict is set yet, slow polling from 4 s → 8 s
 // so the panel doesn't re-render under their hands mid-decision.
 const POLL_INTERVAL_DECISION = 8000;
 let _pollTimer = null;
 
-// Phase 3 (May 2026, HAR-driven) — incremental delta polling state.
+// Phase 3 (May 2026, HAR-driven) - incremental delta polling state.
 // Backend `/api/v1/reports/?since=<iso>` returns ONLY reports updated
 // since `since`. We track the X-Server-Time of the last response and
 // echo it back on the next poll. Idle dashboards drop from ~440 KB
@@ -224,13 +224,13 @@ let _pollTimer = null;
 //
 // Periodic full refresh: every Nth poll we deliberately skip `since`
 // to catch deletions (24h soft-delete grace window) and any state
-// drift. 30 polls × 4 s = 2 min between full refreshes — fine for
+// drift. 30 polls × 4 s = 2 min between full refreshes - fine for
 // admin-action latency, plenty cheap.
 let _lastServerTime = null;            // ISO 8601 cursor from previous poll
 let _pollsSinceFullRefresh = 0;
 const _FULL_REFRESH_EVERY_N_POLLS = 30;
 
-// Phase 4 (May 2026, HAR-driven) — ETag / If-None-Match. Server returns
+// Phase 4 (May 2026, HAR-driven) - ETag / If-None-Match. Server returns
 // an ETag header on every /reports/ response. Echo it back on the next
 // poll; if data hasn't changed, server short-circuits with 304 + no
 // body. Combined with Phase 3's `since=<cursor>`, an idle poll round-
@@ -241,7 +241,7 @@ let _lastReportsEtag = null;
 let allReports = [];
 let sortMode = 'impact';
 let timeFilterHours = 0; // 0 = show all time (no filter)
-// Jun 2026 (export audit) — the tree renderer's fully-filtered set, cached so
+// Jun 2026 (export audit) - the tree renderer's fully-filtered set, cached so
 // tree-node exports ship EXACTLY what the visible tree was built from
 // (status + time + search + chips + crisis drill). exportNodeData previously
 // rebuilt from raw allReports: a node badge showing 3 could export 10 rows.
@@ -254,12 +254,12 @@ let firstZoomDone = false;
 
 // ── Live Incident Notifications ─────────────────────────────────────────────
 let _unseenReports = [];
-// K.5.d (May 2026, Phase K) — bell cap raised 10 → 50 so burst-mode
+// K.5.d (May 2026, Phase K) - bell cap raised 10 → 50 so burst-mode
 // arrivals (5+ in 5 s) don't lose the older entries off the LIFO. The
 // burst banner above the bell still suppresses per-card spawn under
 // burst conditions; the bell itself can now carry the full burst.
 const _MAX_NOTIFS = 50;
-// K.5.c (May 2026, Phase K) — _seenIds LRU cap. Pre-fix the Set grew
+// K.5.c (May 2026, Phase K) - _seenIds LRU cap. Pre-fix the Set grew
 // unbounded in localStorage; an operator session running for weeks
 // eventually hit the quota → setItem threw → notifications stopped
 // persisting cross-session → stale notifications re-fired next session.
@@ -269,14 +269,14 @@ const _SEEN_IDS_CAP = 1000;
 const _seenIds = (() => {
     try {
         const raw = JSON.parse(localStorage.getItem('crisp_seen_ids') || '[]');
-        // Trim on load too — handles legacy localStorage entries from
+        // Trim on load too - handles legacy localStorage entries from
         // pre-K.5.c sessions that may have grown unbounded.
         return new Set(raw.slice(-_SEEN_IDS_CAP));
     } catch (_) {
         return new Set();
     }
 })();
-// K.5.c — central LRU-eviction + persistence helper. Use this instead
+// K.5.c - central LRU-eviction + persistence helper. Use this instead
 // of bare `localStorage.setItem('crisp_seen_ids', ...)`. The cap is
 // enforced BEFORE write so a quota-exceeded throw only fires when the
 // payload would actually be larger than 1000 ids' worth (~50 KB).
@@ -307,7 +307,7 @@ let priorityZones = new Set(JSON.parse(localStorage.getItem('crisp_priority_zone
 const SEV_SCORE = { CRITICAL: 10, SEVERE: 7, MODERATE: 4, MINOR: 2, UNKNOWN: 1 };
 const INFRA_WEIGHTS = { HOSPITAL: 10, POWER_PLANT: 8, POWER: 8, WATER_TREATMENT: 7, WATER: 7, ROAD: 3, BRIDGE: 5, SCHOOL: 4, HOUSE: 2, OTHER: 1 };
 // UNDP super-type icons + labels. Same labels appear on PWA tile titles
-// and dashboard badges — single source of truth across the two surfaces.
+// and dashboard badges - single source of truth across the two surfaces.
 // Legacy enum values (HOSPITAL, POWER, WATER, ROAD, HOUSE, SCHOOL, TELECOM)
 // alias to the UNDP super-type they were collapsed into during the Phase
 // 22 migration, so historical rows still render with a meaningful icon
@@ -369,13 +369,13 @@ const CRISIS_LABELS = {
     LANDSLIDE:         'Landslide',
     PANDEMIC:          'Pandemic',
 };
-// Helpers — used wherever enum-style strings used to leak through
+// Helpers - used wherever enum-style strings used to leak through
 // .replace(/_/g, ' ') into the UI. Pass through unknown values so a
 // future enum addition doesn't break the render.
 const infraLabel  = (v) => INFRA_LABELS[v]  || (v ? String(v).replace(/_/g, ' ') : '');
 const crisisLabel = (v) => CRISIS_LABELS[v] || (v ? String(v).replace(/_/g, ' ') : '');
 
-// ── B3: Dynamic Crisis Forms — report-detail rendering ──────────────────────
+// ── B3: Dynamic Crisis Forms - report-detail rendering ──────────────────────
 // Resolve form_pack_id → pack title/version and crisis_event_id → event name
 // from the admin crisis-forms lists (the dashboard is admin-authed). Bulk-
 // fetched ONCE and cached; failures degrade gracefully to the raw id/version.
@@ -410,9 +410,9 @@ function _humanizeFormKey(k) {
 function _formatFormValue(v) {
     if (v === true) return 'Yes';
     if (v === false) return 'No';
-    if (v == null || v === '') return '—';
-    if (Array.isArray(v)) return v.length ? v.map((x) => escapeHtml(_humanizeFormKey(String(x)))).join(', ') : '—';
-    if (typeof v === 'object') { try { return escapeHtml(JSON.stringify(v)); } catch (_e) { return '—'; } }
+    if (v == null || v === '') return '-';
+    if (Array.isArray(v)) return v.length ? v.map((x) => escapeHtml(_humanizeFormKey(String(x)))).join(', ') : '-';
+    if (typeof v === 'object') { try { return escapeHtml(JSON.stringify(v)); } catch (_e) { return '-'; } }
     return escapeHtml(String(v));
 }
 // Render Report.form_data (curated crisis-pack answers) as a collapsible section.
@@ -440,7 +440,7 @@ function _renderFormDataSection(r) {
 // after the F.3.c audit revealed the operator-perceived "everything
 // is Transport & Communication" problem was driven by legacy ROAD
 // chip data getting normalised to TRANSPORT_COMMUNICATION via the
-// backend's _apply_taxonomy hook — 89 of 120 reports). The richer
+// backend's _apply_taxonomy hook - 89 of 120 reports). The richer
 // signal is the `infrastructure_sub_type` column (ROAD / HOSPITAL /
 // POWER / WATER / SCHOOL / HOUSE / TELECOM) which was already being
 // captured server-side but never surfaced in the dashboard.
@@ -475,7 +475,7 @@ const SEV_COLORS = { CRITICAL: '#ef4444', SEVERE: '#f97316', MODERATE: '#eab308'
 let viewMode = 'queue'; // 'queue' = triage cards | 'tree' = strategic hierarchy
 let cardSortMode = 'priority'; // priority | newest | oldest | severity | type | has_media | confidence | crisis | damage | source
 
-// ── Operational queues (Jun 2026 — attention-panel routing audit) ────────────
+// ── Operational queues (Jun 2026 - attention-panel routing audit) ────────────
 // Each Crisis Intelligence "Immediate Attention" row deep-links into ONE of
 // these queues via the hash state segment `#/incidents;queue=<key>`. Every
 // predicate mirrors the EXACT backend count definition in
@@ -484,7 +484,7 @@ let cardSortMode = 'priority'; // priority | newest | oldest | severity | type |
 //   critical      = active (not closed) + severity CRITICAL          (:414)
 //   sla-risk      = PENDING + older than its severity's SLA target   (:407-411)
 //   escalating    = reports on buildings with escalation_risk >= 70  (:486-488;
-//                   NOTE: the badge counts BUILDINGS — the queue shows their
+//                   NOTE: the badge counts BUILDINGS - the queue shows their
 //                   linked reports, labelled accordingly)
 //   verification  = reviewer_verdict NOT_REVIEWED (NO status filter) (:415)
 //   triage        = PENDING + NOT_REVIEWED                           (:416-417)
@@ -508,7 +508,7 @@ const QUEUES = {
     },
     'sla-risk': {
         label: 'SLA at-risk', icon: '⏳',
-        desc: 'PENDING reports past their severity response target (1h critical / 4h severe / 12h moderate / 24h minor) — most overdue first',
+        desc: 'PENDING reports past their severity response target (1h critical / 4h severe / 12h moderate / 24h minor) - most overdue first',
         pass: (r) => r.status === 'PENDING' && Date.now() > _slaDeadline(r),
         sort: 'sla_breach',
     },
@@ -522,13 +522,13 @@ const QUEUES = {
     },
     'verification': {
         label: 'Pending verification', icon: '🔍',
-        desc: 'Reports awaiting a human review verdict (any status — an unreviewed resolved report still needs its verdict)',
+        desc: 'Reports awaiting a human review verdict (any status - an unreviewed resolved report still needs its verdict)',
         pass: (r) => (r.reviewer_verdict || 'NOT_REVIEWED') === 'NOT_REVIEWED',
         sort: 'oldest',
     },
     'triage': {
         label: 'Awaiting triage', icon: '📋',
-        desc: 'PENDING and unreviewed — oldest first',
+        desc: 'PENDING and unreviewed - oldest first',
         pass: (r) => r.status === 'PENDING' && (r.reviewer_verdict || 'NOT_REVIEWED') === 'NOT_REVIEWED',
         sort: 'oldest',
     },
@@ -540,7 +540,7 @@ const QUEUES = {
     },
     'stale': {
         label: 'Stale (open & unreviewed)', icon: '⏱',
-        desc: 'PENDING, unreviewed, older than 24 hours — oldest inactivity first',
+        desc: 'PENDING, unreviewed, older than 24 hours - oldest inactivity first',
         pass: (r) => r.status === 'PENDING'
             && (r.reviewer_verdict || 'NOT_REVIEWED') === 'NOT_REVIEWED'
             && (Date.now() - new Date(ensureUTC(r.server_created_at)).getTime()) > _QUEUE_STALE_HOURS * 3600e3,
@@ -552,7 +552,7 @@ const QUEUES = {
     // active_operations). The legacy keys above stay for back-compat.
     'needs-review': {
         label: 'Needs review', icon: '🔍',
-        desc: 'New reports awaiting a verdict — most overdue first',
+        desc: 'New reports awaiting a verdict - most overdue first',
         pass: (r) => !_QUEUE_CLOSED.includes(r.status)
             && (r.reviewer_verdict || 'NOT_REVIEWED') === 'NOT_REVIEWED'
             && !r.help_dispatched_at && r.status !== 'RESPONDING',
@@ -560,7 +560,7 @@ const QUEUES = {
     },
     'needs-response': {
         label: 'Needs response', icon: '🚑',
-        desc: 'Verified real and awaiting responder dispatch — oldest first',
+        desc: 'Verified real and awaiting responder dispatch - oldest first',
         pass: (r) => !_QUEUE_CLOSED.includes(r.status)
             && r.reviewer_verdict === 'ACCEPTED'
             && !r.help_dispatched_at && r.status !== 'RESPONDING',
@@ -568,7 +568,7 @@ const QUEUES = {
     },
     'active-ops': {
         label: 'Active operations', icon: '🚁',
-        desc: 'Responders dispatched, en route or on-scene — monitor to completion',
+        desc: 'Responders dispatched, en route or on-scene - monitor to completion',
         pass: (r) => !_QUEUE_CLOSED.includes(r.status)
             && (!!r.help_dispatched_at || r.status === 'RESPONDING'),
         sort: 'oldest',
@@ -577,14 +577,14 @@ const QUEUES = {
 let _activeQueue = null;                 // queue key | null
 let _escalatingBuildingIds = null;       // Set<building_id> (escalating queue prefetch)
 let _queuePrevSort = null;               // restore the user's sort on queue exit
-let _activeCrisisEventId = null;         // Operations Phase 2 — operation scope | null
+let _activeCrisisEventId = null;         // Operations Phase 2 - operation scope | null
 
 function _applyQueueFilter(reports) {
     if (!_activeQueue || !QUEUES[_activeQueue]) return reports;
     return reports.filter(QUEUES[_activeQueue].pass);
 }
 
-// Operations Phase 2 — scope the incident feed to a single operation. Resets
+// Operations Phase 2 - scope the incident feed to a single operation. Resets
 // the delta cursor + ETag and clears the cache so the next fetch is a FULL,
 // scoped refresh (no stale cross-operation reports leaking through a delta
 // poll). Pass null to return to the global feed. cc-operations.js calls this
@@ -602,7 +602,7 @@ function setOperationScope(crisisEventId) {
 window.setOperationScope = setOperationScope;
 window.getOperationScope = () => _activeCrisisEventId;
 
-// Escalating prefetch — the badge's population lives on the buildings table
+// Escalating prefetch - the badge's population lives on the buildings table
 // (Building.escalation_risk / Building.state), not on report rows.
 async function _loadEscalatingBuildings() {
     try {
@@ -643,7 +643,7 @@ function setActiveQueue(key, updateHash = true) {
         cardSortMode = QUEUES[key].sort;
         // A queue's members can live in ANY triage bucket (e.g. the
         // dispatch queue's cards sit under HELP SENT, collapsed by
-        // default) — the user must immediately see the reports, so all
+        // default) - the user must immediately see the reports, so all
         // buckets open while a queue is active.
         sectionState = { needs: true, dispatched: true, resolved: true };
         if (QUEUES[key].needsBuildings && !_escalatingBuildingIds) _loadEscalatingBuildings();
@@ -688,7 +688,7 @@ function _syncQueueFromHash() {
     if (key !== _activeQueue) setActiveQueue(key, false);
 }
 window.addEventListener('hashchange', _syncQueueFromHash);
-// Boot sync — covers deep links + refresh. DOMContentLoaded may already have
+// Boot sync - covers deep links + refresh. DOMContentLoaded may already have
 // fired by the time this script block runs, so sync immediately in that case.
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => setTimeout(_syncQueueFromHash, 0));
@@ -696,7 +696,7 @@ if (document.readyState === 'loading') {
     setTimeout(_syncQueueFromHash, 0);
 }
 
-// Phase G.5 (May 2026) — Bulk multi-select state.
+// Phase G.5 (May 2026) - Bulk multi-select state.
 // `_bulkSelectMode` toggles the checkbox UI; `_bulkSelectedIds` is
 // the Set of currently-selected report ids. Both reset on view-mode
 // switch + on closeBulkSelection().
@@ -739,17 +739,17 @@ const getMediaUrl = (url) => {
     return `${BACKEND_HOST}/${url.replace(/^\//, '')}`;
 };
 
-// May 2026 — append a cache-buster query param without breaking
-// presigned S3 URLs. S3 SigV4 signs the canonical query string —
+// May 2026 - append a cache-buster query param without breaking
+// presigned S3 URLs. S3 SigV4 signs the canonical query string -
 // ANY extra param (even `?_cb=` or `&_t=`) shifts the canonical
 // request and the computed signature stops matching what S3 stored.
 // Browser fetch returns 403 with SignatureDoesNotMatch. The <audio>
-// element doesn't surface 403 cleanly — it bubbles up as
+// element doesn't surface 403 cleanly - it bubbles up as
 // `Uncaught NotSupportedError: Failed to load because no supported
 // source was found`, which masquerades as a codec problem. Hours
 // of red-herring debugging.
 //
-// May 2026 (HAR-driven rewrite) — the backend now emits STABLE
+// May 2026 (HAR-driven rewrite) - the backend now emits STABLE
 // `/api/v1/reports/media/<id>/<file|thumb>` URLs instead of presigned
 // S3 URLs (which churned per-poll, defeating browser cache and
 // forcing 98× refetch of identical bytes). The presigned URL only
@@ -772,13 +772,13 @@ const _withCacheBust = (url, key, value) => {
 // `blurhash`), encoded by the reporter app at capture time and delivered in
 // the meta POST (arrives in ~200 ms). Decoding it locally gives us a very
 // cheap 40x40 colour-impression bitmap we can slot into the <img src> BEFORE
-// any media chunk has uploaded — closing the time-to-first-visual gap from
+// any media chunk has uploaded - closing the time-to-first-visual gap from
 // "first SMALL variant lands" (~2 s best case) to "meta POST round-trip"
 // (~200 ms). The real photo hot-swaps in via `_maybeUpgradeDetailImage` the
 // moment a complete variant arrives, so the blurhash is a transient visual
 // only.
 //
-// Caching: decoding a 40x40 image via the 4x3 DCT costs ~1–2 ms — cheap, but
+// Caching: decoding a 40x40 image via the 4x3 DCT costs ~1–2 ms - cheap, but
 // `selectReport()` and `showIncidentPreview()` can fire many times per poll
 // cycle, and the hash is stable for the lifetime of a report. A plain Map
 // keyed by hash is fine: the dashboard holds ~36 reports in the feed so
@@ -796,7 +796,7 @@ function blurhashToDataURL(hash, width = 40, height = 40) {
         const pixels = window.BlurHash.decode(hash, width, height);
         // Offscreen canvas: no DOM insertion needed, just an ephemeral 2D
         // context to hand the Uint8ClampedArray to. JPEG at q=0.6 because the
-        // blurhash bitmap is already lossy/blurred — PNG would be ~4× larger
+        // blurhash bitmap is already lossy/blurred - PNG would be ~4× larger
         // for zero perceptible gain.
         const canvas = document.createElement('canvas');
         canvas.width = width;
@@ -809,7 +809,7 @@ function blurhashToDataURL(hash, width = 40, height = 40) {
         _blurhashCache.set(hash, dataUrl);
         return dataUrl;
     } catch (e) {
-        // Malformed hash — cache `null` so we don't re-attempt each render.
+        // Malformed hash - cache `null` so we don't re-attempt each render.
         console.warn('[CRISP] blurhash decode failed:', e && e.message);
         _blurhashCache.set(hash, null);
         return null;
@@ -824,7 +824,7 @@ function blurhashToDataURL(hash, width = 40, height = 40) {
 // back to partial previews if no variant has finished yet. Legacy media
 // without a photo_group_id becomes its own one-member group so reports
 // queued before this feature shipped still render.
-// Phase L (May 2026) — canonical 3-value SMALL/MEDIUM/ORIGINAL.
+// Phase L (May 2026) - canonical 3-value SMALL/MEDIUM/ORIGINAL.
 // Legacy LOW/HIGH kept in the rank table only so historical rows
 // (pre-alembic-0035 backfill) still sort sensibly if they
 // somehow appear; backend never emits them post-migration.
@@ -833,7 +833,7 @@ const TIER_RANK = { SMALL: 1, LOW: 1, MEDIUM: 2, HIGH: 3, ORIGINAL: 4 };
 // ── Phase 2 (Apr 2026): tier override map ──────────────────────────────────
 // Analysts can click SMALL / MEDIUM / LARGE to manually pick which variant
 // to view. Once a user has overridden, `_maybeUpgradeDetailImage` must NOT
-// auto-upgrade them back to the best tier on the next poll — their
+// auto-upgrade them back to the best tier on the next poll - their
 // deliberate pick wins. Keyed by reportId (not group) because the choice
 // is a panel-level preference; cleared on panel close / delete.
 const _tierOverride = new Map();   // reportId → 'LOW' | 'MEDIUM' | 'HIGH'
@@ -848,7 +848,7 @@ const _tierOverride = new Map();   // reportId → 'LOW' | 'MEDIUM' | 'HIGH'
 // endpoint is cheap (~1 SELECT) and returns just the per-tier media rows.
 // Merge fresh status into the in-memory record and re-render the tier
 // switcher if anything changed. Listing-poll updates still drive the
-// steady-state view — this just removes the open-the-card lag.
+// steady-state view - this just removes the open-the-card lag.
 async function _refreshTierStatusForDetail(reportId) {
     if (!reportId) return;
     try {
@@ -856,7 +856,7 @@ async function _refreshTierStatusForDetail(reportId) {
             method: 'GET',
             credentials: 'omit',  // public endpoint; no auth needed for tier surface
         });
-        if (!res.ok) return;  // 404 on old backend / transient — silent no-op
+        if (!res.ok) return;  // 404 on old backend / transient - silent no-op
         const body = await res.json();
         if (!body || !Array.isArray(body.media)) return;
         const r = allReports.find(x => x.id === reportId);
@@ -885,7 +885,7 @@ async function _refreshTierStatusForDetail(reportId) {
             window.selectReport(reportId, /* skipFly */ true);
         }
     } catch (e) {
-        // Network blip / abort — silent. Listing poll will catch up.
+        // Network blip / abort - silent. Listing poll will catch up.
     }
 }
 
@@ -911,7 +911,7 @@ function groupPhotos(mediaList) {
 // gets the `.active` class so analysts can see which tier is showing.
 // Escapes group_id / report_id for safe inline handlers.
 function _buildTierSwitcher(reportId, group, activeTier) {
-    // Phase L (May 2026) — canonical SMALL/MEDIUM/ORIGINAL tier
+    // Phase L (May 2026) - canonical SMALL/MEDIUM/ORIGINAL tier
     // values match what's in the DB. Pre-L this was LOW/MEDIUM/HIGH
     // which silently disabled SMALL + ORIGINAL buttons because
     // byTier[tier] lookups missed the canonical-named Media rows.
@@ -931,7 +931,7 @@ function _buildTierSwitcher(reportId, group, activeTier) {
         const disabled = complete ? '' : ' disabled';
         const title = complete
             ? `Show ${label} variant`
-            : (m ? `${label} — uploading ${pct}%` : `${label} — not available`);
+            : (m ? `${label} - uploading ${pct}%` : `${label} - not available`);
         const onclick = complete
             ? `event.stopPropagation();setDetailImageTier('${rid}','${gid}','${tier}',this)`
             : '';
@@ -944,7 +944,7 @@ function _buildTierSwitcher(reportId, group, activeTier) {
     return `<div class="dp-tier-switcher" role="group" aria-label="Image quality">${btns}</div>`;
 }
 
-// May 2026 (HAR-driven, Phase 2) — bandwidth policy for the inline detail
+// May 2026 (HAR-driven, Phase 2) - bandwidth policy for the inline detail
 // view. Previously every detail-panel render eagerly fetched the LARGE
 // (HIGH-tier) variant via `bestVariant()`, even when the analyst was just
 // scanning the queue. With LARGE variants typically ~500 KB and the
@@ -952,9 +952,9 @@ function _buildTierSwitcher(reportId, group, activeTier) {
 // per analyst-shift the 90% case never benefits from.
 //
 // New default: render the SMALLEST complete variant inline (~50 KB), and
-// upgrade to LARGE on EXPLICIT user intent — clicking the LARGE button
+// upgrade to LARGE on EXPLICIT user intent - clicking the LARGE button
 // in the tier switcher, or opening the lightbox. The auto-upgrade poll
-// (`_maybeUpgradeDetailImage`) is now bounded to LOW→MEDIUM only — it
+// (`_maybeUpgradeDetailImage`) is now bounded to LOW→MEDIUM only - it
 // never silently fetches LARGE behind the user's back.
 //
 // `thumbVariant()` mirrors `bestVariant()` but with reversed tier
@@ -962,13 +962,13 @@ function _buildTierSwitcher(reportId, group, activeTier) {
 // so progressive rendering keeps working during in-flight uploads.
 function thumbVariant(group) {
     if (!group || !group.members || group.members.length === 0) return null;
-    // Prefer the LOWEST-rank COMPLETED variant — the thumb-first policy.
+    // Prefer the LOWEST-rank COMPLETED variant - the thumb-first policy.
     // May 2026 (425-fallback): a tier is only renderable once its PII blur
     // is done. While pii_blur_status='pending', GET /media/{id}/file returns
     // 425 Too Early, so picking it would blank the <img>. Excluding pending
     // tiers makes the picker fall through to the ungated thumbnail/blurhash
     // (never blank) and auto-upgrade to the full image the moment blur
-    // completes — no onerror hack, no 425 flicker, PII-safe by construction.
+    // completes - no onerror hack, no 425 flicker, PII-safe by construction.
     const complete = group.members
         .filter(m => m.assembly_status === 'complete' && m.url && m.pii_blur_status !== 'pending')
         .sort((a, b) => (TIER_RANK[a.resolution_tier] || 0) - (TIER_RANK[b.resolution_tier] || 0));
@@ -976,7 +976,7 @@ function thumbVariant(group) {
         const m = complete[0];
         return { src: getMediaUrl(m.url), tier: m.resolution_tier, isFinal: true, mediaId: m.id };
     }
-    // No complete variant yet — fall back to whatever bestVariant would
+    // No complete variant yet - fall back to whatever bestVariant would
     // surface (partial thumbnails / partial JPEG / blurhash). Keeps
     // progressive rendering identical during uploads.
     return bestVariant(group);
@@ -984,10 +984,10 @@ function thumbVariant(group) {
 
 // Find the highest-tier complete variant for explicit "show full" actions
 // (lightbox click, LARGE button). Returns null if no complete variant
-// exists yet — caller should fall back to whatever inline tier is showing.
+// exists yet - caller should fall back to whatever inline tier is showing.
 function highestCompleteVariant(group) {
     if (!group || !group.members) return null;
-    // 425-fallback (May 2026): exclude blur-pending tiers — their /file 425s.
+    // 425-fallback (May 2026): exclude blur-pending tiers - their /file 425s.
     const m = group.members
         .filter(x => x.assembly_status === 'complete' && x.url && x.pii_blur_status !== 'pending')
         .sort((a, b) => (TIER_RANK[b.resolution_tier] || 0) - (TIER_RANK[a.resolution_tier] || 0))[0];
@@ -997,7 +997,7 @@ function highestCompleteVariant(group) {
 function bestVariant(group) {
     if (!group || !group.members || group.members.length === 0) return null;
     // Prefer the highest-rank COMPLETED variant.
-    // 425-fallback (May 2026): exclude blur-pending tiers — their /file 425s,
+    // 425-fallback (May 2026): exclude blur-pending tiers - their /file 425s,
     // which would blank the image. Falls through to partial/thumbnail/blurhash
     // (all ungated) until blur completes, then the full variant is picked.
     const complete = group.members
@@ -1007,7 +1007,7 @@ function bestVariant(group) {
         const m = complete[0];
         return { src: getMediaUrl(m.url), tier: m.resolution_tier, isFinal: true, mediaId: m.id };
     }
-    // No full variant yet — pick the highest partial/thumbnail preview.
+    // No full variant yet - pick the highest partial/thumbnail preview.
     const partials = group.members
         .filter(m => m.thumbnail_url)
         .sort((a, b) => (TIER_RANK[b.resolution_tier] || 0) - (TIER_RANK[a.resolution_tier] || 0));
@@ -1018,7 +1018,7 @@ function bestVariant(group) {
     // ── Phase 2.2 (Apr 2026): partial-file rendering ───────────────────────
     // If no variant has emitted a thumbnail yet but the backend has written
     // `<media_id>_partial.jpg` (updated every few chunks during upload), we
-    // can show THAT file as an intermediate visual — even ~30% of a JPEG is
+    // can show THAT file as an intermediate visual - even ~30% of a JPEG is
     // recognisable. `completion_pct` is the 0..100 progress indicator; any
     // value strictly between 0 and 100 means a partial file is on disk.
     //
@@ -1046,40 +1046,40 @@ function bestVariant(group) {
     return null;
 }
 
-// ── Phase F image-reliability (May 2026) — tri-state classifier for the
+// ── Phase F image-reliability (May 2026) - tri-state classifier for the
 // LARGE (HIGH-tier) variant of a photo group. Replaces the binary
 // `assembly_status !== 'complete'` check that conflated `pending`,
 // `assembling`, and `failed` into "uploading…" with a pulsing spinner
 // for 14 days. Now the dashboard renders distinct visuals for:
 //
-//   complete    — variant is on S3; render the image.
-//   uploading   — chunks still arriving inside the freshness window;
+//   complete    - variant is on S3; render the image.
+//   uploading   - chunks still arriving inside the freshness window;
 //                 show the existing fa-pulse cloud-arrow chip.
-//   delayed     — chunks have been stuck `pending`/`assembling` past
+//   delayed     - chunks have been stuck `pending`/`assembling` past
 //                 the freshness window but the backend hasn't yet
 //                 abandoned them (sweep tick lag). Show a yellow
 //                 clock chip + offer the operator a Reclaim button.
-//   lost        — sweep flipped the row to `failed` with
+//   lost        - sweep flipped the row to `failed` with
 //                 abandon_reason populated (chunks_never_arrived /
 //                 assembly_worker_lost / operator_manual). Red chip
 //                 + Reclaim button (retry if chunks were full; mark-
-//                 abandoned otherwise — operator confirms in modal).
-//   missing     — no HIGH row at all. Two sub-cases distinguished by
+//                 abandoned otherwise - operator confirms in modal).
+//   missing     - no HIGH row at all. Two sub-cases distinguished by
 //                 the freshness window: `missing-fresh` (report
 //                 younger than 30 min, HIGH might still arrive) renders
 //                 the "ORIG pending" chip; `missing-old` returns no
 //                 chip (the PWA gave up retrying, OR the channel
-//                 doesn't capture HIGH at all — Telegram / WhatsApp /
+//                 doesn't capture HIGH at all - Telegram / WhatsApp /
 //                 SMS / IVR).
 //
 // `_ORIG_FRESH_MS` is the SINGLE window applied to both the "HIGH
 // row exists but stuck" path AND the "HIGH row never created" path.
-// Matches the backend sweep's `_ABANDON_STALE_MIN=30 minutes` — any
+// Matches the backend sweep's `_ABANDON_STALE_MIN=30 minutes` - any
 // pending row older than this WILL be abandoned on the next sweep
 // tick, so showing a chip past 30 min on a row the sweep can't
 // rescue is operator-confusing noise.
 //
-// Phase F (operator follow-up, May 2026) — the missing-HIGH branch
+// Phase F (operator follow-up, May 2026) - the missing-HIGH branch
 // previously used a 14-day deferral horizon under the rationale that
 // the PWA's offline-queue retry runs that long. In practice the
 // 14-day chip was operator-trained noise: stale captures (4-day-old
@@ -1090,7 +1090,7 @@ function bestVariant(group) {
 // won't deliver it without intervention") AND matches the backend's
 // own abandon threshold so the operator's mental model is unified
 // across the client + server.
-const _ORIG_FRESH_MS = 30 * 60 * 1000;  // 30 min — matches backend sweep
+const _ORIG_FRESH_MS = 30 * 60 * 1000;  // 30 min - matches backend sweep
 
 function _classifyHighTier(group, reportAgeMs) {
     if (!group || !group.members) return 'missing-old';
@@ -1103,14 +1103,14 @@ function _classifyHighTier(group, reportAgeMs) {
     }
     if (large.assembly_status === 'complete') return 'complete';
     if (large.assembly_status === 'failed') return 'lost';
-    // pending / assembling — distinguished by freshness window.
+    // pending / assembling - distinguished by freshness window.
     return reportAgeMs < _ORIG_FRESH_MS ? 'uploading' : 'delayed';
 }
 
-// Phase B.3 (May 2026, UNDP-grade rebuild) — empty-state CTA for the
+// Phase B.3 (May 2026, UNDP-grade rebuild) - empty-state CTA for the
 // satellite verification panel when no verification has run yet.
 // Replaces the bare "Verify via Satellite" button with a richer card
-// that explains what verification DOES — analysts unfamiliar with the
+// that explains what verification DOES - analysts unfamiliar with the
 // feature otherwise wonder what the button is for. The card lists the
 // 4 providers used (transparency for UNDP judges) + the typical
 // runtime so analysts know what to expect.
@@ -1145,7 +1145,7 @@ function ensureUTC(iso) {
 // ── Operator-local time presentation (Jun 2026) ──────────────────────────
 // ONE date-time format for the whole dashboard: "11 Jun 2026, 2:45 PM"
 // in the operator's local timezone + locale. Every absolute timestamp
-// shown in UI goes through here — never raw ISO, never UTC wall-clock.
+// shown in UI goes through here - never raw ISO, never UTC wall-clock.
 // Parsing routes through ensureUTC so a naive backend string can never
 // render shifted by the local offset.
 function fmtDateTime(iso) {
@@ -1158,7 +1158,7 @@ function fmtDateTime(iso) {
     });
 }
 // DATE-ONLY values (e.g. satellite acquisition_date "2026-06-08") must not
-// be fed to the Date parser as bare strings — JS reads them as UTC
+// be fed to the Date parser as bare strings - JS reads them as UTC
 // midnight, which displays as the PREVIOUS day for viewers west of UTC.
 // Anchor the literal Y-M-D to LOCAL midnight, then show the calendar date.
 function fmtDateOnly(s) {
@@ -1220,7 +1220,7 @@ function showToast(msg, type = 'info') {
     setTimeout(() => toast.remove(), 3000);
 }
 
-// ── Operations Phase 3 — auto-claim write-path (launch + undo) ────────────────
+// ── Operations Phase 3 - auto-claim write-path (launch + undo) ────────────────
 // Launch an operation from the un-operationalised critical cluster: the backend
 // creates a CrisisEvent + bulk-claims the open-critical, no-operation reports,
 // then we open it. Reversible via the operation dashboard's "Undo claim" button
@@ -1238,7 +1238,7 @@ async function launchOperationFromCluster() {
         const n = body.claimed_count || 0;
         showToast(`Operation created · ${n} report${n === 1 ? '' : 's'} claimed`, 'success');
         try { window.location.hash = '#/operations/' + encodeURIComponent(body.operation_id); } catch (_e) {}
-    } catch (_e) { showToast('Launch failed — network error', 'error'); }
+    } catch (_e) { showToast('Launch failed - network error', 'error'); }
 }
 window.launchOperationFromCluster = launchOperationFromCluster;
 
@@ -1252,14 +1252,14 @@ async function unclaimOperation(opId) {
         const n = body.unclaimed_count || 0;
         showToast(`Claim reversed · ${n} report${n === 1 ? '' : 's'} released`, 'success');
         try { window.location.hash = '#/'; } catch (_e) {}
-    } catch (_e) { showToast('Undo failed — network error', 'error'); }
+    } catch (_e) { showToast('Undo failed - network error', 'error'); }
 }
 window.unclaimOperation = unclaimOperation;
 
 // ── Live Incident Notification System ────────────────────────────────────────
 
 // ══════════════════════════════════════════════════════════════════════
-// Phase J.4 (May 2026) — Notification card-stack + burst-mode banner
+// Phase J.4 (May 2026) - Notification card-stack + burst-mode banner
 // ══════════════════════════════════════════════════════════════════════
 // Replaces the clobber-and-replace flash with an honest card stack
 // (center-screen per operator preference). New cards push the
@@ -1283,7 +1283,7 @@ let _stackSoloTimer  = null;        // exactly one auto-dismiss timer at a
                                     // time (cleared on every stack mutation;
                                     // re-armed only when length === 1).
 
-// Notification-lifecycle debug hook — set
+// Notification-lifecycle debug hook - set
 // `localStorage.crisp_notif_debug = '1'` in DevTools to trace every
 // dedup decision in the console. Off in production. The state inspector
 // `window.__crispNotifDebug()` is always available regardless of the flag.
@@ -1292,7 +1292,7 @@ function _notifLog(...args) {
         if (localStorage.getItem('crisp_notif_debug') === '1') {
             console.log('[CRISP-notif]', ...args);
         }
-    } catch (_) { /* SSR / disabled storage — silent */ }
+    } catch (_) { /* SSR / disabled storage - silent */ }
 }
 
 function _inBurstMode() {
@@ -1301,7 +1301,7 @@ function _inBurstMode() {
     return _burstArrivals.length >= _BURST_THRESHOLD;
 }
 
-// Helper — central place to (re)arm the per-stack timers. Called from
+// Helper - central place to (re)arm the per-stack timers. Called from
 // `_addNotification` and `_dismissStackCard` so growth + shrink land on
 // the same state machine. Prior code had a per-card `notif._dismissTimer`
 // that leaked when the stack grew from 1 → 2 (the solo timer kept
@@ -1337,12 +1337,12 @@ function _refreshStackTimers() {
 }
 
 function _addNotification(r) {
-    // May 2026 (regression follow-up) — the prior fix's
+    // May 2026 (regression follow-up) - the prior fix's
     // `_suppressNewReportNotifications` flag was REMOVED. It papered over
     // the underlying problem (knownIds.clear() in _replaceReportData
     // causes EVERY report to look new) by silencing the notify path
     // wholesale. On any deployment where the dashboard couldn't read
-    // X-Server-Time (cross-origin dev, LAN, cloudflared tunnel — CORS
+    // X-Server-Time (cross-origin dev, LAN, cloudflared tunnel - CORS
     // expose_headers omission) `wantFullRefresh` stayed true forever,
     // EVERY poll re-walked the snapshot under the suppression flag, and
     // ALL operator notifications were silently dropped. _replaceReportData
@@ -1372,7 +1372,7 @@ function _addNotification(r) {
         // Operation this incident belongs to (denormalised crisis_event_name).
         // null = global (not tied to any operation). Shown on the card + bell.
         operation: r.crisis_event_name || null,
-        // Operation ID — so clicking the notification opens the incident INSIDE
+        // Operation ID - so clicking the notification opens the incident INSIDE
         // its operation (deep-link), not just the global feed.
         crisisEventId: r.crisis_event_id || null,
     };
@@ -1417,7 +1417,7 @@ function _addNotification(r) {
             location: notif.location,
             sevColor: notif.sevColor,
             timestamp: notif.timestamp,
-            // addedAt stays — bell entry's "age" is anchored to first arrival.
+            // addedAt stays - bell entry's "age" is anchored to first arrival.
         };
         _renderNotifications();
         _notifLog('dedup:bell-update', notif.id);
@@ -1470,7 +1470,7 @@ function _addNotification(r) {
     // ── Confirmed: new event. Now mutate state.
     _notifLog('new', notif.id, notif.severity, notif.type);
 
-    // Bell panel — LIFO, cap _MAX_NOTIFS.
+    // Bell panel - LIFO, cap _MAX_NOTIFS.
     _unseenReports.unshift(notif);
     if (_unseenReports.length > _MAX_NOTIFS) _unseenReports.pop();
     _renderNotifications();
@@ -1493,16 +1493,16 @@ function _addNotification(r) {
     }
     _renderNotificationStack();
 
-    // Re-arm timers based on the new stack size (Bug C fix — the prior
+    // Re-arm timers based on the new stack size (Bug C fix - the prior
     // code armed a per-card timer that survived when the stack grew).
     _refreshStackTimers();
 }
 
-// Build the inner HTML for a stack card. Pure function — no side
+// Build the inner HTML for a stack card. Pure function - no side
 // effects. Called by `_renderNotificationStack` only when a card
 // either needs to be CREATED (new id) or its content changed
 // (severity / upgrade-chip / location / count). Position is NOT
-// embedded here — CSS handles position via `data-pos` so transitions
+// embedded here - CSS handles position via `data-pos` so transitions
 // are smooth when index changes.
 function _buildStackCardInner(n) {
     const srcLabel = {APP:'Mobile App',ANDROID:'Android',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[n.source] || n.source;
@@ -1517,7 +1517,7 @@ function _buildStackCardInner(n) {
     return `
         ${upgradeChip}
         <div class="notif-flash-icon" style="color:${n.sevColor};">🚨</div>
-        <div class="notif-flash-title">${n.coalescedCount > 1 ? `${n.coalescedCount}× reports — same building` : 'NEW INCIDENT REPORTED'}</div>
+        <div class="notif-flash-title">${n.coalescedCount > 1 ? `${n.coalescedCount}× reports - same building` : 'NEW INCIDENT REPORTED'}</div>
         ${opChip}
         <div class="notif-flash-detail">
             <span class="notif-sev" style="background:${n.sevColor}25;color:${n.sevColor};font-size:13px;padding:4px 10px;">${n.severity}</span>
@@ -1535,7 +1535,7 @@ function _buildStackCardInner(n) {
 //   · brand-new ids are appended (with `.is-entering` for animate-in)
 //   · dropped ids are animate-out + removed
 //   · surviving nodes have data-pos / data attributes / inner HTML
-//     updated in place — no DOM destroy, so CSS transitions on
+//     updated in place - no DOM destroy, so CSS transitions on
 //     `transform: translateY(...) scale(...) rotate(...)` interpolate
 //     smoothly from the old position to the new one
 //
@@ -1576,7 +1576,7 @@ function _renderNotificationStack() {
     const desired = new Map();
     _notificationStack.forEach((n, i) => desired.set(String(n.id), { n, i }));
 
-    // First pass — remove any DOM card whose id is not in the desired set.
+    // First pass - remove any DOM card whose id is not in the desired set.
     Array.from(stack.children).forEach((el) => {
         const id = el.getAttribute('data-id');
         if (!desired.has(id)) {
@@ -1588,7 +1588,7 @@ function _renderNotificationStack() {
         }
     });
 
-    // Second pass — for each desired id, update or create.
+    // Second pass - for each desired id, update or create.
     desired.forEach(({ n, i }, id) => {
         let el = stack.querySelector(`.notif-stack-card[data-id="${cssEscape(id)}"]`);
         if (!el) {
@@ -1606,7 +1606,7 @@ function _renderNotificationStack() {
             setTimeout(() => el.classList.remove('is-entering'), 360);
             return;
         }
-        // Existing — update content + position. NO DOM destroy.
+        // Existing - update content + position. NO DOM destroy.
         // Only rewrite innerHTML if the content fingerprint changed,
         // so the upgrade-chip animation doesn't re-fire on every poll.
         const fp = `${n.severity}|${n.type}|${n.location}|${n.coalescedCount}|${n._upgraded ? 1 : 0}|${n._upgradeReason || ''}`;
@@ -1621,7 +1621,7 @@ function _renderNotificationStack() {
     });
 }
 
-// Minimal CSS.escape polyfill — Safari < 15 didn't have it.
+// Minimal CSS.escape polyfill - Safari < 15 didn't have it.
 function cssEscape(s) {
     if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(s);
     return String(s).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
@@ -1630,7 +1630,7 @@ function cssEscape(s) {
 window._dismissStackCard = (id) => {
     _notificationStack = _notificationStack.filter(n => n.id !== id);
     _renderNotificationStack();
-    // Re-arm timers for the new stack state — if 2 cards remained and
+    // Re-arm timers for the new stack state - if 2 cards remained and
     // one was just dismissed, the solo timer needs to start for the
     // last surviving card. The shared helper centralises this.
     _refreshStackTimers();
@@ -1639,7 +1639,7 @@ window._dismissStackCard = (id) => {
 // Expose for any historical caller (kept for back-compat).
 function _dismissStackCard(id) { return window._dismissStackCard(id); }
 
-// Burst banner — pinned center-top when 5+ arrive in 5 s.
+// Burst banner - pinned center-top when 5+ arrive in 5 s.
 function _showBurstBanner() {
     _burstBannerActive = true;
     document.body.classList.add('burst-mode');
@@ -1675,7 +1675,7 @@ function _hideBurstBanner() {
     }
 }
 
-// K.5.e (May 2026, Phase K) — truncation banner.
+// K.5.e (May 2026, Phase K) - truncation banner.
 // When the backend's X-Total-Count exceeds DASHBOARD_PAGE_LIMIT (10K),
 // the dashboard silently truncates. Pre-fix the only signal was a
 // console.warn that operators never saw. The banner sits at the top of
@@ -1694,7 +1694,7 @@ function _showTruncationBanner(total, limit) {
     banner.innerHTML = `
         <i class="fa-solid fa-triangle-exclamation"></i>
         <strong>Showing ${limit.toLocaleString()} of ${total.toLocaleString()} reports</strong>
-        — server-side pagination needed to see the rest.
+        - server-side pagination needed to see the rest.
         <span class="truncation-banner-close" onclick="_hideTruncationBanner()" title="Dismiss">×</span>
     `;
     banner.style.display = 'flex';
@@ -1767,11 +1767,11 @@ window.toggleNotifPanel = () => {
 
 window.dismissNotif = (id) => {
     // Capture the notification's operation BEFORE removing it, so the click opens
-    // the incident INSIDE its operation (deep-link) — not just the global feed.
+    // the incident INSIDE its operation (deep-link) - not just the global feed.
     const _n = _unseenReports.find(n => n.id === id);
     _unseenReports = _unseenReports.filter(n => n.id !== id);
     _seenIds.add(id);
-    _persistSeenIds();  // K.5.c — LRU cap + safe persist
+    _persistSeenIds();  // K.5.c - LRU cap + safe persist
     _renderNotifications();
     window.openIncident(id, { operationId: _n && _n.crisisEventId, source: 'notification' });
     // Close panel if empty
@@ -1785,7 +1785,7 @@ window.dismissNotif = (id) => {
 window.clearAllNotifs = () => {
     _unseenReports.forEach(n => _seenIds.add(n.id));
     _unseenReports = [];
-    _persistSeenIds();  // K.5.c — LRU cap + safe persist
+    _persistSeenIds();  // K.5.c - LRU cap + safe persist
     _renderNotifications();
     const panel = document.getElementById('notif-panel');
     if (panel) panel.style.display = 'none';
@@ -1810,7 +1810,7 @@ window.openIncident = (id, opts) => {
         window.selectReport(id);   // pre-boot fallback
     }
 };
-// Read-only accessor onto the loaded report cache — CrispNav uses it to resolve
+// Read-only accessor onto the loaded report cache - CrispNav uses it to resolve
 // an incident's operation (crisis_event_id) and to wait for the report to land.
 window.__crispGetReport = (id) => {
     try { return (allReports || []).find((x) => x && x.id === id) || null; } catch (_e) { return null; }
@@ -1841,7 +1841,7 @@ function haversineKm(lat1, lon1, lat2, lon2) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Clusters reports by proximity — reports within CLUSTER_RADIUS_KM share a region name
+// Clusters reports by proximity - reports within CLUSTER_RADIUS_KM share a region name
 function clusterReportsByProximity(reports) {
     const clusters = []; // { center: {lat, lng}, name: string, reports: [] }
     const withLoc = reports.filter(r => r.location);
@@ -1891,7 +1891,7 @@ function assignClusterName(cluster) {
     return `${country} Zone (${cluster.center.lat.toFixed(2)}, ${cluster.center.lng.toFixed(2)})`;
 }
 
-// Apply 15km clustering to all reports — sets r._region for each
+// Apply 15km clustering to all reports - sets r._region for each
 function applyRegionClustering(reports) {
     const { clusters } = clusterReportsByProximity(reports);
     for (const c of clusters) {
@@ -2202,7 +2202,7 @@ function renderFeed() {
         renderTreeFeed(el);
     }
     updateCommandStats();
-    // P3.3 — Progressive disclosure: once the feed is painted, hide any card
+    // P3.3 - Progressive disclosure: once the feed is painted, hide any card
     // past the first 50 and wire up a sentinel + IntersectionObserver that
     // reveals the next 50 when the user scrolls near the bottom. Keeps the
     // initial paint under 100 ms even with 1000+ reports in `allReports`.
@@ -2227,12 +2227,12 @@ function _applyProgressiveReveal(container) {
 
     // Add a sentinel div right after the last visible card.
     //
-    // Phase 25.1 (May 2026) — anchor the sentinel by the LAST VISIBLE
+    // Phase 25.1 (May 2026) - anchor the sentinel by the LAST VISIBLE
     // card, not the first-hidden card. The previous version did
     //     cards[visibleCount - 1].parentElement
     //         .insertBefore(sentinel, cards[visibleCount].nextSibling);
     // which crashes when `cards[visibleCount - 1]` and
-    // `cards[visibleCount]` have different parents — exactly what
+    // `cards[visibleCount]` have different parents - exactly what
     // happens in Queue Mode (three separate <section>s for backlog /
     // triage / responding). A new report arriving via any channel
     // (e.g. Telegram) triggered the re-render that pushed the cutoff
@@ -2282,13 +2282,13 @@ function _applyProgressiveReveal(container) {
 
 // ── Queue Mode: three-bucket triage cards ─────────────────────────────────────
 function renderTriageQueue(el) {
-    // Operational queue (attention-panel deep link) — the queue predicate
+    // Operational queue (attention-panel deep link) - the queue predicate
     // DEFINES the population (replaces status/time filters; search/chips
     // still narrow below).
     let reports = _applyQueueFilter(allReports);
     if (!_activeQueue && timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
-        // K.5.b (May 2026, Phase K) — use _priorityTime so offline-
+        // K.5.b (May 2026, Phase K) - use _priorityTime so offline-
         // drained reports stay visible by CAPTURE time, not by the
         // drain timestamp the server stamped when the chunks finally
         // arrived. Pre-fix the "Last 1 hour" filter silently hid a
@@ -2306,7 +2306,7 @@ function renderTriageQueue(el) {
     } else if (_activePillFilter === 'resolved') {
         reports = reports.filter(r => r.status === 'RESOLVED' || r.status === 'FALSE_ALARM');
     } else if (_activePillFilter === 'originals_pending') {
-        // Phase C.2 — surface reports where the LARGE (HIGH) tier hasn't
+        // Phase C.2 - surface reports where the LARGE (HIGH) tier hasn't
         // finished assembling for at least one captured photo. Helps
         // operators monitor the "Original delayed by poor connectivity"
         // case before silently shipping medium-tier previews to the
@@ -2323,7 +2323,7 @@ function renderTriageQueue(el) {
     }
     // 'all' or null = no additional filter
 
-    // Phase G.1 (May 2026) — apply stacking chip filters on top of the
+    // Phase G.1 (May 2026) - apply stacking chip filters on top of the
     // time + status pill chain. AND between active chips (with damage
     // dimension treated as OR-within). Set is empty → no-op.
     if (_activeChipFilters.size) {
@@ -2378,8 +2378,8 @@ function renderTriageQueue(el) {
         needs.length > 0 ? `${needs.length} Need Response` : 'All Clear';
 }
 
-// Phase F.8.b (May 2026) — Offline-sync honest sort key.
-// Returns the report's TRIAGE timestamp — the moment the operator
+// Phase F.8.b (May 2026) - Offline-sync honest sort key.
+// Returns the report's TRIAGE timestamp - the moment the operator
 // should reason about. For online reports this is identical to
 // server_created_at (received = captured ± seconds). For offline-
 // queued reports that drained N minutes / hours later, this is
@@ -2397,7 +2397,7 @@ function _priorityTime(r) {
     if (s == null) return c;
     if (c == null) return s;
     // If server received WAY later than client capture, this is a
-    // drained-offline submission — use client_created_at so priority
+    // drained-offline submission - use client_created_at so priority
     // sorting honours capture time rather than drain time.
     if (s - c > _F8_STALE_THRESHOLD_MS) return c;
     return s;
@@ -2417,7 +2417,7 @@ function sortByPriorityDesc(a, b) {
     // 2. Infrastructure criticality (hospitals, power before roads, houses)
     const dw = (INFRA_WEIGHTS[b.infrastructure_type] || 1) - (INFRA_WEIGHTS[a.infrastructure_type] || 1);
     if (dw !== 0) return dw;
-    // 3. Recency (newest-captured first — Phase F.8.b uses
+    // 3. Recency (newest-captured first - Phase F.8.b uses
     //    _priorityTime so drained-offline reports don't pretend to be
     //    "just now").
     return _priorityTime(b) - _priorityTime(a);
@@ -2496,7 +2496,7 @@ function getSortFunction() {
 function createAlertBanner(count) {
     const el = document.createElement('div');
     el.className = 'qrt-alert-banner';
-    el.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${count} CRITICAL incident${count > 1 ? 's' : ''} — immediate response required`;
+    el.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${count} CRITICAL incident${count > 1 ? 's' : ''} - immediate response required`;
     return el;
 }
 
@@ -2533,7 +2533,7 @@ function createIncidentCard(r) {
     const card = document.createElement('div');
     const isSelected = (typeof _bulkSelectedIds !== 'undefined') && _bulkSelectedIds.has(r.id);
     card.className = `qrt-card ${selectedId === r.id ? 'selected' : ''} ${isSelected ? 'bulk-checked' : ''}`;
-    // Phase F image-reliability (May 2026) — expose the report id on
+    // Phase F image-reliability (May 2026) - expose the report id on
     // the card element so e2e specs + operator devtools can scope to
     // a specific card without doing visibility heuristics or relying
     // on `:first` (which is brittle once the progressive-reveal
@@ -2547,7 +2547,7 @@ function createIncidentCard(r) {
     card.dataset.reportId = r.id;
     card.dataset.id = r.id;   // for CrispNav.markSelected highlight/scroll
     card.onclick    = (ev) => {
-        // Phase G.5 — checkbox click is opt-in; clicking elsewhere on
+        // Phase G.5 - checkbox click is opt-in; clicking elsewhere on
         // the card still opens the detail panel via the existing path.
         if (ev.target && ev.target.classList && ev.target.classList.contains('qrt-bulk-check')) return;
         window.openIncident(r.id);   // unified: deep-link + op-aware
@@ -2559,7 +2559,7 @@ function createIncidentCard(r) {
     const infra = r.infrastructure_type || 'OTHER';
     const icon  = INFRA_CARD_ICONS[infra] || 'fa-triangle-exclamation';
 
-    // WHERE — prefer user-named location, fall back to device name, then coords
+    // WHERE - prefer user-named location, fall back to device name, then coords
     const loc     = r.location;
     const locText = loc?.user_location_name
                  || loc?.device_location_name
@@ -2576,7 +2576,7 @@ function createIncidentCard(r) {
     const locDone    = !!(loc?.latitude || loc?.device_latitude);
     const allDone    = (!r.expected_media || r.received_media >= r.expected_media) && locDone;
 
-    // ACTION button — differs by current status
+    // ACTION button - differs by current status
     let actionEl;
     if (r.status === 'PENDING' || r.status === 'VERIFIED') {
         actionEl = `<button class="qrt-dispatch-btn"
@@ -2589,7 +2589,7 @@ function createIncidentCard(r) {
         actionEl = `<span class="qrt-resolved-label"><i class="fa-solid fa-ban"></i> False</span>`;
     }
 
-    // Truth score badge — shown if verification has been run
+    // Truth score badge - shown if verification has been run
     const v = r.verification;
     let truthBadge = '';
     if (v && v.total_score !== undefined) {
@@ -2606,7 +2606,7 @@ function createIncidentCard(r) {
         </span>`;
     }
 
-    // Phase C.2 (May 2026) — "Original pending" badge. Fires whenever
+    // Phase C.2 (May 2026) - "Original pending" badge. Fires whenever
     // any captured photo's LARGE (HIGH) tier hasn't finished assembling.
     // Surfaces the "reporter is on a slow link, Original is in the
     // background queue" case from the UNDP spec so operators don't
@@ -2614,7 +2614,7 @@ function createIncidentCard(r) {
     // Counts groups for which LARGE is missing or incomplete; shows
     // worst-case completion_pct for context.
     //
-    // Phase F image-reliability (May 2026) — the feed-card chip now
+    // Phase F image-reliability (May 2026) - the feed-card chip now
     // distinguishes uploading / delayed / lost / missing states using
     // `_classifyHighTier()`. Pre-fix this site conflated pending,
     // assembling, and failed under one 14-day "still uploading" chip
@@ -2644,7 +2644,7 @@ function createIncidentCard(r) {
         }
     }
     const origPendingCount = cntLost + cntDelayed + cntUploading + cntMissingFresh;
-    // Pick the worst state for the chip cosmetic — operator sees a red
+    // Pick the worst state for the chip cosmetic - operator sees a red
     // chip if ANY group is `lost`, yellow if any are `delayed`, amber
     // (pulsing cloud-arrow) for the still-uploading happy path.
     let chipState = 'uploading';
@@ -2665,10 +2665,10 @@ function createIncidentCard(r) {
         'missing-fresh': 'ORIG',
     }[chipState];
     const _chipTitle = {
-        lost:    `${cntLost} ${cntLost === 1 ? 'Original' : 'Originals'} permanently lost — network never delivered the final chunks. Click to open the report and use the Reclaim button.`,
+        lost:    `${cntLost} ${cntLost === 1 ? 'Original' : 'Originals'} permanently lost - network never delivered the final chunks. Click to open the report and use the Reclaim button.`,
         delayed: `${cntDelayed} ${cntDelayed === 1 ? 'Original is' : 'Originals are'} delayed past the 30-min freshness window. The backend recovery sweep will mark them lost on the next tick. Click to inspect.`,
         uploading: `${origPendingCount} of ${_groups.length} ${origPendingCount === 1 ? 'Original is' : 'Originals are'} still uploading (worst pct: ${origMinPct}%). Click to open the report.`,
-        'missing-fresh': `${cntMissingFresh} ${cntMissingFresh === 1 ? 'Original has' : 'Originals have'} no HIGH-tier row yet — reporter's device may still be queueing. Click to inspect.`,
+        'missing-fresh': `${cntMissingFresh} ${cntMissingFresh === 1 ? 'Original has' : 'Originals have'} no HIGH-tier row yet - reporter's device may still be queueing. Click to inspect.`,
     }[chipState];
     const origPendingChip = origPendingCount > 0 && _groups.length > 0
         ? `<span class="qrt-orig-chip qrt-orig-chip-${chipState}" title="${_chipTitle}">
@@ -2676,21 +2676,21 @@ function createIncidentCard(r) {
            </span>`
         : '';
 
-    // K.5.a (May 2026, Phase K) — operator-visible status chips.
+    // K.5.a (May 2026, Phase K) - operator-visible status chips.
     // Renders the FIRST applicable chip from the severity-ordered list
     // below (most-concerning first). Detail panel can show all chips
     // simultaneously; the feed card stays at one chip per row to keep
     // operator triage scannable.
     //
     // Priority order matches the audit's "operator concern" gradient:
-    //   1. Media corrupt (checksum_mismatch)         — RED, data integrity
-    //   2. Upload abandoned (chunks_never_arrived)   — RED, no recovery
-    //   3. Redaction failed (pii_blur_status=failed)  — RED, privacy risk
-    //   4. Original (slow network, bandwidth_tier_deferred) — AMBER
-    //   5. Attribution lost (expired token)          — GREY, informational
-    //   6. Uploading… (sync_status=PARTIAL + pending media) — AMBER
+    //   1. Media corrupt (checksum_mismatch)         - RED, data integrity
+    //   2. Upload abandoned (chunks_never_arrived)   - RED, no recovery
+    //   3. Redaction failed (pii_blur_status=failed)  - RED, privacy risk
+    //   4. Original (slow network, bandwidth_tier_deferred) - AMBER
+    //   5. Attribution lost (expired token)          - GREY, informational
+    //   6. Uploading… (sync_status=PARTIAL + pending media) - AMBER
     const _media = r.media || [];
-    // R1 (May 2026) — chip predicate distinguishes abandoned-and-recovered
+    // R1 (May 2026) - chip predicate distinguishes abandoned-and-recovered
     // from abandoned-forever. Pre-R1 we matched on abandon_reason alone;
     // that caused successfully-resumed uploads to render the "Upload
     // abandoned" chip indefinitely because abandon_reason was never
@@ -2705,7 +2705,7 @@ function createIncidentCard(r) {
     const _hasPiiBlurStatus = (status) => _media.some(m => m && m.pii_blur_status === status);
     let _statusChip = '';
     if (_hasAbandonReason('checksum_mismatch')) {
-        _statusChip = `<span class="k5a-chip k5a-chip-red" title="One or more media files failed integrity check (djb2 checksum mismatch on assembly). Bytes on disk are corrupt — only a fresh upload can recover.">
+        _statusChip = `<span class="k5a-chip k5a-chip-red" title="One or more media files failed integrity check (djb2 checksum mismatch on assembly). Bytes on disk are corrupt - only a fresh upload can recover.">
             <i class="fa-solid fa-triangle-exclamation"></i> Media corrupt
         </span>`;
     } else if (_hasAbandonReason('chunks_never_arrived') || _hasAbandonReason('assembly_worker_lost')) {
@@ -2713,22 +2713,22 @@ function createIncidentCard(r) {
             <i class="fa-solid fa-satellite-dish"></i> Upload abandoned
         </span>`;
     } else if (_hasPiiBlurStatus('failed')) {
-        _statusChip = `<span class="k5a-chip k5a-chip-red" title="PII blur (face / text redaction) failed on this image. Review manually before sharing — bytes may contain identifiable faces or text.">
+        _statusChip = `<span class="k5a-chip k5a-chip-red" title="PII blur (face / text redaction) failed on this image. Review manually before sharing - bytes may contain identifiable faces or text.">
             <i class="fa-solid fa-eye-low-vision"></i> Redaction failed
         </span>`;
     } else if (_hasPiiBlurStatus('pending')) {
-        // B-H (May 2026, Batch B-H of the Forensic Blur Audit) —
+        // B-H (May 2026, Batch B-H of the Forensic Blur Audit) -
         // canonical 4-state pii_blur_status taxonomy. Pending means
         // assembly completed but the blur worker hasn't finished yet;
         // GET /media/{id}/file returns 425 Too Early during this
         // window (B-A URL gating). Operator sees the amber chip
-        // instead of a broken image — and knows it will resolve
+        // instead of a broken image - and knows it will resolve
         // shortly without needing to refresh.
-        _statusChip = `<span class="k5a-chip k5a-chip-amber" title="Image is being scanned for PII (faces + text). Public URL is gated until scan completes — typically 5-30 seconds.">
+        _statusChip = `<span class="k5a-chip k5a-chip-amber" title="Image is being scanned for PII (faces + text). Public URL is gated until scan completes - typically 5-30 seconds.">
             <i class="fa-solid fa-shield-halved"></i> Checking PII…
         </span>`;
     } else if (_hasPiiBlurStatus('complete_with_redactions')) {
-        // B-H: positive operator signal — image WAS scanned and
+        // B-H: positive operator signal - image WAS scanned and
         // redactions were applied. Green / informational rather than
         // alerting; the redaction worked.
         _statusChip = `<span class="k5a-chip k5a-chip-green" title="Faces and / or PII text were detected and automatically blurred. Image is safe to share at any audience tier.">
@@ -2744,18 +2744,18 @@ function createIncidentCard(r) {
         </span>`;
     } else if (r.sync_status === 'PARTIAL'
                && _media.some(m => m && m.assembly_status === 'pending')) {
-        _statusChip = `<span class="k5a-chip k5a-chip-amber" title="Report is still progressing — some chunks pending. Idle-promote (Action ④) will flip to SYNCED after 60s of no media activity.">
+        _statusChip = `<span class="k5a-chip k5a-chip-amber" title="Report is still progressing - some chunks pending. Idle-promote (Action ④) will flip to SYNCED after 60s of no media activity.">
             <i class="fa-solid fa-hourglass-half"></i> Uploading…
         </span>`;
     }
-    // B3 — Dynamic Crisis Form provenance chip (when the report came through a
+    // B3 - Dynamic Crisis Form provenance chip (when the report came through a
     // geo-gated crisis pack). Icon-only label keeps the feed card scannable; the
     // pack title is shown on the detail panel.
     const _formChip = r.form_pack_id
         ? `<span class="k5a-chip" style="background:rgba(34,211,238,0.14);color:#67e8f9;" title="Submitted via a Dynamic Crisis Form pack${r.form_pack_version ? ' (v' + r.form_pack_version + ')' : ''}"><i class="fa-solid fa-clipboard-list"></i> Crisis form</span>`
         : '';
 
-    // Phase G.5 — bulk-select checkbox at top-left. Visible only when
+    // Phase G.5 - bulk-select checkbox at top-left. Visible only when
     // multi-select mode is enabled (operator toggled the toolbar
     // button); otherwise stays out of the way.
     const bulkChk = (typeof _bulkSelectMode !== 'undefined' && _bulkSelectMode)
@@ -2786,12 +2786,12 @@ function createIncidentCard(r) {
             <div class="qrt-when">
                 <i class="fa-regular fa-clock"></i>
                 ${_isStaleArrival(r)
-                    ? `<span class="qrt-stale" title="Captured offline — drained on reconnect">
+                    ? `<span class="qrt-stale" title="Captured offline - drained on reconnect">
                           <i class="fa-solid fa-cloud-arrow-up"></i> Captured ${timeAgo(r.client_created_at)} · Received ${timeAgo(r.server_created_at)}
                        </span>`
                     : timeAgo(r.server_created_at)}
             </div>
-            <!-- Phase F.1.c (May 2026) — de-stuffed media presence row.
+            <!-- Phase F.1.c (May 2026) - de-stuffed media presence row.
                  Previously each icon also carried an inline percent
                  text (di-pct span) when the upload was mid-progress.
                  Across a 50-card feed scan that was ~50×3 = ~150
@@ -2812,7 +2812,7 @@ function createIncidentCard(r) {
                 <span class="qrt-di ${audioDone ? 'di-done' : hasAudio ? 'di-partial' : 'di-off'}" title="Audio: ${audioDone ? 'Complete' : hasAudio ? Math.round(audioPct) + '%' : 'Not received'}">
                     <i class="fa-solid fa-microphone"></i>
                 </span>
-                ${v ? `<span class="qrt-ai-badge" title="Verified: ${v.total_score}/100 — ${(v.verdict || '').replace(/_/g,' ')}" style="color:${v.total_score >= 60 ? '#22c55e' : v.total_score >= 40 ? '#eab308' : '#ef4444'};">
+                ${v ? `<span class="qrt-ai-badge" title="Verified: ${v.total_score}/100 - ${(v.verdict || '').replace(/_/g,' ')}" style="color:${v.total_score >= 60 ? '#22c55e' : v.total_score >= 40 ? '#eab308' : '#ef4444'};">
                     <i class="fa-solid fa-brain"></i> ${v.total_score}
                 </span>` : ''}
             </div>
@@ -2843,7 +2843,7 @@ window.setViewMode = function(mode) {
 
 // ── Tree Mode: original hierarchical feed ─────────────────────────────────────
 function renderTreeFeed(el) {
-    // Operational queue (attention-panel deep link) — replaces status/time.
+    // Operational queue (attention-panel deep link) - replaces status/time.
     let filtered = _activeQueue ? _applyQueueFilter(allReports)
         : allReports.filter(r => {
             if (statusFilter === 'all') return true;
@@ -2854,7 +2854,7 @@ function renderTreeFeed(el) {
     // Filter by time
     if (!_activeQueue && timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
-        // K.5.b — use _priorityTime so offline-drained reports stay visible
+        // K.5.b - use _priorityTime so offline-drained reports stay visible
         // by capture time, not the late server-receive timestamp.
         filtered = filtered.filter(r => _priorityTime(r) > cutoff);
     }
@@ -2869,13 +2869,13 @@ function renderTreeFeed(el) {
             return haystack.includes(treeSearchTerm);
         });
     }
-    // Phase G.1 — apply stacking chip filters in tree mode too, so the
+    // Phase G.1 - apply stacking chip filters in tree mode too, so the
     // operator's chip selection persists across view-mode switches.
     if (_activeChipFilters.size) {
         filtered = filtered.filter(_passesChipFilters);
     }
     el.innerHTML = '';
-    _lastTreeFiltered = filtered;   // export parity — see exportNodeData
+    _lastTreeFiltered = filtered;   // export parity - see exportNodeData
     const frag = document.createDocumentFragment();
     const tree = buildControlPanelTree(filtered);
     renderTreeLevel(frag, tree, 0, '');
@@ -2889,7 +2889,7 @@ function renderTreeFeed(el) {
 }
 
 /** Get the time-filtered report set (shared by stats, analytics, and map) */
-// Phase G.4 — Single-crisis drill-down filter. Layers on top of the
+// Phase G.4 - Single-crisis drill-down filter. Layers on top of the
 // G.1 chip filter set without colliding with the existing chip ids.
 // Set by clicking a crisis-type bar in the analytics panel; cleared
 // by clicking the same bar again or by clearing all chip filters.
@@ -2899,7 +2899,7 @@ function _getFilteredReports() {
     let reports = _applyQueueFilter(allReports);
     if (!_activeQueue && timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
-        // K.5.b — use _priorityTime for offline-aware time filter.
+        // K.5.b - use _priorityTime for offline-aware time filter.
         reports = reports.filter(r => _priorityTime(r) > cutoff);
     }
     if (_crisisDrillFilter != null) {
@@ -2926,13 +2926,13 @@ function updateCommandStats() {
     _set('count-resolved', resolved);
     _set('count-total', reports.length);
 
-    // Phase C.2 — Originals-pending count. Show the pill only when > 0
+    // Phase C.2 - Originals-pending count. Show the pill only when > 0
     // so the command bar doesn't grow a permanent "0 ORIG PENDING" chip
     // (which would mislead operators into thinking it's broken).
     //
     // Phase F image-reliability (May 2026). The pill counts reports that
     // have at least one HIGH-tier variant in `uploading` / `delayed` /
-    // `lost` / `missing-fresh` — i.e. any tri-state OTHER than
+    // `lost` / `missing-fresh` - i.e. any tri-state OTHER than
     // `complete` or `missing-old`. Pre-fix this counter conflated all
     // non-complete states under one label which never decremented when
     // the backend gave up (no terminal state existed yet). Now the
@@ -2983,7 +2983,7 @@ function updateCommandStats() {
 
 // ── Status-filter selection: click a segmented-control item to filter the feed ──
 //
-// Phase F.1.b — the five separate .stat-pill elements were replaced by
+// Phase F.1.b - the five separate .stat-pill elements were replaced by
 // one segmented control (.cmd-status-seg with .cmd-status-seg-item
 // children). Selection lookup is now by id (#stat-critical etc.) which
 // is stable across the redesign; the active class moved from
@@ -3009,13 +3009,13 @@ window.filterByPill = function (type) {
     renderFeed();
 };
 
-// Phase G.1 (May 2026) — Stacking multi-filter chips.
+// Phase G.1 (May 2026) - Stacking multi-filter chips.
 //
 // State: `_activeChipFilters` is a Set<string> of chip ids. Empty set
 // means no chip filter is active. Multiple chips stack with AND
 // semantics between chip dimensions and OR semantics within the
 // damage dimension (so dmg-complete + dmg-partial both selected
-// matches reports with either damage class — not zero rows).
+// matches reports with either damage class - not zero rows).
 //
 // Persistence: localStorage (cross-session) + URL hash (deep-linkable
 // to a colleague). URL hash takes precedence on page load so a deep-
@@ -3024,7 +3024,7 @@ window.filterByPill = function (type) {
 // Render pipeline: `_passesChipFilters(r)` predicate is applied after
 // the existing time + status pill filters in both `renderTriageQueue`
 // (queue mode) and `renderTreeFeed` (tree mode). Filter chips are
-// VIEW-MODE-INDEPENDENT — selecting "Debris clearing" filters the
+// VIEW-MODE-INDEPENDENT - selecting "Debris clearing" filters the
 // same set of reports in either mode.
 const CHIP_FILTERS_LS_KEY = 'crisp_dashboard_chip_filters_v1';
 let _activeChipFilters = new Set();
@@ -3052,7 +3052,7 @@ function _restoreChipFiltersFromStorage() {
             }
         }
     } catch (_) {
-        // Defensive — bad JSON, no localStorage, etc. → start empty.
+        // Defensive - bad JSON, no localStorage, etc. → start empty.
     }
 }
 
@@ -3111,11 +3111,11 @@ window.clearAllChipFilters = function () {
 };
 
 // ══════════════════════════════════════════════════════════════════════
-// Phase G.6 (May 2026) — Saved view presets
+// Phase G.6 (May 2026) - Saved view presets
 // ══════════════════════════════════════════════════════════════════════
 // Operator captures the current viewing state ({chips, status pill,
 // time filter, view mode, sort mode}) under a chosen name. Stored
-// in localStorage — single-device for now; a backend `UserView`
+// in localStorage - single-device for now; a backend `UserView`
 // table can layer on later when multi-device sharing becomes real.
 //
 // State shape (serialised as JSON):
@@ -3142,7 +3142,7 @@ function _loadSavedViews() {
 
 function _persistSavedViews(views) {
     try { localStorage.setItem(SAVED_VIEWS_LS_KEY, JSON.stringify(views)); }
-    catch (_) { showToast('localStorage quota — cannot save', 'error'); }
+    catch (_) { showToast('localStorage quota - cannot save', 'error'); }
 }
 
 function _captureCurrentView() {
@@ -3161,7 +3161,7 @@ function _applyView(v) {
     _activeChipFilters.clear();
     for (const id of (v.chips || [])) _activeChipFilters.add(id);
     if (typeof _activePillFilter !== 'undefined') {
-        // Reach into the global state directly — the existing pill-
+        // Reach into the global state directly - the existing pill-
         // setter wraps a renderFeed which is wasted work here.
         _activePillFilter = v.statusPill || null;
     }
@@ -3424,7 +3424,7 @@ function _renderAnalytics() {
     const _tsd = document.getElementById('team-score-details');
     if (_tsd) _tsd.innerHTML = `
         <div style="font-size:18px;font-weight:800;color:${scColor};font-family:var(--font-head);margin-bottom:4px;">${scLabel}</div>
-        <div style="font-size:12px;color:var(--text-sub);margin-bottom:8px;">Team Performance Score — based on response speed, critical resolution, verification coverage, and data quality</div>
+        <div style="font-size:12px;color:var(--text-sub);margin-bottom:8px;">Team Performance Score - based on response speed, critical resolution, verification coverage, and data quality</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <span class="ac-score-chip">Response ${bd.response}/30</span>
             <span class="ac-score-chip">Critical ${bd.critical}/25</span>
@@ -3433,7 +3433,7 @@ function _renderAnalytics() {
             <span class="ac-score-chip">Triage ${bd.triage}/10</span>
         </div>`;
 
-    // 0b. Score Trend (daily — store in localStorage)
+    // 0b. Score Trend (daily - store in localStorage)
     const TREND_KEY = 'crisp_score_trend';
     // Key by the operator's LOCAL calendar day (was toISOString = UTC day,
     // which rolled the bucket over at 05:30 IST / mid-shift elsewhere).
@@ -3575,7 +3575,7 @@ function _renderAnalytics() {
         <div class="ac-metric"><span class="ac-metric-val" style="color:#94a3b8;">${withDescription}</span><span class="ac-metric-label">Have Text</span></div>
     `;
 
-    // ── Phase G.4 — Drill-down breakdowns ──────────────────────────
+    // ── Phase G.4 - Drill-down breakdowns ──────────────────────────
     // 8. Top buildings (by report count). Click → openBuildingConsole.
     const buildingCounts = {};
     const buildingLabels = {};
@@ -3583,7 +3583,7 @@ function _renderAnalytics() {
         const bid = r.building_id;
         if (!bid) return;
         buildingCounts[bid] = (buildingCounts[bid] || 0) + 1;
-        // Pick a label — first non-empty per id wins.
+        // Pick a label - first non-empty per id wins.
         if (!buildingLabels[bid]) {
             buildingLabels[bid] =
                 r.location?.user_location_name
@@ -3673,14 +3673,14 @@ window._ensureChipFilter = function (chipId, shouldBeOn) {
     } else if (!shouldBeOn && isOn) {
         toggleChipFilter(chipId);
     } else {
-        // Already in the desired state — just nudge a re-render in case
+        // Already in the desired state - just nudge a re-render in case
         // the operator clicked from analytics with no actual chip change.
         renderFeed();
     }
     showToast(shouldBeOn ? `Filter applied: ${chipId}` : `Filter cleared: ${chipId}`, 'success');
 };
 
-// Phase G.4 — Single-crisis drill-down filter declared above; this is
+// Phase G.4 - Single-crisis drill-down filter declared above; this is
 // just a comment marker for the next reader.
 
 window._setCrisisDrillFilter = function (crisis) {
@@ -3695,7 +3695,7 @@ window._setCrisisDrillFilter = function (crisis) {
     renderFeed();
 };
 
-// Crisis drill-down predicate — applied INSIDE _getFilteredReports
+// Crisis drill-down predicate - applied INSIDE _getFilteredReports
 // below via `_passesCrisisDrill`. Kept here next to the state so the
 // filter is one logical unit.
 window._passesCrisisDrill = function (r) {
@@ -3703,7 +3703,7 @@ window._passesCrisisDrill = function (r) {
     return (r.crisis_type || 'UNKNOWN') === _crisisDrillFilter;
 };
 
-// Phase G.4 — graceful close for analytics panel (no-op if already
+// Phase G.4 - graceful close for analytics panel (no-op if already
 // closed). The existing toggle is `_renderAnalytics`-gated by panel
 // visibility; we provide an explicit closer so drill-down clicks
 // don't have to know about the implementation.
@@ -3715,7 +3715,7 @@ window.closeAnalyticsPanel = function () {
 };
 
 // ══════════════════════════════════════════════════════════════════════
-// Phase G.5 (May 2026) — Bulk multi-select + batch verify
+// Phase G.5 (May 2026) - Bulk multi-select + batch verify
 // ══════════════════════════════════════════════════════════════════════
 // Operator toggles "Select" mode → each visible card grows a
 // checkbox. Selected ids accumulate in `_bulkSelectedIds`. A floating
@@ -3765,7 +3765,7 @@ function _paintBulkSelectUI() {
     if (countEl) countEl.textContent = String(count);
 }
 
-// SSE batch verify — opens an EventSource against the batch-verify
+// SSE batch verify - opens an EventSource against the batch-verify
 // stream and surfaces progress via toast. Since EventSource doesn't
 // allow custom headers (no Authorization), we instead use fetch
 // with stream:true semantics and manually parse SSE events.
@@ -3930,7 +3930,7 @@ function showIncidentPreview(r, event) {
     const thumbUrl = img?.thumbnail_url ? getMediaUrl(img.thumbnail_url) : '';
     const fullUrl  = img?.url && img.assembly_status === 'complete' ? getMediaUrl(img.url) : '';
     const audioUrl = audio?.url ? getMediaUrl(audio.url) : (audio?.thumbnail_url ? getMediaUrl(audio.thumbnail_url) : '');
-    // Phase 2 (May 2026): hover-preview is a 380px tooltip — no need to
+    // Phase 2 (May 2026): hover-preview is a 380px tooltip - no need to
     // fetch the LARGE variant for it. Prefer the thumb (which is also
     // already in cache from the inline detail panel render). Falls back
     // to full only if no thumb exists (legacy single-variant rows).
@@ -3946,7 +3946,7 @@ function showIncidentPreview(r, event) {
         partialPreviewUrl = getMediaUrl('static/' + img.id + '_partial.jpg')
                           + '?p=' + Math.floor(img.completion_pct);
     }
-    // Phase 1.5: last-resort — blurhash placeholder. Used when no variant,
+    // Phase 1.5: last-resort - blurhash placeholder. Used when no variant,
     // no partial thumbnail, and no partial file exists yet (e.g. meta POST
     // landed but the first chunk is still in flight). Never overrides a
     // real photo source.
@@ -3954,12 +3954,12 @@ function showIncidentPreview(r, event) {
     // Phase 2: thumb-first preference (was full-first). Cuts hover-preview
     // image bandwidth ~10× when LOW + LARGE both exist for a report.
     const photoSrc = thumbUrl || fullUrl || partialPreviewUrl || blurPreviewUrl || '';
-    // May 2026 — route sat URLs through getMediaUrl(). The backend now
+    // May 2026 - route sat URLs through getMediaUrl(). The backend now
     // emits stable `/api/v1/reports/<id>/satellite/<slot>` URLs for S3-
     // backed media; getMediaUrl() correctly handles relative paths
     // (prepends BACKEND_HOST) and external https URLs (pass-through).
     // The previous `${BACKEND_HOST}${...}` concat broke whenever the
-    // serializer returned an `https://s3...` presigned URL — producing
+    // serializer returned an `https://s3...` presigned URL - producing
     // `https://undp/.../https://s3.../...` → 404.
     const satSrc = v?.satellite_image_url ? getMediaUrl(v.satellite_image_url) : '';
 
@@ -4007,10 +4007,10 @@ function showIncidentPreview(r, event) {
             ${v ? `<div class="fp-verify-row">
                 <span class="fp-verify-score" style="color:${gc};">${v.total_score}</span>
                 <div class="fp-verify-dots">
-                    <span style="color:${dotCol(scores.location_authenticity)};">● Loc ${scores.location_authenticity ?? '—'}</span>
-                    <span style="color:${dotCol(scores.damage_corroboration)};">● Dmg ${scores.damage_corroboration ?? '—'}</span>
-                    <span style="color:${dotCol(scores.description_coherence)};">● Desc ${scores.description_coherence ?? '—'}</span>
-                    <span style="color:${dotCol(scores.data_quality)};">● Data ${scores.data_quality ?? '—'}</span>
+                    <span style="color:${dotCol(scores.location_authenticity)};">● Loc ${scores.location_authenticity ?? '-'}</span>
+                    <span style="color:${dotCol(scores.damage_corroboration)};">● Dmg ${scores.damage_corroboration ?? '-'}</span>
+                    <span style="color:${dotCol(scores.description_coherence)};">● Desc ${scores.description_coherence ?? '-'}</span>
+                    <span style="color:${dotCol(scores.data_quality)};">● Data ${scores.data_quality ?? '-'}</span>
                 </div>
             </div>` : ''}
         </div>
@@ -4059,23 +4059,23 @@ window.playPreviewAudio = function (url, btn) {
 };
 
 // ── Detail Panel ─────────────────────────────────────────────────────────────
-// skipFly=true when called from poll loop — avoids jarring map movement on auto-refresh
+// skipFly=true when called from poll loop - avoids jarring map movement on auto-refresh
 window.selectReport = (id, skipFly = false) => {
     selectedId = id;
     const r = allReports.find(x => x.id === id);
     if (!r) return;
 
     const panel = document.getElementById('detail-panel');
-    // The detail is a GLOBAL overlay — reparent it to <body> so it renders over
+    // The detail is a GLOBAL overlay - reparent it to <body> so it renders over
     // any context (it ships nested in the incidents view, which is display:none
     // on the operations route; a hidden ancestor would otherwise clip it).
     if (panel.parentElement !== document.body) document.body.appendChild(panel);
     panel.style.display = 'flex';
 
-    // P1.5 — fire-and-forget tier-status refresh so the tier switcher /
+    // P1.5 - fire-and-forget tier-status refresh so the tier switcher /
     // gallery thumbs show post-poll-cycle fresh state instead of waiting
     // for the next listing poll (~4 s). Only fires once per open (not on
-    // re-renders triggered by the refresh itself — `skipFly=true` is the
+    // re-renders triggered by the refresh itself - `skipFly=true` is the
     // recursion guard since the refresh callback always passes true).
     if (!skipFly) {
         _refreshTierStatusForDetail(id);
@@ -4112,7 +4112,7 @@ window.selectReport = (id, skipFly = false) => {
     // `_maybeUpgradeDetailImage` below, which swaps the <img src> without
     // rebuilding the DOM.
     const primaryGroup = photoGroups[0] || null;
-    // Phase 2 (May 2026): default to the SMALLEST complete variant inline —
+    // Phase 2 (May 2026): default to the SMALLEST complete variant inline -
     // typical analyst flow is "skim 50 reports, pull 5 to lightbox", so
     // pre-fetching LARGE on every detail-panel render burned ~10× the
     // bandwidth analysts actually consumed. Honour any manual override
@@ -4148,12 +4148,12 @@ window.selectReport = (id, skipFly = false) => {
     const tierSwitcher = primaryGroup ? _buildTierSwitcher(r.id, primaryGroup, variantPick?.tier) : '';
     // Phase 1.5: if nothing else is renderable yet, try the report's
     // blurhash for instant first-visual. Decoding is cached; returns null
-    // when the hash is missing (legacy report) or malformed — in which case
+    // when the hash is missing (legacy report) or malformed - in which case
     // we fall back to the original "awaiting media" icon placeholder.
     const blurDataUrl = !imgSrc ? blurhashToDataURL(r.blurhash) : null;
     // Phase 2 (May 2026): the lightbox is the explicit "I want HQ" trigger.
     // Even if the inline image is showing the LOW thumb, clicking opens the
-    // HIGHEST complete variant — which is what the analyst means by "show
+    // HIGHEST complete variant - which is what the analyst means by "show
     // me the photo". If only LOW is uploaded so far, we just reuse that.
     const lightboxPick = primaryGroup ? highestCompleteVariant(primaryGroup) : null;
     const lightboxSrc = lightboxPick?.src || imgSrc;
@@ -4175,7 +4175,7 @@ window.selectReport = (id, skipFly = false) => {
                        ${tierSwitcher}
                    </div>`
                 : blurDataUrl
-                    // Phase 1.5: blurhash placeholder — the <div> carries
+                    // Phase 1.5: blurhash placeholder - the <div> carries
                     // `data-group-id` so `_maybeUpgradeDetailImage` finds
                     // and hot-swaps this element once a real variant lands.
                     ? `<div class="dp-img dp-img-uploading" data-group-id="${primaryGroup.group_id || ''}">
@@ -4192,7 +4192,7 @@ window.selectReport = (id, skipFly = false) => {
     ) : (
         // No media rows at all (meta POST landed but upload hasn't started):
         // if the report carries a blurhash, use it as the placeholder instead
-        // of the "camera-slash" icon — gives the analyst an immediate sense
+        // of the "camera-slash" icon - gives the analyst an immediate sense
         // of the scene while the uploader negotiates the first chunk.
         blurDataUrl
             ? `<div class="dp-img dp-img-placeholder" style="padding:0;overflow:hidden;">
@@ -4202,7 +4202,7 @@ window.selectReport = (id, skipFly = false) => {
     );
 
     // ── Satellite image HTML (with alt source toggle) ──
-    // May 2026 — getMediaUrl() routes both relative `/api/v1/...` URLs
+    // May 2026 - getMediaUrl() routes both relative `/api/v1/...` URLs
     // (prepends BACKEND_HOST) and absolute https (pass-through). See
     // the hover-preview comment above for the full HAR-driven story.
     const satSrc    = v?.satellite_image_url ? getMediaUrl(v.satellite_image_url) : '';
@@ -4238,7 +4238,7 @@ window.selectReport = (id, skipFly = false) => {
 
     // ── Satellite verification: score + metadata + 1-paragraph summary ──
     //
-    // Phase B (May 2026, UNDP-grade rebuild) — surface the metadata
+    // Phase B (May 2026, UNDP-grade rebuild) - surface the metadata
     // analysts actually need: acquisition date with sign-aware days-gap,
     // cloud cover with traffic-light colour code, sources used count,
     // and a "Last verified Xm ago" timestamp + re-verify CTA so analysts
@@ -4309,7 +4309,7 @@ window.selectReport = (id, skipFly = false) => {
                 <span style="color:#cbd5e1;font-weight:600;">${allSources.length} sources</span>
             </span>`;
         } else if (v.satellite_source) {
-            // Single-source legacy verification — show the one source.
+            // Single-source legacy verification - show the one source.
             const shortSrc = v.satellite_source.split('(')[0].trim();
             sourcesHtml = `<span class="dp-sat-meta-chip" title="${v.satellite_source}">
                 <i class="fa-solid fa-satellite-dish"></i>
@@ -4340,7 +4340,7 @@ window.selectReport = (id, skipFly = false) => {
         const cloudPct = v.satellite_cloud_cover_pct ?? 0;
         const cloudWarning = (cloudPct > 70 && damageScore <= 10)
             ? `<div class="dp-sat-warning"><i class="fa-solid fa-triangle-exclamation"></i>
-                Heavy cloud cover may have reduced visible damage detection — consider re-verifying after the next clear pass.
+                Heavy cloud cover may have reduced visible damage detection - consider re-verifying after the next clear pass.
               </div>`
             : '';
 
@@ -4362,7 +4362,7 @@ window.selectReport = (id, skipFly = false) => {
                 <button class="dp-reverify-btn" onclick="runVerification('${r.id}')" title="Re-run AI satellite verification (~25s)">
                     <i class="fa-solid fa-rotate"></i> Re-verify
                 </button>
-                <button class="dp-share-evidence-btn" onclick="copyEvidenceLink('${r.id}')" title="Copy a public link to this verification — share with judges or partners">
+                <button class="dp-share-evidence-btn" onclick="copyEvidenceLink('${r.id}')" title="Copy a public link to this verification - share with judges or partners">
                     <i class="fa-solid fa-share-nodes"></i> Share evidence
                 </button>
             </div>
@@ -4427,7 +4427,7 @@ window.selectReport = (id, skipFly = false) => {
     const aaSummary = cachedAA?.summary ?? '';
     const aaDetails = cachedAA?.details ?? '';
 
-    // Phase J.2 (May 2026) — one-sentence operator headline.
+    // Phase J.2 (May 2026) - one-sentence operator headline.
     // Operators want to know "what happened / where / severity /
     // open status" without scanning chips. Derived from existing
     // fields; zero backend change.
@@ -4439,7 +4439,7 @@ window.selectReport = (id, skipFly = false) => {
                 (r.location && (r.location.user_location_name || r.location.device_location_name))
                 || '';
             if (!raw) return '';
-            // Last 1-2 comma segments — most-specific then city.
+            // Last 1-2 comma segments - most-specific then city.
             const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
             if (parts.length >= 2) return `${parts[0]}, ${parts[parts.length - 1]}`;
             return parts[0] || '';
@@ -4452,11 +4452,11 @@ window.selectReport = (id, skipFly = false) => {
             : r.status === 'RESPONDING' ? ' · responder on the way'
             : r.status === 'FALSE_ALARM' ? ' · false alarm'
             : '';
-        return `${infraLbl}${locShort ? ' at ' + locShort : ''} — ${sevLbl}${waitChunk || respChunk}.`;
+        return `${infraLbl}${locShort ? ' at ' + locShort : ''} - ${sevLbl}${waitChunk || respChunk}.`;
     })();
 
     document.getElementById('detail-body').innerHTML = `
-        <!-- Phase J.2 — operator headline + 6-section restructure.
+        <!-- Phase J.2 - operator headline + 6-section restructure.
              Headline gives the analyst the at-a-glance answer to
              "what / where / severity / what's the open status?"
              without needing to scan the chip row. Sections that
@@ -4492,14 +4492,14 @@ window.selectReport = (id, skipFly = false) => {
                     })() : `<button class="dp-run-ai-btn" onclick="runAIAssessment('${r.id}')"><i class="fa-solid fa-shield-halved"></i> Credibility Check</button>`}
                 </div>
                 <button class="dp-pdf-btn" onclick="exportPDF('${r.id}')" title="Export PDF"><i class="fa-solid fa-file-pdf"></i></button>
-                <button class="dp-pdf-btn" onclick="downloadEvidenceBundle('${r.id}')" title="Evidence bundle (ZIP) — photos, audio, satellite snapshots + verification JSON for offline review"><i class="fa-solid fa-file-zipper"></i></button>
+                <button class="dp-pdf-btn" onclick="downloadEvidenceBundle('${r.id}')" title="Evidence bundle (ZIP) - photos, audio, satellite snapshots + verification JSON for offline review"><i class="fa-solid fa-file-zipper"></i></button>
             </div>
-            <!-- Phase 5 (Apr 2026) — Reviewer actions + response-time strip.
+            <!-- Phase 5 (Apr 2026) - Reviewer actions + response-time strip.
                  Lives above the existing dispatch/resolve/false-alarm row so
                  analysts see the verdict + response-time context before
                  deciding to send help. -->
             ${_renderReviewerActions(r)}
-            <!-- Phase J.2 (May 2026) — primary CTA + overflow.
+            <!-- Phase J.2 (May 2026) - primary CTA + overflow.
                  Send Help is the always-visible primary action.
                  False Alarm now lives inside the Verdict dropdown
                  above. Delete moves into the overflow menu so the
@@ -4532,15 +4532,15 @@ window.selectReport = (id, skipFly = false) => {
             </div>
         </div>
 
-        <!-- Phase F.2.a (May 2026) — Per-incident timeline. Surfaces the
+        <!-- Phase F.2.a (May 2026) - Per-incident timeline. Surfaces the
              lifecycle audit data the backend already records (status
              transitions, media additions, satellite verdict, deletion
              grace) so operators have a clear chronological picture
              without leaving the detail panel. Collapsed by default to
              keep the panel compact on first open; click "Timeline" to
              expand. Pure dashboard-side render from the data the LIST
-             endpoint already returns — no backend changes. -->
-        <!-- Phase J.2 (May 2026) — collapsible Activity Log section.
+             endpoint already returns - no backend changes. -->
+        <!-- Phase J.2 (May 2026) - collapsible Activity Log section.
              Wraps F.2.b's audit ribbon into a default-collapsed
              card so admin actions are one click away but don't add
              to the always-visible CTA inventory. Hidden entirely
@@ -4559,7 +4559,7 @@ window.selectReport = (id, skipFly = false) => {
             </div>
         </details>
 
-        <!-- Phase J.2 — collapsible Timeline section. Was always-visible
+        <!-- Phase J.2 - collapsible Timeline section. Was always-visible
              before; now collapsed by default so the panel reads calmer.
              Click summary to expand. -->
         <details class="dp-section dp-section-timeline">
@@ -4589,23 +4589,23 @@ window.selectReport = (id, skipFly = false) => {
                  this span entirely. ADMIN clicks open the profile drawer. -->
             ${r.reporter_badge ? `<span class="dp-field-badge dp-reporter-badge" style="background:rgba(34,197,94,0.12);color:#86efac;cursor:${r.user_id ? 'pointer' : 'default'};" ${r.user_id ? `onclick="openReporterProfile('${r.user_id}')"` : ''} title="${r.user_id ? 'Click to view reporter details (admin only)' : ''}"><i class="fa-solid fa-user-check"></i> ${escapeHtml(r.reporter_badge)}</span>` : ''}
             ${_isStaleArrival(r) ? `<span class="dp-field-badge dp-stale-arrival" title="Reporter captured this offline. The report was drained from the device's pending queue on reconnect ${timeAgo(r.server_created_at)}."><i class="fa-solid fa-cloud-arrow-up"></i> Offline-queued · Captured ${timeAgo(r.client_created_at)}</span>` : ''}
-            <!-- Phase 1.6 (May 2026) — Reporter tier badge. Surfaces the
+            <!-- Phase 1.6 (May 2026) - Reporter tier badge. Surfaces the
                  V4 gamification ladder (T1_SCOUT to T4_LIFEKEEPER) so
                  analysts can see at a glance whether the reporter is a
                  newcomer or a trusted veteran. The tier is server-derived
                  from the linked ReporterProfile (see _attach_reporter_tier
                  in backend/app/api/endpoints/reports.py). NULL = no
-                 profile yet OR legacy badge_level — we explicitly do NOT
+                 profile yet OR legacy badge_level - we explicitly do NOT
                  render T1_SCOUT-by-default to avoid visual confusion.
-                 Phase 2.1 — reads metadata from the shared canonical
+                 Phase 2.1 - reads metadata from the shared canonical
                  config at window.CRISP_TIERS_BY_ID (sourced from
                  shared/tier-config.json). -->
             ${r.reporter_tier ? (() => {
                 const meta = (window.CRISP_TIERS_BY_ID || {})[r.reporter_tier];
                 if (!meta) return '';
-                return `<span class="dp-field-badge dp-reporter-tier" data-tier="${r.reporter_tier}" style="background:rgba(255,255,255,0.06);color:${meta.color};" title="Reporter tier: ${meta.label} — ${meta.criterion}">${meta.emoji} ${meta.label}</span>`;
+                return `<span class="dp-field-badge dp-reporter-tier" data-tier="${r.reporter_tier}" style="background:rgba(255,255,255,0.06);color:${meta.color};" title="Reporter tier: ${meta.label} - ${meta.criterion}">${meta.emoji} ${meta.label}</span>`;
             })() : ''}
-            <!-- Phase E (Apr 2026 UI v3) — "Needs mapping" badge.
+            <!-- Phase E (Apr 2026 UI v3) - "Needs mapping" badge.
                  Fires when the reporter typed a building name in their
                  native language (PWA free-text fallback, RN TextInput,
                  Telegram STEP_BUILDING_NAME) without an OSM footprint
@@ -4623,14 +4623,14 @@ window.selectReport = (id, skipFly = false) => {
                  panel. Green = latest, amber = older. Only rendered for reports
                  with a building_id. -->
             ${r.building_id ? `<span id="dp-version-ribbon-${r.id}" class="dp-field-badge dp-version-ribbon" style="background:rgba(148,163,184,0.12);color:#cbd5e1;"><i class="fa-solid fa-code-branch"></i> V …</span>` : ''}
-            <!-- B3 — Dynamic Crisis Form provenance tag. Shows when the report came
+            <!-- B3 - Dynamic Crisis Form provenance tag. Shows when the report came
                  through a geo-gated crisis pack; the pack title + event name are
                  resolved asynchronously post-render (see selectReport). -->
             ${r.form_pack_id ? `<span id="dp-form-tag-${r.id}" class="dp-field-badge dp-crisis-form-tag" style="background:rgba(34,211,238,0.14);color:#67e8f9;" title="Submitted via a Dynamic Crisis Form pack"><i class="fa-solid fa-clipboard-list"></i> Crisis form${r.form_pack_version ? ` · v${r.form_pack_version}` : ''}</span>` : ''}
         </div>
         ${r.service_status ? (() => {
             const ss = r.service_status;
-            // Phase 1.6 (May 2026) — full UNDP Appendix-1 enum coverage.
+            // Phase 1.6 (May 2026) - full UNDP Appendix-1 enum coverage.
             // The PWA V4 flow can now emit INTERMITTENT / LOAD_SHEDDING /
             // BLACKOUT (electricity) and FULLY_OPERATIONAL /
             // PARTIALLY_OPERATIONAL / NOT_OPERATIONAL (health). Map each
@@ -4666,7 +4666,7 @@ window.selectReport = (id, skipFly = false) => {
                 const m = meta(ss.health);
                 html += `<span class="dp-field-badge dp-svc-health" data-value="${ss.health}" style="background:rgba(255,255,255,0.04);color:${m.c};"><i class="fa-solid ${m.i}"></i> 🏥 ${m.label}</span>`;
             }
-            // Phase 1.6 — humanize pressing_needs codes too. The PWA
+            // Phase 1.6 - humanize pressing_needs codes too. The PWA
             // emits raw codes (food_water, shelter, medical, ...).
             // Operators want a readable label; keep the raw code as
             // a data-attribute so filtering can still match exactly.
@@ -4698,21 +4698,21 @@ window.selectReport = (id, skipFly = false) => {
             <div class="dp-img-view" id="dp-img-view-${r.id}" style="position:relative;">
                 ${imgHtml}
                 <div class="dp-pii-badge"><i class="fa-solid fa-shield-halved"></i> PII Protected</div>
-                ${photoGroups.length > 1 ? `<div class="dp-img-count-badge" title="This report has ${photoGroups.length} captured photos — tap a thumbnail or the image to open the gallery.">
+                ${photoGroups.length > 1 ? `<div class="dp-img-count-badge" title="This report has ${photoGroups.length} captured photos - tap a thumbnail or the image to open the gallery.">
                     <i class="fa-solid fa-images"></i> Photo <span class="dp-img-count-active">1</span> of ${photoGroups.length}
                 </div>` : ''}
             </div>
             ${photoGroups.length > 0 ? (() => {
-                // May 2026 — render the strip even for single-photo reports
+                // May 2026 - render the strip even for single-photo reports
                 // so operators get a consistent layout AND see at a glance
                 // when more variants are still uploading. "+N originals
                 // pending" reads off the LARGE tier's assembly_status across
-                // every photo group — this surfaces the "Original may be
+                // every photo group - this surfaces the "Original may be
                 // delayed by poor connectivity" case from the UNDP spec.
                 const labelText = photoGroups.length === 1
                     ? 'Photo 1 of 1'
                     : `${photoGroups.length} Photos`;
-                // Phase F image-reliability (May 2026) — tri-state chip
+                // Phase F image-reliability (May 2026) - tri-state chip
                 // replaces the binary "complete vs pending" check that
                 // pulsed forever on `failed` rows. Now each non-complete
                 // group surfaces under its WORST-state chip and offers
@@ -4761,7 +4761,7 @@ window.selectReport = (id, skipFly = false) => {
                     lost:    'The reporter\'s device never delivered the final chunks. Use Reclaim → Retry assembly if you believe the file is recoverable, or Reclaim → Mark abandoned to dismiss.',
                     delayed: 'These uploads are past the 30-minute freshness window. The next backend recovery tick will mark them lost; you can reclaim them in the meantime.',
                     uploading: 'These uploads are still inside the freshness window. They should appear automatically once the reporter\'s device finishes the chunk stream.',
-                    'missing-fresh': 'The HIGH-tier variant hasn\'t been allocated yet — the reporter\'s device may be queueing it on slow connectivity. The PWA will retry for up to 14 days.',
+                    'missing-fresh': 'The HIGH-tier variant hasn\'t been allocated yet - the reporter\'s device may be queueing it on slow connectivity. The PWA will retry for up to 14 days.',
                 }[dpChipState];
                 // Reclaim button only shown for `lost` + `delayed` states.
                 // Embeds the reclaimable media list as a JSON-encoded data-*
@@ -4856,9 +4856,9 @@ window.selectReport = (id, skipFly = false) => {
             const phone = ci.phone || '';
             const netLoc = ci.network_location || [ci.network_city, ci.network_state, ci.network_country].filter(Boolean).join(', ');
             const hasCallerInfo = phone || netLoc;
-            // Phase 23 — geocoding confidence chip. Shown when the
+            // Phase 23 - geocoding confidence chip. Shown when the
             // location came from a text-only channel (IVR / SMS /
-            // WhatsApp transcript) — the backend stores a float
+            // WhatsApp transcript) - the backend stores a float
             // confidence + source string on the Location row.
             const gcConf = (typeof loc?.geocoding_confidence === 'number') ? loc.geocoding_confidence : null;
             const gcSrc  = loc?.geocoding_source || '';
@@ -4872,7 +4872,7 @@ window.selectReport = (id, skipFly = false) => {
                 ${loc ? `<div class="dp-loc-row">
                     <i class="fa-solid fa-map-pin" style="color:${sevColor};"></i>
                     <span class="dp-loc-name">${userName}</span>
-                    ${gcPct !== null ? `<span class="dp-geoconf ${gcCls}" title="Geocoded from voice/text via ${escapeHtml(gcSrc || 'unknown')} — ${gcPct}% confidence"><i class="fa-solid fa-wand-magic-sparkles"></i> ${gcPct}%${gcSrc ? ` · ${escapeHtml(gcSrc)}` : ''}</span>` : ''}
+                    ${gcPct !== null ? `<span class="dp-geoconf ${gcCls}" title="Geocoded from voice/text via ${escapeHtml(gcSrc || 'unknown')} - ${gcPct}% confidence"><i class="fa-solid fa-wand-magic-sparkles"></i> ${gcPct}%${gcSrc ? ` · ${escapeHtml(gcSrc)}` : ''}</span>` : ''}
                     <button class="dp-copy-btn" onclick="navigator.clipboard.writeText('${loc.latitude}, ${loc.longitude}'); showToast('Coords copied','success')"><i class="fa-solid fa-copy"></i></button>
                 </div>` : ''}
                 ${mismatch ? `<div class="dp-loc-row dp-loc-device">
@@ -4896,7 +4896,7 @@ window.selectReport = (id, skipFly = false) => {
         <!-- ⑥ Source Details (collapsible) -->
         <div class="dp-source-details">
             <button class="dp-expand-btn" onclick="const el=document.getElementById('dp-source-body');const ic=this.querySelector('i');if(el.style.display==='none'){el.style.display='block';ic.classList.replace('fa-chevron-down','fa-chevron-up');}else{el.style.display='none';ic.classList.replace('fa-chevron-up','fa-chevron-down');}">
-                <i class="fa-solid fa-chevron-down"></i> <span style="color:${{APP:'#7c3aed',WHATSAPP:'#25d366',TELEGRAM:'#26a5e4',SMS:'#f59e0b',IVR:'#ec4899'}[r.source] || '#94a3b8'};">Source Details — ${{APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || r.source}</span>
+                <i class="fa-solid fa-chevron-down"></i> <span style="color:${{APP:'#7c3aed',WHATSAPP:'#25d366',TELEGRAM:'#26a5e4',SMS:'#f59e0b',IVR:'#ec4899'}[r.source] || '#94a3b8'};">Source Details - ${{APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || r.source}</span>
             </button>
             <div id="dp-source-body" style="display:none;" class="dp-source-detail-body">
                 <div class="dp-meta-row"><span class="dp-meta-key">Channel</span><span>${{APP:'Progressive Web App',WHATSAPP:'WhatsApp Bot',TELEGRAM:'Telegram Bot',SMS:'SMS Gateway',IVR:'IVR Voice Call'}[r.source] || r.source}</span></div>
@@ -4907,10 +4907,10 @@ window.selectReport = (id, skipFly = false) => {
         </div>
     `;
 
-    // ── Action dock hidden — actions now in top bar ──
+    // ── Action dock hidden - actions now in top bar ──
     document.getElementById('dp-action-dock').innerHTML = '';
 
-    // Phase F.2.b — async-load the admin-action ribbon for this report.
+    // Phase F.2.b - async-load the admin-action ribbon for this report.
     _fetchReportAuditTrail(r.id);
 
     // W4 versioning ribbon fill (Apr 2026 UI v2.1). Async because we
@@ -4951,7 +4951,7 @@ window.selectReport = (id, skipFly = false) => {
         el.title = `Click to highlight all ${idx.total} reports for this building on the map`;
     })();
 
-    // B3 — resolve the crisis-form pack title + event name for the detail tag +
+    // B3 - resolve the crisis-form pack title + event name for the detail tag +
     // answers header. Async (admin lists, cached); guarded against panel close.
     (async () => {
         if (!r.form_pack_id && !r.crisis_event_id) return;
@@ -4965,7 +4965,7 @@ window.selectReport = (id, skipFly = false) => {
             const name = (pack && pack.title) ? escapeHtml(pack.title) : 'Crisis form';
             const ver = r.form_pack_version ? ` · v${r.form_pack_version}` : '';
             tag.innerHTML = `<i class="fa-solid fa-clipboard-list"></i> ${name}${ver}`;
-            tag.title = `Form: ${pack && pack.title ? pack.title : (r.form_pack_id || '—')}${ev && ev.name ? ` · Event: ${ev.name}` : ''}`;
+            tag.title = `Form: ${pack && pack.title ? pack.title : (r.form_pack_id || '-')}${ev && ev.name ? ` · Event: ${ev.name}` : ''}`;
         }
         const fn = document.getElementById(`dp-cf-formname-${r.id}`);
         if (fn) {
@@ -4999,19 +4999,19 @@ window.dpSwitchView = (reportId, view, btn) => {
     // Reset to single view aspect ratio
     container.closest('.dp-evidence-card').querySelector('.dp-img-view .dp-img')?.style?.removeProperty?.('aspect-ratio');
     if (view === 'photo' && img?.url) {
-        // May 2026 — main report photo uses `object-fit:contain` so a
+        // May 2026 - main report photo uses `object-fit:contain` so a
         // portrait phone capture isn't stretched into the .dp-img's
         // 4:3 box. Letterbox bars use the parent's #0f1520 background.
         container.innerHTML = `<div class="dp-img" onclick="openGallery('${r.id}', 0)"><img src="${getMediaUrl(img.url)}" style="width:100%;height:100%;object-fit:contain;border-radius:8px;"></div>`;
     } else if (view === 'sat') {
-        // Apr 2026 — multi-provider fan-out: render every successful
+        // Apr 2026 - multi-provider fan-out: render every successful
         // satellite source side-by-side (AWS Sentinel-2 / Microsoft
         // Planetary Computer / ESA Copernicus / Mapbox). Falls back to
         // single-image view for verifications that ran under the older
         // chain (single-source) path.
         const all = Array.isArray(v?.satellite_images) ? v.satellite_images : [];
         if (all.length >= 2) {
-            // Compact label per source — keeps grid cells tight without
+            // Compact label per source - keeps grid cells tight without
             // overflowing on small screens.
             const sourceShort = (s) => {
                 if (!s) return 'Unknown';
@@ -5022,7 +5022,7 @@ window.dpSwitchView = (reportId, view, btn) => {
                 return s.length > 30 ? s.slice(0, 30) + '…' : s;
             };
             const cells = all.slice(0, 4).map((entry, i) => {
-                // May 2026 — getMediaUrl() handles both relative
+                // May 2026 - getMediaUrl() handles both relative
                 // `/api/v1/.../satellite/grid/<idx>` URLs and absolute
                 // https. Previously hard-coded BACKEND_HOST concat.
                 const src = entry.url ? getMediaUrl(entry.url) : '';
@@ -5103,7 +5103,7 @@ window.dpSwitchView = (reportId, view, btn) => {
     }
 };
 
-// Gallery image switcher — click thumbnail to show in main view.
+// Gallery image switcher - click thumbnail to show in main view.
 // groupIdx is the index into the photo-group list (one group per captured
 // photo, regardless of how many Media variant rows it has on the server).
 //
@@ -5120,23 +5120,23 @@ window.dpShowGalleryImage = (reportId, groupIdx, thumbEl) => {
     if (!grp) return;
     const pick = thumbVariant(grp);
     if (!pick || !pick.src) return;
-    // Lightbox click opens the HIGHEST complete variant — explicit "show me HQ".
+    // Lightbox click opens the HIGHEST complete variant - explicit "show me HQ".
     const lightboxPick = highestCompleteVariant(grp);
     const lightboxSrc = lightboxPick?.src || pick.src;
     const container = document.getElementById(`dp-img-view-${reportId}`);
     if (!container) return;
-    // Phase L (May 2026) — canonical tier values. Accept legacy LOW/HIGH
+    // Phase L (May 2026) - canonical tier values. Accept legacy LOW/HIGH
     // for any pre-rename Media rows that might still exist (alembic 0035
     // backfilled them but defensive).
     const tierLabel = (pick.tier === 'SMALL' || pick.tier === 'LOW') ? 'SMALL'
         : pick.tier === 'MEDIUM' ? 'MEDIUM'
         : (pick.tier === 'ORIGINAL' || pick.tier === 'HIGH') ? 'ORIGINAL'
         : pick.tier;
-    // Preserve the PII badge (and any other overlay children) — only swap the
+    // Preserve the PII badge (and any other overlay children) - only swap the
     // <div class="dp-img"> block. The old innerHTML= wipe lost the shield chip
     // on every thumbnail click.
     const imgWrap = container.querySelector('.dp-img');
-    // May 2026 — `object-fit:contain` matches the .dp-img .img-full-layer
+    // May 2026 - `object-fit:contain` matches the .dp-img .img-full-layer
     // rule so swapping between cached/live image and gallery navigation
     // keeps the same letterbox treatment.
     const newImgHtml = `<div class="dp-img" data-group-id="${grp.groupId}" data-current-tier="${pick.tier}" onclick="openGallery('${reportId}', ${groupIdx})">
@@ -5151,7 +5151,7 @@ window.dpShowGalleryImage = (reportId, groupIdx, thumbEl) => {
     // Update active thumb
     thumbEl.parentElement.querySelectorAll('.dp-gallery-thumb').forEach(t => t.classList.remove('active'));
     thumbEl.classList.add('active');
-    // Phase A — keep the "Photo X of N" count badge in sync with the active thumb
+    // Phase A - keep the "Photo X of N" count badge in sync with the active thumb
     // so the inline preview always advertises which photo of the multi-image
     // capture is currently on screen. Cheap one-line DOM update; no-op when
     // the badge isn't rendered (single-photo reports).
@@ -5172,7 +5172,7 @@ window.dpOpenCompare = (r) => {
     const locMatch = scores.location_authenticity ? Math.round((scores.location_authenticity / 25) * 100) : 0;
     const gc = (pct) => pct >= 70 ? '#22c55e' : pct >= 40 ? '#eab308' : '#ef4444';
 
-    // Timestamps — satellite_acquisition_date is when the satellite CAPTURED the image (from provider API)
+    // Timestamps - satellite_acquisition_date is when the satellite CAPTURED the image (from provider API)
     const photoTime = r.server_created_at ? formatShortDate(r.server_created_at) : 'Unknown';
     const satAcqDate = v?.satellite_acquisition_date;
     const satTime = satAcqDate ? formatShortDate(satAcqDate) : 'Acq. date unavailable';
@@ -5181,7 +5181,7 @@ window.dpOpenCompare = (r) => {
 
     // Time gap between photo capture and satellite image capture
     const gapText = (acqDate) => {
-        if (!acqDate || !r.server_created_at) return 'Date unknown — verify manually';
+        if (!acqDate || !r.server_created_at) return 'Date unknown - verify manually';
         const photoMs = new Date(ensureUTC(r.server_created_at)).getTime();
         const satMs = new Date(ensureUTC(acqDate)).getTime();
         const diffDays = Math.round((photoMs - satMs) / 86400000);
@@ -5209,7 +5209,7 @@ window.dpOpenCompare = (r) => {
 
     overlay.innerHTML = `
         <div class="dp-compare-header">
-            <div class="dp-compare-title"><i class="fa-solid fa-columns"></i> Image Comparison — ${infraDisplayLabel(r.infrastructure_type, r.infrastructure_sub_type)} · ${r.severity}</div>
+            <div class="dp-compare-title"><i class="fa-solid fa-columns"></i> Image Comparison - ${infraDisplayLabel(r.infrastructure_type, r.infrastructure_sub_type)} · ${r.severity}</div>
             <div class="dp-compare-overall">Overall: <strong style="color:${gc(total)};">${total}/100</strong></div>
             <button class="dp-compare-close" onclick="document.getElementById('dp-compare-overlay').style.display='none'"><i class="fa-solid fa-xmark"></i></button>
         </div>
@@ -5241,12 +5241,12 @@ window.closeDetail = () => {
     // it defaults back to the best-complete variant.
     if (selectedId) _tierOverride.delete(selectedId);
     selectedId = null;
-    // Phase H.1.d — also clear any active Building Console state so
+    // Phase H.1.d - also clear any active Building Console state so
     // the next selectReport call doesn't paint over a stale console.
     if (typeof _selectedBuildingId !== 'undefined' && _selectedBuildingId) {
         _closeBuildingConsole({ skipFeedRender: true });
     }
-    // Phase G.3 — drop the full-report max-modal class on close so the
+    // Phase G.3 - drop the full-report max-modal class on close so the
     // next time the panel opens it starts in its docked size.
     document.body.classList.remove('dp-fullscreen');
     document.getElementById('detail-panel').style.display = 'none';
@@ -5260,18 +5260,18 @@ window.closeDetail = () => {
 };
 
 // ──────────────────────────────────────────────────────────────────────
-// Phase F.2.b (May 2026) — Per-report admin-action ribbon
+// Phase F.2.b (May 2026) - Per-report admin-action ribbon
 // ──────────────────────────────────────────────────────────────────────
 // Async-fetches the last 8 REPORT_* AuthAuditLog entries for the
 // currently-selected report and paints a compact strip above the
 // per-incident timeline. Guarded against the panel closing /
-// switching to a different report mid-fetch — the target element
+// switching to a different report mid-fetch - the target element
 // is replaced wholesale by the next selectReport.
 
 async function _fetchReportAuditTrail(reportId) {
     const target = document.getElementById(`dp-audit-ribbon-${reportId}`);
     if (!target) return;
-    // Phase J.2 — parent section is the wrapping <details> card. We
+    // Phase J.2 - parent section is the wrapping <details> card. We
     // hide the whole section (via .is-empty) rather than just the
     // inner ribbon when there are no events, so the operator's panel
     // doesn't carry a useless "Activity Log" empty header.
@@ -5337,7 +5337,7 @@ async function _fetchReportAuditTrail(reportId) {
                     const who = e.user_email ? escapeHtml(e.user_email.split('@')[0]) : 'system';
                     const when = e.created_at ? timeAgo(e.created_at) : '';
                     const reason = (e.details && e.details.action_taken)
-                        ? ` — <em>${escapeHtml(String(e.details.action_taken))}</em>` : '';
+                        ? ` - <em>${escapeHtml(String(e.details.action_taken))}</em>` : '';
                     return `<li class="dp-audit-row">
                         <i class="fa-solid ${ic}" style="color:${co};"></i>
                         <span class="dp-audit-action" style="color:${co};">${lb}</span>
@@ -5349,17 +5349,17 @@ async function _fetchReportAuditTrail(reportId) {
             </ul>
         `;
     } catch (e) {
-        // Silent — the ribbon is best-effort.
+        // Silent - the ribbon is best-effort.
         target.style.display = 'none';
     }
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Phase G.3 (May 2026) — Full-report max-modal
+// Phase G.3 (May 2026) - Full-report max-modal
 // ──────────────────────────────────────────────────────────────────────
 // The detail panel by default docks on the right (~380 px wide). For
 // a distraction-free reading / printing pass an operator can max it
-// to cover the feed + map. Implementation is purely CSS-driven —
+// to cover the feed + map. Implementation is purely CSS-driven -
 // the `body.dp-fullscreen` class swells the detail panel and dims
 // the rest. No content re-render needed.
 
@@ -5414,11 +5414,11 @@ window.addEventListener('popstate', (ev) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
-// Phase H.1.d (May 2026) — Building Intelligence Console.
+// Phase H.1.d (May 2026) - Building Intelligence Console.
 //
 // When a building is selected (URL hash, map polygon click, or the
 // detail panel's "Building history" link), the right-side detail
-// panel becomes the Building Console — a humanitarian-ops-grade
+// panel becomes the Building Console - a humanitarian-ops-grade
 // surface that aggregates the building's reports + intelligence
 // scores + crisis breakdown + responder status + satellite roll-up
 // into one visual entity.
@@ -5426,14 +5426,14 @@ window.addEventListener('popstate', (ev) => {
 // The console fetches GET /api/v1/buildings/{id} (Phase H.1.c) and
 // renders 6 sections in this commit:
 //
-//   1. Sticky header — name, state pill, scores summary, close
+//   1. Sticky header - name, state pill, scores summary, close
 //   2. 5-score intelligence grid (severity / confidence / activity /
 //      escalation_risk / humanitarian_priority)
 //   3. Crisis-type breakdown + damage distribution + debris chip
 //   4. Versioned report stack (latest-first)
 //   5. Satellite verification roll-up
 //   6. Footer with placeholders for H.2-H.6 surfaces (state actions,
-//      responder panel, notes, AI summary, dossier export — wired in
+//      responder panel, notes, AI summary, dossier export - wired in
 //      subsequent commits without restructuring the console layout).
 //
 // State machine: a single `_selectedBuildingId` variable + URL hash
@@ -5494,7 +5494,7 @@ window.openBuildingConsole = async (buildingId) => {
     }
 
     // Map: highlight the selected building's polygon + fly to its
-    // centroid. Both bounded by map readiness — silent no-op if the
+    // centroid. Both bounded by map readiness - silent no-op if the
     // map isn't initialised yet.
     try {
         if (window.map && typeof window.map.flyTo === 'function' &&
@@ -5528,14 +5528,14 @@ function _closeBuildingConsole(opts) {
 window.closeBuildingConsole = _closeBuildingConsole;
 
 // ──────────────────────────────────────────────────────────────────────
-// Phase H.5+ (May 2026) — Console header info derivation
+// Phase H.5+ (May 2026) - Console header info derivation
 // ──────────────────────────────────────────────────────────────────────
 // Operator feedback: "OSM way 1243242 is unreadable as a building name."
 // Instead, the header should carry:
 //   - A human-readable building name (osm_name → most-common
 //     infrastructure_name from reports → "Untitled building")
 //   - The city / locality (parsed from constituent reports' location
-//     names — the last comma-separated segment is usually the city
+//     names - the last comma-separated segment is usually the city
 //     or region)
 //   - The geographic coordinates (centroid)
 //   - A small OSM-id hint at the bottom so the operator can still
@@ -5543,7 +5543,7 @@ window.closeBuildingConsole = _closeBuildingConsole;
 
 function _deriveBuildingHeaderInfo(b) {
     const reports = b.reports || [];
-    // Find a useful infrastructure name from constituent reports —
+    // Find a useful infrastructure name from constituent reports -
     // first non-empty wins ("Holy Cross Hospital", "Powai Bridge", …).
     let inferredName = null;
     for (const r of reports) {
@@ -5558,7 +5558,7 @@ function _deriveBuildingHeaderInfo(b) {
         || (b.osm_addr_full && b.osm_addr_full.trim())
         || 'Untitled building';
 
-    // City / locality — count location-name segments + pick the most
+    // City / locality - count location-name segments + pick the most
     // common one. The LAST segment of a comma-separated location name
     // is usually the city / state / country; we pick the most-distinctive
     // (i.e., the most common segment that isn't trivially short).
@@ -5584,7 +5584,7 @@ function _deriveBuildingHeaderInfo(b) {
         city = sorted[0][0];
     }
 
-    // Coords — 4-decimal precision is plenty for an operator console
+    // Coords - 4-decimal precision is plenty for an operator console
     // (matches ~11 m). Centroid is the building's authoritative point.
     const coords = (b.centroid_lat != null && b.centroid_lng != null)
         ? `${b.centroid_lat.toFixed(4)}, ${b.centroid_lng.toFixed(4)}`
@@ -5613,7 +5613,7 @@ function _renderBuildingConsole(b) {
         if (v >= 20) return '#22c55e';
         return '#94a3b8';
     };
-    const scoreVal = (v) => (v == null ? '—' : v.toFixed(0));
+    const scoreVal = (v) => (v == null ? '-' : v.toFixed(0));
     const sevColor = SEV_COLORS[b.severity_max] || '#64748b';
     const stateColors = {
         ACTIVE:      { bg: 'rgba(148, 163, 184, 0.18)', fg: '#cbd5e1' },
@@ -5626,7 +5626,7 @@ function _renderBuildingConsole(b) {
     };
     const stateCol = stateColors[b.state] || stateColors.ACTIVE;
 
-    // Phase H.5+ (May 2026) — Header redesign per operator feedback:
+    // Phase H.5+ (May 2026) - Header redesign per operator feedback:
     // "OSM way 1243242" is unreadable. Promote a human-friendly name
     // (osm_name → infrastructure_name from reports → "Untitled building"
     // with the OSM id as a small subtitle). Derive city/locality from
@@ -5711,7 +5711,7 @@ function _renderBuildingConsole(b) {
                 </div>
             </div>
 
-            <!-- Horizontal lifecycle stepper — Report 1 → Report 2 →
+            <!-- Horizontal lifecycle stepper - Report 1 → Report 2 →
                  AI summary → CSV exported → Building safe (N lives saved).
                  Async-loaded so the stepper paints once the timeline
                  fetch resolves. -->
@@ -5719,7 +5719,7 @@ function _renderBuildingConsole(b) {
                 <div class="bc-empty">Loading lifecycle…</div>
             </div>
 
-            <!-- Phase H.6 — AI building summary -->
+            <!-- Phase H.6 - AI building summary -->
             ${_renderBuildingAiCard(b)}
 
             <!-- 5-score intelligence grid -->
@@ -5808,7 +5808,7 @@ function _renderBuildingConsole(b) {
                 </div>
             </div>
 
-            <!-- Phase H.3 — Responder coordination -->
+            <!-- Phase H.3 - Responder coordination -->
             <div class="bc-section bc-section-responders">
                 <div class="bc-section-title">
                     <i class="fa-solid fa-truck-medical"></i> Responders
@@ -5826,7 +5826,7 @@ function _renderBuildingConsole(b) {
                 </div>
             </div>
 
-            <!-- Phase H.4 — Operator notes thread -->
+            <!-- Phase H.4 - Operator notes thread -->
             <div class="bc-section bc-section-notes">
                 <div class="bc-section-title">
                     <i class="fa-regular fa-note-sticky"></i> Operator notes
@@ -5844,18 +5844,18 @@ function _renderBuildingConsole(b) {
                 </div>
             </div>
 
-            <!-- Phase H.10 — Related buildings (spatial proximity) -->
+            <!-- Phase H.10 - Related buildings (spatial proximity) -->
             <div class="bc-section bc-section-related">
                 <div class="bc-section-title">
                     <i class="fa-solid fa-link-slash"></i> Related buildings
-                    <span class="bc-section-count" id="bc-related-count-${escapeHtml(b.id)}">—</span>
+                    <span class="bc-section-count" id="bc-related-count-${escapeHtml(b.id)}">-</span>
                 </div>
                 <div class="bc-related" id="bc-related-${escapeHtml(b.id)}">
                     <div class="bc-empty">Loading nearby buildings…</div>
                 </div>
             </div>
 
-            <!-- Phase H.2 — Building event timeline -->
+            <!-- Phase H.2 - Building event timeline -->
             <div class="bc-section">
                 <div class="bc-section-title">
                     <i class="fa-solid fa-timeline"></i> Building timeline
@@ -5872,11 +5872,11 @@ function _renderBuildingConsole(b) {
 
         </div>
     `;
-    // Phase H.2 — fetch the timeline async (decoupled from the
+    // Phase H.2 - fetch the timeline async (decoupled from the
     // initial console paint so the user sees scores + reports
     // immediately, even while the timeline still loads).
     setTimeout(() => _refreshBuildingTimeline(b.id), 50);
-    // Phase H.10 — fetch related buildings similarly. Independent
+    // Phase H.10 - fetch related buildings similarly. Independent
     // of the timeline fetch; either can fail without blocking the
     // other.
     setTimeout(() => _refreshRelatedBuildings(b.id), 80);
@@ -5915,7 +5915,7 @@ function _initBuildingHashListener() {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Phase H.2 — Building state actions + timeline
+// Phase H.2 - Building state actions + timeline
 // ──────────────────────────────────────────────────────────────────────
 // Allowed transitions mirror the backend's state machine. UI only
 // shows buttons for legal transitions from the current state.
@@ -5950,7 +5950,7 @@ const _STATE_ACTION_ICON = {
 };
 
 function _renderBuildingStateActions(b) {
-    // Phase J.3 (May 2026) — State dropdown replaces 1-5 stacked
+    // Phase J.3 (May 2026) - State dropdown replaces 1-5 stacked
     // state buttons. Same data driver (_BUILDING_STATE_TRANSITIONS);
     // only the visual surface collapses. Reduces Building Console
     // header from 8 always-visible action buttons to 2.
@@ -5995,7 +5995,7 @@ const _STATE_ACTION_SUB = {
     FALSE_ALARM: 'Mark as misinformation',
 };
 
-// Phase J.3 (May 2026) — Reason-prompt modal (replaces native prompt()).
+// Phase J.3 (May 2026) - Reason-prompt modal (replaces native prompt()).
 // Resolves with the entered text (string), an empty string if the
 // operator submitted blank, or `false` if they cancelled.
 function _promptReasonModal({ title, hint, toState }) {
@@ -6056,7 +6056,7 @@ function _promptReasonModal({ title, hint, toState }) {
     });
 }
 
-// Auth header builder — mirrors the pattern used by other authenticated
+// Auth header builder - mirrors the pattern used by other authenticated
 // fetches in this file (decoded JWT from localStorage).
 function _authHeaders() {
     const t = (function () {
@@ -6068,12 +6068,12 @@ function _authHeaders() {
 }
 
 window._changeBuildingState = async (buildingId, toState) => {
-    // Phase J.3 (May 2026) — Reason modal replaces the ugly native
+    // Phase J.3 (May 2026) - Reason modal replaces the ugly native
     // prompt() for ESCALATED + FALSE_ALARM transitions. Native
     // prompt() reads as "enterprise" against the calmer J.2 / J.3
     // surface; the modal matches the dashboard's design language.
     // For non-weight-bearing transitions (Monitored, Re-open, etc.)
-    // we still skip the reason — those are one-click actions.
+    // we still skip the reason - those are one-click actions.
     let reason = null;
     if (toState === 'ESCALATED' || toState === 'FALSE_ALARM') {
         const action = toState === 'ESCALATED' ? 'Escalate' : 'Mark as false alarm';
@@ -6145,7 +6145,7 @@ window._refreshBuildingTimeline = async (buildingId) => {
         }
         const events = await res.json();
         // Always render the horizontal lifecycle stepper, even when
-        // the vertical timeline below is empty — the stepper has
+        // the vertical timeline below is empty - the stepper has
         // useful nodes from the building roll-up even with 0 events.
         if (lifeEl) {
             const detail = _buildingConsoleCache[buildingId] || null;
@@ -6162,16 +6162,16 @@ window._refreshBuildingTimeline = async (buildingId) => {
             let body = kind;
             if (kind === 'STATE_CHANGED') {
                 body = `State: ${escapeHtml(payload.from_state || '?')} → <strong>${escapeHtml(payload.to_state || '?')}</strong>`;
-                if (payload.reason) body += ` — <em>${escapeHtml(payload.reason)}</em>`;
+                if (payload.reason) body += ` - <em>${escapeHtml(payload.reason)}</em>`;
             } else if (kind === 'ESCALATED') {
-                body = `Operator escalated${payload.reason ? ' — <em>' + escapeHtml(payload.reason) + '</em>' : ''}`;
+                body = `Operator escalated${payload.reason ? ' - <em>' + escapeHtml(payload.reason) + '</em>' : ''}`;
             } else if (kind === 'FALSE_ALARM_DECLARED') {
-                body = `Marked as misinformation${payload.reason ? ' — <em>' + escapeHtml(payload.reason) + '</em>' : ''}`;
+                body = `Marked as misinformation${payload.reason ? ' - <em>' + escapeHtml(payload.reason) + '</em>' : ''}`;
             } else if (kind === 'REPORT_LINKED') {
                 body = `Report linked${payload.report_id ? ' (' + escapeHtml(String(payload.report_id).slice(0, 8)) + ')' : ''}`;
             } else if (kind === 'NOTE_ADDED') {
                 body = 'Operator note added' + (payload.pinned ? ' (pinned)' : '');
-                if (payload.preview) body += ` — <em>${escapeHtml(payload.preview)}…</em>`;
+                if (payload.preview) body += ` - <em>${escapeHtml(payload.preview)}…</em>`;
             } else if (kind === 'NOTE_EDITED') {
                 body = 'Operator note edited';
             } else if (kind === 'NOTE_DELETED') {
@@ -6216,7 +6216,7 @@ window._refreshBuildingTimeline = async (buildingId) => {
 };
 
 // ──────────────────────────────────────────────────────────────────────
-// Phase H.5+ (May 2026) — Horizontal lifecycle stepper
+// Phase H.5+ (May 2026) - Horizontal lifecycle stepper
 // ──────────────────────────────────────────────────────────────────────
 // Operator feedback: "Below the top bar we should have a timeline
 // view with 1st report → 2nd report → 3 reports → AI summary
@@ -6254,7 +6254,7 @@ function _renderBuildingLifecycleStepper(events, detail) {
     const exportEvents = chrono.filter(e => e.event_kind === 'DOSSIER_EXPORTED');
     const lastExport = exportEvents[exportEvents.length - 1];
 
-    // Terminal state — derived from detail.state + lives saved roll-up.
+    // Terminal state - derived from detail.state + lives saved roll-up.
     const state = detail ? detail.state : null;
     const reports = (detail && detail.reports) || [];
     const livesSaved = reports
@@ -6329,7 +6329,7 @@ function _renderBuildingLifecycleStepper(events, detail) {
             color: '#7dd3fc',
         });
     }
-    // Terminal state node — always last.
+    // Terminal state node - always last.
     if (allResolved) {
         nodes.push({
             kind: 'RESOLVED',
@@ -6361,7 +6361,7 @@ function _renderBuildingLifecycleStepper(events, detail) {
             terminal: true,
         });
     } else {
-        // Active situation — show the current state as the trailing node.
+        // Active situation - show the current state as the trailing node.
         nodes.push({
             kind: 'STATE',
             icon: 'fa-circle',
@@ -6401,7 +6401,7 @@ function _renderBuildingLifecycleStepper(events, detail) {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Phase H.3 — Responder coordination + watch list (dashboard surface)
+// Phase H.3 - Responder coordination + watch list (dashboard surface)
 // ──────────────────────────────────────────────────────────────────────
 // Each Building can have N responders (BuildingResponder rows) with a
 // lifecycle: ASSIGNED → DISPATCHED → ARRIVED → CLEARED. Operators
@@ -6425,7 +6425,7 @@ function _renderBuildingAiCard(b) {
                     </button>
                 </div>
                 <div class="bc-ai-empty-body">
-                    No AI brief yet. Click <em>Generate</em> for a Claude-Haiku synthesis of
+                    No AI brief yet. Click <em>Generate</em> for a AI synthesis of
                     constituent reports, responder activity, and operator notes.
                 </div>
             </div>
@@ -6435,7 +6435,7 @@ function _renderBuildingAiCard(b) {
     const findings = (ai.key_findings || []).map(f => `<li>${escapeHtml(f)}</li>`).join('');
     const conflicts = (ai.conflicting_signals || []).map(f => `<li>${escapeHtml(f)}</li>`).join('');
 
-    // Phase H.9 — trend chips + responder-type badges.
+    // Phase H.9 - trend chips + responder-type badges.
     const trends = ai.trends || {};
     const trendIcon = {
         RISING:     { icon: 'fa-arrow-trend-up',   color: '#ef4444', label: 'Severity rising' },
@@ -6554,7 +6554,7 @@ window._refreshBuildingAiSummary = async (buildingId) => {
 };
 
 function _renderBuildingExportMenu(b) {
-    // A compact dropdown — Export → PDF / GeoJSON. The endpoints
+    // A compact dropdown - Export → PDF / GeoJSON. The endpoints
     // are analyst-gated; auth headers can't be set on a plain <a
     // download>, so we fetch as blob + trigger a virtual anchor click.
     return `
@@ -6832,7 +6832,7 @@ window._advanceResponder = async (buildingId, responderId, action) => {
 };
 
 // ──────────────────────────────────────────────────────────────────────
-// Phase H.10 — Related buildings carousel (dashboard surface)
+// Phase H.10 - Related buildings carousel (dashboard surface)
 // ──────────────────────────────────────────────────────────────────────
 window._refreshRelatedBuildings = async (buildingId) => {
     const el = document.getElementById(`bc-related-${buildingId}`);
@@ -6845,7 +6845,7 @@ window._refreshRelatedBuildings = async (buildingId) => {
         );
         if (!res.ok) {
             el.innerHTML = '<div class="bc-empty">Could not load nearby buildings.</div>';
-            if (countEl) countEl.textContent = '—';
+            if (countEl) countEl.textContent = '-';
             return;
         }
         const data = await res.json();
@@ -6892,7 +6892,7 @@ window._refreshRelatedBuildings = async (buildingId) => {
                         <i class="fa-solid fa-flag"></i> ${b.report_count || 0}
                     </span>
                     <span class="bc-related-stat" style="color:${priorityColor(b.humanitarian_priority)};">
-                        <i class="fa-solid fa-bullseye"></i> ${b.humanitarian_priority != null ? b.humanitarian_priority.toFixed(0) : '—'}
+                        <i class="fa-solid fa-bullseye"></i> ${b.humanitarian_priority != null ? b.humanitarian_priority.toFixed(0) : '-'}
                     </span>
                 </div>
             </div>`;
@@ -6903,10 +6903,10 @@ window._refreshRelatedBuildings = async (buildingId) => {
 };
 
 // ──────────────────────────────────────────────────────────────────────
-// Phase H.4 — Operator notes thread (dashboard surface)
+// Phase H.4 - Operator notes thread (dashboard surface)
 // ──────────────────────────────────────────────────────────────────────
 // Notes are the long-form context channel that BuildingEvent and
-// ai_summary don't try to be — free text, pinnable, edit + soft-delete.
+// ai_summary don't try to be - free text, pinnable, edit + soft-delete.
 // Console section renders newest-first, pinned-first; soft-deleted
 // notes render as tombstones.
 
@@ -7035,7 +7035,7 @@ window._submitNote = async (buildingId) => {
 };
 
 window._editNote = async (buildingId, noteId) => {
-    // Inline edit — replace the rendered body div with a textarea +
+    // Inline edit - replace the rendered body div with a textarea +
     // Save / Cancel. Single-row mutation; no full re-render until
     // the patch completes.
     const bodyEl = document.getElementById(`bc-note-body-${noteId}`);
@@ -7131,7 +7131,7 @@ window._deleteNote = async (buildingId, noteId) => {
 };
 
 window._toggleBuildingMonitor = async (buildingId, watching) => {
-    // `watching` is the CURRENT state — if true, DELETE the monitor;
+    // `watching` is the CURRENT state - if true, DELETE the monitor;
     // otherwise POST a new one.
     try {
         const method = watching ? 'DELETE' : 'POST';
@@ -7157,11 +7157,11 @@ window._toggleBuildingMonitor = async (buildingId, watching) => {
     }
 };
 
-// ── Phase 5 (Apr 2026) — Reviewer actions block ─────────────────────────────
+// ── Phase 5 (Apr 2026) - Reviewer actions block ─────────────────────────────
 // Renders a compact row showing the current verdict + two action buttons
 // (Accept / Reject) + two timestamp buttons (Dispatched / Arrived).
 // Response time displayed when both `reviewed_at` and a responder timestamp
-// are set — value comes precomputed from the backend as `response_time_seconds`.
+// are set - value comes precomputed from the backend as `response_time_seconds`.
 
 function _fmtDuration(secs) {
     if (!Number.isFinite(secs) || secs < 0) return '';
@@ -7182,10 +7182,10 @@ function _fmtReviewAgo(iso) {
     return _fmtDuration(secs) + ' ago';
 }
 
-// Phase F.2.a (May 2026) — Per-incident timeline renderer.
+// Phase F.2.a (May 2026) - Per-incident timeline renderer.
 //
 // Surfaces the lifecycle audit data the backend already records on
-// the Report + related rows. NO new endpoint required — every event
+// the Report + related rows. NO new endpoint required - every event
 // type below is sourced from a column already present in the LIST
 // response.
 //
@@ -7211,7 +7211,7 @@ function _renderIncidentTimeline(r) {
     const events = [];
 
     // Report received (always present unless server_created_at is null
-    // — shouldn't happen but defensive).
+    // - shouldn't happen but defensive).
     if (r.server_created_at) {
         events.push({
             ts: r.server_created_at,
@@ -7249,7 +7249,7 @@ function _renderIncidentTimeline(r) {
             label: `${isImage ? 'Photo' : 'Audio'} added${m.resolution_tier ? ' (' + m.resolution_tier + ')' : ''}`,
         });
         // Upload complete (only when assembly flipped to complete and
-        // the updated_at moved past the created_at — otherwise it's
+        // the updated_at moved past the created_at - otherwise it's
         // the same instant, redundant row).
         if (m.assembly_status === 'complete' && m.updated_at && m.updated_at !== m.created_at) {
             events.push({
@@ -7317,7 +7317,7 @@ function _renderIncidentTimeline(r) {
     events.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
 
     if (events.length === 0) {
-        // Shouldn't normally happen — server_created_at is always set.
+        // Shouldn't normally happen - server_created_at is always set.
         // Render an explicit empty state rather than nothing so the
         // section's presence is consistent.
         return `<details class="dp-timeline">
@@ -7359,13 +7359,13 @@ function _renderReviewerActions(r) {
     const actionTxt = (verdict === 'REJECTED' && r.action_taken)
         ? `<div class="dp-reviewer-note"><i class="fa-solid fa-comment-dots"></i> ${escapeHtml(r.action_taken)}</div>` : '';
 
-    // May 2026 (operator-reported) — Lives helped input.
+    // May 2026 (operator-reported) - Lives helped input.
     //
     // The PWA home shows "Lives Saved" sourced from each report's
     // `lives_impacted` integer (analyst-only `PATCH /reports/{id}/impact`
     // endpoint, which has existed since April 2026). But no dashboard
-    // UI exposed it — analysts had no way to set the number short of
-    // a curl. Reporters' home cards therefore always showed "—".
+    // UI exposed it - analysts had no way to set the number short of
+    // a curl. Reporters' home cards therefore always showed "-".
     //
     // This input is gated by the same role pattern as the other
     // analyst actions: the buttons call /review, /dispatch, /resolve
@@ -7373,7 +7373,7 @@ function _renderReviewerActions(r) {
     // requests return 403. We don't hide the input client-side; we
     // rely on the server's gate. (Hiding would require a role check
     // we don't reliably have on every dashboard surface.)
-    // Phase F.1.d (May 2026) — Lives Helped input moved to the
+    // Phase F.1.d (May 2026) - Lives Helped input moved to the
     // reviewer top row so it's discoverable without scrolling. The
     // hint text below the input is dropped from the sticky strip
     // (operator's onboarding tooltip surfaces the same info on
@@ -7396,13 +7396,13 @@ function _renderReviewerActions(r) {
             </button>
         </div>`;
 
-    // Phase J.2 (May 2026) — Verdict dropdown replaces the Accept /
+    // Phase J.2 (May 2026) - Verdict dropdown replaces the Accept /
     // Reject / Dispatched / Arrived 4-button row. The dropdown
     // collapses three verdicts (Accept · Reject · False alarm) into
     // a single decision surface; once the verdict is set, the
     // dropdown shows the active verdict and the operator can change
     // it via the same control. Dispatched / Arrived stay as small
-    // timestamp pills below — they're response-progress events,
+    // timestamp pills below - they're response-progress events,
     // not verdict actions.
     //
     // Operator confirmation (May 2026 working session): "Single
@@ -7421,7 +7421,7 @@ function _renderReviewerActions(r) {
                 ? 'dp-verdict-trigger dp-verdict-trigger-false'
                 : 'dp-verdict-trigger dp-verdict-trigger-pending');
 
-    // Phase J.2 — response-progress chips. When the timestamp isn't
+    // Phase J.2 - response-progress chips. When the timestamp isn't
     // set, the chip is clickable ("Mark dispatched"); when set it's
     // a read-only timestamp pill ("Dispatched 12 min ago").
     const dispatchedChip = r.help_dispatched_at
@@ -7504,7 +7504,7 @@ function _renderReviewerActions(r) {
     </div>`;
 }
 
-// May 2026 (operator-reported) — analyst-side setter for the per-report
+// May 2026 (operator-reported) - analyst-side setter for the per-report
 // `lives_impacted` integer. Backend gates the endpoint with
 // `require_analyst`; the dashboard fetch carries the JWT cookie
 // automatically. On 403 we surface a toast that explains why (helps
@@ -7545,7 +7545,7 @@ window.setLivesImpacted = async (reportId) => {
         showToast(
             body.lives_impacted === 0
                 ? 'Cleared lives-helped count.'
-                : `Saved — ${body.lives_impacted} ${body.lives_impacted === 1 ? 'life' : 'lives'} helped.`,
+                : `Saved - ${body.lives_impacted} ${body.lives_impacted === 1 ? 'life' : 'lives'} helped.`,
             'success',
         );
         renderFeed();
@@ -7581,7 +7581,7 @@ window.setReviewVerdict = async (reportId, verdict, actionTaken = null) => {
 
 window.openRejectModal = (reportId) => {
     const note = prompt(
-        'Reject this report — please describe why (required).\n\n' +
+        'Reject this report - please describe why (required).\n\n' +
         'This note is logged against the report so future responders see the rationale.',
         ''
     );
@@ -7620,7 +7620,7 @@ window.stampResponderTime = async (reportId, which) => {
     }
 };
 
-// Phase 2: manual tier selection — swap the displayed variant in-place.
+// Phase 2: manual tier selection - swap the displayed variant in-place.
 // Stamps `_tierOverride[reportId]` so subsequent polls / upgrades don't
 // override the user's choice. Also updates the gallery thumb's active
 // class + the tier switcher's active button state, and rewires the
@@ -7659,7 +7659,7 @@ window.setDetailImageTier = (reportId, groupId, tier, btnEl) => {
 };
 
 // ──────────────────────────────────────────────────────────────────────
-// Phase J.5 (May 2026) — Global keyboard shortcuts
+// Phase J.5 (May 2026) - Global keyboard shortcuts
 // ──────────────────────────────────────────────────────────────────────
 // `?` opens the shortcuts cheat-sheet modal.
 // `Esc` closes any open modal / dropdown / detail panel.
@@ -7708,7 +7708,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ──────────────────────────────────────────────────────────────────────
-// Phase J.5 — Onboarding tooltips
+// Phase J.5 - Onboarding tooltips
 // ──────────────────────────────────────────────────────────────────────
 // First few sessions per device, surface a one-line hint over the
 // Verdict dropdown + the Send Help CTA + the Tools menu. Counter
@@ -7799,14 +7799,14 @@ function _showOnboardingTip({ id, anchor, text, placement = 'below' }) {
 // Drive onboarding tips for the surfaces operators most need to find.
 function _kickOnboardingTips() {
     if (_onboardingSessionCount() > _ONBOARDING_SESSION_THRESHOLD) return;
-    // Tools menu — show 1.5 s after page idles so the operator's eye
+    // Tools menu - show 1.5 s after page idles so the operator's eye
     // is settled. Anchor by the Tools dropdown button.
     setTimeout(() => {
         const toolsBtn = document.querySelector('#cmd-tools-dropdown > button');
         _showOnboardingTip({
             id: 'tools-intro',
             anchor: toolsBtn,
-            text: 'Analytics, exports and language are tucked under Tools — fewer buttons, same features.',
+            text: 'Analytics, exports and language are tucked under Tools - fewer buttons, same features.',
             placement: 'below',
         });
     }, 1500);
@@ -7869,7 +7869,7 @@ document.addEventListener('keydown', (e) => {
     const images = r.media?.filter(m => m.type === 'IMAGE') || [];
     const group = groupPhotos(images)[0];
     if (!group) return;
-    // Phase L (May 2026) — canonical SMALL/MEDIUM/ORIGINAL.
+    // Phase L (May 2026) - canonical SMALL/MEDIUM/ORIGINAL.
     const tiersInOrder = ['SMALL', 'MEDIUM', 'ORIGINAL'];
     const current = _tierOverride.get(selectedId) ||
         (bestVariant(group)?.tier) || 'ORIGINAL';
@@ -7898,7 +7898,7 @@ document.addEventListener('keydown', (e) => {
  */
 function renderVerificationSection(r) {
     const v = r.verification;
-    if (!v) return ''; // Not yet verified — section absent until user triggers it
+    if (!v) return ''; // Not yet verified - section absent until user triggers it
 
     const scores   = v.scores || {};
     const total    = v.total_score || 0;
@@ -7911,7 +7911,7 @@ function renderVerificationSection(r) {
         UNVERIFIED:            'Unverified',
     };
 
-    // SVG gauge — circle r=30, circumference = 188.5
+    // SVG gauge - circle r=30, circumference = 188.5
     const C      = 188.5;
     const offset = C - (total / 100) * C;
     const gaugeColor = total >= 80 ? '#22c55e'
@@ -7993,7 +7993,7 @@ function renderVerificationSection(r) {
             <div class="sat-compare-frame">
                 <div class="sat-compare-label"><i class="fa-solid fa-satellite"></i> Satellite View</div>
                 ${satImgSrc
-                    ? `<img src="${satImgSrc}" class="sat-compare-img" onclick="openLightbox('${satImgSrc}','Satellite')" title="Click to enlarge — ${v.satellite_source || ''}">`
+                    ? `<img src="${satImgSrc}" class="sat-compare-img" onclick="openLightbox('${satImgSrc}','Satellite')" title="Click to enlarge - ${v.satellite_source || ''}">`
                     : `<div class="sat-compare-img" style="display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-dim);">Unavailable</div>`
                 }
             </div>
@@ -8036,22 +8036,22 @@ function renderVerificationSection(r) {
             <div class="sat-comp-row">
                 <span class="sat-comp-label">Location Match</span>
                 <div class="sat-comp-bar"><div class="sat-comp-fill" style="width:${barPct(scores.location_authenticity)}%; background:${barCol(scores.location_authenticity)};"></div></div>
-                <span class="sat-comp-val">${scores.location_authenticity ?? '—'}/25</span>
+                <span class="sat-comp-val">${scores.location_authenticity ?? '-'}/25</span>
             </div>
             <div class="sat-comp-row">
                 <span class="sat-comp-label">Damage Evidence</span>
                 <div class="sat-comp-bar"><div class="sat-comp-fill" style="width:${barPct(scores.damage_corroboration)}%; background:${barCol(scores.damage_corroboration)};"></div></div>
-                <span class="sat-comp-val">${scores.damage_corroboration ?? '—'}/25</span>
+                <span class="sat-comp-val">${scores.damage_corroboration ?? '-'}/25</span>
             </div>
             <div class="sat-comp-row">
                 <span class="sat-comp-label">Description Match</span>
                 <div class="sat-comp-bar"><div class="sat-comp-fill" style="width:${barPct(scores.description_coherence)}%; background:${barCol(scores.description_coherence)};"></div></div>
-                <span class="sat-comp-val">${scores.description_coherence ?? '—'}/25</span>
+                <span class="sat-comp-val">${scores.description_coherence ?? '-'}/25</span>
             </div>
             <div class="sat-comp-row">
                 <span class="sat-comp-label">Data Quality</span>
                 <div class="sat-comp-bar"><div class="sat-comp-fill" style="width:${barPct(scores.data_quality)}%; background:${barCol(scores.data_quality)};"></div></div>
-                <span class="sat-comp-val">${scores.data_quality ?? '—'}/25</span>
+                <span class="sat-comp-val">${scores.data_quality ?? '-'}/25</span>
             </div>
         </div>
 
@@ -8063,7 +8063,7 @@ function renderVerificationSection(r) {
 }
 
 /**
- * Trigger verification for a report — calls POST /api/v1/reports/{id}/verify.
+ * Trigger verification for a report - calls POST /api/v1/reports/{id}/verify.
  * Shows loading state on the button, then refreshes the detail panel on completion.
  */
 window.runVerification = async (id) => {
@@ -8080,11 +8080,11 @@ window.runVerification = async (id) => {
             // Merge verification result into allReports so re-render shows it
             const idx = allReports.findIndex(r => r.id === id);
             if (idx >= 0) allReports[idx] = { ...allReports[idx], verification: verif };
-            showToast(`Truth score: ${verif.total_score}/100 — ${verif.verdict?.replace(/_/g,' ')}`, 'success');
+            showToast(`Truth score: ${verif.total_score}/100 - ${verif.verdict?.replace(/_/g,' ')}`, 'success');
             selectReport(id, true); // re-render detail panel, skip map fly
         } else {
             const err = await res.json().catch(() => ({}));
-            const errMsg = err.detail || (res.status === 503 ? 'Satellite service unavailable — check API keys' : `Server error (${res.status})`);
+            const errMsg = err.detail || (res.status === 503 ? 'Satellite service unavailable - check API keys' : `Server error (${res.status})`);
             showToast(`Verification failed: ${errMsg}`, 'error');
             if (btn) {
                 btn.classList.remove('verifying');
@@ -8093,7 +8093,7 @@ window.runVerification = async (id) => {
             }
         }
     } catch (e) {
-        showToast('Verification request failed — check internet connection', 'error');
+        showToast('Verification request failed - check internet connection', 'error');
         if (btn) {
             btn.classList.remove('verifying');
             btn.innerHTML = '<i class="fa-solid fa-satellite"></i> Verify with Satellite';
@@ -8102,14 +8102,14 @@ window.runVerification = async (id) => {
     }
 };
 
-// ── Phase F image-reliability (May 2026) — Reclaim modal + handler
+// ── Phase F image-reliability (May 2026) - Reclaim modal + handler
 //
 // Operator clicks the Reclaim button on the detail-panel gallery chip
 // (only present when at least one HIGH-tier variant is in `lost` or
 // `delayed` state). This opens a small choice modal: Retry assembly
 // vs Mark abandoned. Each mode POSTs to /api/v1/reports/media/{id}/reclaim
 // in a small batch (one request per HIGH-tier media id; client-side
-// concurrency 3 — keeps the backend's per-report audit log readable).
+// concurrency 3 - keeps the backend's per-report audit log readable).
 //
 // Why a modal and not a one-click action: the wrong mode can lose a
 // recoverable upload (if chunks WERE all there, mark_abandoned drops
@@ -8129,7 +8129,7 @@ window._openMediaReclaimModal = (reportId, triggerBtn) => {
         showToast('No reclaimable media on this report.', 'info');
         return;
     }
-    // Strip any prior reclaim modal — only one at a time.
+    // Strip any prior reclaim modal - only one at a time.
     document.querySelectorAll('.reclaim-modal-backdrop').forEach(n => n.remove());
     const rows = _reclaimables.map(m => `
         <div class="reclaim-row">
@@ -8194,7 +8194,7 @@ window._runMediaReclaim = async (reportId, mode, actionBtn) => {
 
     let ok = 0, fail = 0;
     const errors = [];
-    // Run sequentially with a small await — the per-call backend cost
+    // Run sequentially with a small await - the per-call backend cost
     // is cheap and serial keeps the order predictable for the audit log.
     for (const m of reclaimables) {
         try {
@@ -8222,10 +8222,10 @@ window._runMediaReclaim = async (reportId, mode, actionBtn) => {
     if (ok > 0 && fail === 0) {
         showToast(`Reclaim ${modeLabel}: ${ok}/${reclaimables.length} succeeded`, 'success');
     } else if (ok > 0 && fail > 0) {
-        showToast(`Reclaim ${modeLabel}: ${ok} OK, ${fail} failed — see console`, 'warning');
+        showToast(`Reclaim ${modeLabel}: ${ok} OK, ${fail} failed - see console`, 'warning');
         console.warn('Reclaim errors:', errors);
     } else {
-        showToast(`Reclaim ${modeLabel}: ${fail} failed — see console`, 'error');
+        showToast(`Reclaim ${modeLabel}: ${fail} failed - see console`, 'error');
         console.warn('Reclaim errors:', errors);
     }
     backdrop.remove();
@@ -8241,11 +8241,11 @@ window._runMediaReclaim = async (reportId, mode, actionBtn) => {
 };
 
 
-// Phase C.2 (May 2026, UNDP-grade rebuild) — copy a public, auth-free
+// Phase C.2 (May 2026, UNDP-grade rebuild) - copy a public, auth-free
 // evidence URL to the clipboard. The verification panel exposes a
 // "Share evidence" button that calls this. Resolves to a static
 // page (web-dashboard/src/evidence.html) which fetches the public
-// /api/v1/reports/<id>/evidence endpoint — no login needed.
+// /api/v1/reports/<id>/evidence endpoint - no login needed.
 //
 // Trust model matches the existing presigned-URL behaviour: report_id
 // is a UUID, unguessable. UNDP judges click the link and instantly see
@@ -8258,9 +8258,9 @@ window.copyEvidenceLink = async (reportId) => {
     const url = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, '')}evidence.html?id=${encodeURIComponent(reportId)}`;
     try {
         // Modern Async Clipboard API. Requires HTTPS (or localhost) +
-        // user-gesture context — both satisfied here (button click).
+        // user-gesture context - both satisfied here (button click).
         await navigator.clipboard.writeText(url);
-        showToast('Evidence link copied — share with judges or partners', 'success');
+        showToast('Evidence link copied - share with judges or partners', 'success');
     } catch (e) {
         // Fallback: surface the URL in a prompt so the analyst can
         // still grab it. Triggers when navigator.clipboard is missing
@@ -8268,7 +8268,7 @@ window.copyEvidenceLink = async (reportId) => {
         try {
             window.prompt('Copy this evidence link:', url);
         } catch (_) {
-            showToast('Copy failed — paste manually: ' + url, 'error');
+            showToast('Copy failed - paste manually: ' + url, 'error');
         }
     }
 };
@@ -8278,7 +8278,7 @@ window.runAIAssessment = async (id) => {
     const r = allReports.find(x => x.id === id);
     if (!r) return;
 
-    // Block if already assessed — prevent duplicate API calls
+    // Block if already assessed - prevent duplicate API calls
     if (r.ai_assessment) {
         showToast('Credibility check already completed for this incident', 'info');
         return;
@@ -8337,10 +8337,10 @@ window.runAIAssessment = async (id) => {
                 if (data.inferred_type) allReports[idx].infrastructure_type = data.inferred_type;
                 if (data.inferred_severity) allReports[idx].severity = data.inferred_severity;
             }
-            // Re-render — top bar shows AI score, tree view updates type/severity
+            // Re-render - top bar shows AI score, tree view updates type/severity
             selectReport(id, true);
             renderFeed();
-            showToast(`Credibility: ${confScore}/100 — ${action}`, 'success');
+            showToast(`Credibility: ${confScore}/100 - ${action}`, 'success');
         } else {
             showToast('Credibility check failed', 'error');
             if (topBtn) { topBtn.disabled = false; topBtn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Credibility Check'; }
@@ -8364,7 +8364,7 @@ window.exportPDF = (id) => {
     const ts = fmtDateTime(r.server_created_at);
 
     // Gather all image URLs: user photo + primary satellite + alt satellite
-    // May 2026 — getMediaUrl() handles all four cases now: relative
+    // May 2026 - getMediaUrl() handles all four cases now: relative
     // `/static/...` (LocalStorage), relative `/api/v1/.../satellite/...`
     // (S3-backed stable URLs), absolute https (legacy/external),
     // data: URLs (rare inline). Previously hard-coded BACKEND_HOST
@@ -8375,7 +8375,7 @@ window.exportPDF = (id) => {
     const satAltImgUrl = v?.satellite_image_url_alt ? getMediaUrl(v.satellite_image_url_alt) : '';
     const satSource1 = (v?.satellite_source || 'Satellite').split('(')[0].trim();
     const satSource2 = (v?.satellite_source_alt || 'Alt Satellite').split('(')[0].trim();
-    // Date-only acquisition dates go through fmtDateOnly — bare
+    // Date-only acquisition dates go through fmtDateOnly - bare
     // YYYY-MM-DD strings parse as UTC midnight and shift a day for
     // viewers west of UTC if fed to the Date parser directly.
     const satDate1 = v?.satellite_acquisition_date ? fmtDateOnly(v.satellite_acquisition_date) : '';
@@ -8384,7 +8384,7 @@ window.exportPDF = (id) => {
     const satRes2 = v?.satellite_resolution_m_alt ? `${v.satellite_resolution_m_alt}m` : '';
     const hasAnyImage = userImgUrl || satImgUrl || satAltImgUrl;
 
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>CRISP Incident Report — ${r.id.substring(0,8)}</title>
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>CRISP Incident Report - ${r.id.substring(0,8)}</title>
     <style>
       *{margin:0;padding:0;box-sizing:border-box;}
       body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:28px 32px;max-width:800px;margin:0 auto;color:#1e293b;font-size:13px;}
@@ -8458,7 +8458,7 @@ window.exportPDF = (id) => {
       <div class="row"><span class="k">Audio Recordings</span><span class="v">${r.media?.filter(m=>m.type==='AUDIO').length || 0}</span></div>
     </div>
 
-    <div class="footer">Generated by CRISP — Crisis Response Intelligence & Situation Platform · ${new Date().toLocaleString()}</div>
+    <div class="footer">Generated by CRISP - Crisis Response Intelligence & Situation Platform · ${new Date().toLocaleString()}</div>
     </body></html>`;
 
     const w = window.open('', '_blank', 'width=850,height=1100');
@@ -8478,7 +8478,7 @@ window.patchReport = async (id, action) => {
             if (selectedId === id) selectReport(id);
             renderFeed();
         }
-    } catch (e) { showToast('Action failed — check internet connection', 'error'); }
+    } catch (e) { showToast('Action failed - check internet connection', 'error'); }
 };
 
 window.deleteReport = async (id) => {
@@ -8505,7 +8505,7 @@ window.deleteReport = async (id) => {
 // `building_is_latest` so the detail panel can paint the "V 2 of 3 · latest"
 // ribbon. Legacy list-shaped responses are still accepted (older backends)
 // via an Array.isArray branch, so we don't break during a rolling deploy.
-// Phase 1 (Apr 2026 — Optional reporter login) — reporter-profile drawer.
+// Phase 1 (Apr 2026 - Optional reporter login) - reporter-profile drawer.
 // Calls `/auth/users/{user_id}` which is gated to ADMIN role on the
 // server; ANALYST sessions get 403 and we show a short info toast.
 // Masked "User abc12345" already rendered in the row badge for everyone;
@@ -8536,7 +8536,7 @@ window.openReporterProfile = async (userId) => {
     }
 };
 
-// Phase H.1.d/e (May 2026) — filterByBuilding now ROUTES to the
+// Phase H.1.d/e (May 2026) - filterByBuilding now ROUTES to the
 // Building Intelligence Console instead of just opening map popups.
 // The old per-marker popup behaviour was a navigator, not a filter;
 // the console is the operator-facing surface that aggregates the
@@ -8666,10 +8666,10 @@ window.playDetailAudio = function (btn, url) {
         btn.classList.remove('playing');
         if (currentAudio._url === url) { currentAudio = null; return; }
     }
-    // May 2026 — cache-bust on legacy /static/ URLs only. Presigned
+    // May 2026 - cache-bust on legacy /static/ URLs only. Presigned
     // S3 URLs already vary on every API poll (fresh X-Amz-Date +
     // Signature), and appending `&_t=…` would invalidate the SigV4
-    // signature — S3 returns 403, browser surfaces it as
+    // signature - S3 returns 403, browser surfaces it as
     // NotSupportedError ("no supported source was found").
     const fetchUrl = _withCacheBust(url, '_t', Date.now());
     currentAudio = new Audio(fetchUrl);
@@ -8688,7 +8688,7 @@ window.playDetailAudio = function (btn, url) {
     };
     currentAudio.onloadedmetadata = () => {
         const dur = document.getElementById('detail-audio-dur');
-        if (dur) dur.textContent = isFinite(currentAudio.duration) ? formatTime(currentAudio.duration) : '—:——';
+        if (dur) dur.textContent = isFinite(currentAudio.duration) ? formatTime(currentAudio.duration) : '-:--';
     };
     currentAudio.onended = () => {
         btn.innerHTML = '<i class="fa-solid fa-play"></i>';
@@ -8697,16 +8697,16 @@ window.playDetailAudio = function (btn, url) {
 };
 
 function formatTime(s) {
-    if (!s || !isFinite(s) || isNaN(s)) return '—:——';
+    if (!s || !isFinite(s) || isNaN(s)) return '-:--';
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
     return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
 // ── Gallery (PhotoSwipe v5) ─────────────────────────────────────────────────
-// May 2026 — replaces the original 6-line `openLightbox()` overlay. The old
+// May 2026 - replaces the original 6-line `openLightbox()` overlay. The old
 // version showed one URL with no swipe / keyboard / zoom, so multi-image
-// reports felt "stuck on the first photo" — exactly the UX problem behind
+// reports felt "stuck on the first photo" - exactly the UX problem behind
 // the user's bug report. PhotoSwipe v5 brings:
 //   · swipe navigation (touch + mouse)
 //   · ←/→/Esc keyboard nav
@@ -8715,15 +8715,15 @@ function formatTime(s) {
 //
 // On top of the stock lightbox we register a custom UI element ("tier-tabs")
 // that lets the analyst toggle Small / Medium / Original variants from inside
-// the gallery — implementing the user's "tabs/groups for Small / Medium /
+// the gallery - implementing the user's "tabs/groups for Small / Medium /
 // Original" requirement. The active tier highlights, disabled tiers carry an
 // "uploading X%" tooltip so it's obvious why the analyst can't click it yet.
 //
 // Single-image satellite/comparison call sites still use `openLightbox(url,
-// caption)` — kept as a shim that routes through PhotoSwipe single-slide
+// caption)` - kept as a shim that routes through PhotoSwipe single-slide
 // mode so we never have two distinct lightbox UIs side by side.
 
-// Phase L (May 2026) — canonical SMALL/MEDIUM/ORIGINAL tier values.
+// Phase L (May 2026) - canonical SMALL/MEDIUM/ORIGINAL tier values.
 // The lightbox button labels stay user-friendly ("Small"/"Medium"/"Original")
 // while the internal `tier` values match the Media row's resolution_tier.
 const _TIER_BUTTONS = [
@@ -8738,14 +8738,14 @@ const _TIER_BUTTONS = [
 let _currentGalleryTiers = new Map(); // photo_group_id → 'LOW' | 'MEDIUM' | 'HIGH'
 
 // Intrinsic-dimension cache (src → {w,h}). The Media schema carries no
-// width/height, so the lightbox used to hardcode 1920×1440 — which fed
+// width/height, so the lightbox used to hardcode 1920×1440 - which fed
 // PhotoSwipe the wrong fit geometry and STRETCHED portrait / panoramic /
 // square photos. We read each image's real naturalWidth/Height once it
 // loads and re-fit; cached per-src so re-opening is flash-free.
 const _imgDimCache = new Map();
 
 // Feed PhotoSwipe a slide's TRUE intrinsic size + re-fit it. Idempotent and
-// never throws — a sizing refinement must never break the viewer.
+// never throws - a sizing refinement must never break the viewer.
 function _applyRealDims(content, imgEl) {
     try {
         const img = imgEl
@@ -8765,7 +8765,7 @@ function _applyRealDims(content, imgEl) {
 }
 
 // Pre-measure intrinsic dimensions so PhotoSwipe fits the TRUE aspect from the
-// first frame (no 4:3 placeholder distortion — the schema has no width/height).
+// first frame (no 4:3 placeholder distortion - the schema has no width/height).
 // Cache-first: cached / data-URI / already-shown images resolve instantly.
 // Capped per-image so a slow uncached ORIGINAL never hangs the open; the
 // `loadComplete` → _applyRealDims hook is the backstop for any timeout.
@@ -8792,8 +8792,8 @@ function _premeasureSlides(slides) {
 
 // ── Client-side rotation (non-destructive; no re-upload) ─────────────────────
 // PhotoSwipe has no native rotation. We rotate the inner <img> via a CSS
-// transform — PhotoSwipe owns the .pswp__zoom-wrap transform, so rotating the
-// child <img> doesn't fight its zoom/pan — and on 90/270 scale it to re-fit the
+// transform - PhotoSwipe owns the .pswp__zoom-wrap transform, so rotating the
+// child <img> doesn't fight its zoom/pan - and on 90/270 scale it to re-fit the
 // viewport (the bounding box swaps W↔H). Tracked per photo_group_id so nav
 // preserves it; reset on close. Zoom is reset to fit on each rotate so the
 // transform composes without a pan offset.
@@ -8843,7 +8843,7 @@ function _resetViewerRotation(pswp) {
 
 // ── Geo metadata overlay (top-right) + viewer preferences ────────────────────
 // Location is per-REPORT (every image in a report shares one Location), so the
-// overlay reflects the report's capture location — identical across that
+// overlay reflects the report's capture location - identical across that
 // report's photos by design. Content + visibility are a localStorage
 // user-preference (no per-user backend on v34).
 const _VIEWER_PREFS_KEY = 'crisp_image_viewer_prefs';
@@ -8940,7 +8940,7 @@ function _buildGallerySlides(report, startGroupIdx) {
         // Seed from the per-src dimension cache when known (flash-free
         // re-opens); otherwise a neutral 4:3 placeholder. `_applyRealDims`
         // (registered on PhotoSwipe `loadComplete`) corrects each slide to
-        // the image's true intrinsic size + re-fits — so no photo is stretched.
+        // the image's true intrinsic size + re-fits - so no photo is stretched.
         const _cdim = _imgDimCache.get(pick?.src);
         return {
             src: pick?.src || '',
@@ -8959,7 +8959,7 @@ function _buildGallerySlides(report, startGroupIdx) {
 
 window.openGallery = async function (reportId, startGroupIdx) {
     if (typeof PhotoSwipe === 'undefined') {
-        console.warn('[openGallery] PhotoSwipe not loaded — falling back to single-image overlay');
+        console.warn('[openGallery] PhotoSwipe not loaded - falling back to single-image overlay');
         const r0 = allReports.find(x => x.id === reportId);
         if (r0) {
             const groups0 = groupPhotos((r0.media || []).filter(m => m.type === 'IMAGE'));
@@ -8991,11 +8991,11 @@ window.openGallery = async function (reportId, startGroupIdx) {
         showHideAnimationType: 'fade',
         // Smooth Esc / outside-tap dismissal.
         closeOnVerticalDrag: true,
-        // Disable pinch-to-close on iOS — collides with pinch-zoom.
+        // Disable pinch-to-close on iOS - collides with pinch-zoom.
         pinchToClose: false,
     });
 
-    // Re-fit every slide to its TRUE intrinsic size once the image loads —
+    // Re-fit every slide to its TRUE intrinsic size once the image loads -
     // replaces the hardcoded 1920×1440 that stretched non-4:3 photos.
     pswp.on('loadComplete', (e) => { _applyRealDims(e.content); _applyRotation(pswp); });
     // Re-apply the per-group rotation when navigating between slides.
@@ -9029,7 +9029,7 @@ window.openGallery = async function (reportId, startGroupIdx) {
                         const isActive = tier === activeTier;
                         const title = complete
                             ? `Show ${label} variant`
-                            : (m ? `${label} — uploading ${pct}%` : `${label} — not available`);
+                            : (m ? `${label} - uploading ${pct}%` : `${label} - not available`);
                         return `<button type="button"
                                     class="pswp-tier-tab ${isActive ? 'active' : ''} ${complete ? '' : 'disabled'}"
                                     data-tier="${tier}"
@@ -9044,7 +9044,7 @@ window.openGallery = async function (reportId, startGroupIdx) {
                         <div class="pswp-tier-caption">${captionBits.join(' · ')}</div>
                         <div class="pswp-tier-buttons">${btns}</div>
                     `;
-                    // Wire clicks. Re-bound every render — the inner HTML
+                    // Wire clicks. Re-bound every render - the inner HTML
                     // was just rewritten so prior listeners are gone.
                     el.querySelectorAll('.pswp-tier-tab').forEach(btn => {
                         btn.onclick = (e) => {
@@ -9067,7 +9067,7 @@ window.openGallery = async function (reportId, startGroupIdx) {
                                 const img = currSlide.container.querySelector('img');
                                 if (img) {
                                     // Tier swap sets src directly, so PhotoSwipe's
-                                    // own loadComplete won't fire — re-fit to the
+                                    // own loadComplete won't fire - re-fit to the
                                     // new tier's real dims once it decodes.
                                     img.addEventListener('load',
                                         () => _applyRealDims(currSlide.content, img), { once: true });
@@ -9141,7 +9141,7 @@ window.openGallery = async function (reportId, startGroupIdx) {
 };
 
 // Backward-compat shim. Old single-image call sites (satellite popups, sat
-// compare panels) keep using openLightbox() — route them through PhotoSwipe
+// compare panels) keep using openLightbox() - route them through PhotoSwipe
 // so the user always sees the same lightbox UI. When PhotoSwipe isn't
 // loaded, fall back to the original simple overlay.
 window.openLightbox = function (url, caption) {
@@ -9159,7 +9159,7 @@ window.openLightbox = function (url, caption) {
     pswp.init();
 };
 
-// Final-fallback simple overlay (used if PhotoSwipe failed to load — e.g.
+// Final-fallback simple overlay (used if PhotoSwipe failed to load - e.g.
 // CDN blocked on a restrictive operator network). Mirrors the legacy
 // behaviour so the worst case is "no swipe" rather than "image unviewable".
 function _openSingleOverlay(url, caption) {
@@ -9184,7 +9184,7 @@ function initMap() {
         maxBounds: [[-85, -180], [85, 180]],
         maxBoundsViscosity: 1.0,
     }).setView([20, 0], 2);
-    // Phase F.1.a (May 2026) — dark-mode tile fix.
+    // Phase F.1.a (May 2026) - dark-mode tile fix.
     //
     // The previous single-layer `dark_all` style baked place labels into
     // the tile at low contrast, making city / district / region names
@@ -9193,11 +9193,11 @@ function initMap() {
     // separate tilesets: `dark_nolabels` + `dark_only_labels`. We layer
     // them so we can boost the label-only layer's CSS opacity / filter
     // independently of the base, AND the labels render ABOVE everything
-    // (markers, building footprints, heat) — which keeps city names
+    // (markers, building footprints, heat) - which keeps city names
     // legible even when a cluster marker would otherwise overlap them.
     //
     // Fallback: if the labels layer fails to load (transient CARTO
-    // outage), the base `dark_nolabels` stays usable on its own — same
+    // outage), the base `dark_nolabels` stays usable on its own - same
     // imagery as `dark_all` minus the place names. Better than no map.
     //
     // CSP: `*.basemaps.cartocdn.com` is already whitelisted in
@@ -9218,7 +9218,7 @@ function initMap() {
             maxZoom: 19,
             noWrap: true,
             pane: 'overlayPane',       // sits above the base + below markers/popups
-            // No `opacity` here — the .leaflet-tile-pane rule in
+            // No `opacity` here - the .leaflet-tile-pane rule in
             // styles.css handles the contrast boost so we can tune it
             // without re-deploying app.js.
         }
@@ -9237,7 +9237,7 @@ function initMap() {
     });
     darkTiles.addTo(map);
 
-    // ── Phase H.8 — All-buildings priority-coloured overlay ────────
+    // ── Phase H.8 - All-buildings priority-coloured overlay ────────
     // A togglable data layer (NOT a base map swap) that paints every
     // tracked Building as a polygon (when footprint cached) or a
     // circle at the centroid (when not). Colour scale follows the
@@ -9253,11 +9253,11 @@ function initMap() {
 
     function _priorityColor(score) {
         if (score == null) return '#64748b';
-        if (score >= 80) return '#ef4444';   // red — extreme
-        if (score >= 60) return '#f97316';   // orange — high
-        if (score >= 40) return '#eab308';   // yellow — moderate
-        if (score >= 20) return '#22c55e';   // green — low
-        return '#94a3b8';                    // grey — ~negligible
+        if (score >= 80) return '#ef4444';   // red - extreme
+        if (score >= 60) return '#f97316';   // orange - high
+        if (score >= 40) return '#eab308';   // yellow - moderate
+        if (score >= 20) return '#22c55e';   // green - low
+        return '#94a3b8';                    // grey - ~negligible
     }
 
     function _renderAllBuildingsLayer(buildings) {
@@ -9304,12 +9304,12 @@ function initMap() {
                     <div style="color:#cbd5e1;">
                         <strong style="color:${stateColor};">${escapeHtml(b.state)}</strong> ·
                         ${b.report_count || 0} reports ·
-                        Priority <strong>${b.humanitarian_priority != null ? b.humanitarian_priority.toFixed(0) : '—'}</strong>
+                        Priority <strong>${b.humanitarian_priority != null ? b.humanitarian_priority.toFixed(0) : '-'}</strong>
                     </div>
                     <div style="color:#94a3b8;font-size:11px;margin-top:3px;">
-                        Sev ${b.severity_score != null ? b.severity_score.toFixed(0) : '—'} ·
-                        Conf ${b.confidence_score != null ? b.confidence_score.toFixed(0) : '—'} ·
-                        Escal ${b.escalation_risk != null ? b.escalation_risk.toFixed(0) : '—'}
+                        Sev ${b.severity_score != null ? b.severity_score.toFixed(0) : '-'} ·
+                        Conf ${b.confidence_score != null ? b.confidence_score.toFixed(0) : '-'} ·
+                        Escal ${b.escalation_risk != null ? b.escalation_risk.toFixed(0) : '-'}
                     </div>
                     <button onclick="openBuildingConsole('${b.id}')"
                         style="margin-top:6px;padding:4px 10px;background:rgba(167,139,250,0.18);
@@ -9369,7 +9369,7 @@ function initMap() {
 
     L.control.layers(
         { "Dark": darkTiles, "Satellite": satelliteTiles, "Street": streetTiles },
-        // Overlays — the user can toggle buildings on top of any base map.
+        // Overlays - the user can toggle buildings on top of any base map.
         { "Buildings (priority)": buildingsPriorityLayer },
         { position: 'topright' }
     ).addTo(map);
@@ -9399,9 +9399,9 @@ function initMap() {
     };
     priorityLegend.addTo(map);
 
-    // Building footprints layer — loads from Overpass API at zoom >= 15.
+    // Building footprints layer - loads from Overpass API at zoom >= 15.
     //
-    // Phase H.1.e (May 2026) — polygons now:
+    // Phase H.1.e (May 2026) - polygons now:
     //   * click → openBuildingConsole(osm:way:<id>)
     //   * highlight when the operator's currently-selected building
     //     matches (via window._highlightBuildingPolygon set by the
@@ -9410,7 +9410,7 @@ function initMap() {
     let _buildingLayer = null;
     let _buildingCache = {};
     let _buildingDebounce = null;
-    // Phase H.1.e — map of `osm:way:<id>` → Leaflet layer so we can
+    // Phase H.1.e - map of `osm:way:<id>` → Leaflet layer so we can
     // re-style the selected polygon when the operator opens the console.
     const _buildingPolyById = new Map();
 
@@ -9462,9 +9462,9 @@ function initMap() {
                         if (f.properties.name) {
                             layer.bindTooltip(f.properties.name, { sticky: true });
                         }
-                        // Phase H.1.e — polygon click opens the Building
+                        // Phase H.1.e - polygon click opens the Building
                         // Intelligence Console. We open even for buildings
-                        // that don't yet have a Reports row — the console
+                        // that don't yet have a Reports row - the console
                         // handles 404 by showing a toast + closing.
                         layer.on('click', (ev) => {
                             // Prevent the click from bubbling to the map
@@ -9482,13 +9482,13 @@ function initMap() {
     }
     map.on('moveend', () => { clearTimeout(_buildingDebounce); _buildingDebounce = setTimeout(loadBuildingFootprints, 600); });
 
-    // Initialize cluster group — optimized for easy clicking on hotspots
+    // Initialize cluster group - optimized for easy clicking on hotspots
     clusterGroup = L.markerClusterGroup({
         maxClusterRadius: 35,
         spiderfyOnMaxZoom: true,
         spiderfyDistanceMultiplier: 2.5,
         showCoverageOnHover: false,
-        zoomToBoundsOnClick: false,     // we handle click ourselves — spiderfy on click
+        zoomToBoundsOnClick: false,     // we handle click ourselves - spiderfy on click
         disableClusteringAtZoom: 16,
         iconCreateFunction: function (cluster) {
             const children = cluster.getAllChildMarkers();
@@ -9548,7 +9548,7 @@ function initMap() {
 
         const locName = children[0]?._crispReport?.location?.user_location_name || children[0]?._crispReport?.location?.device_location_name || '';
         cluster.bindPopup(`<div style="min-width:190px;max-width:260px;">
-            <div style="font-size:13px;font-weight:800;color:#ffae00;margin-bottom:6px;">${children.length} Incidents${locName ? ' — ' + escapeHtml(locName) : ''}</div>
+            <div style="font-size:13px;font-weight:800;color:#ffae00;margin-bottom:6px;">${children.length} Incidents${locName ? ' - ' + escapeHtml(locName) : ''}</div>
             ${rows}
             <div style="font-size:10px;color:#64748b;text-align:center;margin-top:6px;"><i class="fa-solid fa-hand-pointer"></i> Click to expand</div>
         </div>`, { className: 'cluster-popup', closeButton: false, autoPan: false }).openPopup();
@@ -9558,7 +9558,7 @@ function initMap() {
         e.layer.closePopup();
     });
 
-    // Track spiderfy state — exposed on window so updateMapMarkers can skip rebuild
+    // Track spiderfy state - exposed on window so updateMapMarkers can skip rebuild
     window._spiderfiedCluster = null;
     let _spiderfyLock = false;
 
@@ -9596,7 +9596,7 @@ function initMap() {
 }
 
 function updateMapMarkers() {
-    // Skip full map rebuild while a spider is open — user is interacting with it
+    // Skip full map rebuild while a spider is open - user is interacting with it
     if (window._spiderfiedCluster) return;
 
     clusterGroup.clearLayers();
@@ -9630,7 +9630,7 @@ function updateMapMarkers() {
             const img = r.media?.find(m => m.type === 'IMAGE');
             return `<div style="padding:8px;min-width:180px;">
                 ${img ? `<img src="${getMediaUrl(img.url)}" style="width:100%;height:70px;object-fit:cover;border-radius:6px;margin-bottom:6px;">` : ''}
-                <div style="font-weight:700;font-size:14px;color:${color};">${r.severity} — ${r.infrastructure_type}</div>
+                <div style="font-weight:700;font-size:14px;color:${color};">${r.severity} - ${r.infrastructure_type}</div>
                 <div style="font-size:13px;color:#94a3b8;margin-top:2px;">${(r.description || '').substring(0, 60)}</div>
                 <div style="font-size:12px;color:#475569;margin-top:4px;">${timeAgo(r.server_created_at)}</div>
             </div>`;
@@ -9643,14 +9643,14 @@ function updateMapMarkers() {
         heatPoints.push([lat, lng, intensity]);
     });
 
-    // Heat layer — guard against zero-size canvas (can throw getImageData error)
+    // Heat layer - guard against zero-size canvas (can throw getImageData error)
     if (heatPoints.length > 0) {
         try {
             heatLayer = L.heatLayer(heatPoints, {
                 radius: 30, blur: 20, maxZoom: 10,
                 gradient: { 0.2: '#22c55e', 0.4: '#eab308', 0.6: '#f97316', 0.8: '#ef4444', 1.0: '#dc2626' }
             }).addTo(map);
-        } catch (_) { /* map not fully sized yet — heat layer will be added on next update */ }
+        } catch (_) { /* map not fully sized yet - heat layer will be added on next update */ }
     }
 
     // Auto-zoom on first load
@@ -9743,7 +9743,7 @@ window.showPendingDeletions = function () {
         const remaining = Math.max(0, expiresAt - Date.now());
         const hrs = Math.floor(remaining / 3600000);
         const mins = Math.floor((remaining % 3600000) / 60000);
-        const countdown = remaining > 0 ? `${hrs}h ${mins}m remaining` : 'Expired — awaiting purge';
+        const countdown = remaining > 0 ? `${hrs}h ${mins}m remaining` : 'Expired - awaiting purge';
         const expired = remaining <= 0;
         const loc = r.location?.user_location_name || r.location?.device_location_name || 'Unknown';
         const sevColor = SEV_COLORS[r.severity] || '#64748b';
@@ -9785,7 +9785,7 @@ window.closeDeletionsPanel = function () {
     if (panel) panel.style.display = 'none';
 };
 
-// P1.8 — admin endpoints now require X-Admin-Key. Cache the key in localStorage
+// P1.8 - admin endpoints now require X-Admin-Key. Cache the key in localStorage
 // so the operator only pastes it once. If absent, prompt. If the server later
 // returns 403 (key rotated), wipe the cached copy and prompt again.
 function _getAdminKey(forcePrompt = false) {
@@ -9821,11 +9821,11 @@ window.purgeAllDeletions = async function () {
     if (!confirm(`Permanently delete all ${_pendingDeletions.length} pending deletion(s)? This cannot be undone.`)) return;
     try {
         const res = await _adminFetch(`${API}/purge-all-pending`, { method: 'POST' });
-        if (!res) { showToast('Purge cancelled — admin key required', 'error'); return; }
+        if (!res) { showToast('Purge cancelled - admin key required', 'error'); return; }
         if (res.ok) {
             const result = await res.json();
             showToast(`${result.purged} report(s) permanently deleted`, 'success');
-            // Re-fetch from the server instead of trusting client state — the
+            // Re-fetch from the server instead of trusting client state - the
             // previous "_pendingDeletions = []" was correct in theory but the
             // counter badge (driven by a separate poll) could have stayed
             // stale if the toggle button rendered from the old cache.
@@ -9841,7 +9841,7 @@ window.purgeAllDeletions = async function () {
             showToast(`Purge failed (HTTP ${res.status})`, 'error');
         }
     } catch (e) {
-        showToast('Purge failed — check connection', 'error');
+        showToast('Purge failed - check connection', 'error');
     }
 };
 
@@ -9849,7 +9849,7 @@ window.purgeExpiredOnly = async function () {
     if (!confirm('Permanently delete all expired deletion requests?')) return;
     try {
         const res = await _adminFetch(`${API}/purge-expired`, { method: 'POST' });
-        if (!res) { showToast('Purge cancelled — admin key required', 'error'); return; }
+        if (!res) { showToast('Purge cancelled - admin key required', 'error'); return; }
         if (res.ok) {
             const result = await res.json();
             showToast(`Purged ${result.purged} expired report(s)`, 'success');
@@ -9864,7 +9864,7 @@ window.purgeExpiredOnly = async function () {
             showToast(`Purge failed (HTTP ${res.status})`, 'error');
         }
     } catch (e) {
-        showToast('Purge failed — check connection', 'error');
+        showToast('Purge failed - check connection', 'error');
     }
 };
 
@@ -9872,7 +9872,7 @@ window.purgeExpiredOnly = async function () {
 const _origFetchReports = fetchReports;
 
 // ── Export Functions ──────────────────────────────────────────────────────────
-// Jun 2026 (export audit) — every format now downloads through the BACKEND
+// Jun 2026 (export audit) - every format now downloads through the BACKEND
 // export endpoints via an authenticated fetch -> blob:
 //   * Shapefile/KML previously used window.open, which bypasses the fetch
 //     auth interceptor -> guaranteed 401 in a new tab while the UI toasted
@@ -9881,7 +9881,7 @@ const _origFetchReports = fetchReports;
 //     satellite verification columns (UNDP must-have #11) and ignored the
 //     backend's richer schema (HXL row, appended metadata columns).
 // The on-screen status + time filters pass through as query params (the
-// composite "Active" view maps to status=PENDING,VERIFIED — the backend
+// composite "Active" view maps to status=PENDING,VERIFIED - the backend
 // accepts a comma list). Client-side assembly survives only as the offline
 // fallback for CSV/GeoJSON, clearly labelled as degraded.
 function _exportFilterParams() {
@@ -9897,7 +9897,7 @@ function _exportFilterParams() {
 }
 window._exportFilterParams = _exportFilterParams;
 
-// Jun 2026 (export audit) — per-report evidence bundle: ZIP of evidence.json,
+// Jun 2026 (export audit) - per-report evidence bundle: ZIP of evidence.json,
 // completed media files, stored satellite snapshots and a README, so a
 // verifier (or UNDP judge) can review one report fully OFFLINE.
 window.downloadEvidenceBundle = async function (reportId) {
@@ -9945,10 +9945,10 @@ window.exportData = async function (format) {
     } catch (e) {
         if (fmt === 'csv' || fmt === 'geojson') {
             // Degraded offline fallback over the already-loaded session
-            // reports — explicitly labelled (no satellite columns).
+            // reports - explicitly labelled (no satellite columns).
             const filtered = getFilteredReports();
             if (fmt === 'geojson') exportGeoJSON(filtered); else exportCSV(filtered);
-            showToast('Backend unreachable — exported the reports loaded in this session instead (no satellite columns).', 'warning');
+            showToast('Backend unreachable - exported the reports loaded in this session instead (no satellite columns).', 'warning');
         } else {
             showToast(`${fmt.toUpperCase()} export failed: ${e.message}`, 'error');
         }
@@ -9967,7 +9967,7 @@ window.exportNodeData = function (path) {
 
 window.exportNodeDataFromIncidents = function (ids) {
     const incs = allReports.filter(r => ids.includes(r.id));
-    // Timestamped name — the old fixed 'crisp_hotspot' overwrote / (1)-suffixed
+    // Timestamped name - the old fixed 'crisp_hotspot' overwrote / (1)-suffixed
     // successive exports with no way to tell them apart.
     const d = new Date();
     const p = (n) => String(n).padStart(2, '0');
@@ -9984,7 +9984,7 @@ function getFilteredReports() {
         });
     if (!_activeQueue && timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
-        // K.5.b — use _priorityTime for offline-aware time filter.
+        // K.5.b - use _priorityTime for offline-aware time filter.
         filtered = filtered.filter(r => _priorityTime(r) > cutoff);
     }
     return filtered;
@@ -10059,7 +10059,7 @@ window.setStatusFilter = (f) => {
 window.setTimeFilter = (h) => {
     timeFilterHours = h;
     document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
-    // K.5.b — guard the active-button bookkeeping behind the implicit
+    // K.5.b - guard the active-button bookkeeping behind the implicit
     // click `event` global since tests + programmatic callers don't
     // necessarily provide one. Falls through cleanly when called from
     // a non-click context (e.g. e2e test stubbing).
@@ -10067,10 +10067,10 @@ window.setTimeFilter = (h) => {
         if (typeof event !== 'undefined' && event && event.target && event.target.classList) {
             event.target.classList.add('active');
         }
-    } catch (_) { /* no event in scope — programmatic call */ }
+    } catch (_) { /* no event in scope - programmatic call */ }
     renderFeed();
 };
-// K.5.b — test-only helper that bypasses the time-button DOM
+// K.5.b - test-only helper that bypasses the time-button DOM
 // bookkeeping for e2e specs that drive the filter programmatically.
 window.__crispSetTimeFilterHoursForTest = (h) => {
     timeFilterHours = h;
@@ -10244,7 +10244,7 @@ function _applyReportData(data) {
             if (_initialLoadDone && !_seenIds.has(r.id)) {
                 _addNotification(r);
             } else {
-                // Initial load — silently mark as seen, no flash
+                // Initial load - silently mark as seen, no flash
                 _seenIds.add(r.id);
             }
         } else {
@@ -10274,7 +10274,7 @@ function _applyReportData(data) {
                     if (prev.sync_status !== r.sync_status) detailPanelNeedsRefresh = true;
                 }
             } else {
-                // Known id but absent from allReports — e.g. setOperationScope
+                // Known id but absent from allReports - e.g. setOperationScope
                 // cleared allReports on an operation switch (knownIds is NOT
                 // cleared, to avoid every report looking "new"). Re-insert here
                 // WITHOUT a notification (it's a known report, not a fresh
@@ -10302,13 +10302,13 @@ function _applyReportData(data) {
 //
 // May 2026 (HAR-driven, Phase 2): previously this called `bestVariant()`
 // which would silently auto-upgrade to LARGE on the first poll where the
-// HIGH variant landed — defeating the bandwidth savings. Now it calls
+// HIGH variant landed - defeating the bandwidth savings. Now it calls
 // `thumbVariant()` so the inline view stays small unless the user
 // explicitly picks LARGE. If the user IS holding a manual override, we
 // honour that (existing behaviour).
 function _maybeUpgradeDetailImage() {
     if (!selectedId) return;
-    // Phase 2: respect manual tier override — don't auto-upgrade when the
+    // Phase 2: respect manual tier override - don't auto-upgrade when the
     // user has deliberately picked a tier. `setDetailImageTier` stamps the
     // override; `closeDetail` and report-delete clear it.
     if (_tierOverride.has(selectedId)) return;
@@ -10317,7 +10317,7 @@ function _maybeUpgradeDetailImage() {
     const images = r.media?.filter(m => m.type === 'IMAGE') || [];
     if (!images.length) return;
     const groups = groupPhotos(images);
-    // Build a groupId → pick lookup. Null-group entries are skipped — the
+    // Build a groupId → pick lookup. Null-group entries are skipped - the
     // legacy single-media path never upgrades.
     // Use `thumbVariant` so polling never silently fetches the LARGE tier;
     // the user has to explicitly click LARGE to pull it.
@@ -10392,13 +10392,13 @@ function _maybeUpgradeDetailImage() {
 // Apr 2026: expose read-only pointers to the module-scope state + the
 // poll function so the Playwright E2E suite and ad-hoc DevTools debugging
 // can inspect and kick the report list without a 4-second wait.
-// NOT used by production code paths — safe to keep always-on.
+// NOT used by production code paths - safe to keep always-on.
 Object.defineProperty(window, 'allReports', {
     get: () => allReports,
     configurable: true,
 });
 // Leaflet instances so the map-render spec can walk clusterGroup's layers
-// without screen-scraping Leaflet's private DOM. Read-only getters —
+// without screen-scraping Leaflet's private DOM. Read-only getters -
 // production code never mutates these via `window.*`.
 Object.defineProperty(window, '__crispMap', {
     get: () => map,
@@ -10419,7 +10419,7 @@ Object.defineProperty(window, '__crispTimeFilterHours', {
 });
 window.__crispFetchReports = () => fetchReports();
 
-// May 2026 (operator-reported, post-iPhone-14 audit) — the listing
+// May 2026 (operator-reported, post-iPhone-14 audit) - the listing
 // endpoint's server-side `limit: int = 100` default was silently
 // truncating the dashboard's view at 100 reports. Top-bar TOTAL pill
 // reflected the truncated count, not the true `X-Total-Count`. Pass
@@ -10436,14 +10436,14 @@ async function fetchReports() {
         const baseUrl = API.endsWith('/') ? API : API + '/';
         // Phase 3: send `?since=<X-Server-Time>` on subsequent polls.
         // First poll (no _lastServerTime) and every Nth poll skip it
-        // for a full refresh — that's how deletions get reflected.
+        // for a full refresh - that's how deletions get reflected.
         const wantFullRefresh = !_lastServerTime
             || _pollsSinceFullRefresh >= _FULL_REFRESH_EVERY_N_POLLS;
         // Always pin a generous limit so the backend's default of 100
         // doesn't quietly truncate. `&` vs `?` depends on whether
         // `?since=` is already present.
         const limitParam = `limit=${DASHBOARD_PAGE_LIMIT}`;
-        // Operations Phase 2 — when an operation is active, scope the feed to it
+        // Operations Phase 2 - when an operation is active, scope the feed to it
         // (the backend filters before X-Total-Count, so the count stays scoped).
         const scopeParam = _activeCrisisEventId
             ? '&crisis_event_id=' + encodeURIComponent(_activeCrisisEventId) : '';
@@ -10464,7 +10464,7 @@ async function fetchReports() {
         const res = await fetch(listUrl, fetchOpts);
         console.log('[CRISP] Response:', res.status, res.url);
         // Phase 3: capture the server's clock for the NEXT poll's cursor.
-        // Header is echoed back regardless of whether the body is empty —
+        // Header is echoed back regardless of whether the body is empty -
         // an idle poll still advances the cursor so the window doesn't
         // grow unboundedly.
         const serverTime = res.headers.get('X-Server-Time');
@@ -10479,10 +10479,10 @@ async function fetchReports() {
             _pollsSinceFullRefresh += 1;
         }
 
-        // Phase 4: 304 Not Modified — nothing to do. Local state is
+        // Phase 4: 304 Not Modified - nothing to do. Local state is
         // already canonical. Skip body parsing + render entirely.
         if (res.status === 304) {
-            console.log('[CRISP] 304 — no changes since last poll');
+            console.log('[CRISP] 304 - no changes since last poll');
             _updateCacheBadge(false);
             _reschedulePoller();
             return;
@@ -10491,27 +10491,27 @@ async function fetchReports() {
         const data = await res.json();
         console.log('[CRISP] Loaded', data.length, wantFullRefresh ? 'reports (full)' : 'delta updates');
 
-        // Scale-out signal — if the backend says there are more rows
+        // Scale-out signal - if the backend says there are more rows
         // than the page-limit we asked for, log a warning so we know
         // proper pagination is needed BEFORE the truncation becomes an
         // ops issue. Idempotent; no-op when caught early.
         const xTotalCount = parseInt(res.headers.get('X-Total-Count') || '0', 10);
         if (xTotalCount > DASHBOARD_PAGE_LIMIT && wantFullRefresh) {
             console.warn(`[CRISP] Dashboard truncation imminent: X-Total-Count=${xTotalCount} exceeds DASHBOARD_PAGE_LIMIT=${DASHBOARD_PAGE_LIMIT}. Proper pagination needed.`);
-            // K.5.e (May 2026, Phase K) — operator-visible banner.
+            // K.5.e (May 2026, Phase K) - operator-visible banner.
             // Pre-fix the truncation only logged to console; operators
             // didn't know reports past row 10K were silently hidden.
             // Banner sits at the top of the header chrome so anyone
             // looking at the dashboard knows what they're not seeing.
             _showTruncationBanner(xTotalCount, DASHBOARD_PAGE_LIMIT);
         } else if (typeof _hideTruncationBanner === 'function') {
-            // Count dropped back below the threshold — clear the banner
+            // Count dropped back below the threshold - clear the banner
             // on a subsequent full-refresh poll.
             if (wantFullRefresh) _hideTruncationBanner();
         }
 
         try {
-            // Phase 3: cache the FULL list (after merge) — the delta poll
+            // Phase 3: cache the FULL list (after merge) - the delta poll
             // body alone wouldn't be a useful offline snapshot. We only
             // overwrite the cache on full-refresh polls so a delta poll
             // doesn't shrink the offline cache to a single record.
@@ -10523,7 +10523,7 @@ async function fetchReports() {
         _updateCacheBadge(false);
         // Apply rendering separately so UI errors don't look like network failures
         try {
-            // For full-refresh polls, REPLACE allReports — that's how we
+            // For full-refresh polls, REPLACE allReports - that's how we
             // notice server-side deletions (the deleted id stops appearing).
             // For delta polls, keep merging into existing state (the
             // existing _applyReportData handles upsert by id).
@@ -10534,8 +10534,8 @@ async function fetchReports() {
             }
             if (!_initialLoadDone) {
                 _initialLoadDone = true;
-                _persistSeenIds();  // K.5.c — LRU cap + safe persist
-                console.log('[CRISP] Initial load complete — future reports will trigger notifications');
+                _persistSeenIds();  // K.5.c - LRU cap + safe persist
+                console.log('[CRISP] Initial load complete - future reports will trigger notifications');
             }
             console.log('[CRISP] Rendered', allReports.length, 'reports on map');
         } catch (e) {
@@ -10544,11 +10544,11 @@ async function fetchReports() {
             const feed = document.getElementById('report-feed-list');
             if (feed) feed.innerHTML = `<div style="padding:20px;color:#ef4444;font-size:13px;"><b>Render Error:</b> ${e.message}<br><br>Data loaded (${data.length} reports) but UI failed. Check console (Cmd+Option+J).</div>`;
         }
-        // Apr 2026 — REMOVED `_checkPendingDeletions()` from per-poll cycle.
+        // Apr 2026 - REMOVED `_checkPendingDeletions()` from per-poll cycle.
         // It made an extra GET /api/v1/reports/?include_deleted=true on
         // every cycle, doubling the network rate (~130k req/day per open
         // tab in active-poll mode). Pending-deletion metadata changes
-        // infrequently (admin-only action) — checking it every 30 s via
+        // infrequently (admin-only action) - checking it every 30 s via
         // the dedicated interval at init time is plenty.
         // Manual triggers (admin purge buttons) still call it directly.
     } catch (e) {
@@ -10560,7 +10560,7 @@ async function fetchReports() {
     _reschedulePoller();
 }
 
-// Phase 3 / May 2026 — full-refresh path. Reconciles allReports with the
+// Phase 3 / May 2026 - full-refresh path. Reconciles allReports with the
 // server-truth snapshot using a HONEST diff (deletions + insertions +
 // updates) rather than the prior "clear knownIds + re-walk under a
 // suppression flag" pattern.
@@ -10570,7 +10570,7 @@ async function fetchReports() {
 // which would have re-fired _addNotification for ALL of them. To prevent
 // the cascade, a `_suppressNewReportNotifications` flag suppressed the
 // whole notify path for the duration. The bug: genuinely-new reports
-// arriving during a full-refresh poll ALSO got suppressed — they landed
+// arriving during a full-refresh poll ALSO got suppressed - they landed
 // in knownIds via the upsert but never reached _seenIds or _unseenReports.
 // On any deployment where the dashboard couldn't read X-Server-Time
 // (cross-origin dev where CORS hadn't exposed the header), EVERY poll
@@ -10602,7 +10602,7 @@ function _replaceReportData(data) {
         }
     }
     // Rebuild allReports by filtering to ids that survived (preserves
-    // existing in-memory enrichment — region annotations etc).
+    // existing in-memory enrichment - region annotations etc).
     allReports = allReports.filter(r => incomingIds.has(r.id));
 
     // ── 2. Hand off to the existing upsert. Each row r:
@@ -10645,7 +10645,7 @@ function _hasActiveUploads() {
     });
 }
 
-// Apr 2026 — cap active-poll mode to 60 s of wall-clock time. Without
+// Apr 2026 - cap active-poll mode to 60 s of wall-clock time. Without
 // this cap, a single old report whose chunked upload was abandoned
 // midway (legacy bug, now fixed at submit-time but historical rows
 // remain) keeps `_hasActiveUploads()` returning true forever, which
@@ -10653,13 +10653,13 @@ function _hasActiveUploads() {
 // at ~130k requests/day per open dashboard tab. The cap means once we
 // stop seeing the upload counter actually MOVE for 60 s, we drop back
 // to the normal 4 s interval. If a fresh upload starts, the cap
-// resets — fast polling resumes for the duration of that real upload.
+// resets - fast polling resumes for the duration of that real upload.
 let _lastActiveUploadProgressAt = 0;
 let _lastActiveUploadFingerprint = '';
 
 function _activePollAllowed() {
     if (!_hasActiveUploads()) return false;
-    // Fingerprint = which media + how far along — captures whether
+    // Fingerprint = which media + how far along - captures whether
     // anything is actually progressing or we're just stuck.
     const fp = allReports
         .flatMap(r => (r.media || []).map(m => `${m.id || ''}:${m.completion_pct ?? 0}:${m.assembly_status || ''}`))
@@ -10672,7 +10672,7 @@ function _activePollAllowed() {
     return (Date.now() - _lastActiveUploadProgressAt) < 60_000;
 }
 
-// Phase J.6 — track recent operator interaction. We treat any click /
+// Phase J.6 - track recent operator interaction. We treat any click /
 // keydown inside the detail panel as a "still deciding" signal; if
 // nothing has happened in 30 s the panel is just-open-but-idle and
 // normal polling resumes.
@@ -10696,7 +10696,7 @@ function _decisionModeActive() {
     return true;
 }
 
-// Phase F image-reliability (May 2026) — remember the current poll
+// Phase F image-reliability (May 2026) - remember the current poll
 // interval so `_updateCacheBadge` can pass it to the offline-banner
 // bridge ("Retrying every Ns"). The banner reads this on every
 // fail/success bridge call.
@@ -10708,7 +10708,7 @@ function _reschedulePoller() {
     if (_activePollAllowed()) {
         interval = POLL_INTERVAL_ACTIVE;
     } else if (_decisionModeActive()) {
-        // J.6 — operator is mid-decision; don't re-render under their hands.
+        // J.6 - operator is mid-decision; don't re-render under their hands.
         interval = POLL_INTERVAL_DECISION;
     } else {
         interval = POLL_INTERVAL;
@@ -10719,11 +10719,11 @@ function _reschedulePoller() {
 
 function _updateCacheBadge(stale) {
     const badge = document.getElementById('cache-freshness-badge');
-    // Apr 2026 fix: the bottom "Offline — showing cached data" banner used
+    // Apr 2026 fix: the bottom "Offline - showing cached data" banner used
     // to be driven by navigator.onLine (unreliable: gets stuck false after
     // transient network hiccups). Now it tracks ACTUAL fetch results via
     // the bridge `window.setDashboardOnline(ok)` defined in index.html.
-    // Phase F image-reliability (May 2026) — pass the current poll
+    // Phase F image-reliability (May 2026) - pass the current poll
     // interval so the banner can render "Retrying every Ns".
     try {
         if (typeof window.setDashboardOnline === 'function') {
@@ -10738,7 +10738,7 @@ function _updateCacheBadge(stale) {
     if (!badge) return;
     if (stale) {
         badge.innerHTML = '<span class="live-dot" style="background:#f59e0b;box-shadow:0 0 6px #f59e0b;"></span>CACHED';
-        badge.title = 'Showing cached data — reconnect to refresh';
+        badge.title = 'Showing cached data - reconnect to refresh';
         badge.style.borderColor = 'rgba(245,158,11,0.4)';
     } else {
         badge.innerHTML = '<span class="live-dot"></span>LIVE';
@@ -10765,7 +10765,7 @@ function _loadCachedReports() {
     } catch (_) { return false; }
 }
 
-// ── Phase 5.1 (May 2026) — Admin Moderation overlay ──────────────────────────
+// ── Phase 5.1 (May 2026) - Admin Moderation overlay ──────────────────────────
 // Backed by /api/v1/admin/observability/nearby/* + /api/v1/admin/appeals/*.
 // Auth is JWT-based (require_admin → role ∈ {ADMIN, SUPER_ADMIN}); the
 // global fetch wrapper at line ~33 adds Authorization automatically.
@@ -10874,7 +10874,7 @@ function _modEscape(s) {
 }
 
 /** Escape a value for safe interpolation into an HTML on*-handler that
- *  embeds it as a JS single-quoted string literal — i.e. need to defeat
+ *  embeds it as a JS single-quoted string literal - i.e. need to defeat
  *  both HTML AND JS-string injection vectors. IDs come from the server
  *  (UUIDs / building refs / geohashes) so the risk is theoretical, but
  *  the cost is zero. */
@@ -10890,9 +10890,9 @@ function _modAttrJs(s) {
 
 function _modCardForCluster(e, grade) {
     const when = e.latest_at ? timeAgo(e.latest_at) : '';
-    const types = (e.crisis_types || []).slice(0, 2).join(', ') || '—';
-    const lat = (typeof e.centroid_lat === 'number') ? e.centroid_lat.toFixed(3) : '—';
-    const lng = (typeof e.centroid_lng === 'number') ? e.centroid_lng.toFixed(3) : '—';
+    const types = (e.crisis_types || []).slice(0, 2).join(', ') || '-';
+    const lat = (typeof e.centroid_lat === 'number') ? e.centroid_lat.toFixed(3) : '-';
+    const lng = (typeof e.centroid_lng === 'number') ? e.centroid_lng.toFixed(3) : '-';
     const meta = [];
     if (e.kind)  meta.push(`kind=${e.kind}`);
     if (e.tier)  meta.push(`tier=${e.tier}`);
@@ -10904,7 +10904,7 @@ function _modCardForCluster(e, grade) {
     return `<div class="mod-triage-card grade-${grade}">
         <div class="mod-tc-header">
             <span class="mod-tc-grade ${grade}">${grade}</span>
-            <span class="mod-tc-id" title="${escId}">${escId || '—'}</span>
+            <span class="mod-tc-id" title="${escId}">${escId || '-'}</span>
             <span class="mod-tc-when">${when}</span>
         </div>
         <div class="mod-tc-body">
@@ -10965,7 +10965,7 @@ function _modAppealCard(a) {
     const dev = a.device_id ? `device ${a.device_id.slice(0, 12)}…`
                             : (a.user_id ? `user ${a.user_id.slice(0, 12)}…` : 'unknown');
     const score = (typeof a.original_spam_score === 'number')
-        ? a.original_spam_score.toFixed(2) : '—';
+        ? a.original_spam_score.toFixed(2) : '-';
     const jsId = _modAttrJs(a.id || '');
     const actions = decided ? `
         <div style="font-size:11px;color:var(--text-dim);margin-top:8px;font-family:var(--font-mono);">
@@ -10979,7 +10979,7 @@ function _modAppealCard(a) {
             <button class="mod-ac-btn uphold" onclick="_modDecideAppeal('${jsId}','upheld')" title="Keep the suspension; device stays flagged">
                 <i class="fa-solid fa-pause"></i> Uphold
             </button>
-            <button class="mod-ac-btn ban" onclick="_modDecideAppeal('${jsId}','banned')" title="Permanent ban — requires note">
+            <button class="mod-ac-btn ban" onclick="_modDecideAppeal('${jsId}','banned')" title="Permanent ban - requires note">
                 <i class="fa-solid fa-ban"></i> Ban
             </button>
         </div>`;
@@ -11023,7 +11023,7 @@ window._modDecideAppeal = async function (appealId, decision) {
     let notes = null;
     if (decision === 'banned') {
         notes = prompt(
-            'Permanent ban — please document the rationale.\n' +
+            'Permanent ban - please document the rationale.\n' +
             'This is logged in the appeal audit trail.'
         );
         if (notes === null) return;   // cancel
@@ -11165,7 +11165,7 @@ function _initUserMenu() {
         // Non-blocking; ignore failures.
         setTimeout(() => _refreshModerationCounts(), 800);
     }
-    // Phase J.1 — admin-divider visibility + dot indicator. The
+    // Phase J.1 - admin-divider visibility + dot indicator. The
     // divider only appears when at least one admin item is shown;
     // the dot fires when any admin item has a non-zero badge so the
     // operator's eye is drawn to the chip without us having to keep
@@ -11175,7 +11175,7 @@ function _initUserMenu() {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Phase J.1 (May 2026) — Header consolidation helpers
+// Phase J.1 (May 2026) - Header consolidation helpers
 // ──────────────────────────────────────────────────────────────────────
 // The user-chip dropdown holds admin actions. _refreshUserMenuAdminState
 // keeps the divider + the red-dot indicator in sync with the existing
@@ -11280,11 +11280,11 @@ setInterval(_autoRefreshToken, 25 * 60 * 1000); // Refresh every 25 min
 
 document.addEventListener('DOMContentLoaded', async () => {
     _initUserMenu();
-    // Phase J.1 — wire the Tools-menu active dot to the Analytics +
+    // Phase J.1 - wire the Tools-menu active dot to the Analytics +
     // Predict panel visibility so the operator sees a small marker
     // when one of those overlays is currently open.
     _initToolsActiveDot();
-    // Phase J.5 — bump session counter + show onboarding tips for
+    // Phase J.5 - bump session counter + show onboarding tips for
     // the first 3 sessions per device.
     _onboardingBumpSession();
     _kickOnboardingTips();
@@ -11299,13 +11299,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!d.contains(e.target)) d.classList.remove('open');
         });
     });
-    // Phase G.1 (May 2026) — restore stacking chip filters from URL
+    // Phase G.1 (May 2026) - restore stacking chip filters from URL
     // hash or localStorage and paint the chip UI. Must run BEFORE the
     // first feed render so the active set is honoured on cold load
     // (deep-linked URLs land showing the right filter combo).
     _restoreChipFiltersFromStorage();
     _paintChipFilterUI();
-    // Phase H.1.d (May 2026) — install the URL-hash listener so a
+    // Phase H.1.d (May 2026) - install the URL-hash listener so a
     // deep-linked `#building=osm:way:123` opens the Building
     // Intelligence Console on cold load.
     _initBuildingHashListener();
@@ -11328,7 +11328,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Fetch fresh data, then adaptive polling takes over
     fetchReports();
 
-    // Apr 2026 — pending-deletions check runs on its own slow timer
+    // Apr 2026 - pending-deletions check runs on its own slow timer
     // instead of riding the per-poll cycle (which doubled network rate
     // to ~130k req/day per tab in active-poll mode). Admin actions
     // that delete reports continue to call _checkPendingDeletions()

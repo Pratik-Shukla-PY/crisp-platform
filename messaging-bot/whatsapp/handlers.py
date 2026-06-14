@@ -1,5 +1,5 @@
 """
-WhatsApp Message Handlers — Routes incoming messages by type,
+WhatsApp Message Handlers - Routes incoming messages by type,
 updates the session buffer, and drives the guided conversation flow.
 """
 import logging
@@ -32,7 +32,7 @@ async def handle_incoming_message(phone: str, message: dict):
 
     # Deduplication
     if msg_id and is_duplicate_message(session, msg_id):
-        logger.debug(f"Duplicate message {msg_id} — skipping")
+        logger.debug(f"Duplicate message {msg_id} - skipping")
         return
 
     session.touch()
@@ -94,7 +94,7 @@ async def _handle_text(session, message: dict):
             logger.info(f"{session.phone_hash}: type={itype}")
             return
 
-    # Regular text — append to description
+    # Regular text - append to description
     if session.text:
         session.text += " " + text
     else:
@@ -104,7 +104,7 @@ async def _handle_text(session, message: dict):
 
 
 async def _handle_image(session, message: dict):
-    """Handle image message — download from Meta servers."""
+    """Handle image message - download from Meta servers."""
     image_info = message.get("image", {})
     media_id = image_info.get("id")
     caption = image_info.get("caption", "")
@@ -127,7 +127,7 @@ async def _handle_image(session, message: dict):
 
 
 async def _handle_audio(session, message: dict):
-    """Handle voice note/audio message — download from Meta servers."""
+    """Handle voice note/audio message - download from Meta servers."""
     audio_info = message.get("audio", {})
     media_id = audio_info.get("id")
 
@@ -199,7 +199,7 @@ async def _advance_flow(session):
     """
     phone = session.phone_raw
 
-    # If first message ever — send welcome
+    # If first message ever - send welcome
     if len(session.message_ids) <= 1 and not session.has_evidence:
         await send_welcome(phone)
         return

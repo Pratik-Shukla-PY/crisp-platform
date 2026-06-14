@@ -1,17 +1,17 @@
-/* cc-home.js — Crisis Intelligence Center (post-login landing).
+/* cc-home.js - Crisis Intelligence Center (post-login landing).
  *
  * A humanitarian situation room shown over the dashboard at route '/'. It
- * delivers SITUATIONAL AWARENESS first, navigation second — replacing the old
+ * delivers SITUATIONAL AWARENESS first, navigation second - replacing the old
  * 4-tile launcher. It does NOT redesign the "Monitor & Respond" module; it
  * surfaces a read-only summary and routes INTO that module for action.
  *
- * Hard rule (operator brief): every widget is backed by REAL data — no dummy
+ * Hard rule (operator brief): every widget is backed by REAL data - no dummy
  * cards, no fake AI, no hardcoded KPIs. Sources:
- *   • GET /api/v1/analytics/summary   — KPIs, distributions, timings, impact, deltas
- *   • GET /api/v1/analytics/damage-rate-24h — 24h intake sparkline
- *   • GET /api/v1/reports/?limit=…    — map markers + recent activity
- *   • GET /api/v1/reports/nearby      — emerging-hotspot briefing
- *   • router.js                       — deep-links into the operations module
+ *   • GET /api/v1/analytics/summary   - KPIs, distributions, timings, impact, deltas
+ *   • GET /api/v1/analytics/damage-rate-24h - 24h intake sparkline
+ *   • GET /api/v1/reports/?limit=…    - map markers + recent activity
+ *   • GET /api/v1/reports/nearby      - emerging-hotspot briefing
+ *   • router.js                       - deep-links into the operations module
  * Metrics with no backing data (population/displacement/households) are shown
  * as an explicit "data integration required" note, never invented.
  * See web-dashboard/docs/crisis-intelligence-dashboard-spec.md.
@@ -57,9 +57,9 @@
     if (sec < 86400) return Math.floor(sec / 3600) + 'h ago';
     return Math.floor(sec / 86400) + 'd ago';
   }
-  const fmtNum = (n) => (n == null ? '—' : Number(n).toLocaleString());
+  const fmtNum = (n) => (n == null ? '-' : Number(n).toLocaleString());
   function fmtDur(sec) {
-    if (sec == null) return '—';
+    if (sec == null) return '-';
     sec = Math.round(sec);
     if (sec < 60) return sec + 's';
     if (sec < 3600) return Math.round(sec / 60) + 'm';
@@ -95,7 +95,7 @@
     .cc-num{font-variant-numeric:tabular-nums}
     /* visually-hidden region heading (a11y; the visible identity is in the shell) */
     .cc-vh{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-    /* sticky header block — identity row + primary nav stay pinned while the
+    /* sticky header block - identity row + primary nav stay pinned while the
        page scrolls. z-index must clear Leaflet's internal panes/controls
        (up to ~1000); the map card is additionally isolated below. Negative
        margins bleed the bar to the wrap edges so content scrolls under a
@@ -166,26 +166,26 @@
     .cc-map-fallback{height:430px;display:grid;place-items:center;color:#8A99B5;font-size:13px}
     .cc-geo{font-size:11.5px;color:#8A99B5;padding:8px 6px 2px}
     .cc-geo strong{color:#cdd8ec;font-variant-numeric:tabular-nums}
-    /* Geo caption OVERLAYS the map's bottom instead of adding column height —
+    /* Geo caption OVERLAYS the map's bottom instead of adding column height -
        keeps the map card the same height as #cc-att (height-mismatch fix). */
     #cc-map-card{position:relative}
     #cc-map-card #cc-map-geo{position:absolute;left:16px;right:16px;bottom:16px;z-index:500;margin:0;
       padding:5px 10px;background:rgba(11,18,32,.82);border:1px solid rgba(255,255,255,.08);border-radius:8px;
       backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);pointer-events:none}
     #cc-map-card #cc-map-geo:empty{display:none}
-    /* ── SPLIT DECISION SURFACE — map (left) + Global Attention panel (right) ──
+    /* ── SPLIT DECISION SURFACE - map (left) + Global Attention panel (right) ──
        Equal-height: the LEFT map card's fixed #cc-map (430px → 448px border-box)
        is the tallest item in the single grid row, so the row resolves to ~448px.
        grid default align-items:stretch forces the RIGHT panel to that exact
        height; its 5 cards (flex:1 1 0) then divide it into equal slices with one
-       uniform gap — no blank tail, no uneven gutters, regardless of count strings.
+       uniform gap - no blank tail, no uneven gutters, regardless of count strings.
        The map height is content-independent → it never re-tiles/jumps on poll. */
     .cc-split{display:grid;grid-template-columns:1.6fr 1fr;gap:14px;align-items:stretch;margin-bottom:6px}
     .cc-split-map{min-width:0}
     .cc-split-att{min-width:0;display:flex;flex-direction:column}
     .cc-att-hd{margin:0 0 10px}
     .cc-att-col{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:8px}
-    /* attention CARD — .opc parity: 12px radius, #101a2e bg, #233149 border, hover #418FDE */
+    /* attention CARD - .opc parity: 12px radius, #101a2e bg, #233149 border, hover #418FDE */
     .cc-att-card{flex:1 1 0;min-height:0;display:flex;flex-direction:column;justify-content:center;
       background:#101a2e;border:1px solid #233149;border-radius:12px;cursor:pointer;
       overflow:hidden;position:relative;transition:border-color .12s,background .12s}
@@ -203,7 +203,7 @@
     .cc-att-row .cnt2{font-size:10.5px;color:#7d89a3;margin-top:1px}
     .cc-att-row .ar{color:#5C6B85;font-size:15px;flex:none}
     .cc-att-card:hover .ar{color:#418FDE}
-    /* CRITICAL emphasis — filled-red command strip (absolute → adds no height) +
+    /* CRITICAL emphasis - filled-red command strip (absolute → adds no height) +
        red border accent + larger count, so the 5 cards stay equal-height. */
     .cc-att-crit{border-color:#5a1f1f}
     .cc-att-crit:hover{border-color:#f87171;background:#16100f}
@@ -325,29 +325,29 @@
     ov.innerHTML = `
       <div class="cc-wrap">
         <!-- Identity (org name) + clock + live + profile all live in the global
-             Command Center shell (crisp-shell.js) now — there is no separate
+             Command Center shell (crisp-shell.js) now - there is no separate
              situational banner here (it used to float over the KPI cards). This
              visually-hidden heading is the labelled region's H1 for a11y. -->
         <h1 id="cc-home-heading" class="cc-vh">Crisis Intelligence Center</h1>
 
         <!-- TWO-ZONE Global Command Center (ICS COP vs IAP):
-             ZONE A — ACTIVE RESPONSE: the operations you are RUNNING (the single
+             ZONE A - ACTIVE RESPONSE: the operations you are RUNNING (the single
                authoritative active-operations surface; no longer a count echoed
                on the map badge + the attention row).
-             ZONE B — GLOBAL MONITORING: everything happening worldwide.
+             ZONE B - GLOBAL MONITORING: everything happening worldwide.
              The old side-by-side ops|map row (which conflated the two) is split:
              the rail is full-width in Zone A, the map drops full-width into Zone B. -->
         <div class="cc-zone cc-zone-response">
-          <div class="cc-sec-t cc-band">⚡ Active Response <span class="cc-band-sub">— operations you are running</span> <span class="cc-stale" id="cc-sum-stale"></span></div>
+          <div class="cc-sec-t cc-band">⚡ Active Response <span class="cc-band-sub">- operations you are running</span> <span class="cc-stale" id="cc-sum-stale"></span></div>
           <div id="cc-ops-rail"><div class="cc-empty">Loading operations…</div></div>
         </div>
 
         <div class="cc-zone cc-zone-monitor">
-          <div class="cc-sec-t cc-band">🌐 Global Monitoring <span class="cc-band-sub">— where it's happening · what needs you</span></div>
+          <div class="cc-sec-t cc-band">🌐 Global Monitoring <span class="cc-band-sub">- where it's happening · what needs you</span></div>
           <!-- SPLIT DECISION SURFACE: map (left) + Global-Attention panel (right).
                Equal-height: the map's fixed 430px child sets the row height; the
                panel stretches to it (grid align-items:stretch) and its 5 cards
-               flex:1 1 0 divide that height into equal slices — no blank tail. -->
+               flex:1 1 0 divide that height into equal slices - no blank tail. -->
           <div class="cc-split">
             <div class="cc-card cc-split-map" id="cc-map-card" style="padding:8px">
               <div id="cc-map"></div><div id="cc-map-geo" class="cc-geo"></div>
@@ -409,7 +409,7 @@
     }
   }
 
-  // Jun 2026 — action-based Command Center model. FIVE cards, not seven:
+  // Jun 2026 - action-based Command Center model. FIVE cards, not seven:
   //   • two SITUATIONAL alarms that count their real entity (critical
   //     incidents, escalating hotspots) with the underlying report tally as a
   //     secondary, and
@@ -417,7 +417,7 @@
   //     response → Active operations) where every open report sits in exactly
   //     one stage.
   // Each row still deep-links to its own filtered queue ('#/incidents;queue=…'
-  // — see QUEUES in app.js). Counts fall back to legacy fields so the cards
+  // - see QUEUES in app.js). Counts fall back to legacy fields so the cards
   // still render if a stale backend hasn't shipped the new ones yet.
   function renderAttention(b) {
     const c = b.counts || {};
@@ -430,7 +430,7 @@
     const row = (glyph, color, label, sub, n, secondary, queue, isCrit) => {
       const zero = !n;
       return `<div class="cc-att-row cc-att-card${isCrit ? ' cc-att-crit' : ''}${zero ? ' zero' : ''}" data-queue="${queue}" role="link" tabindex="0"
-        aria-label="${esc(label)} — ${zero ? 'all clear' : fmtNum(n) + ', open queue'}">
+        aria-label="${esc(label)} - ${zero ? 'all clear' : fmtNum(n) + ', open queue'}">
         ${isCrit && !zero ? `<div class="cc-att-strip" aria-hidden="true">Command priority</div>` : ''}
         <div class="cc-att-main">
           <div class="cc-att-ic" style="background:${color}22;color:${color}">${glyph}</div>
@@ -457,7 +457,7 @@
       row('🚑', '#2DD4BF', 'Needs response', 'Confirmed · dispatch',
           num(c.needs_response), '', 'needs-response'),
       // Terminal pipeline stage = REPORTS currently being responded to (dispatched
-      // / RESPONDING). Labeled "In response" — NOT "Active operations", which is a
+      // / RESPONDING). Labeled "In response" - NOT "Active operations", which is a
       // CrisisEvent count and lives solely on the Active Operations rail above. The
       // old label made one number (the rail) look like a different number (this
       // report count) and read as a contradiction.
@@ -475,7 +475,7 @@
     }
   }
 
-  // ── operations rail (Phase 2 — operations-first home) ──────────────────────
+  // ── operations rail (Phase 2 - operations-first home) ──────────────────────
   async function loadOperations() {
     try {
       const { body } = await jget('/operations');
@@ -495,12 +495,12 @@
   function renderOpsRail(ops) {
     const box = el('cc-ops-rail');
     if (!box) return;
-    // Shared card (cc-operations.js CrispOpCard) — the rail + the /operations list
+    // Shared card (cc-operations.js CrispOpCard) - the rail + the /operations list
     // render the SAME card. Fallback to a minimal inline row if that module hasn't
     // loaded (defensive; both ship in index.html).
     if (window.CrispOpCard && typeof window.CrispOpCard.renderInto === 'function') {
       // Active Response zone: Start-New card first, LIVE ops, then a collapsed
-      // ENDED group. No "LIVE OPERATIONS" sub-header — the zone band already
+      // ENDED group. No "LIVE OPERATIONS" sub-header - the zone band already
       // reads "⚡ Active Response".
       window.CrispOpCard.renderInto(box, ops, {
         empty: 'No active operations. Start one to coordinate a response.',
@@ -576,8 +576,8 @@
       <div class="cc-statline"><span>Verified reports</span><span class="v">${fmtNum(ver)} (${pct}%)</span></div>
       <div class="cc-statline"><span>Unverified / rejected</span><span class="v">${fmtNum(unver)}</span></div>
       <div style="margin-top:10px"><div class="cc-sec-t" style="margin:0 0 4px">Intake · last 24h</div>
-        <div class="cc-spark" id="cc-spark"><div class="cc-empty" style="padding:0">—</div></div></div>`;
-    _renderSpark();   // repaint from cache — the card rebuild just wiped #cc-spark
+        <div class="cc-spark" id="cc-spark"><div class="cc-empty" style="padding:0">-</div></div></div>`;
+    _renderSpark();   // repaint from cache - the card rebuild just wiped #cc-spark
   }
 
   function renderImpact(b) {
@@ -587,11 +587,11 @@
     if (box) box.innerHTML = `
       <div class="cc-imp">
         ${cell(fmtNum(im.critical_infrastructure), 'Critical infrastructure hit')}
-        ${cell(im.service_disruptions == null ? '—' : fmtNum(im.service_disruptions), 'Service disruptions')}
+        ${cell(im.service_disruptions == null ? '-' : fmtNum(im.service_disruptions), 'Service disruptions')}
         ${cell(fmtNum(im.lives_impacted_sum), 'Lives impacted (reported)')}
         ${cell(fmtNum(im.responders_active), 'Responders active')}
       </div>
-      <div class="cc-note"><strong>Population exposure &amp; displacement</strong> — not shown.
+      <div class="cc-note"><strong>Population exposure &amp; displacement</strong> - not shown.
         CRISP records citizen damage reports, not census/displacement data. These require an external
         data integration (WorldPop/GHSL for population, IOM DTM/UNHCR for displacement) joined by
         geography. Surfacing fabricated figures would mislead operations.</div>`;
@@ -599,8 +599,8 @@
 
   // ── data: 24h intake sparkline ──────────────────────────────────────────
   // RACE FIX (Jun 2026): #cc-spark is CREATED by renderEfficiency (summary
-  // completion), but this fetch usually resolves first — it used to find no
-  // container, bail, and the summary then painted a permanent "—" over it.
+  // completion), but this fetch usually resolves first - it used to find no
+  // container, bail, and the summary then painted a permanent "-" over it.
   // Buckets are cached and rendered by whichever side finishes LAST:
   // loadSparkline() on fetch completion, renderEfficiency() right after it
   // rebuilds the card.
@@ -628,21 +628,21 @@
 
   // ── data: map markers + recent activity ──
   // TWO fetches now (decoupled): the global MAP pulls up to 5k LIGHTWEIGHT markers
-  // (id/coords/severity/status/type — GET /reports/markers) so it stays
+  // (id/coords/severity/status/type - GET /reports/markers) so it stays
   // representative at 100k/500k instead of the old heavy newest-200 slice; the
   // Recent-Activity table pulls only the newest ~20 RICH rows (it shows 10).
   function loadFeed() {
-    // MAP — many lean points.
+    // MAP - many lean points.
     jget('/reports/markers?limit=5000').then(({ body }) => {
       const markers = Array.isArray(body) ? body : (body && (body.items || body.reports)) || [];
       renderMap(markers);
-      // Geo caption (client Turf point-in-polygon) is O(points × countries) — sample
+      // Geo caption (client Turf point-in-polygon) is O(points × countries) - sample
       // down so 5k markers don't stall the caption while the map still plots them all.
       const stride = markers.length > 800 ? Math.ceil(markers.length / 800) : 1;
       const geoSample = stride > 1 ? markers.filter((_, i) => i % stride === 0) : markers;
       loadWorldGeo().then(() => renderGeoCaption(geoSample)).catch(() => {});
     }).catch(() => { mapFallback('Map data unavailable'); });
-    // RECENT ACTIVITY — newest rich rows.
+    // RECENT ACTIVITY - newest rich rows.
     jget('/reports/?limit=20').then(({ body }) => {
       const reports = Array.isArray(body) ? body : (body && (body.items || body.reports)) || [];
       renderActivity(reports);
@@ -660,7 +660,7 @@
     return [Number(lat), Number(lng)];
   }
 
-  // ── client-side country derivation (interim) — Turf point-in-polygon over the
+  // ── client-side country derivation (interim) - Turf point-in-polygon over the
   // bundled world.json, scoped to the LOADED report window. A proper at-scale
   // country breakdown needs a Location.country column + backfill (spec §4-A);
   // until then this honestly labels itself "current view".
@@ -717,7 +717,7 @@
     try {
       // openLanding() rebuilds the overlay's innerHTML on every Home visit, so a
       // previously-created _map now points at a DETACHED #cc-map node. Tear it
-      // down and re-init against the live container — otherwise the singleton
+      // down and re-init against the live container - otherwise the singleton
       // guard below skips initialisation and the new node stays blank. (Fixes
       // "Operations → Home → map doesn't load".)
       if (_map) {
@@ -737,7 +737,7 @@
         // can still be mid-reflow when Leaflet samples the container, so it
         // builds a 0-size tile grid. Recompute on ready AND whenever the
         // container gains/changes a real size (overlay reveal · global-shell
-        // padding · window resize). invalidateSize only here — never re-fit on
+        // padding · window resize). invalidateSize only here - never re-fit on
         // resize, so it can't hijack the operator's pan/zoom.
         try { _map.whenReady(() => { try { _map.invalidateSize(); } catch (_) {} }); } catch (_) {}
         try {
@@ -761,7 +761,7 @@
         const what = [r.crisis_type, r.infrastructure_type].filter(Boolean).map(titleCase).join(' · ') || 'Report';
         mk.bindPopup(`<b>${esc(what)}</b><br>${esc(titleCase(sev))} · ${esc(String(r.status || ''))}<br><small>${esc(timeAgo(r.server_created_at))}</small>`);
         // Popup on hover (preview); CLICK opens the incident detail (deep-link +
-        // operation-aware) — previously a dead-end (popup-only, no click handler).
+        // operation-aware) - previously a dead-end (popup-only, no click handler).
         mk.on('mouseover', () => { try { mk.openPopup(); } catch (_e) {} });
         mk.on('mouseout', () => { try { mk.closePopup(); } catch (_e) {} });
         mk.on('click', () => { try { window.openIncident && window.openIncident(r.id); } catch (_e) {} });
@@ -771,7 +771,7 @@
       const _fit = () => { try { _map.invalidateSize(); if (pts.length) _map.fitBounds(pts, { padding: [30, 30], maxZoom: 8 }); } catch (_) {} };
       _fit();
       // Re-run after the browser has laid out the (possibly just-revealed)
-      // container — two frames guarantees layout is settled on a cold load.
+      // container - two frames guarantees layout is settled on a cold load.
       requestAnimationFrame(() => requestAnimationFrame(_fit));
     } catch (e) { mapFallback('Map render failed'); }
   }
@@ -796,7 +796,7 @@
       const col = SEV_COLOR[sev] || '#64748b';
       const status = String(r.status || '').toUpperCase();
       const sc = STATUS_COLOR[status] || '#6B7280';
-      const place = (r.location && (r.location.user_location_name || r.location.device_location_name)) || '—';
+      const place = (r.location && (r.location.user_location_name || r.location.device_location_name)) || '-';
       const what = [r.crisis_type, r.infrastructure_type].filter(Boolean).map(titleCase).join(' · ') || 'Report';
       return `<tr data-id="${esc(r.id || '')}">
         <td title="${esc(what)}">${esc(what)}</td>
@@ -810,7 +810,7 @@
       <th>Type</th><th>Location</th><th>Severity</th><th>Verification</th><th>Status</th><th>Updated</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
     // Deep-link the clicked report (route-aware: navigates to Operations then
-    // opens that incident's detail) — not the old generic '/incidents' feed.
+    // opens that incident's detail) - not the old generic '/incidents' feed.
     box.querySelectorAll('tbody tr').forEach((tr) => tr.addEventListener('click', () => {
       const id = tr.getAttribute('data-id');
       if (id && typeof window.openIncident === 'function') window.openIncident(id);
@@ -824,7 +824,7 @@
     if (!box) return;
     const cards = [];
     const s = _lastSummary;
-    // Emerging hotspot — from the live nearby aggregator (burst/acute tiers).
+    // Emerging hotspot - from the live nearby aggregator (burst/acute tiers).
     try {
       const { body } = await jget('/reports/nearby');
       const groups = (body && (body.groups || body.items)) || (Array.isArray(body) ? body : []);
@@ -850,7 +850,7 @@
         s: 'source: /analytics/summary' });
       const d = s.deltas || {};
       if ((d.reports_24h || 0) > (d.reports_prev_24h || 0)) cards.push({ cls: 'warn', h: 'Intake rising',
-        d: `${fmtNum(d.reports_24h)} new reports in 24h vs ${fmtNum(d.reports_prev_24h)} the prior day — incident inflow is increasing.`,
+        d: `${fmtNum(d.reports_24h)} new reports in 24h vs ${fmtNum(d.reports_prev_24h)} the prior day - incident inflow is increasing.`,
         s: 'source: /analytics/summary deltas' });
     }
     if (!cards.length) { box.innerHTML = `<div class="cc-empty">No notable operational patterns in the current window.</div>`; return; }

@@ -1,5 +1,5 @@
 /**
- * nearbyApi — RN client for /api/v1/reports/nearby (May 2026).
+ * nearbyApi - RN client for /api/v1/reports/nearby (May 2026).
  *
  * Mirrors the PWA's mobile-app/src/nearby.js behaviour matrix:
  *
@@ -7,12 +7,12 @@
  *   ────────────  ────────    ─────────────────   ──────────────────
  *   online        granted     live API            YES (full list)
  *   online        granted     empty 200           YES (empty state)
- *   online        denied      —                   HIDDEN
+ *   online        denied      -                   HIDDEN
  *   offline       granted     fresh < 5 min       OPTIONAL (cached)
- *   offline       —           stale / none        HIDDEN
+ *   offline       -           stale / none        HIDDEN
  *   any           any         API error           HIDDEN (silent fail)
  *
- * The module NEVER triggers a GPS prompt on the home screen — caller
+ * The module NEVER triggers a GPS prompt on the home screen - caller
  * supplies the already-cached location (typically from
  * App.tsx's location state set by the v4 capture flow).
  *
@@ -26,7 +26,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { getApiBase } from './api';
 
-// ── Wire types — must match backend/app/schemas/report.py ─────────────
+// ── Wire types - must match backend/app/schemas/report.py ─────────────
 
 export interface NearbyGroup {
   id: string;
@@ -64,7 +64,7 @@ export const CACHE_TTL_MS = 5 * 60 * 1000;
 const AS_KEY = 'crisp_nearby_cache_v1';
 const REQUEST_TIMEOUT_MS = 6_000;
 
-// ── Privacy helper — 3dp rounding before the request leaves the device.
+// ── Privacy helper - 3dp rounding before the request leaves the device.
 export function round3(n: number): number {
   return Math.round(n * 1000) / 1000;
 }
@@ -135,7 +135,7 @@ export async function fetchNearby(q: NearbyQuery): Promise<NearbyResponse | null
 }
 
 /**
- * Composite read path — tries network first (when online), falls
+ * Composite read path - tries network first (when online), falls
  * back to fresh cache. Returns null when neither path produces a
  * usable payload (the component then hides the module).
  */
@@ -176,7 +176,7 @@ export async function loadNearby(opts: {
   return { payload, fromCache, cacheAgeMs };
 }
 
-// ── Time helper — used by the component to render "5 min ago" etc.
+// ── Time helper - used by the component to render "5 min ago" etc.
 export function humanizeAgo(iso: string, t: (k: string, fb: string) => string): string {
   if (!iso) return '';
   const ts = new Date(iso).getTime();

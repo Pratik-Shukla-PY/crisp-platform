@@ -11,7 +11,7 @@
  *      UNDP tier-2, then 6 Indian sub-national).
  *
  * Goals: less visual fragmentation, lower cognitive load, cleaner
- * scrolling. CLAUDE.md "Lang picker close" invariant updated to
+ * scrolling. the project invariants "Lang picker close" invariant updated to
  * reflect the single-affordance model.
  *
  * This spec pins:

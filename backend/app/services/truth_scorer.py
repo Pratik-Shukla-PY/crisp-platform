@@ -1,10 +1,10 @@
 """
-CRISP Satellite Truth Scorer — powered by Claude Haiku (vision-capable)
+CRISP Satellite Truth Scorer - powered by Claude Haiku (vision-capable)
 ──────────────────────────────────────────────────────────────
 Sends two images + full report context to Claude (multi-modal):
-  Image 1 — satellite top-down view of the reported GPS coordinates
-  Image 2 — ground-level photo submitted by the citizen reporter
-  Text    — description, audio transcription, claimed infra type / severity,
+  Image 1 - satellite top-down view of the reported GPS coordinates
+  Image 2 - ground-level photo submitted by the citizen reporter
+  Text    - description, audio transcription, claimed infra type / severity,
              temporal gap between satellite acquisition and report timestamp,
 
 Uses prompt caching: the scoring rubric (~800 tokens) is sent as a cached
@@ -15,13 +15,13 @@ Result stored in satellite_verifications table.
              satellite cloud cover, source metadata
 
 Returns a structured JSON dict with:
-  scores        — 4 component scores (0-25 each) summing to 0-100
-  verdict       — STRONGLY_CORROBORATED | LIKELY_AUTHENTIC |
+  scores        - 4 component scores (0-25 each) summing to 0-100
+  verdict       - STRONGLY_CORROBORATED | LIKELY_AUTHENTIC |
                   PARTIALLY_VERIFIED | LOW_CONFIDENCE | UNVERIFIED
-  reasoning     — 2-3 sentence narrative
-  key_findings  — bullet list of the most important observations
-  caveats       — limitations that affect score reliability
-  satellite_data — metadata echoed back for storage
+  reasoning     - 2-3 sentence narrative
+  key_findings  - bullet list of the most important observations
+  caveats       - limitations that affect score reliability
+  satellite_data - metadata echoed back for storage
 """
 import base64
 import json
@@ -49,36 +49,36 @@ You will receive:
   - (When present) COMMUNITY-CURATED GROUND TRUTH: structured answers the reporter
     gave to crisis-specific questions inside an admin-defined crisis event (e.g.
     "flames visible? yes", "water depth: knee-high"). These are deliberate,
-    constrained answers — weigh them as corroborating evidence across components
+    constrained answers - weigh them as corroborating evidence across components
     2, 3 and 4. They strengthen (or, if they contradict the photo/satellite,
     weaken) the assessment; they are NOT a substitute for visual confirmation.
 
 Score the report across 4 components (25 pts each → total 100):
 
-━━━ COMPONENT 1 — LOCATION AUTHENTICITY (0–25) ━━━
+━━━ COMPONENT 1 - LOCATION AUTHENTICITY (0–25) ━━━
 Does the satellite confirm the claimed infrastructure TYPE exists at these exact coordinates?
-  25 — Satellite clearly shows the exact claimed infrastructure (hospital, road, power lines…)
-  18 — Similar infrastructure visible but not an exact match
-   8 — Ambiguous; hard to confirm from satellite resolution
-   0 — Coordinates show empty land / water / dense vegetation — nothing matching the claim
+  25 - Satellite clearly shows the exact claimed infrastructure (hospital, road, power lines…)
+  18 - Similar infrastructure visible but not an exact match
+   8 - Ambiguous; hard to confirm from satellite resolution
+   0 - Coordinates show empty land / water / dense vegetation - nothing matching the claim
 
-━━━ COMPONENT 2 — DAMAGE CORROBORATION (0–25) ━━━
+━━━ COMPONENT 2 - DAMAGE CORROBORATION (0–25) ━━━
 Does satellite evidence support claimed damage? Critically account for temporal gap.
-  25 — Post-incident satellite clearly shows damage, collapse, fire scar, or flooding
-  20 — Satellite within 24 h shows anomaly (dark patch, structural gap, water ingress)
-  15 — Pre-incident satellite; damage type is physically plausible for this infrastructure
-  10 — Satellite >2 weeks old — insufficient temporal data to verify
-   5 — Pre-incident satellite shows no pre-existing vulnerability
-   0 — Post-incident satellite shows NO damage, directly contradicting the report
+  25 - Post-incident satellite clearly shows damage, collapse, fire scar, or flooding
+  20 - Satellite within 24 h shows anomaly (dark patch, structural gap, water ingress)
+  15 - Pre-incident satellite; damage type is physically plausible for this infrastructure
+  10 - Satellite >2 weeks old - insufficient temporal data to verify
+   5 - Pre-incident satellite shows no pre-existing vulnerability
+   0 - Post-incident satellite shows NO damage, directly contradicting the report
 
-━━━ COMPONENT 3 — DESCRIPTION COHERENCE (0–25) ━━━
+━━━ COMPONENT 3 - DESCRIPTION COHERENCE (0–25) ━━━
 Do the text description, audio transcription, and submitted photo mutually corroborate?
-  25 — All three sources fully consistent and mutually reinforcing
-  18 — Minor inconsistencies; same core incident described across sources
-   8 — Notable contradictions between sources but same general area/event
-   0 — Description or transcription directly contradicts what is visible in the photo
+  25 - All three sources fully consistent and mutually reinforcing
+  18 - Minor inconsistencies; same core incident described across sources
+   8 - Notable contradictions between sources but same general area/event
+   0 - Description or transcription directly contradicts what is visible in the photo
 
-━━━ COMPONENT 4 — DATA QUALITY & CONFIDENCE (0–25) ━━━
+━━━ COMPONENT 4 - DATA QUALITY & CONFIDENCE (0–25) ━━━
 How reliable is the input data? Sum sub-scores:
   Satellite recency:
     Same day as report = 12 pts | 1–7 days before = 9 pts
@@ -91,10 +91,10 @@ How reliable is the input data? Sum sub-scores:
     Text / audio only       = 1 pt
   Community-curated ground truth (crisis-pack answers present):
     Present = +3 pts | Absent = 0 pts
-  (Hard cap COMPONENT 4 at 25 — curated answers can lift a thin report toward
+  (Hard cap COMPONENT 4 at 25 - curated answers can lift a thin report toward
    the cap but never above it.)
 
-Return ONLY valid JSON — no markdown fences, no prose outside the object:
+Return ONLY valid JSON - no markdown fences, no prose outside the object:
 {
   "scores": {
     "location_authenticity": <int 0-25>,
@@ -172,10 +172,10 @@ class TruthScorer:
         satellite_data: dict,
         has_audio: bool = False,
         has_gps: bool = True,
-        # B4 — Dynamic Crisis Forms context. When the report came through a
+        # B4 - Dynamic Crisis Forms context. When the report came through a
         # geo-gated crisis pack, the reporter answered crisis-specific questions
         # (form_data) inside an admin-defined event. These are community-curated
-        # ground truth — additional corroborating evidence for the credibility
+        # ground truth - additional corroborating evidence for the credibility
         # chain. All keyword + default None → existing callers are unaffected.
         form_data: Optional[dict] = None,
         crisis_type: Optional[str] = None,
@@ -202,7 +202,7 @@ class TruthScorer:
             })
             content.append({
                 "type": "text",
-                "text": "↑ IMAGE 1 — SATELLITE (top-down view of reported GPS coordinates)",
+                "text": "↑ IMAGE 1 - SATELLITE (top-down view of reported GPS coordinates)",
             })
 
         # ── Part 2: user photo ────────────────────────────────────────────────
@@ -223,7 +223,7 @@ class TruthScorer:
                 })
                 content.append({
                     "type": "text",
-                    "text": "↑ IMAGE 2 — USER PHOTO (ground-level, submitted by citizen reporter)",
+                    "text": "↑ IMAGE 2 - USER PHOTO (ground-level, submitted by citizen reporter)",
                 })
             except Exception as exc:
                 logger.warning(f"Could not load user image {user_image_path}: {exc}")
@@ -242,26 +242,26 @@ class TruthScorer:
                 if days_gap < 0:
                     temporal_note = (
                         f"Satellite acquired {abs(days_gap)} day(s) AFTER the report "
-                        f"(post-incident imagery — damage should be visible if significant)"
+                        f"(post-incident imagery - damage should be visible if significant)"
                     )
                 elif days_gap == 0:
                     temporal_note = "Satellite acquired on the SAME DAY as the report"
                 else:
                     temporal_note = (
                         f"Satellite acquired {days_gap} day(s) BEFORE the report "
-                        f"(pre-incident imagery — damage may NOT yet be visible)"
+                        f"(pre-incident imagery - damage may NOT yet be visible)"
                     )
             except Exception:
                 pass
 
         data_completeness = "GPS + photo" + (" + audio" if has_audio else "")
 
-        # B4 — community-curated ground truth (crisis-pack answers) + event type.
+        # B4 - community-curated ground truth (crisis-pack answers) + event type.
         _curated = _format_curated_answers(form_data)
         _pack_tag = (f" [pack {form_pack_id} v{form_pack_version}]"
                      if form_pack_id else "")
         _curated_block = (
-            f"\nCOMMUNITY-CURATED GROUND TRUTH{_pack_tag} — structured answers the "
+            f"\nCOMMUNITY-CURATED GROUND TRUTH{_pack_tag} - structured answers the "
             f"reporter gave to crisis-specific questions"
             f"{f' for a confirmed {crisis_type} event' if crisis_type else ''}. "
             f"Treat these as corroborating evidence (weigh across damage, coherence "
@@ -292,7 +292,7 @@ class TruthScorer:
             f"\n"
             f"USER DATA COMPLETENESS: {data_completeness}\n"
             f"\n"
-            f"Return ONLY the JSON object — no markdown, no extra text."
+            f"Return ONLY the JSON object - no markdown, no extra text."
         )})
 
         # ── Call Claude Haiku (async) ─────────────────────────────────────────
@@ -334,7 +334,7 @@ class TruthScorer:
             }
             result["scored_at"] = datetime.now(timezone.utc).isoformat()
 
-            # B4 — record that community-curated crisis-form answers were part of
+            # B4 - record that community-curated crisis-form answers were part of
             # the evidence chain + surface it as a key finding (the dashboard
             # detail panel renders key_findings → no schema change needed).
             considered = bool(_curated)
@@ -351,7 +351,7 @@ class TruthScorer:
                     result["key_findings"] = [_note]
 
             logger.info(
-                f"Truth score for {report_id}: {sc['total']}/100 — {result.get('verdict')}"
+                f"Truth score for {report_id}: {sc['total']}/100 - {result.get('verdict')}"
                 + (" [+curated]" if considered else "")
             )
             return result
@@ -390,7 +390,7 @@ def _no_key_result() -> dict:
     r.update({
         "error":     "ANTHROPIC_API_KEY not configured",
         "verdict":   "UNVERIFIED",
-        "reasoning": "Verification service not configured — add ANTHROPIC_API_KEY to .env",
+        "reasoning": "Verification service not configured - add ANTHROPIC_API_KEY to .env",
     })
     return r
 

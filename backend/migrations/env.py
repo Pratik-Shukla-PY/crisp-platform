@@ -1,5 +1,5 @@
 """
-Alembic env.py — wired to use the runtime DATABASE_URL + the Base.metadata
+Alembic env.py - wired to use the runtime DATABASE_URL + the Base.metadata
 from the CRISP application so `alembic revision --autogenerate` sees every
 model and `alembic upgrade head` uses the same connection string the app
 does.
@@ -32,7 +32,7 @@ config = context.config
 # Override the sqlalchemy.url in alembic.ini with the one the app uses
 # (driven by DATABASE_URL env var). This means running migrations and
 # running the app against a fresh Postgres / staging DB requires only
-# `export DATABASE_URL=...` — no duplicated config to drift.
+# `export DATABASE_URL=...` - no duplicated config to drift.
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 if config.config_file_name is not None:

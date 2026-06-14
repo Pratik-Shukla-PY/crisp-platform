@@ -5,11 +5,11 @@
  * based on real-time network speed and stability.
  *
  * Network Classifications:
- *   FAST       — Stable, high bandwidth (WiFi/4G)
- *   MEDIUM     — Moderate bandwidth (3G+)
- *   SLOW       — Low bandwidth or unstable
- *   VERY_SLOW  — <100kbps or high jitter
- *   OFFLINE    — No connectivity
+ *   FAST       - Stable, high bandwidth (WiFi/4G)
+ *   MEDIUM     - Moderate bandwidth (3G+)
+ *   SLOW       - Low bandwidth or unstable
+ *   VERY_SLOW  - <100kbps or high jitter
+ *   OFFLINE    - No connectivity
  */
 import NetInfo from '@react-native-community/netinfo';
 
@@ -120,7 +120,7 @@ export async function detectNetworkTier(): Promise<NetworkTier> {
     }
 
     if (type === 'wifi') {
-      // WiFi — assume FAST unless speed test says otherwise
+      // WiFi - assume FAST unless speed test says otherwise
       _currentTier = 'FAST';
       return _currentTier;
     }

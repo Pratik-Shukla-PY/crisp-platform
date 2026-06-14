@@ -4,7 +4,7 @@ Revision ID: 0020_nearby_group_events
 Revises: 0019_report_first_verified_at
 Create Date: 2026-05-16
 
-Nearby Reports Pipeline — Phase 2 (docs §3.7) introduces lifecycle
+Nearby Reports Pipeline - Phase 2 (docs §3.7) introduces lifecycle
 tracking for nearby groups (promote / downgrade / merge / split /
 resolve / fading transitions). Each event captures the group_id
 involved, the from→to transition, the timestamp, and a small JSON
@@ -14,12 +14,12 @@ This table is the persistent audit trail behind §13's
 `cluster_lifetime_seconds` histogram + the dashboard's Phase 4
 "Cluster history" public-timeline view.
 
-Indexed on (group_id, occurred_at) so the most common query —
-"all events for a group, newest first" — is a single index scan.
+Indexed on (group_id, occurred_at) so the most common query -
+"all events for a group, newest first" - is a single index scan.
 Also indexed on occurred_at alone for the time-window aggregation
 the observability endpoint will run.
 
-Idempotent — uses the inspector guard pattern from 0013/0015/
+Idempotent - uses the inspector guard pattern from 0013/0015/
 0017/0018/0019.
 """
 from alembic import op
@@ -46,11 +46,11 @@ def upgrade() -> None:
     if _TABLE not in existing_tables:
         op.create_table(
             _TABLE,
-            # uuid primary key — strings keep the schema portable.
+            # uuid primary key - strings keep the schema portable.
             sa.Column("id", sa.String(length=36), primary_key=True),
             # The group this event belongs to. Group ids are
             # synthesized (g_building_<bid> / g_block_<gh>_<crisis> /
-            # g_area_<gh>_<crisis>) — not a FK because groups are
+            # g_area_<gh>_<crisis>) - not a FK because groups are
             # ephemeral aggregations, not DB rows.
             sa.Column("group_id", sa.String(length=128), nullable=False),
             # Event taxonomy. Bounded set so callers can index/filter.
@@ -62,7 +62,7 @@ def upgrade() -> None:
             sa.Column("to_tier", sa.String(length=16), nullable=True),
             sa.Column("from_count", sa.Integer(), nullable=True),
             sa.Column("to_count", sa.Integer(), nullable=True),
-            # Tiny JSON payload for ad-hoc diff data — kept jsonb so
+            # Tiny JSON payload for ad-hoc diff data - kept jsonb so
             # we can query inside it later (e.g., "groups that lost a
             # device between t1 and t2").
             sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()),

@@ -1,5 +1,5 @@
 """
-Telegram Media Handler — Downloads media from Telegram Bot API servers,
+Telegram Media Handler - Downloads media from Telegram Bot API servers,
 encodes to base64 for CRISP backend consumption.
 
 Video handling: when user sends video (mistaking it for voice note),
@@ -129,7 +129,7 @@ async def download_and_split_video(video_file_id: str, thumb_file_id: str = None
             pass
 
     except FileNotFoundError:
-        logger.warning("ffmpeg not found — cannot extract audio from video. Install ffmpeg.")
+        logger.warning("ffmpeg not found - cannot extract audio from video. Install ffmpeg.")
     except subprocess.TimeoutExpired:
         logger.warning("ffmpeg timed out extracting audio")
     except Exception as e:

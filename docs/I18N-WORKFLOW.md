@@ -1,4 +1,4 @@
-# CRISP i18n workflow — UNDP submission deliverable
+# CRISP i18n workflow - UNDP submission deliverable
 
 This document describes how CRISP supports 22 locales today and how
 UNDP / partner translators extend the language set going forward.
@@ -17,14 +17,14 @@ by the InnoCentive submission.
 | 1    | `ru` | Russian     | Русский              | 🇷🇺 | Tatyana                  | UN official |
 | 2    | `hi` | Hindi       | हिन्दी               | 🇮🇳 | Aditi                    | UNDP set |
 | 2    | `pt` | Portuguese  | Português            | 🇵🇹 | Camila / Cristiano        | UNDP set |
-| 2    | `bn` | Bengali     | বাংলা                | 🇧🇩 | (none — falls to en)     | UNDP set |
+| 2    | `bn` | Bengali     | বাংলা                | 🇧🇩 | (none - falls to en)     | UNDP set |
 | 2    | `ja` | Japanese    | 日本語                | 🇯🇵 | Takumi / Kazuha           | UNDP set |
 | 2    | `tr` | Turkish     | Türkçe               | 🇹🇷 | Filiz                    | UNDP set |
-| 2    | `vi` | Vietnamese  | Tiếng Việt           | 🇻🇳 | (none — falls to en)     | UNDP set |
+| 2    | `vi` | Vietnamese  | Tiếng Việt           | 🇻🇳 | (none - falls to en)     | UNDP set |
 | 2    | `ko` | Korean      | 한국어                | 🇰🇷 | Seoyeon                  | UNDP set |
-| 2    | `id` | Indonesian  | Bahasa Indonesia     | 🇮🇩 | (none — falls to en)     | UNDP set |
-| 2    | `ur` | Urdu        | اردو                 | 🇵🇰 | (none — falls to en)     | UNDP set · RTL |
-| 3    | `kn` | Kannada     | ಕನ್ನಡ                | 🇮🇳 | (none — falls to en)     | India sub-national |
+| 2    | `id` | Indonesian  | Bahasa Indonesia     | 🇮🇩 | (none - falls to en)     | UNDP set |
+| 2    | `ur` | Urdu        | اردو                 | 🇵🇰 | (none - falls to en)     | UNDP set · RTL |
+| 3    | `kn` | Kannada     | ಕನ್ನಡ                | 🇮🇳 | (none - falls to en)     | India sub-national |
 | 3    | `ta` | Tamil       | தமிழ்                | 🇮🇳 | Aditi (hi-IN proxy)      | India sub-national |
 | 3    | `te` | Telugu      | తెలుగు               | 🇮🇳 | Aditi (hi-IN proxy)      | India sub-national |
 | 3    | `ml` | Malayalam   | മലയാളം               | 🇮🇳 | Aditi (hi-IN proxy)      | India sub-national |
@@ -36,7 +36,7 @@ Coverage per locale is recorded in each JSON's `__meta__` block.
 Run `node scripts/build-locale-skeletons.mjs --dry-run` for the live
 report.
 
-Tier-1 (UN) locales are first-class — they appear in the prominent
+Tier-1 (UN) locales are first-class - they appear in the prominent
 top row of the language picker. Tier-2 / 3 appear in the
 horizontal-scroll carousel below.
 
@@ -46,10 +46,10 @@ For any visible string, the runtime resolution order is:
 
 1. Active locale's value from `mobile-app/src/i18n/{lang}.json`
 2. English value from `mobile-app/src/i18n/en.json` (always loaded
-   before any non-English locale — see
+   before any non-English locale - see
    `mobile-app/src/app.js` → `activateLang` async block + the
    `I18N.__en_fully_loaded` flag)
-3. The raw key as a last-resort placeholder (visually obvious — a
+3. The raw key as a last-resort placeholder (visually obvious - a
    broken translation, not a useful string)
 
 The "missing native translation" → "English placeholder" hop is
@@ -63,14 +63,14 @@ Say you want to add Swahili (`sw`).
 
 1. **Add to `LANG_FLAGS` in `mobile-app/src/app.js`.** Use the
    country flag of the dominant L1 country. Swahili → 🇹🇿 Tanzania
-   (or 🇰🇪 Kenya — pick one).
+   (or 🇰🇪 Kenya - pick one).
    ```js
    const LANG_FLAGS = { …, sw: '🇹🇿' };
    ```
 2. **Add to `SUPPORTED_LANGS` (same file).** The runtime gate that
    prevents non-shipped locales from being picked.
 3. **Update `COUNTRY_LANG_DATA`** (also `app.js`) for any country
-   where Swahili is primary (KE, TZ, UG already in the table — set
+   where Swahili is primary (KE, TZ, UG already in the table - set
    `code: 'sw'`).
 4. **Add a tile to the picker overlay** in
    `mobile-app/src/index.html`. Tier-2/3 tiles live inside
@@ -127,12 +127,12 @@ as many times as needed. CI gates on `validate-i18n.mjs`.
 
 `scripts/validate-i18n.mjs` enforces:
 
-- **Hard fail** — required tier-1 locales (`ar`, `zh`, `en`, `fr`,
+- **Hard fail** - required tier-1 locales (`ar`, `zh`, `en`, `fr`,
   `ru`, `es`) must exist and parse as valid JSON.
-- **Hard fail** — any locale missing a key that exists in `en.json`
+- **Hard fail** - any locale missing a key that exists in `en.json`
   (we ship 100% key coverage; gaps are EN placeholders, not absent
   keys).
-- **Warn** — tier-2 / 3 locales with `translation_status` of
+- **Warn** - tier-2 / 3 locales with `translation_status` of
   `partial` or `skeleton-only`. These are tracked in
   `__meta__.gap_keys` and resolved by the worksheet workflow.
 
@@ -149,11 +149,11 @@ rendering:
 | Incident  | A crisis event (earthquake, flood, fire, conflict, etc.)     | Translate to the language's most direct word for "crisis event"; avoid "accident" / "issue" connotations |
 | Reporter  | A citizen submitting a crisis report                         | Translate as the role, not as journalism term |
 | Newcomer  | A reporter who has not yet submitted any report              | Often a short tag/chip; pick a friendly word |
-| IVR       | Phone-call interface (`+1 662 676 8896`)                     | Acronym — leave as "IVR" or expand to "phone call" |
+| IVR       | Phone-call interface (`+1 662 676 8896`)                     | Acronym - leave as "IVR" or expand to "phone call" |
 | OSM       | OpenStreetMap                                                | Acronym; leave as-is or render as "OpenStreetMap" if space allows |
 | Verified  | A report that has been satellite-corroborated                | Adjective; UNDP rubric term |
 | Submit / Send | Final tap to dispatch the report                         | Strong action verb; not "save" |
-| Anonymous | The default no-login mode                                    | A guarantee — emphasise privacy in translation |
+| Anonymous | The default no-login mode                                    | A guarantee - emphasise privacy in translation |
 | CRISP     | The product name                                             | Brand name; never translate |
 
 ## 7. RTL support
@@ -171,10 +171,10 @@ because the `[dir="rtl"]` overrides match on direction, not language.
 
 ## 8. References
 
-- Phase 25 plan: `/Users/pks/.claude/plans/swirling-forging-raccoon.md`
+- Phase 25 plan: the design plan
 - Validator: `scripts/validate-i18n.mjs`
 - Builder: `scripts/build-locale-skeletons.mjs`
 - Worksheet generator: `scripts/generate-i18n-worksheets.mjs`
 - Worksheet importer: `scripts/import-i18n-worksheet.mjs`
 - IVR voice map: `messaging-bot/ivr/webhook.py::_IVR_VOICES`
-- UN must-have #2 (6 official languages): `CLAUDE.md`
+- UN must-have #2 (6 official languages): `the project invariants`

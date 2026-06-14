@@ -1,4 +1,4 @@
-"""L3 — cross-tier consensus algorithm for face-detection FP reduction.
+"""L3 - cross-tier consensus algorithm for face-detection FP reduction.
 
 A real face is detected at multiple resolutions. A BlazeFace false
 positive (light fixture, vegetation pattern, window grid) typically
@@ -13,11 +13,11 @@ the L1+L2+L4 gate stack and persists its post-gate accepted boxes in
 
 The consensus set is what should be blurred in the final assembled
 output. Per-tier boxes that don't enter the consensus are false-positive
-candidates — they can be either flagged for operator review (initial
+candidates - they can be either flagged for operator review (initial
 deploy) or auto-un-blurred via the B-F retained pre-blur bytes (a
 later commit ties the two together).
 
-All boxes use the normalized [0, 1] coordinate space — independent of
+All boxes use the normalized [0, 1] coordinate space - independent of
 the underlying tier resolution.
 """
 from __future__ import annotations
@@ -59,15 +59,15 @@ def cross_tier_consensus(
     ----------
     boxes_per_tier : dict mapping tier label ('SMALL'|'MEDIUM'|'ORIGINAL')
         to a list of {x, y, w, h} dicts in normalized [0, 1] coords.
-    min_tiers : int — the minimum number of tiers a box must appear in
+    min_tiers : int - the minimum number of tiers a box must appear in
         (with IoU >= iou_threshold) to count as confirmed. Default 2.
-    iou_threshold : float — overlap threshold for treating two boxes as
+    iou_threshold : float - overlap threshold for treating two boxes as
         the same face. Default 0.5.
 
     Returns
     -------
     list of dict, each with x/y/w/h (the AVERAGE of the confirming
-    tiers' boxes — slightly smoothes per-tier coord wobble). Empty
+    tiers' boxes - slightly smoothes per-tier coord wobble). Empty
     list if no consensus.
     """
     flat = []

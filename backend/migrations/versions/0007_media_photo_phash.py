@@ -16,7 +16,7 @@ distance comparison still happens in Python after the prefix narrow-down
 (64-bit popcount isn't standard SQL), but the index is enough to keep
 the candidate set tiny for any realistic crisis.
 
-Idempotent — same pattern as 0004/0005/0006. Safe to rerun.
+Idempotent - same pattern as 0004/0005/0006. Safe to rerun.
 """
 from typing import Sequence, Union
 
@@ -61,7 +61,7 @@ def upgrade() -> None:
             "media",
             ["photo_phash"],
         )
-    # No backfill — legacy rows stay NULL. The dashboard treats NULL as
+    # No backfill - legacy rows stay NULL. The dashboard treats NULL as
     # "not-yet-scanned" (not "unique"); a future admin endpoint can
     # re-hash on demand.
 

@@ -1,11 +1,11 @@
 """
-nearby_aggregator — Privacy-projecting grouping service for the
+nearby_aggregator - Privacy-projecting grouping service for the
 "Verified Reports Nearby" home-stage feature (May 2026).
 
 WHY THIS LIVES IN A SERVICE LAYER (not inline in the endpoint):
-The aggregation logic — bbox pre-filter, haversine, building / crisis-
+The aggregation logic - bbox pre-filter, haversine, building / crisis-
 cluster bucketing, relevance sort, k-anonymity suppression, anti-spam
-device-cap — is the part most likely to be reused (RN companion's
+device-cap - is the part most likely to be reused (RN companion's
 offline-cache parser does the same shape) AND the part where bugs
 become privacy regressions. Keeping it in a dedicated, easy-to-test
 module + a strict typed projection means a single audit pass on this
@@ -27,13 +27,13 @@ Caller (endpoint) supplies the prefiltered Report list with locations
 joined; this module owns ONLY the projection + grouping.
 
 UNDP alignment:
-  • must-have #4 — DamageClassEnum (MINIMAL/PARTIAL/COMPLETE) only
-  • must-have #5 — CrisisTypeEnum only
-  • must-have #6 — building_id as primary group key (OSM-tagged
+  • must-have #4 - DamageClassEnum (MINIMAL/PARTIAL/COMPLETE) only
+  • must-have #5 - CrisisTypeEnum only
+  • must-have #6 - building_id as primary group key (OSM-tagged
                     structure aggregation)
-  • must-have #7 — strict PII projection above
-  • must-have #9 — zero reporter identification surfaced
-  • must-have #12 — scale-ready via bbox pre-filter + relevance top-N
+  • must-have #7 - strict PII projection above
+  • must-have #9 - zero reporter identification surfaced
+  • must-have #12 - scale-ready via bbox pre-filter + relevance top-N
 """
 from __future__ import annotations
 
@@ -49,37 +49,37 @@ logger = logging.getLogger(__name__)
 
 # ── Tunable constants ──────────────────────────────────────────────────
 
-#: T3 (Verified) tier floor — groups need ≥ this many UNIQUE devices to
+#: T3 (Verified) tier floor - groups need ≥ this many UNIQUE devices to
 #: render as a "Verified Nearby Incident". Was MIN_GROUP_REPORTS pre-Phase-1
-#: (May 2026) — the old single-floor model dropped all single-witness
+#: (May 2026) - the old single-floor model dropped all single-witness
 #: signals. New tiered model (see docs/NEARBY_REPORTS_PIPELINE.md §3.2):
 #: T1 = 1 device, T2 = 2 devices OR ≥ 30 min stale, T3 = ≥ 3 devices.
 T3_VERIFIED_FLOOR = 3
 T2_EMERGING_FLOOR = 2
 T1_WEAK_STALE_MIN = 30                # T2 promotion: T1 + ≥ this many minutes old
 
-#: Legacy alias — some external callers still pass `min_group_size`.
+#: Legacy alias - some external callers still pass `min_group_size`.
 #: Now defaults to T1_WEAK (= 1) so the aggregator surfaces every tier
 #: by default; the endpoint slices by tier afterwards based on caller
 #: identity (citizen vs admin vs deployment T1-visibility flag).
 MIN_GROUP_REPORTS = 1
 
-#: Anti-spam cap — a single device's contribution to a group's `count`
+#: Anti-spam cap - a single device's contribution to a group's `count`
 #: is capped here, regardless of how many duplicates they submit. A
 #: bot submitting 50 reports from the same device shows up as 1.
 #: Phase 3 will replace this with trust-weighted contribution.
 PER_DEVICE_CONTRIBUTION_CAP = 1
 
 #: Fallback grid cell size (degrees) for reports without `building_id`.
-#: 0.002° ≈ 220m at the equator — small enough that a "Road Damage"
+#: 0.002° ≈ 220m at the equator - small enough that a "Road Damage"
 #: cluster doesn't span an entire neighbourhood, large enough that
 #: scattered street-level reports still aggregate.
 #: KEPT for backwards-compat with v0 code paths; Phase 2 (May 2026)
 #: replaces this with geohash-based bucketing for both block + area
-#: cluster levels — see `_geohash_encode` + `_bucket_key_for` below.
+#: cluster levels - see `_geohash_encode` + `_bucket_key_for` below.
 FALLBACK_CELL_SIZE_DEG = 0.002
 
-#: Geohash precision for the block-level cluster (Phase 2 — docs §3.4).
+#: Geohash precision for the block-level cluster (Phase 2 - docs §3.4).
 #: precision 7 ≈ 152 m × 152 m cells. Matches the ~100 m "adjacent
 #: buildings" intent of the doc's block tier.
 GEOHASH_PRECISION_BLOCK = 7
@@ -91,17 +91,17 @@ GEOHASH_PRECISION_BLOCK = 7
 #: clusters during disasters).
 GEOHASH_PRECISION_AREA = 6
 
-#: Temporal burst window — ≥ T3_VERIFIED_FLOOR reports inside this many
+#: Temporal burst window - ≥ T3_VERIFIED_FLOOR reports inside this many
 #: minutes flips `is_burst=true`. Phase 2 introduces full HIGH/LOW
 #: grading; Phase 1 uses a simple count-in-window check.
 BURST_WINDOW_MIN = 60
 
-#: Acute spike window — ≥ ACUTE_REPORTS_THRESHOLD inside this many
+#: Acute spike window - ≥ ACUTE_REPORTS_THRESHOLD inside this many
 #: minutes flips `is_acute=true`. Drives the §8 notification policy.
 ACUTE_WINDOW_MIN = 15
 ACUTE_REPORTS_THRESHOLD = 5
 
-#: RESOLVED-recent retention — a group whose `latest_at` is within this
+#: RESOLVED-recent retention - a group whose `latest_at` is within this
 #: many hours AND whose top status is RESOLVED stays in the response
 #: but with `kind="resolved_recent"` so the client renders it in the
 #: separate "Recently Resolved" subtotal line, NOT folded into the
@@ -118,7 +118,7 @@ RESOLVED_RECENT_RETENTION_HOURS = 24
 #
 # Tier TTLs: a report older than `T{n}_max_hours` cannot count toward
 # tier n. So a 25-h-old FLOOD-flash report can still keep a group at
-# T2 (T2 cap 24 h means it falls out — bumped to expire) but a 6 h
+# T2 (T2 cap 24 h means it falls out - bumped to expire) but a 6 h
 # WILDFIRE report counts for T1 only (T1 cap 6h).
 
 @dataclass
@@ -126,7 +126,7 @@ class CrisisRule:
     t1_max_hours: int        # max age for a report to count toward T1
     t2_max_hours: int        # max age for T2
     t3_max_hours: int        # max age for T3 (and overall ceiling)
-    preferred_bucket: str    # 'building' | 'block' | 'area' — Phase 2 honours this
+    preferred_bucket: str    # 'building' | 'block' | 'area' - Phase 2 honours this
 
 
 CRISIS_RULES: dict[str, CrisisRule] = {
@@ -156,7 +156,7 @@ def crisis_rule_for(crisis_type: Optional[str]) -> CrisisRule:
     return CRISIS_RULES.get(str(crisis_type).upper(), DEFAULT_CRISIS_RULE)
 
 
-# ── Coarse crisis category — T1 privacy (docs §3.2 + §10) ──────────────
+# ── Coarse crisis category - T1 privacy (docs §3.2 + §10) ──────────────
 #
 # T1 (Weak Signal) groups expose ONLY a coarse 4-bucket category, NOT
 # the full crisis_type enum. This prevents triangulation of a single
@@ -183,7 +183,7 @@ def coarse_category_for(crisis_type: Optional[str]) -> str:
         return 'OTHER'
     return _COARSE_CRISIS_MAP.get(str(crisis_type).upper(), 'OTHER')
 
-#: Default sort weights — relevance = w_count*log(count) + w_recency + w_proximity
+#: Default sort weights - relevance = w_count*log(count) + w_recency + w_proximity
 RELEVANCE_W_COUNT = 0.4
 RELEVANCE_W_RECENCY = 0.4
 RELEVANCE_W_PROXIMITY = 0.2
@@ -193,7 +193,7 @@ RELEVANCE_W_PROXIMITY = 0.2
 TOP_N_TYPES = 3
 
 
-# ── Summary text matrix (i18n keys — labels resolved client-side) ──────
+# ── Summary text matrix (i18n keys - labels resolved client-side) ──────
 #
 # Maps (crisis_type, damage_class) → short i18n key. Client looks up
 # the key and gets a localized 1-3 word label like "Flooded" /
@@ -203,7 +203,7 @@ TOP_N_TYPES = 3
 # fallback so the client always has something to render even if a
 # locale is missing a key.
 #
-# The matrix is intentionally SPARSE — combos like
+# The matrix is intentionally SPARSE - combos like
 # (CHEMICAL_INCIDENT, MINIMAL) map to a generic key. Keeps the i18n
 # surface manageable (~20 distinct keys instead of 30+).
 
@@ -261,17 +261,17 @@ _SEVERITY_RANK = {
 
 @dataclass
 class NearbyReportInput:
-    """Input shape from the endpoint — flat tuple of columns we need.
+    """Input shape from the endpoint - flat tuple of columns we need.
     Keeping it as a dataclass (not a SQLAlchemy row) keeps the
     aggregator decoupled from the ORM and trivially testable.
 
-    Phase 2 added `user_id` — initial trust proxy for HIGH/LOW
+    Phase 2 added `user_id` - initial trust proxy for HIGH/LOW
     acute grading.
-    Phase 3 added `trust_weight` — pre-computed device-level
+    Phase 3 added `trust_weight` - pre-computed device-level
     contribution weight (docs §6.1). The endpoint resolves it via
     `fraud_detector.device_trust_weight()` then bumps by user role
     (verified responder = 3.0; account-linked civilian = 1.5).
-    Default 1.0 = "new device, no role" — backwards-compatible."""
+    Default 1.0 = "new device, no role" - backwards-compatible."""
     report_id: str
     device_id: Optional[str]
     status: str
@@ -284,9 +284,9 @@ class NearbyReportInput:
     latitude: float
     longitude: float
     server_created_at: datetime
-    user_id: Optional[str] = None                # Phase 2 — trust proxy
-    trust_weight: float = 1.0                    # Phase 3 — device trust
-    # Phase F.8.c — client-side capture time. NULL when the row was
+    user_id: Optional[str] = None                # Phase 2 - trust proxy
+    trust_weight: float = 1.0                    # Phase 3 - device trust
+    # Phase F.8.c - client-side capture time. NULL when the row was
     # written without a `client_created_at` (legacy ingest path). When
     # present, used as the honest "latest_at" anchor so an offline-
     # drained report doesn't make a stale cluster look freshly active.
@@ -295,7 +295,7 @@ class NearbyReportInput:
 
 @dataclass
 class NearbyGroup:
-    """Output shape — strict projection. EVERY field listed here is
+    """Output shape - strict projection. EVERY field listed here is
     cleared for the public response; no other Report column leaks.
 
     Phase 1 (May 2026) added: `tier`, `is_burst`, `is_acute`,
@@ -327,7 +327,7 @@ class NearbyGroup:
     is_acute: bool = False                    # ≥ ACUTE_REPORTS_THRESHOLD in ACUTE_WINDOW_MIN
     acute_grade: Optional[str] = None         # 'high' | 'low' | None (Phase 2 grades trust-weighted)
     crisis_ttl_hours: int = 24                # rule-driven; mirrors CRISIS_RULES[crisis].t3_max_hours
-    coarse_crisis_category: str = 'OTHER'     # 'FLOOD'|'FIRE'|'INFRASTRUCTURE'|'OTHER' — for T1 privacy
+    coarse_crisis_category: str = 'OTHER'     # 'FLOOD'|'FIRE'|'INFRASTRUCTURE'|'OTHER' - for T1 privacy
     responding_count: int = 0                 # status RESPONDING surfaced (Phase 1)
     resolved_count: int = 0                   # status RESOLVED in the RESOLVED-24h retention window
 
@@ -411,7 +411,7 @@ def _label_for(reports: List[NearbyReportInput], kind: str, fallback_lat: float,
         return max(osm_verified.items(), key=lambda kv: kv[1])[0]
     if user_typed:
         return max(user_typed.items(), key=lambda kv: kv[1])[0]
-    # Crisis cluster fallback — geocoded street name would be nicer but
+    # Crisis cluster fallback - geocoded street name would be nicer but
     # we don't want to fire a reverse-geocode call per group here. Round
     # to 3dp so the centroid is no more precise than the client-side
     # rounding policy (~110m).
@@ -437,7 +437,7 @@ def _max_severity(items: List[Optional[str]]) -> str:
 
 
 def _truncate_to_minute(dt: datetime) -> datetime:
-    """Strip sub-minute precision — privacy invariant for output
+    """Strip sub-minute precision - privacy invariant for output
     timestamps. Sub-minute could leak per-report ordering."""
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -451,7 +451,7 @@ def _coerce_aware(dt: Optional[datetime]) -> Optional[datetime]:
     offline-drained, legacy, or cross-driver rows can surface NAIVE
     datetimes. Mixing naive + aware inside a single bucket's ``max()`` /
     ``min()`` raises "can't compare offset-naive and offset-aware
-    datetimes" — a single such report would 500 the whole /nearby
+    datetimes" - a single such report would 500 the whole /nearby
     response for every caller. Coercing at the read points keeps every
     timestamp comparison safe.
     """
@@ -486,7 +486,7 @@ def _sanitize_reports(reports: List[NearbyReportInput]) -> List[NearbyReportInpu
 
     Drops reports without usable coordinates and normalizes every
     timestamp to tz-aware UTC, so no single bad row can raise
-    mid-aggregation. Mutates the per-request input objects in place —
+    mid-aggregation. Mutates the per-request input objects in place -
     they are built fresh per call, so this is safe.
     """
     clean: List[NearbyReportInput] = []
@@ -518,12 +518,12 @@ def _classify_tier(
     reports came from a verified-responder device.
 
     Phase 1 rules (docs §3.2):
-      • T1 (weak)     — 1 unique device, < T1_WEAK_STALE_MIN minutes old
-      • T2 (emerging) — 2 unique devices, OR 1 device + ≥ T1_WEAK_STALE_MIN
+      • T1 (weak)     - 1 unique device, < T1_WEAK_STALE_MIN minutes old
+      • T2 (emerging) - 2 unique devices, OR 1 device + ≥ T1_WEAK_STALE_MIN
                          min stale, OR ≥ 1 verified responder
-      • T3 (verified) — ≥ T3_VERIFIED_FLOOR (= 3) unique devices
+      • T3 (verified) - ≥ T3_VERIFIED_FLOOR (= 3) unique devices
 
-    `has_verified_responder` is the Phase-3 hook — for now it's always
+    `has_verified_responder` is the Phase-3 hook - for now it's always
     False (no trust scoring yet), but the signature accepts it so the
     Phase-3 schema migration doesn't reshape this function.
     """
@@ -545,11 +545,11 @@ def _is_burst(timestamps: List[datetime], window_min: int = BURST_WINDOW_MIN,
     arrive within 15 min of EACH OTHER 48 h ago does NOT light up as
     a current burst.
 
-    Phase 2 (May 2026, docs §3.5) — pre-fix this was a sliding-window
+    Phase 2 (May 2026, docs §3.5) - pre-fix this was a sliding-window
     check inside the cluster's own timestamps, which caused old clusters
     with tightly-clustered (but ancient) reports to misfire as "acute".
 
-    O(n) — single pass counting how many timestamps fall inside the
+    O(n) - single pass counting how many timestamps fall inside the
     `now - window_min`..`now` interval.
     """
     if len(timestamps) < threshold:
@@ -582,14 +582,14 @@ def _is_acute(timestamps: List[datetime], *, now: Optional[datetime] = None) -> 
 
 
 #: HIGH-confidence acute requires ≥ this many trusted-device reports
-#: in the acute window. Phase-2 default — Phase 3 may tune.
+#: in the acute window. Phase-2 default - Phase 3 may tune.
 ACUTE_HIGH_TRUSTED_FLOOR = 3
 
 #: Disaster-mode detection (Phase 4, docs §3.8). When a single query
 #: would return MORE THAN this many groups OR raw reports inside the
 #: radius, the endpoint switches to disaster mode (auto-promote area
 #: bucketing + mega-zones + heat-map render hint). Both thresholds
-#: are independently sufficient — either trip flips the mode.
+#: are independently sufficient - either trip flips the mode.
 #: Defaults overridable via env (CRISP_DISASTER_MODE_GROUPS /
 #: CRISP_DISASTER_MODE_REPORTS).
 DISASTER_MODE_GROUPS_DEFAULT = 50
@@ -613,18 +613,18 @@ def aggregate_disaster_zones(
     radius_km: float = 25.0,
     max_zones: int = 20,
 ) -> List[NearbyGroup]:
-    """Phase 4 (docs §3.8) — alternate aggregation for high-density
+    """Phase 4 (docs §3.8) - alternate aggregation for high-density
     scenarios. Groups EVERY report by area-level geohash (precision 6,
     ~600m) regardless of building_id; returns up to `max_zones`
     mega-zones with kind='disaster_zone'. The map renders these as
     a heat-map overlay (no individual pin click-through).
 
-    Privacy invariants still hold — the same projection in
+    Privacy invariants still hold - the same projection in
     `_summarize_bucket` (centroid only, minute-truncated timestamps,
     per-device cap) applies. Disaster mode just changes the SHAPE
     of the buckets, not their privacy treatment.
 
-    HC83 (May 2026, follow-up to HC82) — `radius_km` is now plumbed
+    HC83 (May 2026, follow-up to HC82) - `radius_km` is now plumbed
     through to the relevance-sort proximity normalizer. Pre-HC83 the
     sort used a hardcoded `radius_km=25`, which produced
     `proximity_score=0` for any group beyond 25 km from the caller.
@@ -635,7 +635,7 @@ def aggregate_disaster_zones(
     """
     if not reports:
         return []
-    # Defensive sanitation — same guard as aggregate_nearby; the
+    # Defensive sanitation - same guard as aggregate_nearby; the
     # disaster path geohashes EVERY report by lat/lng, so an unusable
     # coordinate here is fatal without it.
     reports = _sanitize_reports(reports)
@@ -658,7 +658,7 @@ def aggregate_disaster_zones(
             groups.append(g)
 
     # Sort by relevance + acute / burst boosts (same key as the
-    # normal cascade). HC83 — `radius_km` now flows in from the
+    # normal cascade). HC83 - `radius_km` now flows in from the
     # caller instead of being hardcoded to 25, so the proximity
     # normalizer matches the caller's actual query range.
     def _sort_key(g: NearbyGroup) -> float:
@@ -723,11 +723,11 @@ def _summarize_bucket(
     """
     now = now or datetime.now(timezone.utc)
 
-    # Phase 3 (May 2026, docs §6.1 + §6.3) — drop reports from
+    # Phase 3 (May 2026, docs §6.1 + §6.3) - drop reports from
     # suspicious devices (trust_weight == 0.0) entirely before any
     # other math. The report stays in the DB; it just doesn't
     # contribute to this group's count, sort score, or tier
-    # classification. This is the "hard" mitigation tier — when
+    # classification. This is the "hard" mitigation tier - when
     # an abuse signal fires, the device's reports stop influencing
     # the public response until an admin clears the spam_score.
     bucket = [r for r in bucket if r.trust_weight > 0.0]
@@ -752,24 +752,24 @@ def _summarize_bucket(
         min(actual, PER_DEVICE_CONTRIBUTION_CAP) if d else actual
         for d, actual in by_device.items()
     )
-    # Use the larger of (capped_count, len(unique devices)) — a 3-device
+    # Use the larger of (capped_count, len(unique devices)) - a 3-device
     # group of 3 reports should still surface as count=3, not count=1.
     n_devices = len([d for d in by_device if d])
     count = max(capped_count, n_devices, 1)
 
-    # Aggregate counts split by status — sums, not per-report breakdowns.
+    # Aggregate counts split by status - sums, not per-report breakdowns.
     verified = sum(1 for r in bucket if r.status == 'VERIFIED')
     pending = sum(1 for r in bucket if r.status == 'PENDING')
     responding = sum(1 for r in bucket if r.status == 'RESPONDING')
     resolved = sum(1 for r in bucket if r.status == 'RESOLVED')
 
-    # Centroid = arithmetic mean of (lat, lng) — privacy-safe because
+    # Centroid = arithmetic mean of (lat, lng) - privacy-safe because
     # the mean of N reports doesn't reveal any individual location.
     centroid_lat = sum(r.latitude for r in bucket) / len(bucket)
     centroid_lng = sum(r.longitude for r in bucket) / len(bucket)
     distance_km = round(haversine_km(user_lat, user_lng, centroid_lat, centroid_lng), 2)
 
-    # Summary text — use the most common crisis × most common damage
+    # Summary text - use the most common crisis × most common damage
     # combo as the representative summary.
     crisis_types = _most_common_n([r.crisis_type for r in bucket], TOP_N_TYPES)
     damage_classes = _most_common_n([r.damage_class for r in bucket], TOP_N_TYPES)
@@ -779,9 +779,9 @@ def _summarize_bucket(
 
     label = _label_for(bucket, kind, centroid_lat, centroid_lng)
 
-    # Phase F.8.c — honest latest_at + earliest_at.
+    # Phase F.8.c - honest latest_at + earliest_at.
     # When a report was captured offline and drained on reconnect,
-    # server_created_at lies about when the cluster was last active —
+    # server_created_at lies about when the cluster was last active -
     # an offline-queued 4-hour-old report drains with server_created_at
     # = now, making a stale cluster look freshly active. Use
     # client_created_at when present (the honest ground-truth capture
@@ -794,7 +794,7 @@ def _summarize_bucket(
     latest = _truncate_to_minute(max(timestamps)) if timestamps else _truncate_to_minute(now)
     earliest = _truncate_to_minute(min(timestamps)) if timestamps else latest
 
-    # Tier classification — minutes since earliest report drives the
+    # Tier classification - minutes since earliest report drives the
     # "1-device + stale → T2" rule.
     earliest_for_tier = min(timestamps) if timestamps else now
     minutes_since_earliest = max(0.0, (now - earliest_for_tier).total_seconds() / 60.0)
@@ -804,10 +804,10 @@ def _summarize_bucket(
         has_verified_responder=False,        # Phase 3 wires this up
     )
 
-    # Temporal-cluster flags — now-anchored windows.
+    # Temporal-cluster flags - now-anchored windows.
     burst = _is_burst(timestamps, now=now) if timestamps else False
     acute = _is_acute(timestamps, now=now) if timestamps else False
-    # Phase 2 (May 2026, docs §3.5 + §8.1) — HIGH vs LOW confidence
+    # Phase 2 (May 2026, docs §3.5 + §8.1) - HIGH vs LOW confidence
     # grading for is_acute. HIGH-confidence acute drives SW push;
     # LOW-confidence is in-app badge only.
     # Phase 2 trust proxy: count reports in the acute window from
@@ -823,11 +823,11 @@ def _summarize_bucket(
     rule = crisis_rule_for(top_crisis)
     ttl_hours = rule.t3_max_hours
 
-    # Coarse crisis category — used by the endpoint to redact crisis_types
+    # Coarse crisis category - used by the endpoint to redact crisis_types
     # for T1 groups before serialization (docs §10).
     coarse = coarse_category_for(top_crisis)
 
-    # RESOLVED-recent re-tagging — if the bucket's dominant status is
+    # RESOLVED-recent re-tagging - if the bucket's dominant status is
     # RESOLVED and the latest activity is within retention, flip `kind`
     # so the client renders it in the separate "Recently Resolved"
     # subtotal line (docs §3.6 + §4.1) instead of contributing to
@@ -865,16 +865,16 @@ def _summarize_bucket(
     )
 
 
-# ── Geohash (Phase 2, May 2026 — docs §3.4) ────────────────────────────
+# ── Geohash (Phase 2, May 2026 - docs §3.4) ────────────────────────────
 #
-# Pure-Python geohash implementation — vendored here rather than
+# Pure-Python geohash implementation - vendored here rather than
 # pulling in `python-geohash` (yet another transitive dependency
 # for a 30-line algorithm). Same spec as
-# https://en.wikipedia.org/wiki/Geohash — deterministic + identical
+# https://en.wikipedia.org/wiki/Geohash - deterministic + identical
 # output to any conforming implementation.
 #
 # At our target precisions (6 + 7) the cell sizes are ~600 m and
-# ~150 m respectively — small enough to drive meaningful
+# ~150 m respectively - small enough to drive meaningful
 # block / area clustering, large enough that GPS jitter doesn't
 # bounce nearby reports into different buckets.
 
@@ -919,22 +919,22 @@ def _geohash_encode(lat: float, lng: float, precision: int) -> str:
 def _bucket_key_for(report: NearbyReportInput, group_by: str,
                     level: str = 'building') -> str:
     """Compute the bucket key for a report at the requested cluster
-    level. Phase 2 (May 2026, docs §3.4) — adds 'block' + 'area'
+    level. Phase 2 (May 2026, docs §3.4) - adds 'block' + 'area'
     fallbacks via geohash.
 
     `group_by` values:
-      - 'building' — the legacy + default per-bucket strategy. Tries
+      - 'building' - the legacy + default per-bucket strategy. Tries
                      building_id first, falls through to whatever
                      `level` specifies.
-      - 'crisis_type' — coarser, crisis-type-only buckets.
+      - 'crisis_type' - coarser, crisis-type-only buckets.
 
     `level` values (only honoured when `group_by='building'`):
-      - 'building' — building_id; falls back to block geohash when
+      - 'building' - building_id; falls back to block geohash when
                      building_id is null.
-      - 'block'    — geohash precision 7 (~150 m) × crisis_type.
+      - 'block'    - geohash precision 7 (~150 m) × crisis_type.
                      Use when no building bucket meets the tier
                      threshold (escalation).
-      - 'area'     — geohash precision 6 (~600 m) × crisis_type.
+      - 'area'     - geohash precision 6 (~600 m) × crisis_type.
                      Use when block also fails to cluster.
 
     The multi-pass cascade in `aggregate_nearby()` calls this with
@@ -949,11 +949,11 @@ def _bucket_key_for(report: NearbyReportInput, group_by: str,
 
     crisis_suffix = report.crisis_type or 'OTHER'
     if level == 'building' or level == 'block':
-        # block-level cluster — geohash 7 × crisis_type
+        # block-level cluster - geohash 7 × crisis_type
         gh = _geohash_encode(report.latitude, report.longitude, GEOHASH_PRECISION_BLOCK)
         return f"block_{gh}_{crisis_suffix}"
 
-    # area-level cluster — geohash 6 × crisis_type
+    # area-level cluster - geohash 6 × crisis_type
     gh = _geohash_encode(report.latitude, report.longitude, GEOHASH_PRECISION_AREA)
     return f"area_{gh}_{crisis_suffix}"
 
@@ -961,7 +961,7 @@ def _bucket_key_for(report: NearbyReportInput, group_by: str,
 def _relevance_score(group: NearbyGroup, now: datetime, max_radius_km: float) -> float:
     """Higher = more relevant. Combines:
       - count (log-scaled so 100 reports doesn't 100× outrank 10)
-      - decayed recency (Phase 2 — exp decay per crisis-rule half-life)
+      - decayed recency (Phase 2 - exp decay per crisis-rule half-life)
       - proximity (closer = better, normalised to caller's radius)
 
     Phase 2 (May 2026, docs §3.5) replaced the simple `1/hours_ago`
@@ -998,29 +998,29 @@ def _multi_pass_cluster(
     min_group_size: int,
     now: datetime,
 ) -> List[NearbyGroup]:
-    """Phase 2 (May 2026, docs §3.4) — three-level spatial cascade.
+    """Phase 2 (May 2026, docs §3.4) - three-level spatial cascade.
 
     Strategy:
-      Pass 1 — bucket every report by `_bucket_key_for(level='building')`.
+      Pass 1 - bucket every report by `_bucket_key_for(level='building')`.
                 Buckets with ≥ T3_VERIFIED_FLOOR unique devices become
                 'building' clusters (tightest). Their reports are
-                CLAIMED — removed from the residual pool.
+                CLAIMED - removed from the residual pool.
 
-      Pass 2 — re-bucket the residual reports by 'block' (geohash 7 ×
+      Pass 2 - re-bucket the residual reports by 'block' (geohash 7 ×
                 crisis_type). Buckets with ≥ T2_EMERGING_FLOOR unique
                 devices become 'block' clusters. Their reports are
                 CLAIMED.
 
-      Pass 3 — re-bucket whatever remains by 'area' (geohash 6 ×
+      Pass 3 - re-bucket whatever remains by 'area' (geohash 6 ×
                 crisis_type). Any bucket meeting `min_group_size`
                 becomes an 'area' cluster.
 
-      Cleanup — any STILL-residual reports become single-report
+      Cleanup - any STILL-residual reports become single-report
                 'building' clusters at their original building_id
                 (or area-fallback if no building_id). This preserves
                 the T1 weak-signal surfacing for the unmatched tail.
 
-    Reports never appear in more than one cluster — the cascade
+    Reports never appear in more than one cluster - the cascade
     consumes them in order. This avoids double-counting under
     cross-tier overlap (a building inside a block inside an area).
 
@@ -1035,7 +1035,7 @@ def _multi_pass_cluster(
         """Drain buckets that hit the threshold; return their groups.
 
         Identity-preservation: when ALL reports in a bucket share a
-        single `building_id` — even at block/area levels — we keep
+        single `building_id` - even at block/area levels - we keep
         the group_id + kind as `g_building_<bid>` / `kind='building'`.
         This matters for the smart-prefill flow (Phase 3): tap on a
         building-derived cluster should still suggest THAT building.
@@ -1046,7 +1046,7 @@ def _multi_pass_cluster(
         for key, bucket in list(buckets.items()):
             unique_devs = len({r.device_id for r in bucket if r.device_id})
             if unique_devs >= threshold_devices and len(bucket) >= min_group_size:
-                # Bucket survives this pass — promote to a group.
+                # Bucket survives this pass - promote to a group.
                 bucket_building_ids = {r.building_id for r in bucket if r.building_id}
                 # Identity-preservation: when ALL reports share a
                 # single building_id, render as building-level
@@ -1074,7 +1074,7 @@ def _multi_pass_cluster(
                 claimed_groups.append(
                     _summarize_bucket(bucket, effective_kind, user_lat, user_lng, gid, now=now)
                 )
-                # Mark this bucket as claimed — remove its reports
+                # Mark this bucket as claimed - remove its reports
                 # from `residual`.
                 claimed_ids = {r.report_id for r in bucket}
                 residual[:] = [r for r in residual if r.report_id not in claimed_ids]
@@ -1082,7 +1082,7 @@ def _multi_pass_cluster(
 
     groups: List[NearbyGroup] = []
 
-    # Pass 1 — building level (threshold = T3 floor; only firmly-
+    # Pass 1 - building level (threshold = T3 floor; only firmly-
     # clustered buildings claim at this tightest level).
     buckets_b: dict[str, List[NearbyReportInput]] = defaultdict(list)
     for r in residual:
@@ -1090,7 +1090,7 @@ def _multi_pass_cluster(
     groups.extend(_claim(buckets_b, threshold_devices=T3_VERIFIED_FLOOR,
                          kind='building', level='building'))
 
-    # Pass 2 — block level (threshold = T2 floor).
+    # Pass 2 - block level (threshold = T2 floor).
     if residual:
         buckets_blk: dict[str, List[NearbyReportInput]] = defaultdict(list)
         for r in residual:
@@ -1098,7 +1098,7 @@ def _multi_pass_cluster(
         groups.extend(_claim(buckets_blk, threshold_devices=T2_EMERGING_FLOOR,
                              kind='block', level='block'))
 
-    # Pass 3 — area level (threshold = 1 by default — surfaces single
+    # Pass 3 - area level (threshold = 1 by default - surfaces single
     # weak signals over a wider geohash). Caller can pass
     # min_group_size > 1 to suppress this tail.
     if residual:
@@ -1137,7 +1137,7 @@ def aggregate_nearby(
 ) -> List[NearbyGroup]:
     """Bucket → classify tier → summarize → sort by relevance → top-N.
 
-    Phase 1 (May 2026) — was "suppress small groups (k-anonymity)";
+    Phase 1 (May 2026) - was "suppress small groups (k-anonymity)";
     now surfaces every bucket and tags each with a tier so the
     endpoint can slice by caller identity (citizen vs admin vs
     deployment-T1-visibility flag). The privacy floor still holds:
@@ -1159,23 +1159,23 @@ def aggregate_nearby(
     """
     if not reports:
         return []
-    # Defensive sanitation — drop unusable-coord rows + normalize naive
+    # Defensive sanitation - drop unusable-coord rows + normalize naive
     # timestamps so one malformed report can't 500 the whole aggregate.
     reports = _sanitize_reports(reports)
     if not reports:
         return []
 
-    # Phase 2 (May 2026, docs §3.4) — multi-pass spatial cascade.
+    # Phase 2 (May 2026, docs §3.4) - multi-pass spatial cascade.
     # Try the tightest bucket level first (building); reports that
     # don't form a strong-enough bucket at that level escalate to
     # block (geohash 7 ≈ 150 m); reports still unclustered escalate
     # to area (geohash 6 ≈ 600 m). This way:
     #   • dense building damage surfaces at building level (precise)
     #   • spread flood/riot/wildfire surfaces at block/area level
-    #     (which is what citizens need to see — the whole zone, not
+    #     (which is what citizens need to see - the whole zone, not
     #     fragmented per-building bits)
     # The `group_by='crisis_type'` path stays single-level (no cascade)
-    # — that's an explicit caller override.
+    # - that's an explicit caller override.
 
     now = datetime.now(timezone.utc)
 
@@ -1191,7 +1191,7 @@ def aggregate_nearby(
             gid = f"g_crisis_{first.crisis_type or 'OTHER'}"
             groups.append(_summarize_bucket(bucket, 'crisis_cluster', user_lat, user_lng, gid, now=now))
     else:
-        # Phase 2 multi-pass cascade — group_by='building' path.
+        # Phase 2 multi-pass cascade - group_by='building' path.
         groups = _multi_pass_cluster(
             reports=reports,
             user_lat=user_lat,
@@ -1200,7 +1200,7 @@ def aggregate_nearby(
             now=now,
         )
 
-    # 4. Per-tier privacy projection — T1 (weak) groups have their
+    # 4. Per-tier privacy projection - T1 (weak) groups have their
     # `crisis_types` collapsed to `[coarse_crisis_category]` so the
     # full enum can't leak from a single-reporter group (docs §10).
     # T2/T3 surface the full enum.

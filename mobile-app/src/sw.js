@@ -1,46 +1,46 @@
-// CRISP service worker — offline caching, background sync, and push delivery.
+// CRISP service worker - offline caching, background sync, and push delivery.
 //
 // Cache-bump policy: any change to STATIC_ASSETS or any precached
 // resource MUST bump CACHE_NAME so existing installs evict their stale
 // snapshot on the next activate. Without this, returning users keep
 // serving the old build forever.
 
-// May 23 2026 (v256) — UX audit (Batches 1-4) + i18n sync-resolver.
+// May 23 2026 (v256) - UX audit (Batches 1-4) + i18n sync-resolver.
 // Net change across ~30 commits since v255:
-//   · WCAG AA contrast pass — .nav-btn dark text, --red regrade to
+//   · WCAG AA contrast pass - .nav-btn dark text, --red regrade to
 //     #ff8a8a, .settings-note → --text-dim, .history-empty token swap.
 //     Settings stage: 6 violations → 0.
 //   · 22-locale inline critical-text packs + synchronous head
-//     resolver + body-time walker — eliminates the visible English
+//     resolver + body-time walker - eliminates the visible English
 //     flash for every non-EN user (was 170 ms-5 s; now 0 ms).
-//   · Logical properties refactor — 92 sites of left/right + padding/
+//   · Logical properties refactor - 92 sites of left/right + padding/
 //     margin -left/-right converted to inset-inline-* / -inline-* so
 //     AR/UR mirror without manual override.
 //   · RTL: play-arrow + channels-strip mirror, bidi-isolate Latin
 //     location names, html dir from frame 0.
 //   · Font tokens (--fz-xs..--fz-display) + Reader Mode toggle in
-//     Settings — bumps every size step for elderly/presbyopic users.
-//   · Tier-badge retime — hidden for first-timers (gamification only
+//     Settings - bumps every size step for elderly/presbyopic users.
+//   · Tier-badge retime - hidden for first-timers (gamification only
 //     after first successful submission).
-//   · Tablet layout 640-1024 px — frame + max-width.
+//   · Tablet layout 640-1024 px - frame + max-width.
 //   · Hide raw coords + IANA timezone on capture (citizens see
 //     human-readable info; tech-mode flag preserves operator demo).
 //   · 8 new regression specs (99-105 + audit_matrix); 17/17 axe a11y;
 //     78 @smoke pass; Lighthouse PWA 100, A11y 98.
 // Cache bump forces every installed PWA to fetch the new shell + new
 // inline 22-locale packs on next service-worker activation.
-const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose the blur-await gate as window.__crispAwaitPendingBlur so the B-E submit-instant-return contract spec (e2e/tests/pwa/101) actually runs its {timedOut, allDone} + timeout-budget assertions instead of always-skipping (the helper existed but was never on window). Zero production behaviour change. Returning users must evict the stale app.js. // v338 (Jun 2026): close the 3 remaining edited-location re-eval gaps. (1) FREE-TEXT edit — _saveLocEdit no longer needs a tapped suggestion: it resolves coordinates for the typed place from the rendered suggestions / bundled+cached DB (and, online, an awaited Nominatim resolve capped at 3s), treats it as user_corrected, and re-homes the crisis form; when nothing resolves it saves the name only (never {0,0}) and toasts the v4_loc_saved_name_only hint (12 non-stub locales). (2) GPS-RETRY — a user-initiated #btn-v4-retry-gps that lands in a different ~110m cell now routes through _onLocationReeval (clears the previous zone's stock answers + re-matches); a same-spot refresh / automatic capture entry stays a no-op so typed answers are never lost and no spurious toast fires. (3) review-stage #v4-edit-location is now user-initiated too (a material GPS move re-evals); V3 selectPlace/#input-loc-search confirmed DEAD in V4 (element absent) so left untouched — backend re-derives crisis_event_id from coords regardless. Real-DOM e2e spec 126. Returning users must evict the stale v4-flow.js. // v337 (Jun 2026): FIX the v336 edited-location re-eval, which silently no-op'd. (1) _saveLocEdit called the bare identifier _onLocationReeval, declared in a sibling scope (_refreshGps) → ReferenceError at Save → the whole re-eval never ran and the editor never closed; now calls window.__crispV4OnLocationReeval. (2) _setState is non-reactive and nothing listened to 'crisis-pack-resolved', so even once the pack swapped in state the on-screen crispack form never repainted; added a module-scope listener + made _goToClassify re-assert the sub-step on entry, so the visible form reflects the EDITED zone. (3) _showSubStep only hid views in the current order, so when an edit DROPPED the crispack step its stale questions stayed on screen; now hides every .v4-classify-view. (4) _onSend awaits the in-flight /crisis-forms/active re-resolution (capped 2.5s) so a fast edit→send ships the EDITED zone's form_pack_id/version/form_data, not the device zone's. (5) crisis_event_id now ships whenever a pack is active (decoupled from a non-empty form_data) so an edited-zone report keeps operation linkage even before stock answers. (6) edited location writes the `acc` key the submit reads (was `accuracy` → every corrected location shipped accuracy_meters 0). Real-DOM e2e spec 125 now drives the actual editor UI. Returning users must evict the stale v4-flow.js + app.js. // v336 (Jun 2026): edited location is AUTHORITATIVE — when the reporter corrects the location (V4 inline place-search editor), the PWA re-runs crisis-form / operation matching for the NEW coordinates (overriding the ~110 m jitter guard), swaps or clears the active crisis pack, clears the previous zone's stock answers, drops any zone-auto crisis_type that no longer applies (a hand-picked type is preserved via the new state._crisisTypeAuto flag), stamps is_user_corrected on the submitted location, and toasts "Location updated. Applicable crisis form has been refreshed based on the new location." (v4_location_pack_refreshed, 12 non-stub locales). Backend re-derives crisis_event_id from the final submitted coords at intake regardless, and now picks the SMALLEST-RADIUS active zone on overlap so the most specific operation wins. Returning users must evict the stale v4-flow.js + app.js. // v335 (Jun 2026): no duplicate debris question — when the DEPLOYED geo-scoped crisis form already asks debris (a field maps_to debris_clearing_needed, answered in the crisispack sub-step), the standalone REQUIRED debris card on the review surface is suppressed and its submit gate skipped (the form's answer becomes report.debris_clearing_needed). Default flow (no pack, or a pack without a debris field) is unchanged — card shown + required. Returning users must evict the stale v4-flow.js. // v334 (Jun 2026): Operations Phase 1 — the PWA now forwards crisis_event_id on submit (echoes the active-zone event id the /active fetch already stored in state.crisisPack; the server verifies the echo owns the answered pack and re-derives from location otherwise) so each report links to its operation. Default flow (no active zone) stays byte-identical — crisis_event_id null. Returning users must evict the stale app.js. // v333 (Jun 2026): local-time everywhere — every displayed timestamp is device-local, one shared format ("11 Jun 2026, 2:45 PM" via _fmtLocalDateTime, localized to the active app language). Parse hardening: _ensureUtcIso treats timezone-less backend ISO strings as UTC before Date construction (a naive string parsed by the Date constructor reads as LOCAL and shifts displays + _timeAgo math by the device offset). The stage-where clock fallback now renders manual LOCAL time (was unlabeled UTC wall-clock via toISOString), and download filenames (Export-my-data JSON, Badge Studio PNG) stamp the local calendar date. Server side gained matching guarantees (every wire timestamp Z-suffixed). // v332 (Jun 2026): UNDP compliance batch — (1) submit-time gate on the V4 review Send button: damage/infra/crisis must be set AND the debris question must have an explicit Yes/No before a report can be sent; debris promoted from the optional UNDP sheet to a REQUIRED card on the review surface (the five flat UNDP-details fields debris_present/electricity/water/health/pressing_needs now reset per report — a computed-key leak the static validator now also catches by scanning index.html data-undp-field attributes); (2) privacy notice gains an Automated-decisions & AI section (Annex 2 (f) disclosure + human-review right) and a concrete retention statement ("active + up to 1 year, then permanently deleted", replacing "indefinite while the crisis is open"); (3) "Export my data" is now live in Settings (downloads every report this device sent as JSON via /reports/device/{hash}); (4) honest correction wording (delete + 24h-undo + resubmit; in-place edit = roadmap). All notice copy across 22 locales. // v331 (Jun 2026): language policy — explicit-signal precedence. The boot chain is now manual pick > browser locale > cached geo/IP region language > en (was: region cache above browser), and noteDetectedLocal only AUTO-activates a geo-detected region language when the boot locale did NOT come from an explicit signal (manual/browser) — it always still paints the suggestion pill. Fixes the host-locale surprise where an en-US browser in Karnataka silently booted in Kannada; citizens whose devices declare unsupported locales still get their region language auto-applied. // v330 (Jun 2026): faster camera-modal first open — two-phase resolution. getUserMedia now requests 1080p first (a cold camera paints its first frame noticeably faster at 1080p than at 4K, so the live preview appears sooner instead of sitting on the spinner), then transparently upgrades the SAME track to 4K in the background via applyConstraints once the preview is visible, so captured photos keep native fidelity. The spinner now hides on the first painted frame (loadeddata/playing, with a fallback timer) instead of on getUserMedia-resolve, removing the black flash before first pixels. Capture stays safe: the shutter snapshots the live video, so once the upgrade lands every snap is 4K; a snap in the brief pre-upgrade window is still 1080p (never the old ~720p "quality capped" regression). // v329 (Jun 2026): permanent fix for the recurring "stale state leaks into the next report" bug — single source-of-truth reset (_freshReportState() factory + Object.assign(state, _freshReportState())); the v4 capture/classify DOM now RENDERS-FROM-STATE on entry + on the cleared event (description textarea, voice-recorder panel, and damage/infra/crisis selections all derive from state — no imperative-paint drift, which was the recurrence root cause); guarded reset-on-entry to capture from terminal stages (home/success/history/report-detail) while back-nav from classify/review preserves the in-progress capture; crisisStockAnswers now reset per report (fixes the data-integrity leak where report N+1 in the same zone shipped report N's pack answers) while crisisPack zone schema + auto crisis_type still re-apply by design; runtime _assertReportStateClean() self-check (dev/test) + a static CI completeness gate (scripts/validate-report-reset.mjs, wired to pre-commit + CI) so any new capture field must be classified reset-or-preserve and the leak class cannot silently return. // v328 (Jun 2026): image-pipeline hardening — (1) ORIGINAL tier retained as a Blob + sliced directly at upload, never base64-encoded (kills the readAsDataURL OOM that silently dropped originals on multi-photo reports); (2) Mode B drain-time tier regeneration from a retained source blob (a photo that lost the submit-time variant race no longer downgrades to legacy/untiered or gets dropped from a mixed report); (3) reconnect double-upload fix — wedge-recovery keys on loop liveness + requires online, and the loop offline-skips doomed work, so an offline gap can no longer false-trigger a 2nd concurrent drain pass on reconnect. // v327 (Jun 2026): finish the auto-submit-regions removal — drop the dead .auto-submit-timer CSS + repoint the connectivity heartbeat off the now-deleted /regions/enabled onto /api/v1/health. // v326 (Jun 2026): remove the dormant auto-submit-regions feature — drop the PWA countdown timer + the /regions/enabled SW cache intercept + the is_auto_submitted flag. // v325 (Jun 2026): offline-queue resilience — kill the "stuck at N%" wedge. Prevention (encode photoBlob→dataUrl at submit so item.photo always exists) + backstop (deliver + honest note when a photo-intended report has zero uploadable bytes) + boot reconcile + calm "needs attention" flaky-backend state + per-chunk hard-4xx media-id regen + per-variant orphan_no_source immediate mark-deferred. New i18n: upload_photo_unavailable, sync_needs_attention. // v324 (Jun 2026): PWA login redesign — back-arrow → home + bigger ripple logo + gradient "CRISP" wordmark, kept zero-scroll. // v323 (Jun 2026): Thank-You "My Reports" now RENDERS the just-submitted report (success button called goToStage only — no render; now calls openMyReports). // v322 (May 2026, HC97): camera quality + open fixes — getUserMedia requests 4K-ideal (was a low ~720p default → "quality capped") + re-entrancy guard + a starting spinner on open (fixes "had to tap multiple times"). // v321: unify camera UX — Stage-1 + review "+ Add" now both open the custom getUserMedia modal on iOS (capability-gated; was native-only on iOS via the !isIOS fork). <input capture> retained as the runtime fallback (in-app webviews / permission-denied). // v320: "Report another" photo/pick bleed fix.
-// v250 → v251 (May 21 — version-pill /health URL fix). v250 deploy
+const CACHE_NAME = 'crisp-v340';  // v340 (Jun 2026): copy + housekeeping only, zero runtime-logic change - (1) privacy-notice copy across 22 locales drops the AI sub-processor VENDOR NAME (was "AI verification (Anthropic Claude)" / "(Anthropic)") while KEEPING the "AI verification" recipient category so the GDPR Art. 13 category disclosure stays intact; (2) repo-wide em-dash to hyphen normalization in comments + user-facing strings; (3) removed dev-workflow references from shipped comments. Returning users must evict the stale i18n + app.js. // v339 (Jun 2026): test-hook only - expose the blur-await gate as window.__crispAwaitPendingBlur so the B-E submit-instant-return contract spec (e2e/tests/pwa/101) actually runs its {timedOut, allDone} + timeout-budget assertions instead of always-skipping (the helper existed but was never on window). Zero production behaviour change. Returning users must evict the stale app.js. // v338 (Jun 2026): close the 3 remaining edited-location re-eval gaps. (1) FREE-TEXT edit - _saveLocEdit no longer needs a tapped suggestion: it resolves coordinates for the typed place from the rendered suggestions / bundled+cached DB (and, online, an awaited Nominatim resolve capped at 3s), treats it as user_corrected, and re-homes the crisis form; when nothing resolves it saves the name only (never {0,0}) and toasts the v4_loc_saved_name_only hint (12 non-stub locales). (2) GPS-RETRY - a user-initiated #btn-v4-retry-gps that lands in a different ~110m cell now routes through _onLocationReeval (clears the previous zone's stock answers + re-matches); a same-spot refresh / automatic capture entry stays a no-op so typed answers are never lost and no spurious toast fires. (3) review-stage #v4-edit-location is now user-initiated too (a material GPS move re-evals); V3 selectPlace/#input-loc-search confirmed DEAD in V4 (element absent) so left untouched - backend re-derives crisis_event_id from coords regardless. Real-DOM e2e spec 126. Returning users must evict the stale v4-flow.js. // v337 (Jun 2026): FIX the v336 edited-location re-eval, which silently no-op'd. (1) _saveLocEdit called the bare identifier _onLocationReeval, declared in a sibling scope (_refreshGps) → ReferenceError at Save → the whole re-eval never ran and the editor never closed; now calls window.__crispV4OnLocationReeval. (2) _setState is non-reactive and nothing listened to 'crisis-pack-resolved', so even once the pack swapped in state the on-screen crispack form never repainted; added a module-scope listener + made _goToClassify re-assert the sub-step on entry, so the visible form reflects the EDITED zone. (3) _showSubStep only hid views in the current order, so when an edit DROPPED the crispack step its stale questions stayed on screen; now hides every .v4-classify-view. (4) _onSend awaits the in-flight /crisis-forms/active re-resolution (capped 2.5s) so a fast edit→send ships the EDITED zone's form_pack_id/version/form_data, not the device zone's. (5) crisis_event_id now ships whenever a pack is active (decoupled from a non-empty form_data) so an edited-zone report keeps operation linkage even before stock answers. (6) edited location writes the `acc` key the submit reads (was `accuracy` → every corrected location shipped accuracy_meters 0). Real-DOM e2e spec 125 now drives the actual editor UI. Returning users must evict the stale v4-flow.js + app.js. // v336 (Jun 2026): edited location is AUTHORITATIVE - when the reporter corrects the location (V4 inline place-search editor), the PWA re-runs crisis-form / operation matching for the NEW coordinates (overriding the ~110 m jitter guard), swaps or clears the active crisis pack, clears the previous zone's stock answers, drops any zone-auto crisis_type that no longer applies (a hand-picked type is preserved via the new state._crisisTypeAuto flag), stamps is_user_corrected on the submitted location, and toasts "Location updated. Applicable crisis form has been refreshed based on the new location." (v4_location_pack_refreshed, 12 non-stub locales). Backend re-derives crisis_event_id from the final submitted coords at intake regardless, and now picks the SMALLEST-RADIUS active zone on overlap so the most specific operation wins. Returning users must evict the stale v4-flow.js + app.js. // v335 (Jun 2026): no duplicate debris question - when the DEPLOYED geo-scoped crisis form already asks debris (a field maps_to debris_clearing_needed, answered in the crisispack sub-step), the standalone REQUIRED debris card on the review surface is suppressed and its submit gate skipped (the form's answer becomes report.debris_clearing_needed). Default flow (no pack, or a pack without a debris field) is unchanged - card shown + required. Returning users must evict the stale v4-flow.js. // v334 (Jun 2026): Operations Phase 1 - the PWA now forwards crisis_event_id on submit (echoes the active-zone event id the /active fetch already stored in state.crisisPack; the server verifies the echo owns the answered pack and re-derives from location otherwise) so each report links to its operation. Default flow (no active zone) stays byte-identical - crisis_event_id null. Returning users must evict the stale app.js. // v333 (Jun 2026): local-time everywhere - every displayed timestamp is device-local, one shared format ("11 Jun 2026, 2:45 PM" via _fmtLocalDateTime, localized to the active app language). Parse hardening: _ensureUtcIso treats timezone-less backend ISO strings as UTC before Date construction (a naive string parsed by the Date constructor reads as LOCAL and shifts displays + _timeAgo math by the device offset). The stage-where clock fallback now renders manual LOCAL time (was unlabeled UTC wall-clock via toISOString), and download filenames (Export-my-data JSON, Badge Studio PNG) stamp the local calendar date. Server side gained matching guarantees (every wire timestamp Z-suffixed). // v332 (Jun 2026): UNDP compliance batch - (1) submit-time gate on the V4 review Send button: damage/infra/crisis must be set AND the debris question must have an explicit Yes/No before a report can be sent; debris promoted from the optional UNDP sheet to a REQUIRED card on the review surface (the five flat UNDP-details fields debris_present/electricity/water/health/pressing_needs now reset per report - a computed-key leak the static validator now also catches by scanning index.html data-undp-field attributes); (2) privacy notice gains an Automated-decisions & AI section (Annex 2 (f) disclosure + human-review right) and a concrete retention statement ("active + up to 1 year, then permanently deleted", replacing "indefinite while the crisis is open"); (3) "Export my data" is now live in Settings (downloads every report this device sent as JSON via /reports/device/{hash}); (4) honest correction wording (delete + 24h-undo + resubmit; in-place edit = roadmap). All notice copy across 22 locales. // v331 (Jun 2026): language policy - explicit-signal precedence. The boot chain is now manual pick > browser locale > cached geo/IP region language > en (was: region cache above browser), and noteDetectedLocal only AUTO-activates a geo-detected region language when the boot locale did NOT come from an explicit signal (manual/browser) - it always still paints the suggestion pill. Fixes the host-locale surprise where an en-US browser in Karnataka silently booted in Kannada; citizens whose devices declare unsupported locales still get their region language auto-applied. // v330 (Jun 2026): faster camera-modal first open - two-phase resolution. getUserMedia now requests 1080p first (a cold camera paints its first frame noticeably faster at 1080p than at 4K, so the live preview appears sooner instead of sitting on the spinner), then transparently upgrades the SAME track to 4K in the background via applyConstraints once the preview is visible, so captured photos keep native fidelity. The spinner now hides on the first painted frame (loadeddata/playing, with a fallback timer) instead of on getUserMedia-resolve, removing the black flash before first pixels. Capture stays safe: the shutter snapshots the live video, so once the upgrade lands every snap is 4K; a snap in the brief pre-upgrade window is still 1080p (never the old ~720p "quality capped" regression). // v329 (Jun 2026): permanent fix for the recurring "stale state leaks into the next report" bug - single source-of-truth reset (_freshReportState() factory + Object.assign(state, _freshReportState())); the v4 capture/classify DOM now RENDERS-FROM-STATE on entry + on the cleared event (description textarea, voice-recorder panel, and damage/infra/crisis selections all derive from state - no imperative-paint drift, which was the recurrence root cause); guarded reset-on-entry to capture from terminal stages (home/success/history/report-detail) while back-nav from classify/review preserves the in-progress capture; crisisStockAnswers now reset per report (fixes the data-integrity leak where report N+1 in the same zone shipped report N's pack answers) while crisisPack zone schema + auto crisis_type still re-apply by design; runtime _assertReportStateClean() self-check (dev/test) + a static CI completeness gate (scripts/validate-report-reset.mjs, wired to pre-commit + CI) so any new capture field must be classified reset-or-preserve and the leak class cannot silently return. // v328 (Jun 2026): image-pipeline hardening - (1) ORIGINAL tier retained as a Blob + sliced directly at upload, never base64-encoded (kills the readAsDataURL OOM that silently dropped originals on multi-photo reports); (2) Mode B drain-time tier regeneration from a retained source blob (a photo that lost the submit-time variant race no longer downgrades to legacy/untiered or gets dropped from a mixed report); (3) reconnect double-upload fix - wedge-recovery keys on loop liveness + requires online, and the loop offline-skips doomed work, so an offline gap can no longer false-trigger a 2nd concurrent drain pass on reconnect. // v327 (Jun 2026): finish the auto-submit-regions removal - drop the dead .auto-submit-timer CSS + repoint the connectivity heartbeat off the now-deleted /regions/enabled onto /api/v1/health. // v326 (Jun 2026): remove the dormant auto-submit-regions feature - drop the PWA countdown timer + the /regions/enabled SW cache intercept + the is_auto_submitted flag. // v325 (Jun 2026): offline-queue resilience - kill the "stuck at N%" wedge. Prevention (encode photoBlob→dataUrl at submit so item.photo always exists) + backstop (deliver + honest note when a photo-intended report has zero uploadable bytes) + boot reconcile + calm "needs attention" flaky-backend state + per-chunk hard-4xx media-id regen + per-variant orphan_no_source immediate mark-deferred. New i18n: upload_photo_unavailable, sync_needs_attention. // v324 (Jun 2026): PWA login redesign - back-arrow → home + bigger ripple logo + gradient "CRISP" wordmark, kept zero-scroll. // v323 (Jun 2026): Thank-You "My Reports" now RENDERS the just-submitted report (success button called goToStage only - no render; now calls openMyReports). // v322 (May 2026, HC97): camera quality + open fixes - getUserMedia requests 4K-ideal (was a low ~720p default → "quality capped") + re-entrancy guard + a starting spinner on open (fixes "had to tap multiple times"). // v321: unify camera UX - Stage-1 + review "+ Add" now both open the custom getUserMedia modal on iOS (capability-gated; was native-only on iOS via the !isIOS fork). <input capture> retained as the runtime fallback (in-app webviews / permission-denied). // v320: "Report another" photo/pick bleed fix.
+// v250 → v251 (May 21 - version-pill /health URL fix). v250 deploy
 // auto-rolled-back when prod-smoke caught a `HTTP 404 /health` on
 // PWA load. Root cause: home-screen.js _paintVersionPill stripped
-// /api/v1 off window.API_BASE and called /health directly — works in
+// /api/v1 off window.API_BASE and called /health directly - works in
 // dev where the FastAPI root serves /health, but fails in PROD where
 // nginx only proxies /api/v1/* to the backend. Fix: backend mirrors
 // the same response shape under /api/v1/health (main.py); PWA fetches
 // window.API_BASE + /health (no strip). The legacy root /health route
 // is retained for k8s-style orchestrators that probe the FastAPI app
 // directly without going through nginx.
-// v249 → v250 (May 21 — version pill moved to its own row). Operator
+// v249 → v250 (May 21 - version pill moved to its own row). Operator
 // screenshot proved the legacy `#home-utility-version` span was being
 // rendered into a clipped region (.home-utility-footer has overflow:
 // hidden + flex-wrap: nowrap to prevent Open-source link from
@@ -50,9 +50,9 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // rule. The JS painter (_paintVersionPill) targets the new row and
 // also writes to the legacy span for backward-compat with any test
 // selectors. Verified visible in iPhone-viewport Playwright screenshot.
-// v248 → v249 (May 21 — CRITICAL face-blur serialiser fix). Operator
+// v248 → v249 (May 21 - CRITICAL face-blur serialiser fix). Operator
 // caught that v243's bitmap.close() didn't actually fix the cross-
-// image contamination — submitted report 365933f6 with 5 photos
+// image contamination - submitted report 365933f6 with 5 photos
 // showed correct blur on image 1 (had a face) BUT also blur on
 // images 2-5 (water bottle, NO faces) in the same upper-center
 // region image 1's face occupied. Root cause: concurrent calls to
@@ -66,19 +66,19 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // correctness >>> latency. Regression test 97-blur-no-contamination
 // now also asserts CONCURRENT fire produces identical outputs for
 // identical inputs.
-// v247 → v248 (May 21 — version pill belt-and-suspenders). The CSS
+// v247 → v248 (May 21 - version pill belt-and-suspenders). The CSS
 // reversal in v247 fixes the long-term display:none. v248 adds
 // `style.display='inline-block'` inline on the element from JS so
 // iPhones still serving cached v246 CSS see the pill on first
 // reload to v248 (inline style beats external CSS specificity).
 // Regression test 98-version-pill-visible.spec.ts pins both
 // invariants: computed-display ≠ none AND text contains pwa@ + api@.
-// v246 → v247 (May 21 — B5 hotfix: version pill was being hidden by a
+// v246 → v247 (May 21 - B5 hotfix: version pill was being hidden by a
 // pre-existing CSS rule at styles.css:10406 (`display: none`) that the
 // v246 JS painter couldn't override by just removing the HTML `hidden`
-// attribute. The CSS rule has been reversed — version span now shows
+// attribute. The CSS rule has been reversed - version span now shows
 // per its painted text; only the trailing legacy dot stays hidden.
-// v245 → v246 (May 21 — B5: UI cleanup). Two items from the audit:
+// v245 → v246 (May 21 - B5: UI cleanup). Two items from the audit:
 //   · Item 7: removed the "Add 4 quick details" CTA + sub label from
 //     the Thank You / stage-success screen. The post-submission
 //     screen now stays clean and low-cognitive-load. Mid-flow trigger
@@ -88,9 +88,9 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //     per session from /health, cached in sessionStorage). Operators
 //     have direct in-UI visibility on which PWA build + backend they
 //     are hitting after each deploy.
-// v244 → v245 (May 21 — B4: My Reports rendering + home count). Three
+// v244 → v245 (May 21 - B4: My Reports rendering + home count). Three
 // fixes from architectural audit Items 1 + 4:
-//   · dropped `loading="lazy"` from the My Reports card thumbnail —
+//   · dropped `loading="lazy"` from the My Reports card thumbnail -
 //     was causing silent thumbnail-blank when users scrolled past
 //     fast (image never fired its network request).
 //   · in-flight cards (queued / mid-upload) now render a thumbnail
@@ -102,35 +102,35 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //     Pre-fix the tile read window._submittedCache which started as
 //     [] at app.js module-load and only got populated when the user
 //     entered My Reports.
-// v243 → v244 (May 21 — B3: nearby self-exclude + map color coding).
+// v243 → v244 (May 21 - B3: nearby self-exclude + map color coding).
 // Backend now accepts `X-Caller-Device-Hash` header on /nearby and
 // filters out the caller's own reports server-side. PWA sends the
-// header (not a query param — keeps the value out of uvicorn access
+// header (not a query param - keeps the value out of uvicorn access
 // logs per the operator's privacy posture). Map markers now use blue
 // (#3b82f6) for the user's own reports across the My Reports
 // fullscreen map + the detail-view mini-map. The orange shade
 // (#f97316) is reserved for future nearby overlays.
-// v242 → v243 (May 21 — B1: face-blur cross-contamination fix). Closes
+// v242 → v243 (May 21 - B1: face-blur cross-contamination fix). Closes
 // the ImageBitmap allocated by `_decode(srcBlob)` on EVERY exit path
 // in pii-blur.js::blurFaces. Pre-fix the bitmap leaked on detect-fail,
 // no-faces, paint-fail, and even the success path (after canvas
 // drawImage). Under rapid multi-image processing, the GC pool could
 // reuse the bitmap's GPU-backed memory before the prior image's
 // async canvas.toBlob() finished, causing image B's encoded output to
-// contain pixels from image A's blur paint — operator-visible as
+// contain pixels from image A's blur paint - operator-visible as
 // "blur appears on regions of image B with no detected faces".
 // Two-layer fix: close immediately after drawImage (canvas owns
 // pixels from then on), plus a try/finally backstop for every other
 // exit path. Regression test in 97-blur-no-contamination.spec.ts.
-// v241 → v242 (May 21 — sync-badge UX: stop capping at 75% for no-audio
+// v241 → v242 (May 21 - sync-badge UX: stop capping at 75% for no-audio
 // reports). Pre-fix the badge denominator was always 4 (meta+text
 // +photo+audio). On the common no-audio capture path, stages.audio
 // stays false forever → max progress visible = 3/4 = 75% while uploads
 // were healthy. Operator saw "75% queued" persistently and read it as
 // "stuck." New denominator: 3 for no-audio reports, 4 for audio-bearing
-// reports. A fully-staged no-audio report now reads 99% (capped) — an
+// reports. A fully-staged no-audio report now reads 99% (capped) - an
 // accurate "almost done, background tiers still uploading" signal.
-// v240 → v241 (May 21 — two fixes from cellular smoke 5):
+// v240 → v241 (May 21 - two fixes from cellular smoke 5):
 // 1) Freeze chunkSize + total on the variant after the first attempt.
 //    A probe-tier shift between retries previously recomputed `total`
 //    against the new chunkSize. If new total < chunkProgress, the
@@ -144,18 +144,18 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //    detection (no chunk POST in 60s + queue non-empty + visible) fires
 //    startRetryLoop, which then runs v238 wedge-recovery to clear any
 //    stuck _retryLoopRunning flag.
-// v239 → v240 (May 21 — remove VERY_SLOW pre-emptive defer; add 24h cap):
+// v239 → v240 (May 21 - remove VERY_SLOW pre-emptive defer; add 24h cap):
 // Operator-driven model change. Crisis-reporting analyst value-per-
 // decision is much higher than the citizen's battery/data cost on
 // slow networks. Previous matrix dropped MEDIUM + ORIGINAL on
-// VERY_SLOW probe — analyst lost full-fidelity evidence even when the
+// VERY_SLOW probe - analyst lost full-fidelity evidence even when the
 // network could have eventually delivered it. New matrix attempts
 // every tier at whatever bandwidth is available. Hard ceiling: 24 h
 // from submit; after that, give up on incomplete non-SMALL tiers with
 // reason='24h_timeout' so the dashboard chip is honest.
-// v238 → v239 (May 21 — force bandwidth re-probe on visibility-resume):
+// v238 → v239 (May 21 - force bandwidth re-probe on visibility-resume):
 // Cellular smoke 5 surfaced a false-positive defer when iOS Safari
-// suspended a tab mid-upload — every chunk POST iOS killed during
+// suspended a tab mid-upload - every chunk POST iOS killed during
 // suspension ran through pwaNetworkDowngrade() in the chunk-loop catch,
 // ratcheting _pwaTier MEDIUM → SLOW → VERY_SLOW. On resume, the v237
 // defer rule (VERY_SLOW → mark-deferred MEDIUM + ORIGINAL) fired on a
@@ -164,23 +164,23 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // Fix: visibilitychange → visible now forces adaptTierViaProbe({force:true})
 // which measures real bandwidth and overwrites _pwaTier (bypassing the
 // ratchet). Matches the existing pattern in the `online` event handler.
-// v237 → v238 (May 21 — retry-loop wedge recovery): startRetryLoop now
+// v237 → v238 (May 21 - retry-loop wedge recovery): startRetryLoop now
 // detects when _retryLoopRunning is stuck true with no chunk POST in
-// 60+ seconds while the queue still has work — force-resets the flag
+// 60+ seconds while the queue still has work - force-resets the flag
 // and re-arms. Closes a real-world wedge observed in cellular smoke 3
 // v3 where iOS Safari suspended a tab mid-upload, killed the TCP
 // connection during background, and the awaited fetch Promise never
 // resolved. Only Safari-kill-and-reopen recovered. This fix lets every
 // visibilitychange/online/periodic-sweep entry self-heal.
-// v236 → v237 (May 21 — defer matrix relaxed): _uploadVariantTier no
+// v236 → v237 (May 21 - defer matrix relaxed): _uploadVariantTier no
 // longer pre-emptively defers ORIGINAL on SLOW networks. Operator-
 // reported on cellular smoke 3 v2: the single 64 KB upload-probe
 // routinely measured in the SLOW bucket on real 5G via cloudflared
 // tunnel (TCP cold-start, tunnel queueing, radio handoff). Result was
-// "drops in max scenarios" — full-res lost for no real reason. New
+// "drops in max scenarios" - full-res lost for no real reason. New
 // matrix: SLOW attempts all 3 tiers; only VERY_SLOW (< 80 Kbps) still
 // pre-emptively defers MEDIUM + ORIGINAL.
-// v235 → v236 (May 21 — cellular smoke 3 fix): _reconcileBeforeDequeue
+// v235 → v236 (May 21 - cellular smoke 3 fix): _reconcileBeforeDequeue
 // now also tracks MID-FLIGHT variants (mediaId set, chunkProgress > 0,
 // complete=false). Pre-fix, a variant whose chunk loop threw mid-stream
 // stayed invisible to reconcile → ok=true → dequeue → orphan chunks.
@@ -188,61 +188,61 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // PWA queue empty. Post-fix, in-flight variants are tracked as
 // softAssembling → ok=false → keep queued → next pass resumes chunks
 // from chunkProgress.
-// v232 → v233 (May 20 — Phase L Batch 2 second hotfix): caught the
-// 6th surviving 'LOW' default — `uploadChunksBinary({ ..., resolutionTier='LOW', ... })`
+// v232 → v233 (May 20 - Phase L Batch 2 second hotfix): caught the
+// 6th surviving 'LOW' default - `uploadChunksBinary({ ..., resolutionTier='LOW', ... })`
 // function-parameter default. ANY call that omitted `resolutionTier`
 // was sending 'LOW' and 422-ing against the post-Batch-1b backend.
 // Default → 'SMALL'.
 
-// v231 → v232 (May 20 — Phase L Batch 2 hotfix: caught 3 surviving
+// v231 → v232 (May 20 - Phase L Batch 2 hotfix: caught 3 surviving
 // `'LOW'`/`'HIGH'` literals that escaped the initial rename pass:
-//   1. sendBinaryChunkWithRetry default — `resolutionTier || 'LOW'`
+//   1. sendBinaryChunkWithRetry default - `resolutionTier || 'LOW'`
 //      now → 'SMALL'.
-//   2. _sendLegacyB64Chunk default — same fix.
-//   3. Audio legacy attach (manual sync path) — was sending
+//   2. _sendLegacyB64Chunk default - same fix.
+//   3. Audio legacy attach (manual sync path) - was sending
 //      `resolution_tier: 'LOW'`, backend was rejecting with 422.
-//   4. SW background-sync audio attach — was sending `'LOW'` too.
-//   5. PWA reconcile check — looked for `'LOW'` media on server.
+//   4. SW background-sync audio attach - was sending `'LOW'` too.
+//   5. PWA reconcile check - looked for `'LOW'` media on server.
 // Without these, the FIRST submission post-Phase-L deploy was
 // burning chunks against a 422-rejecting backend forever.
 //
-// v230 → v231 (May 20 — Phase L Batch 2: tier vocabulary rename
+// v230 → v231 (May 20 - Phase L Batch 2: tier vocabulary rename
 // SMALL/MEDIUM/ORIGINAL + IDB read-migration + quota threshold drop
 // to 35 MB). Returning users MUST evict the stale app.js +
 // image-variants.js so the PWA stops sending the legacy `large`
 // tier (the backend now rejects it with 422 post-Batch-1b cleanup).
 // IDB queue items with `variants.large` are auto-migrated to
-// `variants.original` on read via _migrateVariantsToPhaseL —
+// `variants.original` on read via _migrateVariantsToPhaseL -
 // pending drains land cleanly under the new vocabulary.
-// v229 → v230 (May 20 — Phase K Batch 5: PWA reliability hardening).
-// K.4.a — `_acquireDrainLock` / `_releaseDrainLock` cross-tab mutex
+// v229 → v230 (May 20 - Phase K Batch 5: PWA reliability hardening).
+// K.4.a - `_acquireDrainLock` / `_releaseDrainLock` cross-tab mutex
 // via localStorage so two tabs draining the same IDB queue don't
 // regress each other's chunkProgress.
-// K.4.b — `submitReport` now non-async + module-scope
+// K.4.b - `submitReport` now non-async + module-scope
 // `_submitInFlight` promise. Double-tap submission returns the
 // SAME promise instead of generating fresh clientReportIds.
-// K.4.c — `_backoffDelayMs(attempt)` capped at 30 s + ≤1 s jitter.
+// K.4.c - `_backoffDelayMs(attempt)` capped at 30 s + ≤1 s jitter.
 // Default retry count bumped 5 → 7. Total budget ~3 min, covers
 // 3 consecutive 30 s Wi-Fi flaps.
-// K.4.d — `_version` field on every queue item via enqueueReport;
+// K.4.d - `_version` field on every queue item via enqueueReport;
 // new `enqueueReportIfVersionMatches(payload, expected)` does a
 // check-and-set so concurrent tabs detect stale-snapshot writes
 // and abort instead of clobbering progress.
-// K.4.e — proactive iOS HEIC quota guard. `_estimateQueueItemBytes`
+// K.4.e - proactive iOS HEIC quota guard. `_estimateQueueItemBytes`
 // computes the projected IDB write; if >40 MB the user gets a
 // "storage almost full" toast BEFORE the enqueue attempts (and
 // before iOS's 50 MB hard limit triggers a silent QuotaExceededError).
 // Returning users must evict the stale app.js to pick up these
 // reliability fixes.
-// v228 → v229 (May 20 — Phase K Batch 4: PWA mark-deferred call on
+// v228 → v229 (May 20 - Phase K Batch 4: PWA mark-deferred call on
 // soft-drain + variant dataUrl re-encode fallback).
-// K.3.a — trySendQueuedReport's softDrain branch now POSTs to
+// K.3.a - trySendQueuedReport's softDrain branch now POSTs to
 // `/reports/{id}/media/mark-deferred` before dequeue. Backend marks
 // the missing MEDIUM/HIGH tiers as bandwidth_tier_deferred,
 // decrements expected_media, and the K.5.a dashboard chip renders
 // "Original (slow network)" instead of leaving the dashboard
 // permanently PARTIAL.
-// K.3.c — _uploadVariantTier no longer silently skips when
+// K.3.c - _uploadVariantTier no longer silently skips when
 // variant.dataUrl is missing. Recovers from item.photo (main) /
 // item.extraPhotos[i] (extras) when those legacy data URLs are
 // still present. If no source exists, marks the variant
@@ -250,29 +250,29 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // soft-drain path signals the backend honestly.
 // Returning users must evict the stale app.js to pick up the new
 // soft-drain + orphan-recovery behaviour.
-// v227 → v228 (May 20 — lang-switch dynamic-renderer fix). activateLang
+// v227 → v228 (May 20 - lang-switch dynamic-renderer fix). activateLang
 // now dispatches `crisp:lang-changed` (both sync + after the locale JSON
 // loads). nearby.js stashes its last payload + open-sheet group and re-
-// paints on the event. home-screen.js subscribes too — channels strip,
+// paints on the event. home-screen.js subscribes too - channels strip,
 // identity bar, devid pill, badge chip, my-reports count, recent-reports
 // list all re-render. Pre-fix the installed PWA had no way to refresh,
 // so users were stuck with stale strings after switching language.
-// v226 → v227 (May 19 — UNDP must-have #6 restoration: #building-select-box
+// v226 → v227 (May 19 - UNDP must-have #6 restoration: #building-select-box
 // markup put back inside #v4-building-mount after the May 15 V3-cleanup
 // regression deleted it, leaving the v4 review stage with no building
 // picker. Returning users must evict the stale index.html that had an
 // empty mount).
-// v225 → v226 (May 19 — reporter-blocking severity:null 422 loop fix).
+// v225 → v226 (May 19 - reporter-blocking severity:null 422 loop fix).
 // Operator submitted an incident; UI stuck at "queued 25%" indefinitely.
 // HAR file showed 47 consecutive 422 responses from /api/v1/reports/meta
 // over 8 minutes, all with the same Pydantic error: "Input should be
 // 'MINOR', 'MODERATE', 'SEVERE', 'CRITICAL' or 'UNKNOWN'" against
-// severity: null. Root cause at app.js:8004 — `state.severity || null`
+// severity: null. Root cause at app.js:8004 - `state.severity || null`
 // degraded to null when the capture flow didn't write to `state.severity`
 // (some entry paths set damage_classification + crisis_type but leave
 // severity untouched). The backend's Pydantic schema
 // (ReportMetaCreate.severity: SeverityEnum = UNKNOWN) has a default but
-// rejects EXPLICIT null with 422 — Pydantic v2 doesn't substitute
+// rejects EXPLICIT null with 422 - Pydantic v2 doesn't substitute
 // defaults for explicit null values; the field becomes required-non-null.
 // Two-part fix: (a) enqueue substitutes 'UNKNOWN' for null at build
 // time; (b) the drain loop ALSO substitutes at send time so the
@@ -280,7 +280,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // the next replay tick instead of retrying the bad value forever.
 // Cache eviction required so the new drain logic reaches users.
 //
-// v224 → v225 (May 19 — four PWA regressions, batched fix).
+// v224 → v225 (May 19 - four PWA regressions, batched fix).
 //
 // Operator-reported the same day as the classifier fix:
 //   1. "No option to change language in the middle of the incident
@@ -303,7 +303,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //      to the desktop camera modal where standalone-mode quirks broke
 //      capture. Broadened iOS detection to also catch
 //      navigator.platform==='MacIntel' && maxTouchPoints>1.
-//   4. "Safe-area / scroll / viewport regression — only landing page
+//   4. "Safe-area / scroll / viewport regression - only landing page
 //      behaves correctly in installed-PWA mode." → ROOT CAUSE: d4f1fad
 //      (May 17) added `padding: calc(20px + env(safe-area-inset-top))`
 //      to .stage but DID NOT bump sw.js. Returning iOS PWAs on the
@@ -312,13 +312,13 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //      installed-PWA mode. Subsequent bumps (v222, v223) eventually
 //      pushed the new CSS but iOS aggressively pins old SWs until the
 //      PWA is force-killed. ARCHITECTURAL FIX: hoisted all four
-//      env(safe-area-inset-*) paddings to .mobile-screen — the OUTER
-//      shell — so every stage automatically clears notch + status bar
+//      env(safe-area-inset-*) paddings to .mobile-screen - the OUTER
+//      shell - so every stage automatically clears notch + status bar
 //      + home indicator + side curves without per-stage opt-in. Per-
 //      stage env() rules dropped from .stage / .home-stage (was
 //      duplicated 2x) / .home-brand-row / .home-channels-strip (3
-//      responsive tiers). New architecture documented in CLAUDE.md
-//      "Safe-area handling — global pattern" invariant. Regression
+//      responsive tiers). New architecture documented in the project invariants
+//      "Safe-area handling - global pattern" invariant. Regression
 //      gated by new e2e/tests/pwa/89-safe-area-all-stages.spec.ts.
 //
 // Why we bump v225 even though the affected styles already shipped
@@ -327,7 +327,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // bump (combined with the now-correct .mobile-screen padding) forces
 // a clean re-fetch so every device converges on the same architecture.
 //
-// v223 → v224 (May 19 — CRITICAL: classifier-state field-naming bug fix).
+// v223 → v224 (May 19 - CRITICAL: classifier-state field-naming bug fix).
 // Reporter-blocking bug surfaced by operator (May 19): "I am reporting
 // House damage, shops/market damage, everything lands as Roads and
 // Bridges → Roads. Completely wrong." Confirmed via inspection of a
@@ -338,7 +338,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // type taxonomies) on every report submitted since the V3 → V4
 // capture-flow transition.
 //
-// ROOT CAUSE — state-field naming mismatch:
+// ROOT CAUSE - state-field naming mismatch:
 //   · v4-flow.js writes user taps to SNAKE_CASE state fields:
 //       state.infrastructure_type / .crisis_type /
 //       .damage_classification / .infrastructure_name
@@ -346,25 +346,25 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //       state.infraType / .crisisType / .damageClass / .infraName
 //   · _clearCaptureState (app.js:12184-12185) RESET those legacy
 //     fields to hardcoded 'ROAD' / 'FLOOD' / 'PARTIAL' / 'MODERATE'
-//     after every submit — so every read returned the same four
+//     after every submit - so every read returned the same four
 //     wrong values forever.
 //   · V3 capture flow was removed in v192, so nothing else wrote to
 //     the legacy fields. They became write-once-at-reset ghost
 //     variables silently poisoning every meta payload.
 //
-// FIX — three surgical changes:
+// FIX - three surgical changes:
 //   1. submitReport reads v4 snake_case FIRST, legacy as fallback,
 //      `null` if neither is set. Surfacing null on a missing pick is
-//      correct (dashboard flags for review) — silently using a
+//      correct (dashboard flags for review) - silently using a
 //      default was the worst outcome.
 //   2. _clearCaptureState drops the hardcoded ROAD/FLOOD/PARTIAL/
 //      MODERATE defaults; resets to null instead. Removes the
 //      masking effect that hid the bug for months.
-//   3. Both blocks gain inline comments referencing CLAUDE.md
+//   3. Both blocks gain inline comments referencing the project invariants
 //      "Classifier-state field naming" invariant so future
 //      contributors don't re-introduce the bug.
 //
-// REGRESSION GUARD — e2e/tests/pwa/88-classifier-pick-roundtrip.spec.ts
+// REGRESSION GUARD - e2e/tests/pwa/88-classifier-pick-roundtrip.spec.ts
 // (NEW, 5 cases): walks the v4 capture flow with explicit picks
 // (RESIDENTIAL + EARTHQUAKE + COMPLETE, COMMERCIAL + FLOOD + MINIMAL,
 // OTHER + free-text), drives submit, asserts queue-item meta carries
@@ -372,13 +372,13 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // legacy defaults can NEVER reappear (asserts meta values are null,
 // not 'ROAD' / 'FLOOD' / 'PARTIAL' / 'MODERATE').
 //
-// IN-FLIGHT QUEUE ROWS — any report enqueued before this commit has
+// IN-FLIGHT QUEUE ROWS - any report enqueued before this commit has
 // the wrong meta baked into its payload (the user's actual taps were
 // never persisted to a recoverable field). This fix cannot retro-
 // correct them; affected reports must be dequeued + re-submitted.
 //
 // Returning users evict v223 on next activate.
-// v222 → v223 (May 2026 — Sprint D, camera-capture UX upgrade):
+// v222 → v223 (May 2026 - Sprint D, camera-capture UX upgrade):
 //   * New #camera-modal overlay: GPS status bar (live coords +
 //     accuracy + compass), top toolbar (back/flash/focus/lock),
 //     hexagonal-aperture shutter SVG, focus reticle, tap-to-focus.
@@ -388,15 +388,15 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //     JPEG now carries the same GPS coords we already persist on
 //     the backend Location row.
 //   * Strict GPS-IFD-only embed (no 0th, no ExifIFD, no
-//     UserComment / Artist / Copyright) — see exif-gps.js for the
+//     UserComment / Artist / Copyright) - see exif-gps.js for the
 //     audit. PII consideration recorded in
-//     /Users/pks/.claude/plans/swirling-forging-raccoon.md.
+//     the design plan.
 //   * Six new i18n keys (camera_locating / camera_back +
 //     aria_{camera_flash,camera_center_focus,camera_rotation_lock,
 //     take_photo}) propagated to all 22 locales.
 //
-// v221 → v222 — operator's home-stage v6.6 + i18n backfill batch (commit 8366c00).
-// v221 → v222 (May 18 — i18n audit + backfill: 100 % coverage push).
+// v221 → v222 - operator's home-stage v6.6 + i18n backfill batch (commit 8366c00).
+// v221 → v222 (May 18 - i18n audit + backfill: 100 % coverage push).
 // Operator: "Audit the 22 Languages translation on all pages, add or
 // drop keywords based on what's there currently. We need 100 %
 // translation for supported languages."
@@ -405,8 +405,8 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   · 22 locale files · 803 EN keys each (structural parity already)
 //   · 6 locales ≥ 95 %: ar 99.5 · zh 99.0 · ru 98.8 · es 98.4 · fr 98.1 · hi 95.4
 //   · 16 locales stuck at ~88-89 %, all missing ~90 of the SAME keys
-//     (added in recent sprints — Nearby Reports Phase 5+, V4 review
-//     redesign, Badge Studio share templates — never backfilled
+//     (added in recent sprints - Nearby Reports Phase 5+, V4 review
+//     redesign, Badge Studio share templates - never backfilled
 //     across the non-UN stub locales)
 //   · 89 common-missing keys grouped by feature: 29 nearby_*, 23
 //     v4_*, 8 badge_*, 6 bs_*, 5 delete_*, 4 tier_*, 3 aria_*, plus
@@ -427,44 +427,44 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   98.6 · fr 98.5 · pt 98.0 · es 97.5 · id 97.1
 //
 // Residual "identical-to-EN" entries are legitimate proper-nouns /
-// universal terms (WhatsApp, Instagram, LinkedIn, Tsunami, OK, "—",
+// universal terms (WhatsApp, Instagram, LinkedIn, Tsunami, OK, "-",
 // `{km} km`, ID:, Hospital, etc.) that correctly stay the same in
 // every language. The 100 % goal is met for actionable strings.
 //
 // Deferred to a separate session: drop the 145 candidate dead keys
 // in en.json (keys with no source references). Requires per-key
 // dynamic-construction audit (e.g. badge-studio uses
-// `_t(\`tier_${tier.toLowerCase()}_label\`, ...)` — only ONE such
+// `_t(\`tier_${tier.toLowerCase()}_label\`, ...)` - only ONE such
 // pattern found, but dropping 145 keys safely needs careful review).
 //
 // Returning users evict v221 on next activate.
-// v220 → v221 (May 17 — operator: "online/offline green dot keep at
+// v220 → v221 (May 17 - operator: "online/offline green dot keep at
 // the top right corner just next to the CRISP's P text").
 // DOM-only relocation: #connectivity-dot moved OUT of #btn-home-voice
 // and INTO .home-brand-name (next to the "P" in CRISP) as a small
 // pip pinned to the top-right corner via position:absolute. Same
-// id + same online/offline class toggling — the _applyOnlineDot
+// id + same online/offline class toggling - the _applyOnlineDot
 // painter in app.js works unchanged. No JS changes. Returning
 // users evict v220 on next activate.
-// v219 → v220 (May 2026 — Lang pill v6.6 follow-up, operator).
+// v219 → v220 (May 2026 - Lang pill v6.6 follow-up, operator).
 // Operator (May 17, after seeing v219 ship): "remove the green dot &
 // speaker icon outside the rounded tile. Reduce padding and only keep
 // language in the tile. Make the button same as Login/My Reports in
 // terms of design, rounded corners not full edge round."
 //
-// Changes (DOM + CSS only — zero JS changes, all IDs preserved):
+// Changes (DOM + CSS only - zero JS changes, all IDs preserved):
 //   · #btn-home-voice extracted from inside #lang-switcher; now a
 //     standalone .home-voice-icon-btn sibling of the pill inside the
 //     new .home-brand-utility flex cluster.
 //   · #connectivity-dot extracted too; now lives as a status pip on
 //     the audio button's top-right corner (same pattern as
-//     #btn-login's #home-login-dot — mirror'd for visual consistency).
+//     #btn-login's #home-login-dot - mirror'd for visual consistency).
 //   · .lang-switcher: border-radius 999 → 12 (rounded-corner button,
 //     not capsule). Padding 7/14 → 5/10 (tighter). Background +
-//     border match .home-primary-btn family — visually the same
+//     border match .home-primary-btn family - visually the same
 //     button system as Login + My Reports.
 //   · Capsule glass / backdrop-filter / outer-shadow chrome removed
-//     — cleaner, lighter visual hierarchy.
+//     - cleaner, lighter visual hierarchy.
 //
 // Alignment (v6.6 structural fix from v219) is UNCHANGED: the pill
 // is still a flex child of #home-brand-row → align-items:center →
@@ -472,10 +472,10 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // invariants in 87-home-stage-invariants.spec.ts still hold.
 //
 // Returning users evict v219 on next activate.
-// v218 → v219 (May 2026 — Home stage v6.6 PERMANENT structural fixes).
+// v218 → v219 (May 2026 - Home stage v6.6 PERMANENT structural fixes).
 // Operator (May 17): "I have tried over 10 times now for alignment of
 // CRISP Logo and language bar, but it never fixes. Whenever I present
-// this UI issue embarrasses me." Plus two adjacent complaints — the
+// this UI issue embarrasses me." Plus two adjacent complaints - the
 // WhatsApp icon getting clipped in the channels strip, and the My
 // Reports tile cluttered with a duplicate lives-saved badge.
 //
@@ -486,14 +486,14 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // (v6.0 → v6.5 + v162 + v213) tweaked pixel math on one side; the
 // next device or rotation re-broke it. ≥ 10 attempts over 2 months.
 //
-// PERMANENT FIX (v6.6, this commit) — STRUCTURAL, not pixel:
-//   1. ALIGNMENT — #lang-switcher relocated INTO #home-brand-row as a
+// PERMANENT FIX (v6.6, this commit) - STRUCTURAL, not pixel:
+//   1. ALIGNMENT - #lang-switcher relocated INTO #home-brand-row as a
 //      flex child (margin-left:auto pushes it to the right edge). Both
 //      elements now share ONE flex parent + ONE inset application →
 //      alignment is intrinsic via align-items:center. No pixel math
 //      survives in either rule. Pill is now home-only (capture stages
 //      have their own headers; no UX regression).
-//   2. CHANNELS STRIP — .home-channels-strip horizontal padding now
+//   2. CHANNELS STRIP - .home-channels-strip horizontal padding now
 //      uses max(10px, env(safe-area-inset-left/right)) so notched /
 //      Dynamic-Island devices don't clip the leftmost/rightmost icon
 //      in installed-PWA mode. .hcs-icon gets min-width pinned to its
@@ -501,7 +501,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //      shrink it. SVGs get overflow:visible so any path that extends
 //      slightly outside its 0-24 viewBox (common in Simple-Icons
 //      brand SVGs like WhatsApp) renders whole.
-//   3. MY REPORTS TILE — #mr-lives-badge element + its painter +
+//   3. MY REPORTS TILE - #mr-lives-badge element + its painter +
 //      orphan CSS rule all DELETED. Lives saved is surfaced
 //      exclusively on the Lifekeeper pill above the CTA. Tile now
 //      shows only the report-count.
@@ -514,12 +514,12 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   · e2e/tests/pwa/87-home-stage-invariants.spec.ts pins the four
 //     invariants in Playwright across pwa + pwa-firefox + pwa-webkit
 //     projects, including the post-rotation case.
-//   · CLAUDE.md "Home header alignment", "Channels strip safe-area",
+//   · the project invariants "Home header alignment", "Channels strip safe-area",
 //     and "My Reports tile" invariants codify the rules so the next
 //     polish sprint can't undo them.
 //
 // Returning users evict v218 on next activate.
-// v217 → v218 (May 2026 — perf Sprint C.1, prune 64 orphan CSS rule blocks):
+// v217 → v218 (May 2026 - perf Sprint C.1, prune 64 orphan CSS rule blocks):
 //   styles.css 467,954 → 456,544 bytes (-11,401 bytes, ~-2.4 % uncompressed).
 //   Removed top-level rule blocks for classes that no longer appear in any
 //   index.html / PWA-JS source after the Phase 4/5.1/6 redesigns:
@@ -533,10 +533,10 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //     - hr-*                                 (Phase 2 reward chip family)
 //     - devid-* (older variants)             (Phase 2 devid card)
 //   Compound selectors (.parent .orphan, .orphan:hover, etc.) intentionally
-//   left in place — safer than risking a cascade regression for the marginal
+//   left in place - safer than risking a cascade regression for the marginal
 //   extra bytes. Aggressive .v4-* stage CSS split deferred to post-UNDP.
 //
-// v216 → v217 (May 2026 — perf Sprint C.2, inline home-stage i18n subset):
+// v216 → v217 (May 2026 - perf Sprint C.2, inline home-stage i18n subset):
 //   index.html now ships a 2.1 KB <script>window.__crispHomeI18nEn={...}</script>
 //   inline block (auto-generated by scripts/generate-home-i18n-inline.mjs)
 //   carrying the 41 EN keys the home stage actually uses at first paint.
@@ -546,7 +546,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   to fetch + merge. Subsequent locale switches still take the JSON
 //   path; only EN's first paint gets the inline shortcut.
 //
-// v215 → v216 (May 2026 — perf Sprint C.4, Workbox-style precache manifest):
+// v215 → v216 (May 2026 - perf Sprint C.4, Workbox-style precache manifest):
 //   Replaced `cache.addAll(STATIC_ASSETS)` with per-asset hash migration.
 //   Every precached URL is paired with a 12-char SHA-256 hash in the
 //   SW_ASSET_MANIFEST block (auto-generated by
@@ -560,31 +560,31 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   prior cache has the x-crisp-hash header); subsequent deploys reap
 //   the win.
 //
-// v214 → v215 (May 2026 — perf Sprint C.3, SWR on reports/nearby):
+// v214 → v215 (May 2026 - perf Sprint C.3, SWR on reports/nearby):
 //   Added stale-while-revalidate intercept for
 //   `/api/v1/reports/nearby` in the fetch handler. The home-stage
 //   number-block now renders from cache in ~5 ms on warm visits while
 //   a background fetch refreshes the payload. Pairs with the 90 s
 //   in-process backend cache. New cache key per (lat,lng,radius)
-//   tuple — old entries age out under SW LRU. No backend / DOM
+//   tuple - old entries age out under SW LRU. No backend / DOM
 //   changes; safe rollback is a one-line revert of the intercept.
 //
-// v213 → v214 (May 2026 — perf Sprint A, 4 low-risk wins):
+// v213 → v214 (May 2026 - perf Sprint A, 4 low-risk wins):
 //   A.1 Trimmed Google Fonts query: dropped unused Inter weight 300 +
-//       Noto Sans Arabic/SC weight 700 — saves ~25 KB CSS + 30 KB woff2
+//       Noto Sans Arabic/SC weight 700 - saves ~25 KB CSS + 30 KB woff2
 //       for long-tail-locale users. No visible typographic change.
 //   A.2 Sentry SDK + init deferred to requestIdleCallback (2.5 s
 //       timeout fallback). Removed `<script src="vendor/sentry.min.js">`
 //       from the eager defer queue; the SDK loads on idle then
 //       Sentry.init runs. Saves 25 KB from critical render path +
 //       ~80 ms TBT. Cost: errors fired in the first ~2 s aren't
-//       captured — acceptable.
+//       captured - acceptable.
 //   A.3 <link rel="preload" as="style"> for the Google Fonts CSS
 //       (high-priority parallel fetch) on top of the existing
 //       media="print" onload swap. Net: woff2 chain lands ~400-800 ms
 //       earlier on slow networks → Inter swaps in BEFORE LCP.
 //   A.4 preconnect: ipapi.co (IP-geo fallback fired ~2 s in) +
-//       undp.crisplabs.tech (backend API — same-origin no-op in PROD,
+//       undp.crisplabs.tech (backend API - same-origin no-op in PROD,
 //       saves TCP+TLS in dev). dns-prefetch freeipapi.com (secondary
 //       fallback). 5 preconnects total, still inside Lighthouse's
 //       uses-rel-preconnect ceiling.
@@ -600,8 +600,8 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //
 //   No backend changes. Returning users evict v213 on next activate.
 //
-// v212 → v213 (May 2026 — Home redesign v6, 7-ask batch):
-//   1. Safe-area inset on .stage base class — fixes installed-PWA
+// v212 → v213 (May 2026 - Home redesign v6, 7-ask batch):
+//   1. Safe-area inset on .stage base class - fixes installed-PWA
 //      header overlap with iPhone notch / Dynamic Island / Android
 //      status bar.
 //   2. Audio button moved from action-tiles row into #lang-switcher
@@ -623,7 +623,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   Returning users evict v212 on next activate to pick up all of
 //   the above. No backend changes.
 //
-// v211 → v212 (May 2026 — Phase 5.1 NO-SCROLL pass, channels redesign):
+// v211 → v212 (May 2026 - Phase 5.1 NO-SCROLL pass, channels redesign):
 //   Operator-reported: the home stage must fit on iPhone SE
 //   (375 × 667) with ZERO vertical scroll. The 2 × 3 square-tile
 //   channels grid (~210 px tall) was the worst offender. Replaced
@@ -631,32 +631,32 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //     · A single-row 6-icon strip (~44 px tall) above the Privacy
 //       footer. Active channels (Telegram, IVR) carry a green
 //       status dot; upcoming channels (WhatsApp, SMS, Android,
-//       iOS) render grey. NO labels on the strip — pure visual.
+//       iOS) render grey. NO labels on the strip - pure visual.
 //     · A bottom-sheet picker that opens on strip tap (mirrors the
 //       .nearby-sheet pattern + animation). Sheet contains the
 //       full 6 channel cards with icon + name + status text +
 //       tap-to-launch. Lazy-painted on first open.
-//   Plus: NO-SCROLL invariant codified in CLAUDE.md so future
+//   Plus: NO-SCROLL invariant codified in the project invariants so future
 //   contributors don't re-introduce the regression. Verified
 //   end-to-end via e2e/_home_matrix_probe.mjs which now asserts
 //   body.scrollHeight ≤ window.innerHeight on every device.
 //
-// v210 → v211 (May 2026 — Phase 5.1 follow-up: home-tile collapse fix):
+// v210 → v211 (May 2026 - Phase 5.1 follow-up: home-tile collapse fix):
 //   Operator-reported. Once the Phase-1 nearby module populated with
 //   reports, `.home-section-bottom` grew by ~217 px (eyebrow + 156 px
 //   number block + tier pill + Recently-Resolved subtotal). Combined
 //   with the channels grid + footer (~330 px), the bottom group hit
-//   ~540 px — squeezing `.home-section-hero` to ~42 px on iPhone SE
+//   ~540 px - squeezing `.home-section-hero` to ~42 px on iPhone SE
 //   and ~73 px on Galaxy S22. The hero card has `overflow: hidden`
 //   for its glow accent, so the CTA was clipped to a flat slab on
 //   iPhone 14 and disappeared entirely on shorter viewports.
 //
 //   Fix (styles.css only):
-//     · `.home-section-hero { min-height: auto }` — was `0`. Lets
+//     · `.home-section-hero { min-height: auto }` - was `0`. Lets
 //       the section keep its content size; the channels overflow to
 //       below-fold on very short viewports instead of crushing the
 //       CTA.
-//     · `.home-hero-card { flex-shrink: 0 }` — defensive. The card
+//     · `.home-hero-card { flex-shrink: 0 }` - defensive. The card
 //       refuses to shrink below its natural content height even if
 //       the parent flex section is squeezed.
 //     · `@media (max-height: 700px)` compaction of the nearby
@@ -667,23 +667,23 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   Verified on iPhone SE / Galaxy S22 / iPhone 14 / Pixel 7 /
 //   Galaxy A52 via e2e/_home_matrix_probe.mjs.
 //
-// v209 → v210 (May 2026 — Nearby Reports Phase 5.1, deferred follow-ups,
+// v209 → v210 (May 2026 - Nearby Reports Phase 5.1, deferred follow-ups,
 // see docs/NEARBY_REPORTS_PIPELINE.md §17):
 //   FIRST PWA-visible delta of the Phase 5.1 series. Adds
-//   `device-telemetry.js` to STATIC_ASSETS — a small standalone IIFE
+//   `device-telemetry.js` to STATIC_ASSETS - a small standalone IIFE
 //   that runs ~1.2 s after DOMContentLoaded and POSTs a sanitised
 //   device-behaviour summary to /api/v1/devices/telemetry (backend
 //   commit 79ffc56). Throttled to once per 24 h via localStorage.
 //
-//   The summary feeds the upgraded emulator-farm detector — replaces
+//   The summary feeds the upgraded emulator-farm detector - replaces
 //   the Phase-5 UA-substring scaffold with WebGL renderer / sensor
 //   activity / battery API / locale-tz scoring. No raw sensor streams
 //   captured (UNDP must-have #7); accel_active is a single 1-bit
 //   variance-derived flag.
 //
-// v208 → v209 (May 2026 — Nearby Reports Phase 5, see
+// v208 → v209 (May 2026 - Nearby Reports Phase 5, see
 // docs/NEARBY_REPORTS_PIPELINE.md §15 Phase 5):
-//   Backend-only delta — no PWA-visible contract change. Cache
+//   Backend-only delta - no PWA-visible contract change. Cache
 //   bumped so installed admin PWAs evict any /api/v1/admin
 //   route metadata from the SW cache once Phase 5's appeal
 //   webhook + observability surface lights up.
@@ -692,18 +692,18 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //     • Async fraud-batch worker (fraud_batch.py): emulator-farm,
 //       narrative-similarity, cross-device-ring detectors. Idempotent
 //       sweep on a 15-minute scheduler interval.
-//     • Outbound webhooks on appeal decisions — CRISP_APPEAL_WEBHOOK_
+//     • Outbound webhooks on appeal decisions - CRISP_APPEAL_WEBHOOK_
 //       URLS env (comma-separated). UNDP / partners integrate
 //       without coupling to internal schema.
-//     • PostGIS migration scaffold (0023_postgis_geospatial) —
+//     • PostGIS migration scaffold (0023_postgis_geospatial) -
 //       degrades gracefully when extension unavailable; Phase 5.1
 //       will flip aggregator to ST_DWithin once geom column lands
 //       on cooperating clusters.
 //
-//   Documents the operator-mandated 5-phase roadmap CLOSURE — all
+//   Documents the operator-mandated 5-phase roadmap CLOSURE - all
 //   phases per docs/NEARBY_REPORTS_PIPELINE.md §15 are now committed
 //   locally. Operator deploy approval pending.
-// v207 → v208 (May 2026 — Nearby Reports Phase 4, see
+// v207 → v208 (May 2026 - Nearby Reports Phase 4, see
 // docs/NEARBY_REPORTS_PIPELINE.md §15 Phase 4):
 //   Backend-only delta. New response shape gains `density_mode`
 //   ('normal' | 'disaster') + X-Crisp-Density-Mode response
@@ -714,9 +714,9 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //     • Disaster-mode auto-promotion (groups > 50 OR reports > 200
 //       inside the radius → area-level mega-zones with kind=
 //       'disaster_zone'; frontend renders as heat-map).
-//     • Appeal framework — POST/GET /api/v1/admin/appeals/*.
+//     • Appeal framework - POST/GET /api/v1/admin/appeals/*.
 //       CRISP-hosted; webhook integration scaffolded for Phase 5.
-//     • Push-policy helper — hybrid HIGH/LOW grading rules from
+//     • Push-policy helper - hybrid HIGH/LOW grading rules from
 //       docs §8.1 codified in a single helper for dashboard +
 //       Web Push delivery layer to consume.
 //
@@ -724,32 +724,32 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   (existing renderer falls through for unknown `density_mode`).
 //   Cache bumped so admins on the installed PWA pick up the new
 //   /admin/appeals/* + /admin/observability/* surface promptly.
-// v206 → v207 (May 2026 — Nearby Reports Phase 3, see
+// v206 → v207 (May 2026 - Nearby Reports Phase 3, see
 // docs/NEARBY_REPORTS_PIPELINE.md §15 Phase 3):
 //   Trust + offline polish + smart prefill. Highlights:
 //     • IDB store bumped to `crisp_nearby_cache_v2` for the new
 //       response shape (recently_resolved_groups + tier + burst +
 //       acute fields). Old v1 caches evict on next activate.
 //     • Per-tier online + offline TTL replaces the single CACHE_TTL_MS.
-//       T3 verified — 5 min online / 24 h offline.
-//       T2 emerging — 3 min / 6 h.
-//       T1 weak     — 2 min / 30 min (hide after offline TTL).
+//       T3 verified - 5 min online / 24 h offline.
+//       T2 emerging - 3 min / 6 h.
+//       T1 weak     - 2 min / 30 min (hide after offline TTL).
 //     • Smart-prefill flow: tap on a nearby group writes
 //       `sessionStorage['crisp_prefill_v1']` with building_id +
 //       centroid + suggested crisis/severity; v4-flow.js consumes
-//       it on stage-v4-capture entry — user only adds photo/audio.
+//       it on stage-v4-capture entry - user only adds photo/audio.
 //     • SUGGESTED severity (not overwritten) per operator decision.
 //   Backend trust-weight wiring is invisible to the SW but lands
 //   in the same release window:
 //     • New devices.spam_score / reports_count / spam_signals
 //       columns (migration 0021_device_trust_columns).
 //     • fraud_detector.evaluate_submission runs inline on each
-//       POST /reports/meta — 3 hot signals (GPS spoof, impossible
+//       POST /reports/meta - 3 hot signals (GPS spoof, impossible
 //       movement, rate burst). Suspicious-device contributions
 //       drop to 0 in aggregate_nearby.
-// v205 → v206 (May 2026 — Nearby Reports Phase 2, see
+// v205 → v206 (May 2026 - Nearby Reports Phase 2, see
 // docs/NEARBY_REPORTS_PIPELINE.md §15 Phase 2):
-//   Backend-only delta — the response shape gains the 'block' and
+//   Backend-only delta - the response shape gains the 'block' and
 //   'area' kinds (was only 'building'/'crisis_cluster'/'resolved_
 //   recent'). The PWA renders any new kind transparently. Cache
 //   bumped because:
@@ -758,22 +758,22 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //       PWA but the new route map should be evicted from SW caches
 //       for installed-PWA admins who login via the dashboard).
 //     • Acute grading shifted to a now-anchored window (was
-//       cluster-internal — fixed a misfire on stale clusters whose
+//       cluster-internal - fixed a misfire on stale clusters whose
 //       reports were tightly packed but ancient).
 //     • Decay-weighted sort changes ranking; users may see a
 //       different order even with the same data, so a fresh fetch
 //       on next boot is the right behaviour.
-// v204 → v205 (May 2026 — Nearby Reports Phase 1, see
+// v204 → v205 (May 2026 - Nearby Reports Phase 1, see
 // docs/NEARBY_REPORTS_PIPELINE.md §15):
 //   First implementation slice of the operator-approved redesign of
 //   the nearby pipeline. Changes shipped:
 //     • RESPONDING reports now SURFACE in the nearby module (was
 //       excluded pre-Phase-1) with a 'responders active' status
-//       count exposed on every group — transparency win.
+//       count exposed on every group - transparency win.
 //     • RESOLVED reports within 24h of close surface in a NEW
 //       `recently_resolved_groups` channel rendered as a separate
 //       "Recently Resolved: N" subtotal line. NEVER folded into the
-//       active big number — honest closure feedback per operator.
+//       active big number - honest closure feedback per operator.
 //     • Confidence tiers (weak / emerging / verified) replace the
 //       binary k-anonymity-≥-3 hide. Single-witness reports now
 //       surface as 'weak' with explicit "Unverified" visual humility;
@@ -781,7 +781,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //       'verified' (existing teal halo). Citizens get early-signal
 //       awareness while privacy invariants stay intact.
 //     • Crisis-type adaptive TTL per tier (CRISIS_RULES dict in
-//       backend) — FLOOD_FLASH expires fast, EARTHQUAKE persists.
+//       backend) - FLOOD_FLASH expires fast, EARTHQUAKE persists.
 //       Client surfaces `crisis_ttl_hours` per group.
 //     • Coarse crisis category (FLOOD/FIRE/INFRASTRUCTURE/OTHER)
 //       collapsed for weak-tier groups so a single-reporter's
@@ -820,7 +820,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //        `.home-stage` gains `padding-top: env(safe-area-inset-top)`
 //        and `#lang-switcher` offsets its `top` by the same.
 //     3. The "Nearby reports" module stayed silently hidden in three
-//        cases — (a) no GPS cached, (b) GPS cached but fetch failed,
+//        cases - (a) no GPS cached, (b) GPS cached but fetch failed,
 //        (c) GPS cached + fetch returned 0 groups. Confusing UX
 //        because the operator couldn't tell whether the system was
 //        working or broken. Fix is two-part:
@@ -833,16 +833,16 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //            handling the async race between IP-geo + nearby init.
 //            Render-on-failure: when we have coords but the fetch
 //            fails or returns no groups, render the empty state
-//            instead of silent-hiding — the module is always
+//            instead of silent-hiding - the module is always
 //            visible (and honest) when coords are known. Empty-
 //            state copy simplified: was "✓ All clear in your area /
 //            No verified reports nearby"; now just "No nearby
-//            reports" (no checkmark, no editorialising — a
+//            reports" (no checkmark, no editorialising - a
 //            checkmark next to a failed fetch was misleading).
 //   v201 → v203 was the Lighthouse PROD CLS fix v2 (channels-grid +
 //   install-icon slot reservation).
 //   The v202 attempt (commit 169ca28) was auto-rolled-back when
-//   PROD measured CLS=0.42 against the 0.25 floor — my fixes were
+//   PROD measured CLS=0.42 against the 0.25 floor - my fixes were
 //   validated against fast un-throttled localhost which misses the
 //   biggest contributors that only surface under Slow-4G + 4× CPU
 //   (the LH-mobile audit profile).
@@ -861,7 +861,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   Throttled probe after fixes: 0.133 (47 % below 0.25 floor with
 //   meaningful PROD-amplification headroom).
 //   v202 fixes (chip width + nearby-intel + consent pre-paint) were
-//   reverted via commit 11c77fb — they were correct but addressed
+//   reverted via commit 11c77fb - they were correct but addressed
 //   the wrong-priority shifts. They can be re-attempted later as
 //   a separate batch if PROD CLS budget is tight.
 //   v200 → v201 was the deferred-Originals queue retention fix.
@@ -872,34 +872,34 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   count. Closes a real production gap where 44 % of PWA
 //   photo groups had no HIGH-tier Original ever uploaded.
 //
-// v199 → v200 (May 2026 — Phase 2.3/2.4/2.5/2.6 Badge Studio premium):
+// v199 → v200 (May 2026 - Phase 2.3/2.4/2.5/2.6 Badge Studio premium):
 //   * Canvas redesign: T4 warm-gold palette + glassmorphism panel +
 //     layered drop-shadows on the tier pill (badge-studio.js).
 //   * Character roster refined to 4 humanitarian responders
-//     (character-pack.js — 4 comic archetypes deleted).
+//     (character-pack.js - 4 comic archetypes deleted).
 //   * Tier-gated character picker (locked tiles + auto-pick at open).
 //   * Animated counter roll-up on the studio header stats.
 //   Returning users must evict v199 so they see the redesigned canvas.
 //
-// v198 → v199 (May 2026 — Phase 2.1 shared tier-config extraction):
+// v198 → v199 (May 2026 - Phase 2.1 shared tier-config extraction):
 //   New `tier-config.js` added to STATIC_ASSETS + loaded from
 //   index.html BEFORE badge-studio.js / home-screen.js. Defines
 //   window.CRISP_TIERS{,BY_ID,LEGACY_ALIASES} from the canonical
 //   shared/tier-config.json. Returning users must evict v198 so
 //   the new script tag + STATIC_ASSETS entry land.
 //
-// v197 → v198 (May 2026 — Phase 2.4 WCAG 2.1 AA polish):
+// v197 → v198 (May 2026 - Phase 2.4 WCAG 2.1 AA polish):
 //   index.html + styles.css touched to fix axe-flagged a11y issues:
 //   * #connectivity-dot + #rd-timeline gained role="img"/"list" so
 //     their aria-label survives validation.
 //   * `.v4-meta-loc-coords` / `.v4-substep-label` swapped from the
 //     too-dim `--text-mute` (#64748b, 2.21:1 on navy) to
-//     `--text-sub` (#cbd5e1, ~8.5:1 — passes WCAG AA easily).
+//     `--text-sub` (#cbd5e1, ~8.5:1 - passes WCAG AA easily).
 //   * `.v4-desc-empty-sub` alpha bumped 0.55 → 0.78 to clear the
 //     4.5:1 floor on the V4 review card background.
 //   Returning users need to evict v197 so they pick up the new CSS.
 //
-// v196 → v197 (May 2026 — Phase 1.7 /share/<token> LinkedIn OG wire-up):
+// v196 → v197 (May 2026 - Phase 1.7 /share/<token> LinkedIn OG wire-up):
 //   badge-studio.js now POSTs the rendered PNG (≤100 KB) to
 //   /api/v1/share/mint and deep-links LinkedIn to the signed
 //   /api/v1/share/<token> URL so the share preview carries the
@@ -907,14 +907,14 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   crisplabs.tech tile. Returning users need to evict v196 so the
 //   share button picks up the new mint flow.
 //
-// v195 → v196 (May 2026 — Sentry observability, audit Phase 1.3/1.4/1.5):
+// v195 → v196 (May 2026 - Sentry observability, audit Phase 1.3/1.4/1.5):
 //   index.html now loads vendor/sentry.min.js + sentry-init.js (with
 //   defer) before the rest of the app bundle, so PWA JS errors during
 //   boot land in our Sentry project instead of console-only. DSN is
 //   plumbed via a `<meta name="crisp-sentry-dsn">` tag (empty by
 //   default; deploy pipeline patches with the real DSN). Returning
 //   users need to evict v195 so they pick up the new script tags.
-// v194 → v195 (May 2026 — V4 review-page rethink, operator):
+// v194 → v195 (May 2026 - V4 review-page rethink, operator):
 //   stage-v4-review's captured-strip + summary card + voice-drawer
 //   trio was replaced by 4 purpose-built content cards (Photo /
 //   Description / Location / Classification). Description card has
@@ -922,7 +922,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   and text are no longer asked twice. Section header anchors the
 //   eye. Better icons distinguish infra (🏢) vs hazard (🌀). Bump
 //   forces returning users to evict the cluttered prior build.
-// v193 → v194 (May 2026 — UNDP drawer → bottom-sheet, operator):
+// v193 → v194 (May 2026 - UNDP drawer → bottom-sheet, operator):
 //   index.html replaced the inline `<details id="v4-undp-drawer" open>`
 //   with a compact trigger button (`#btn-v4-open-undp`) + a new
 //   `#v4-undp-sheet` half-screen bottom-sheet. Sheet contains the 5
@@ -931,48 +931,48 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   mirroring `.nearby-sheet`. v4-flow.js's `_initReviewStage` is
 //   rescoped to read from the sheet body. Returning users need to
 //   evict v193 so they don't keep painting the inline-drawer build.
-// v192 → v193 (May 2026 — UNDP drawer UI restored to rich question-
+// v192 → v193 (May 2026 - UNDP drawer UI restored to rich question-
 // cards inside stage-v4-review, per operator: "we spent time/energy
 // on the stage-undp-details UI; this drawer should match"). The
 // drawer's DOM was rewritten (4 row+select controls → 5 question
 // cards with level-buttons + emoji-needs chips) and v4-flow.js
 // rewired to match. Returning users need to evict v192 so their
 // cached drawer DOM doesn't paint over the new question-cards.
-// v191 → v192 (May 2026 — V3 capture flow REMOVED, operator):
+// v191 → v192 (May 2026 - V3 capture flow REMOVED, operator):
 //   index.html lost the 7 V3 stage <div> blocks (stage-photo,
 //   stage-audio, stage-where, stage-infra, stage-crisis,
-//   stage-extras, stage-review — 700+ lines deleted). v4-flow.js's
+//   stage-extras, stage-review - 700+ lines deleted). v4-flow.js's
 //   `?ui=v3` / `crisp_ui_v4='off'` escape hatch is gone. app.js's
 //   UI_V3_ENABLED is hardcoded false; STAGES array no longer
 //   references V3 IDs. Returning users need to evict v191 so they
-//   don't keep painting from the dual-flow snapshot — otherwise a
+//   don't keep painting from the dual-flow snapshot - otherwise a
 //   stale localStorage `crisp_ui_v4=off` would route their cached
 //   index.html into a now-missing stage and strand them on a blank
 //   screen. Bump forces fresh fetch.
-// v190 → v191 (May 2026 — first-time GPS cache mirror, operator):
+// v190 → v191 (May 2026 - first-time GPS cache mirror, operator):
 //   app.js `_saveLocCtx` now also writes `crisp_last_location_v2`
 //   (the key nearby.js reads) so first-time users see the Nearby
 //   Reports section immediately after granting the home-stage
 //   GPS prompt, not only after their first capture flow. Returning
 //   users need to evict v190 so app.js's new mirror runs on next
-//   home boot — without the bump, iOS Safari paints from the v190
+//   home boot - without the bump, iOS Safari paints from the v190
 //   snapshot and the gap reappears for them.
-// v189 → v190 (May 2026 — responsive stabilization, Commit 2):
+// v189 → v190 (May 2026 - responsive stabilization, Commit 2):
 //   styles.css changes for Fix-P3 (.stage-center justify-content:
 //   safe center), Fix-P4 (.home-center overflow-y: auto), and
 //   Fix-P6 (sticky-footer on stage-success + stage-badge-studio).
 //   Bump so returning users see the new layout immediately instead
 //   of holding the v189 snapshot where bottom CTAs still clip.
-// v188 → v189 (May 2026 — responsive stabilization, Commit 1):
+// v188 → v189 (May 2026 - responsive stabilization, Commit 1):
 //   index.html viewport meta now ships viewport-fit=cover +
 //   interactive-widget=resizes-content, and styles.css gains the
 //   dvh-fallback chain on three height-bounded selectors plus
 //   flex-shrink:0 on bottom CTAs and overflow-x:clip on .stage.
 //   Returning users need to evict the old index.html + styles.css
 //   so the new viewport meta + height calcs take effect on first
-//   re-launch — otherwise iOS Safari keeps painting from the v188
+//   re-launch - otherwise iOS Safari keeps painting from the v188
 //   snapshot and the safe-area-inset env() values stay 0.
-// v187 → v188 (May 2026 — Sprint 2 perf fix):
+// v187 → v188 (May 2026 - Sprint 2 perf fix):
 //   mobile-app/src/index.html now `defer`s 14 non-critical scripts
 //   (auth.js, install-prompt.js, home-screen.js, app.js, etc.) so the
 //   initial paint isn't blocked by JS parse. Plus blocked-resource
@@ -980,7 +980,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   the index.html change alone needs a cache eviction so returning
 //   users actually get the new <script defer> ordering and don't keep
 //   serving the old render-blocking version forever.
-// v186 → v187 (May 2026 — success brand position fix, operator):
+// v186 → v187 (May 2026 - success brand position fix, operator):
 //   "Keep the CRISP ILogo and Text position exactly same as the
 //    home page."
 // v186 placed .success-brand inside the centered .success-center
@@ -995,7 +995,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // included. Padding-top: 48 px added to .success-center to push
 // centered content (heart + thank-you) below the brand on short
 // iPhone-SE-class viewports.
-// v185 → v186 (May 2026 — success-stage CRISP brand, operator):
+// v185 → v186 (May 2026 - success-stage CRISP brand, operator):
 //   "On the last page the Crisp Logo and CRISP word is missing,
 //    remove home button and when user clicks on the Crisp Icon
 //    they can go to home."
@@ -1007,7 +1007,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // #btn-success-home click handler in app.js is kept guarded so
 // any cached HTML serving the old markup still navigates home
 // gracefully (back-compat).
-// v184 → v185 (May 2026 — Nearby v8.2 frameless number block).
+// v184 → v185 (May 2026 - Nearby v8.2 frameless number block).
 // Operator: "Don't make a rectangular Block. the Border and
 // background is not needed around the reports nearby."
 // Removed:
@@ -1021,10 +1021,10 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // now sit free on the home stage with no surrounding card. RN
 // companion mirrored (numberBlock background → transparent,
 // borderWidth → 0).
-// v183 → v184 (May 2026 — Nearby Reports v8.1 self-bootstrap fix).
+// v183 → v184 (May 2026 - Nearby Reports v8.1 self-bootstrap fix).
 //
 // Operator's console logs after v8 deploy showed NO `[NearbyIntel]`
-// boot lines — meaning the module never initialized. Root cause:
+// boot lines - meaning the module never initialized. Root cause:
 // script ordering race. `<script src="home-screen.js">` runs
 // BEFORE `<script src="nearby.js">` in document order. home-
 // screen.js's bottom-of-file `init()` call fires synchronously
@@ -1036,10 +1036,10 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // is 'loading', it waits for DOMContentLoaded; otherwise it defers
 // one tick (so any sibling scripts currently parsing can finish
 // setting up `window.t` / `window.API_BASE`). home-screen.js's
-// existing call is kept for back-compat — boot() is idempotent
+// existing call is kept for back-compat - boot() is idempotent
 // (re-rendering the same payload paints the same DOM).
 //
-// v182 → v183 (May 2026 — Nearby Reports v8 redesign: aggregate
+// v182 → v183 (May 2026 - Nearby Reports v8 redesign: aggregate
 // number block + list sheet).
 //
 // Operator: "I asked for a single number with ripple effect thing
@@ -1063,7 +1063,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // RN companion mirrors on HomeScreen.tsx via the new <ListSheet/>
 // sub-component in NearbyReports.tsx.
 //
-// v181 → v182 (May 2026 — channel tile v7 + nearby ripple + GPS
+// v181 → v182 (May 2026 - channel tile v7 + nearby ripple + GPS
 // fallback chain).
 //
 //   1. Channel tiles (PWA + RN parity): live tiles (Telegram + IVR)
@@ -1079,7 +1079,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //      coords, then the existing bottom-sheet slides up. Both
 //      animations gated by prefers-reduced-motion.
 //
-//   3. GPS fix — v4-flow.js `_refreshGps()` had no fallback chain.
+//   3. GPS fix - v4-flow.js `_refreshGps()` had no fallback chain.
 //      On geolocation error it just showed "GPS unavailable". New
 //      chain: getCurrentPosition (fresh) → localStorage cache
 //      (crisp_last_location_v2, same as nearby.js) → IP geo
@@ -1090,19 +1090,19 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //      "GPS shows not available when I start reporting from Report
 //      and incident or nearby report route."
 //
-// v180 → v181 (May 2026 — lang pill v6.5 clean dot + flag fix).
+// v180 → v181 (May 2026 - lang pill v6.5 clean dot + flag fix).
 // Operator: "with the flag I see a black shadow over the icon" +
 // "the green dot can be clean solid green dot than a glowing thing."
 //
-//   1. `.lang-switcher .lps-flag` — removed text-shadow:0 0 1px
+//   1. `.lang-switcher .lps-flag` - removed text-shadow:0 0 1px
 //      rgba(0,0,0,0.35) that was casting a dark halo around the
 //      SVG flag glyph.
-//   2. `.connectivity-dot` — dropped radial-gradient interior
+//   2. `.connectivity-dot` - dropped radial-gradient interior
 //      (was simulating a lit LED) + dropped all 3 box-shadow halo
 //      layers. Now a flat solid #80EE98 disk (red #ef4444 offline).
-//      Size held at 12 px (back from the v6.2 13 px bump — without
+//      Size held at 12 px (back from the v6.2 13 px bump - without
 //      the halo, the smaller pure disk is the right visual weight).
-// v179 → v180 (May 2026 — footer v4 strict single-row pass).
+// v179 → v180 (May 2026 - footer v4 strict single-row pass).
 // Operator screenshot: "Open source" was wrapping to line 2 and
 // the device-ID pill was colliding with it. Root cause: inner-nav
 // gap (10 px) + link padding (4/2 px) + pill icon size (22 px)
@@ -1117,7 +1117,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //      than-wrap fallback (since flex-wrap:nowrap can still allow
 //      visual wrap under some browser layout edge cases)
 // Narrow-phone (≤ 430 px) media query tightened further to match.
-// v178 → v179 (May 2026 — lang pill v6.4 halo removal).
+// v178 → v179 (May 2026 - lang pill v6.4 halo removal).
 // Operator: "the background green glow is also not required here."
 // Dropped the cyan/teal pill halo (`0 0 32px 3px rgba(9,209,199,
 // 0.55)` from the box-shadow stack). Pill now reads cleanly via
@@ -1125,7 +1125,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // The live-indicator green LED dot keeps ITS halo (that's the
 // actual liveness signal, not decoration); only the wider pill
 // halo is gone.
-// v177 → v178 (May 2026 — lang pill v6.3 clean glass pass).
+// v177 → v178 (May 2026 - lang pill v6.3 clean glass pass).
 // Operator: "still looks dark BG, I need clean look like I shared."
 // The v6.2 solid navy gradient (#1b2a44 → #0e1828) was rendering
 // near-black on most displays. Switched to a translucent teal-
@@ -1136,7 +1136,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // the same clean cyan-tinted glass feel as the reference image.
 // `@supports not (backdrop-filter)` fallback bumps alpha to 0.92
 // for older Safari so the look stays consistent.
-// v176 → v177 (May 2026 — lang pill v6.2 + footer v3, operator
+// v176 → v177 (May 2026 - lang pill v6.2 + footer v3, operator
 // feedback round):
 //   1. Lang pill `top: 16 → 22 px` so it sits vertically centered
 //      with the CRISP brand row below (logo + wordmark). Halo
@@ -1152,7 +1152,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //      single-line on a 430 px viewport.
 //   3. Narrow-phone media query (≤ 430 px) scales down the pill
 //      icons + text accordingly so nothing wraps.
-// v175 → v176 (May 2026 — nearby.js local-dev API-base fix).
+// v175 → v176 (May 2026 - nearby.js local-dev API-base fix).
 // Operator reported the "Verified Reports Nearby" module didn't
 // render on local dev. Root cause: nearby.js used relative
 // `/api/v1` for the endpoint, which on a PWA dev-server bind
@@ -1162,7 +1162,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // for `localhost`/`127.0.0.1` → :8000; otherwise window.origin).
 // Also adds console.log/warn instrumentation so the silent-fail
 // path surfaces in DevTools next time. STATIC_ASSETS unchanged.
-// v174 → v175 (May 2026 — home footer v2 visibility pass).
+// v174 → v175 (May 2026 - home footer v2 visibility pass).
 // Operator screenshot: the bottom-portion footer was visually too
 // faint vs the reference image. Three changes:
 //   1. Links bumped 10.5 → 13 px and brighter slate (alpha 0.45 →
@@ -1174,13 +1174,13 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //      Pill padding 5/14 → 8/18, text 11 px → 12.5 px / 700 / white,
 //      letter-spacing 0.06 → 0.10 em.
 //   3. Auto-show tooltip suppressed in footer-row context (CSS
-//      display:none) — the lang-pill identity disclosure already
+//      display:none) - the lang-pill identity disclosure already
 //      surfaces this on first run.
-// nowrap row layout — pill no longer collides on mobile-portrait
+// nowrap row layout - pill no longer collides on mobile-portrait
 // because the icon buttons are gone. RN companion mirrored.
 // Spec: e2e/tests/pwa/86-footer-redesign.spec.ts.
-// v173 → v174 (May 2026 — "Verified Reports Nearby" Phase 2):
-//   1. Bottom-sheet detail modal (#nearby-sheet) — slides up on row
+// v173 → v174 (May 2026 - "Verified Reports Nearby" Phase 2):
+//   1. Bottom-sheet detail modal (#nearby-sheet) - slides up on row
 //      tap, dismissed via backdrop/✕/Escape. Soft pre-fill of
 //      building_id + lat/lng on "Add Your Report Here" CTA (stored
 //      to localStorage; v4 capture flow reads + clears).
@@ -1199,11 +1199,11 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // Touches: index.html (#nearby-sheet markup), nearby.js (_open/
 // _closeDetailSheet, soft prefill), styles.css (~150 lines of
 // .nearby-sheet rules), i18n × 22 locales.
-// v172 → v173 (May 2026 — "Verified Reports Nearby" home intel
+// v172 → v173 (May 2026 - "Verified Reports Nearby" home intel
 // module Phase 1). Adds /api/v1/reports/nearby endpoint (server-
 // side, shipped in commit f682b11) + a new mobile-app/src/nearby.js
 // client module that boots on home, reads cached GPS (never prompts
-// on home — operator's offline-first rule), fetches grouped nearby
+// on home - operator's offline-first rule), fetches grouped nearby
 // reports, renders into the new #home-nearby-intel block, and
 // gracefully hides when offline/cache-stale. New i18n keys (~30)
 // localised across 6 UN langs + hi (other 15 locales en-fallback,
@@ -1212,7 +1212,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // for offline boot of the script (the API call gracefully fails when
 // offline). RN companion lands the same module on HomeScreen.tsx.
 // Specs: e2e/tests/pwa/69-nearby-*.spec.ts.
-// v171 → v172 (May 2026 — lang pill v6.1 visibility pass).
+// v171 → v172 (May 2026 - lang pill v6.1 visibility pass).
 // Operator screenshot pass 2: v6 (v171) reskinned the pill to navy
 // gradient + cyan glow but the halo alpha was too low (0.18) to be
 // perceptually visible against the dark `var(--bg)` home background,
@@ -1225,25 +1225,25 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // RN companion mirrored: shadowOpacity 0.30 → 0.55, radius 12 → 16.
 // Spec: e2e/tests/pwa/85-lang-pill-redesign.spec.ts asserts the
 // new tokens.
-// v170 → v171 (May 2026 — lang pill v6 redesign).
+// v170 → v171 (May 2026 - lang pill v6 redesign).
 // Operator screenshot: the top-right language switcher looked flat
 // (rgba(0,0,0,0.3) background, weak green halo). New look: navy
 // gradient capsule + cyan ambient glow + thin top highlight, plus a
 // brighter radial-gradient LED dot with a stronger green halo so the
-// live-indicator reads clearly. Structure unchanged — #connectivity-
-// dot + #btn-lang-current (containing .lps-flag + .lps-code) — only
+// live-indicator reads clearly. Structure unchanged - #connectivity-
+// dot + #btn-lang-current (containing .lps-flag + .lps-code) - only
 // the visual tokens change so the RTL flip, install-prompt offset,
 // and all existing lang-switcher specs (incl. 56-flag-rendering)
 // stay valid. RN companion uses #152238 + cyan shadow to match.
 // Spec: e2e/tests/pwa/85-lang-pill-redesign.spec.ts.
-// v169 → v170 (May 2026 — operator: 'remove "CAPTURE VERIFY SAVE"').
+// v169 → v170 (May 2026 - operator: 'remove "CAPTURE VERIFY SAVE"').
 // Removed the .cta-sub <span> under the primary CTA in index.html
 // + the matching <Text> in the RN companion. The home_cta_sub i18n
 // key + .cta-sub CSS rule stay as orphans so no locale churn / no
 // regression risk for any other surface that resurrects them.
 // VoiceOver / TalkBack still announces the value-prop via the RN
 // accessibilityHint and the PWA aria-* fallbacks.
-// v168 → v169 (May 2026 — bottom-portion refresh v2, operator feedback):
+// v168 → v169 (May 2026 - bottom-portion refresh v2, operator feedback):
 //   1. CTA helper copy: "Always Working. Everywhere."
 //   2. Live channels show "Live" status in glowing green; both green
 //      dots removed (.ct-dot pip + .is-live::after)
@@ -1255,7 +1255,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // dot from live tiles, IVR uses live_now), styles.css (v168.1 rules
 // block at top of refresh section), 22 i18n files (home_cta_helper +
 // live_now values updated).
-// v167 → v168 (May 2026 — home bottom-portion refresh per operator
+// v167 → v168 (May 2026 - home bottom-portion refresh per operator
 // screenshot: "verified reports nearby" pulse (static 24 for now),
 // bigger frosted-glass action tiles, bigger channel tiles with
 // status subtitle line ("Live now" / "Coming soon" / "Low bandwidth"
@@ -1265,7 +1265,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // i18n files (+ home_reports_nearby + live_now + low_bandwidth +
 // voice_reporting). Bump required so returning users evict the v167
 // pulse-block snapshot. Specs: e2e/tests/pwa/68-home-v5-layout.spec.ts.
-// v166 → v167 (May 2026 — home v5 redesign: hero card grouping,
+// v166 → v167 (May 2026 - home v5 redesign: hero card grouping,
 // deeper navy radial bg + cyan glow, pulse stat block for the
 // lives-saved counter, reassurance helper under the CTA. Touches
 // index.html (.home-hero-card structural wrap, .home-impact-pulse
@@ -1273,7 +1273,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // files (+ home_cta_helper + home_pulse_label). Bump required so
 // returning users evict their cached snapshot of pre-v5 home.
 // Specs: e2e/tests/pwa/68-home-v5-layout.spec.ts.
-// v165 → v166 (May 2026 — IndexedDB queue orphan self-heal).
+// v165 → v166 (May 2026 - IndexedDB queue orphan self-heal).
 // Operator (2026-05-13): a submission was interrupted mid-flight and
 // left a `pending-reports` row with stages.meta/text/audio=true but
 // serverId=null AND zero payload (description empty, no audio, every
@@ -1284,7 +1284,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // such rows on boot and on every syncQueueManual entry. 10-min age
 // gate protects genuinely in-flight submissions. Spec:
 // e2e/tests/pwa/84-queue-orphan-self-heal.spec.ts.
-// v164 → v165 (May 2026 — Stage 2 classify auto-progress).
+// v164 → v165 (May 2026 - Stage 2 classify auto-progress).
 // Operator: "When the user selects any tile/card option in Stage 2,
 //  the app should automatically progress to the next step/page
 //  immediately after selection. The transition should feel smooth,
@@ -1318,10 +1318,10 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   infra tap → crisis view (state.infrastructure_type = RESIDENTIAL)
 //   crisis tap → review stage (state.crisis_type = EARTHQUAKE)
 //   Back → damage view with prior selection still .is-selected
-// v163 → v164 (May 2026 — v4 capture-stage smart contextual tips).
+// v163 → v164 (May 2026 - v4 capture-stage smart contextual tips).
 // Operator: "Redesign the layout so the space between Voice/Text
 //  and Continue feels intentional and useful rather than empty.
-//  Add Smart Contextual Guidance — use this space intelligently to
+//  Add Smart Contextual Guidance - use this space intelligently to
 //  help users submit better reports.
 //  Possible examples:
 //    'Describe what happened'
@@ -1336,14 +1336,14 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // dims that tip + reveals a green check, providing smart contextual
 // feedback without any new state machinery.
 // 5 new i18n keys (v4_cap_tips_eyebrow / _tip_photo / _tip_voice /
-// _tip_text / _tip_impact) translated across all 22 locales —
+// _tip_text / _tip_impact) translated across all 22 locales -
 // validator passes 687 keys.
 // Verified at iPhone 14 (390×844):
 //   - tips card height 225 px, sits at y=509-734
-//   - CTA stays anchored at y=781 (46 px gap above CTA — clean)
+//   - CTA stays anchored at y=781 (46 px gap above CTA - clean)
 //   - page does NOT scroll (scrolls=false)
 //   - all-done state: 3 tips dimmed, 3 green checks shown
-// v162 → v163 (May 2026 — alignment-rhythm pass).
+// v162 → v163 (May 2026 - alignment-rhythm pass).
 // Operator: "Currently the layout feels visually disconnected and
 //  asymmetrical:
 //    - The Lifekeeper badge appears floating randomly and not
@@ -1373,14 +1373,14 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //      shifts. Only vertical padding scales with viewport now.
 // Verified after:
 //   brand        left=20  right_gap=130 (left-anchored)
-//   lang         right=20 (was 16) — matches grid right edge ✓
-//   identity_pill left=86 right=86 — perfectly centred ✓
+//   lang         right=20 (was 16) - matches grid right edge ✓
+//   identity_pill left=86 right=86 - perfectly centred ✓
 //   consent/CTA/utility/channels/footer all left=20 right=20
-//   devid        left=99 right=99 — perfectly centred
+//   devid        left=99 right=99 - perfectly centred
 // Every full-width element now shares LeftGap = RightGap = 20 px;
 // pills are centred symmetrically; no element drifts off-grid.
 // Still scrolls=false on all 5 measured viewports.
-// v161 → v162 (May 2026 — home stage REDESIGN PASS).
+// v161 → v162 (May 2026 - home stage REDESIGN PASS).
 // Operator: "Analyze the current CRISP landing page UI/UX carefully
 //  and redesign/refactor ONLY the layout, spacing, responsiveness,
 //  CSS hierarchy, visual balance, and interaction polish WITHOUT
@@ -1397,12 +1397,12 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   8. 11 bordered surfaces → 6 (reduce cognitive load)
 //
 // Implementation in 3 phases all in one commit:
-//   Phase A — markup: wrap home-center children into 3 semantic
+//   Phase A - markup: wrap home-center children into 3 semantic
 //     sections (top / hero / bottom). Pull action-tiles OUT of the
 //     home-identity block, place BELOW the CTA inside section-hero.
 //     Add CTA subtitle span (.cta-sub "CAPTURE · VERIFY · HELP").
 //     All existing IDs preserved → wiring untouched.
-//   Phase B — CSS: new appended block (lines 9430+) overrides the
+//   Phase B - CSS: new appended block (lines 9430+) overrides the
 //     older block-by-block treatments via .home-stage parent
 //     prefix. Section flex: 0/1/0 grow so hero zone absorbs spare
 //     viewport height (no more `margin: auto 0 0` dead space).
@@ -1411,7 +1411,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //     pill compound-selector compounded so it beats older hero
 //     overrides. Utility tiles → no individual borders. Channels
 //     border opacity 0.18 → 0.06.
-//   Phase C — i18n: new key home_cta_sub ("Capture · Verify · Help")
+//   Phase C - i18n: new key home_cta_sub ("Capture · Verify · Help")
 //     translated across 22 locales. Validator passes 682 keys.
 //
 // Verified at 5 viewports via /tmp/crisp_fit_check.mjs:
@@ -1421,7 +1421,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   iPad        768×1024  scrolls=false  devid_bottom 1006/1024
 //   desktop sh  1280×720  scrolls=false  devid_bottom 708/720
 // Every viewport fits without scroll; device-ID visible at bottom.
-// v160 → v161 (May 2026 — channels back to 3 × 2 grid).
+// v160 → v161 (May 2026 - channels back to 3 × 2 grid).
 //   Operator: "You have kept all channel icons in one row. This is
 //    not Ok. It was looking great earlier. Now its bad. Put in 3
 //    rows adjust box sizes accordingly."
@@ -1442,13 +1442,13 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   Pixel 7     412×915   scrolls=false  devid_bottom=895 of 915
 //   iPad        768×1024  scrolls=false  devid_bottom=1002 of 1024
 //   desktop sh  1280×720  scrolls=false  devid_bottom=704 of 720
-// v159 → v160 (May 2026 — operator-reported scroll on home stage).
+// v159 → v160 (May 2026 - operator-reported scroll on home stage).
 //   "The entire app should be responsive and load on a single page
 //    along the height of the screen without using scroll on all
 //    screens, browsers and OSs. Fix in local. Currently the height
 //    is not responsive, it cuts on some screen."
 // Pre-fix content totalled 1145-1407 px across iPhone SE / iPhone
-// 14 / Pixel / iPad / desktop — overflowing every viewport by
+// 14 / Pixel / iPad / desktop - overflowing every viewport by
 // 300-500 px and forcing scroll.
 // Diagnosed with /tmp/crisp_height_audit.mjs:
 //   biggest contributors → channels section 181-310 px (3×2 grid),
@@ -1470,22 +1470,22 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   desktop   1280×720 scrolls=false  devid_bottom=702 of 720
 // Every viewport now fits without scroll; device-ID pill remains
 // within the viewport at the bottom.
-// v158 → v159 (May 2026 — operator-reported blank slot in action
+// v158 → v159 (May 2026 - operator-reported blank slot in action
 // tiles row).
 //   "When someone downloads the app the download button disappears
 //    but the remaining blocks dont adjust and align and are not
 //    responsive. The blank area looks bad."
 // Diagnosed with Playwright at 960×900 + 390×900:
-//   BEFORE — 4 visible tiles each 71.6 px wide, last tile ends at
+//   BEFORE - 4 visible tiles each 71.6 px wide, last tile ends at
 //   x=595 but row ends at x=675 → ~80 px blank slot on the right.
 //   Same on mobile, ~72 px blank.
 // Root cause: .home-action-tiles was `display: grid;
 // grid-template-columns: repeat(5, 1fr)` which RESERVES five
-// columns always — when a child has `display: none` (install tile
+// columns always - when a child has `display: none` (install tile
 // hidden once PWA is installed) its column stays empty.
 // Fix: swap to flex with `flex: 1 1 0; min-width: 0` on each tile
 // so every VISIBLE tile grows to share the row evenly.
-//   AFTER  — 4 visible tiles each 91.5 px wide (desktop) /
+//   AFTER  - 4 visible tiles each 91.5 px wide (desktop) /
 //   81.5 px (mobile), last tile ends exactly at the row's right
 //   edge → 0 px blank. 5 tiles still 71.6 / 63.6 px wide as
 //   before (no regression on the all-visible state).
@@ -1504,12 +1504,12 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   2) Reward-hero emoji 44/52 → 28/32 px (small viewports / tall).
 //      Tier name 22/26 → 22/24. Card stays the centred trophy from
 //      v157 but no longer dominates.
-//   3) New .home-action-tiles row above the reward hero — 5 equal
+//   3) New .home-action-tiles row above the reward hero - 5 equal
 //      columns: Download App / Login / My Reports / Rewards /
 //      Audio. Each tile: icon above + 2-line label, login keeps
 //      red/green status dot in the corner. Replaces the small top-
 //      right icon cluster (install + voice + login) AND the 2-col
-//      secondary row (My Reports + Rewards) — one unified toolkit.
+//      secondary row (My Reports + Rewards) - one unified toolkit.
 //   4) Labels use new i18n keys (action_tile_download / _login /
 //      _audio) across 22 locales. Validator passes 681 keys.
 // Verified with Playwright (/tmp/crisp_tiles_verify.mjs):
@@ -1527,7 +1527,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   A) Badge chip lifted out of .home-devid-wrap into its own
 //      .home-reward-hero block right below the brand row. New
 //      .home-badge-chip--hero modifier renders it as a centered
-//      trophy card — big emoji on top (44 → 52 px on taller
+//      trophy card - big emoji on top (44 → 52 px on taller
 //      viewports), tier name 22 → 26 px, "{N} LIVES SAVED" caption
 //      in uppercase. Reads as a reward, not a status pill.
 //   B) Device-ID pill (CRISP-XXXX-XXXX) + tooltip MOVED OUT of the
@@ -1545,14 +1545,14 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   - chip height: 78 → 159 px (room for big emoji + label + caption)
 //   - emoji font-size: 13 → 52 px
 //   - padding: 5/11 → 26/36 px
-// v155 → v156 (May 2026 — operator-supplied new brand mark).
+// v155 → v156 (May 2026 - operator-supplied new brand mark).
 // Two SVGs replaced across both the PWA and the dashboard:
-//   • favicon.svg — new "ripple" design: dark navy tile (rx=44 in
+//   • favicon.svg - new "ripple" design: dark navy tile (rx=44 in
 //     a 256 viewBox) with 4 concentric response rings (faint outer
 //     → bright inner), cyan epicenter dot, coral responder dot on
 //     the second ring. Cleaner + on-brand vs the prior orange
 //     shield + alert mark.
-//   • crisp-badge-ripple.svg — horizontal lockup (340×110) with the
+//   • crisp-badge-ripple.svg - horizontal lockup (340×110) with the
 //     same tile mark on the left + "CRISP / Crisis Reporter" text
 //     on the right. Staged in /assets for future splash/share-card
 //     placement.
@@ -1567,7 +1567,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // and the old orange-shield favicon are now gone from the home
 // stage; the FA satellite-dish/shield glyphs are gone from the
 // dashboard header/login/evidence.
-// v154 → v155 (May 2026 — operator: "There is no change on this
+// v154 → v155 (May 2026 - operator: "There is no change on this
 // portion. It still Looks messy bad and not god for UNDP challenge
 // submission" / "Verify, review take snapshot, confirm then then
 // conclude it is done.").
@@ -1577,18 +1577,18 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // for layout-tweak block) won the cascade. With center alignment +
 // the badge's max-width:220 inside a 390-wide wrap, browsers center
 // the constrained item in the cross-axis, leaving the pill at
-// (390 − 198) / 2 = 96 px from the left edge of the wrap — drifted
+// (390 − 198) / 2 = 96 px from the left edge of the wrap - drifted
 // right of the brand-row's left edge.
 // Verified with /tmp/crisp_verify.mjs:
-//   BEFORE — badge_offset_in_wrap: 96, chip_offset_in_wrap: 87
-//   AFTER  — badge_offset_in_wrap:  0, chip_offset_in_wrap:  0
+//   BEFORE - badge_offset_in_wrap: 96, chip_offset_in_wrap: 87
+//   AFTER  - badge_offset_in_wrap:  0, chip_offset_in_wrap:  0
 // Both pill and chip now share `left = 285` with the brand wordmark
 // (all_aligned: true). Fix: changed the conflicting override from
 // `align-items: center` to `align-items: flex-start` at the bottom
 // of styles.css. The earlier `flex-direction: column` change still
 // holds; both children left-align with the rest of the identity
 // area now.
-// v153 → v154 (May 2026, declutter pass v2 — operator: "Further
+// v153 → v154 (May 2026, declutter pass v2 - operator: "Further
 // screwed UI and UX. Its getting worse every time" + "UI is bad
 // overlapping and unprofessional. Make it 10x better than before").
 // Real diagnosis from the screenshot:
@@ -1596,8 +1596,8 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //     so on wide viewports they sat side-by-side and visually
 //     overlapped. The "overlap" complaint.
 //   • The standalone Lives Saved pill ("8 LIVES SAVED") was
-//     redundant — the badge chip above already carries "8 lives
-//     saved" for T4 reporters, and for T1-T3 the value is "—"
+//     redundant - the badge chip above already carries "8 lives
+//     saved" for T4 reporters, and for T1-T3 the value is "-"
 //     (noise).
 //   • Verbose channels lede ("Telegram and IVR are live. Other
 //     channels launching soon.") repeated what the green-dot
@@ -1605,7 +1605,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   • "Crisis Reporter" tagline under the wordmark is a marketing-
 //     site pattern; in-app it adds a 2nd line for no information
 //     gain.
-// Five surgical fixes — pure removals + one layout swap:
+// Five surgical fixes - pure removals + one layout swap:
 //   1) .home-devid-wrap → flex-direction: column → device-ID pill
 //      and badge chip ALWAYS stack vertically; never overlap.
 //   2) Standalone .home-impact "Lives Saved" chip hidden on home
@@ -1625,29 +1625,29 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //
 // Screenshot audit (Strava / Apple Health / Linear benchmark):
 //  • 3 round icons (install + voice + login) floated MID-PAGE between
-//    badge chip and primary CTA — orphan island in dead space.
+//    badge chip and primary CTA - orphan island in dead space.
 //  • Device-ID pill + badge chip stacked as 2 separate identity claims
 //    burning vertical real-estate.
-//  • Badge chip carried verbose "Top tier reached — tap to share your
+//  • Badge chip carried verbose "Top tier reached - tap to share your
 //    badge" sub-text that was both noisy AND misleading (chip is
-//    decorative-only — tap does nothing).
+//    decorative-only - tap does nothing).
 //  • Standalone "8 LIVES SAVED" giant card (34 px font, 18 px padding)
 //    competed with the identity card + primary CTA for attention.
 //
-// Four surgical changes — zero feature removal:
+// Four surgical changes - zero feature removal:
 //  1) tools row LIFTED to position:absolute top:60 right:16, just
-//     under the lang pill — clusters with the other page-chrome icons
+//     under the lang pill - clusters with the other page-chrome icons
 //     at the top-right (Linear / Gmail pattern). Icons shrunk 44 → 36
 //     so the cluster doesn't dominate; tap target stays compliant.
 //  2) Badge chip sub-text for T4 now shows actual stat ({n} lives
 //     saved) instead of the misleading "tap to share" copy.
 //  3) Standalone home-impact "Lives Saved" downsized from a hero card
-//     to a quiet inline chip — number + label baseline-aligned on one
+//     to a quiet inline chip - number + label baseline-aligned on one
 //     line, no background gradient, thin border, ~5 × less vertical
 //     real-estate. The badge chip already carries the user's stat
 //     for T4; this strip persists for T1-T3 as quiet social proof.
 //  4) Tier-progress i18n key `tier_progress_top_share` shortened to
-//     "Top tier reached" across 22 locales (was "Top tier reached —
+//     "Top tier reached" across 22 locales (was "Top tier reached -
 //     tap to share your badge"); new key `badge_chip_lives_stat` added
 //     for the T4 stat template.
 // v151 → v152 (May 2026, operator-requested landing-page icon cleanup).
@@ -1657,7 +1657,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //     the home secondary-row. Login is now a round 44×44 icon in a
 //     new always-visible #home-tools-row (alongside Install + Voice).
 //     A 10-px status dot at the icon's top-right shows auth state
-//     at a glance — GREEN when signed in, RED when anonymous — using
+//     at a glance - GREEN when signed in, RED when anonymous - using
 //     the same palette as the existing .connectivity-dot in the lang
 //     pill (visual consistency for "uneducated reporter" persona).
 //  2) Install + Voice icons LIFTED OUT of #home-devid-wrap into the
@@ -1679,14 +1679,14 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //      and overrode the `[hidden]` UA rule. Now self-contained
 //      `.photo-consent-overlay` class with explicit
 //      `[hidden] { display: none }`. JS toggles via `hidden`
-//      attribute only — no `style.display` writes.
-//   2) Visual polish — replaced the 📸 emoji with an inline SVG
+//      attribute only - no `style.display` writes.
+//   2) Visual polish - replaced the 📸 emoji with an inline SVG
 //      camera glyph (sharper, theme-tinted), asymmetric 1fr/1.8fr
 //      action grid so "OK, choose photo" no longer wraps to 3 lines,
 //      softer entrance animation (fade + slight scale), check
 //      bullets rendered with CSS pseudo-elements instead of the
 //      ✓ character (smoother + scaling-safe).
-// v149 → v150 (May 2026 Lighthouse perf pass — CLS + LCP fixes).
+// v149 → v150 (May 2026 Lighthouse perf pass - CLS + LCP fixes).
 // Three-phase no-feature-change perf rewrite:
 //   Phase 1: slot-reservation CSS so late DOM reveals (badge chip,
 //     lives count, install slot, identity bar swap) stop shifting
@@ -1705,9 +1705,9 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // Add Rewards shortcut on Track my reports and post submission Final
 // Window. Also show Home button there."
 //
-// Phase A — Badge Studio hero pack:
+// Phase A - Badge Studio hero pack:
 //   • New character-pack.js with 8 original hero caricatures (4 comic
-//     archetypes + 4 first-responder archetypes — Caped Guardian /
+//     archetypes + 4 first-responder archetypes - Caped Guardian /
 //     Sky Sentinel / Iron Ally / Beacon Light / Field Medic /
 //     Firefighter / Lifeguard / Rescue Pilot). Apache-2.0 originals,
 //     no trademark exposure (NOT Batman/Superman/Black Panther).
@@ -1717,22 +1717,22 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //   • Character picker (4×2 grid) + share-message picker (8 messages
 //     + Surprise me) in stage-badge-studio.
 //
-// Phase C — Photo consent + thumbnail + applyPiiBlur fix:
+// Phase C - Photo consent + thumbnail + applyPiiBlur fix:
 //   • Consent modal shown on FIRST "Choose photo" tap (persisted
 //     localStorage `crisp_photo_studio_consent_v1`).
 //   • Preview thumbnail (56×56) confirms the uploaded image.
 //   • _maybeBlurFaces now correctly unwraps applyPiiBlur's
 //     {blob, blurred, skipped, ...} return shape. Pre-fix it
 //     duck-typed for Blob|canvas and silently fell through to
-//     the unblurred bitmap on every real upload — UNDP must-have #7
+//     the unblurred bitmap on every real upload - UNDP must-have #7
 //     bug fixed in passing.
 //
-// Phases D+E — Rewards shortcuts everywhere:
+// Phases D+E - Rewards shortcuts everywhere:
 //   • #btn-mr-rewards medal on My Reports controls row.
 //   • Success page secondary row replaces the single Track button
 //     with Track + Rewards + Home in a 3-column grid.
 //
-// Phase F — i18n × 22 locales (+20 new keys).
+// Phase F - i18n × 22 locales (+20 new keys).
 //
 // STATIC_ASSETS adds character-pack.js so the studio works fully
 // offline once installed.
@@ -1754,16 +1754,16 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //      module-scoped const). Pre-fix home-screen.js's three fetch
 //      sites fell back to `/api/v1`, which on local dev resolves
 //      against the PWA's :8080 origin (the static file server)
-//      and 404s — symptom: badge chip stuck at T1_SCOUT even though
+//      and 404s - symptom: badge chip stuck at T1_SCOUT even though
 //      the user is T4_LIFEKEEPER with 8 lives saved (the Lives Saved
 //      card kept working because app.js uses the module-scoped
 //      API_BASE directly). Exposing once heals all consumers.
-//   2) home-secondary-row layout tidied — pre-fix the three buttons
+//   2) home-secondary-row layout tidied - pre-fix the three buttons
 //      (My Reports / Rewards / Login) wrapped awkwardly as 2+1 in
 //      a 2-col grid. New rule pins Login to a full-width row via
 //      grid-column:1/-1 so My Reports + Rewards share row 1 + Login
 //      gets its own row.
-// v145 → v146 (May 2026 reward-system v2, second pass) — separated
+// v145 → v146 (May 2026 reward-system v2, second pass) - separated
 // the "level up info + badges + sharing" surface from the home badge
 // chip. Pre-fix the chip doubled as both a status display AND a
 // tap-to-open-Badge-Studio button, which read as confusing
@@ -1776,7 +1776,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // badge-studio.js (drops the chip-tap wiring since chip is no
 // longer a button), styles.css (Rewards-page styles), 22 locale
 // files (+11 new i18n keys each).
-// v144 → v145 (May 2026 reward-system v2) — full gamification
+// v144 → v145 (May 2026 reward-system v2) - full gamification
 // rewrite per operator request. 4-tier identity-forward ladder
 // (Scout / Signal / Changemaker / Lifekeeper) with progress sub-line
 // on the home badge chip, body-class theme affect at T3+, tier-up
@@ -1788,7 +1788,7 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // for LinkedIn. badge-studio.js added to STATIC_ASSETS so the
 // stage works fully offline once the PWA is installed. ~30 new
 // i18n keys across all 22 locale files.
-// v143 → v144 (May 2026, operator-reported, second-pass UX) — My
+// v143 → v144 (May 2026, operator-reported, second-pass UX) - My
 // Reports redesign #2: dropped the RESOLVED + IN-FLIGHT tiles from
 // the impact-card header (they read as 0 · 0 for most users and
 // added no signal). Card is now single-stat "Lives Saved" with a
@@ -1797,41 +1797,41 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 // looked washed out on the teal/navy theme; repainted with a teal
 // border + chevron + dark-teal surface. HTML + styles.css + app.js
 // (drop `hi-resolved` write) all touched.
-// v142 → v143 (May 2026, operator-reported) — flattened "What caused
+// v142 → v143 (May 2026, operator-reported) - flattened "What caused
 // it?" crisis sub-step. Was a 3-card drill-down (Natural / Tech /
 // Human-made → tap one → subtype list); now all 9 crisis types
 // visible at once under 3 section headers as a 2-column tile grid.
 // One tap to select (was two). Icons use the same responsive cascade
 // as the infra "What was hit?" tiles (48×48 → 68×68 across
 // breakpoints). HTML + v4-flow.js + styles.css all touched.
-// v141 → v142 (May 2026, operator-reported) — bumped infra-classify
+// v141 → v142 (May 2026, operator-reported) - bumped infra-classify
 // tile icon sizes. Was 38×38/20px, now scales 48×48/28px (default)
 // → 56×56/32px (≥380w) → 60×60/34px (≥700h) → 64×64/36px (≥800h)
 // → 68×68/38px (≥900h). Matches the home-stage CTA responsive
 // cascade so v4 capture stays visually consistent.
-// v140 → v141 (May 2026, operator-reported) — single-stat home
+// v140 → v141 (May 2026, operator-reported) - single-stat home
 // impact card. "Reports Verified" tile removed; "Lives Saved" now
 // occupies the card centred + slightly larger. Companion change on
 // the dashboard adds an analyst-only "Lives helped" input on the
 // report detail panel (closes the capability gap where lives_impacted
 // was settable by API but had no UI). app.js + index.html +
 // styles.css all touched.
-// v139 → v140 (May 2026) — color-theme rewrite. Operator-supplied
+// v139 → v140 (May 2026) - color-theme rewrite. Operator-supplied
 // 6-color palette swap (no functional / structural changes):
-//   · #213A58 navy        — page background base (was near-black)
-//   · #0C6478 dark teal   — elevated surfaces (cards, accordions)
-//   · #15919B medium teal — borders + secondary accents (was purple)
-//   · #09D1C7 vivid teal  — PRIMARY accent / CTA (was orange)
-//   · #46DFB1 mint        — soft accents + count chips
-//   · #80EE98 lime        — success states (was emerald green)
+//   · #213A58 navy        - page background base (was near-black)
+//   · #0C6478 dark teal   - elevated surfaces (cards, accordions)
+//   · #15919B medium teal - borders + secondary accents (was purple)
+//   · #09D1C7 vivid teal  - PRIMARY accent / CTA (was orange)
+//   · #46DFB1 mint        - soft accents + count chips
+//   · #80EE98 lime        - success states (was emerald green)
 // Reds (errors), ambers (warnings), UN-blue brand mark, flag SVG
 // colors, and gray text tokens kept unchanged for accessibility +
 // semantic stability. CSS + app.js + building-select.js + index.html
 // + manifest.json all touched; bump CACHE_NAME so returning users
 // pick up the new theme.
-// v138 → v139 (May 2026) — My Reports UX redesign (operator-reported):
+// v138 → v139 (May 2026) - My Reports UX redesign (operator-reported):
 //   · filter chips replaced with a native <select> dropdown ("All"
-//     default) — no more horizontal overflow on 390px screens
+//     default) - no more horizontal overflow on 390px screens
 //   · IN FLIGHT section hides entirely when empty (no more
 //     "Nothing in flight" placeholder wasting vertical space)
 //   · submitted reports grouped into <details> accordions by date
@@ -1839,48 +1839,48 @@ const CACHE_NAME = 'crisp-v339';  // v339 (Jun 2026): test-hook only — expose 
 //     empty group expanded by default
 //   · "Load 5 more" lazy-render per group; older groups lazy-render
 //     their cards on first user-expand
-// v137 → v138 (May 2026) — operator-reported "1 queued never leaves
+// v137 → v138 (May 2026) - operator-reported "1 queued never leaves
 // even on 50+ Mbps." Four coordinated fixes:
 //   · reconcile soft-drain: dequeue when SMALL of every photo lands +
 //     meta/text/audio done; MEDIUM/HIGH missing on the server are
 //     marked deferred and the queue row is removed (was infinitely
 //     re-queuing pre-fix)
 //   · race-safe path for SMALL mid-assembly (server has the row but
-//     assembly_status='partial' — wait one tick instead of rolling
+//     assembly_status='partial' - wait one tick instead of rolling
 //     back the chunk progress and re-uploading)
-//   · UNDP-details queue 24h TTL purge — stale entries from before
+//   · UNDP-details queue 24h TTL purge - stale entries from before
 //     a fixed bug no longer inflate the pill indefinitely
 //   · pill now shows "% complete" + a thin green progress bar
 //     underneath the text so the operator sees draining in real time
 // index.html + styles.css + app.js all touched; bump CACHE_NAME so
 // returning users actually see the new UI.
-// v135 → v136 (May 2026) — inline-SVG flag rendering in the language
+// v135 → v136 (May 2026) - inline-SVG flag rendering in the language
 // picker. Every cached HTML/CSS/JS now carries the data-cc swap; bump
 // CACHE_NAME so returning Windows-Chrome / Linux users actually pick
 // up the fix instead of serving the pre-fix snapshot where their
 // flags rendered as monochrome "GB" / "FR" / "IN" letter pairs.
 //
-// v136 → v137 (May 2026) — unified "N queued" pill across the report
+// v136 → v137 (May 2026) - unified "N queued" pill across the report
 // queue AND the UNDP-details queue. Operator-reported (second pass):
 // the pill only counted IndexedDB reports, so a stuck UNDP-details
 // patch was either invisible OR confused for a stuck report. The
 // pill now sums both queues + tapping it drains both.
-// v133 → v134 (May 2026) — covered the recent batch of unpushed PWA-asset
+// v133 → v134 (May 2026) - covered the recent batch of unpushed PWA-asset
 // changes that previously slipped past the cache-bump policy:
-//   · c4d2087  app.js + v4-flow.js — Add-Another reset + queued-pill toast
-//   · f60aa5b  app.js — SMALL-tier gate / queue drain
-//   · f9086f3  building-select.js + v4-flow.js — building re-fetch on
+//   · c4d2087  app.js + v4-flow.js - Add-Another reset + queued-pill toast
+//   · f60aa5b  app.js - SMALL-tier gate / queue drain
+//   · f9086f3  building-select.js + v4-flow.js - building re-fetch on
 //             manual location change (UNDP must-have #6)
-//   · ecc14a2  building-select.js — fullscreen picker invalidateSize
+//   · ecc14a2  building-select.js - fullscreen picker invalidateSize
 //
-// v134 → v135 (May 2026) — building-select state-cleared listener +
+// v134 → v135 (May 2026) - building-select state-cleared listener +
 // offline queue for the UNDP-details PATCH:
 //   · building-select.js  Add Another now clears _selectedLayer +
 //                          state.buildingOsmElement + the green pill
 //                          (was leaking across reports)
 //   · app.js              UNDP-details save enqueues to
 //                          `crisp_report_details_queue_v1` on failure
-//                          and drains on `online` — matches the
+//                          and drains on `online` - matches the
 //                          offline-first guarantee of the main report
 //                          submit instead of losing data on transient
 //                          network blips ("could not save" → data gone)
@@ -1890,60 +1890,60 @@ const SW_BASE = self.location.href.replace(/sw\.js$/, '');
 
 // ── BEGIN SW_ASSET_MANIFEST (auto-generated by scripts/generate-sw-manifest.mjs) ──
 const SW_ASSET_MANIFEST = {
-    "app.js": "e2ed6c3cf752",
+    "app.js": "f78171a75410",
     "assets/icon-192.png": "90f056f4bc41",
     "assets/icon-512.png": "8fef57c93557",
-    "auth.js": "3aa607301909",
-    "badge-studio.js": "dcbf4d7941f2",
-    "blur-worker-pool.js": "eb20908a9c51",
-    "blur-worker.js": "5c8b033a3a4b",
-    "blurhash.js": "c840d518fe1d",
-    "building-select.js": "6271857e0360",
-    "character-pack.js": "3e41c16081bf",
-    "components/icon-pack.js": "ced48cb253ab",
-    "device-telemetry.js": "13dcfb66b75a",
-    "exif-gps.js": "01e3c798ca74",
+    "auth.js": "fb936d26d2a2",
+    "badge-studio.js": "ddcc40adbd5e",
+    "blur-worker-pool.js": "6d9ee18d87dd",
+    "blur-worker.js": "74f9b11e2cdf",
+    "blurhash.js": "ef8c1ae0a91c",
+    "building-select.js": "a820a12e9862",
+    "character-pack.js": "91cd2fe4b890",
+    "components/icon-pack.js": "41bcba11515f",
+    "device-telemetry.js": "342587def5c5",
+    "exif-gps.js": "ded1f7c2c1f1",
     "favicon.svg": "81a594f8c5d3",
-    "home-screen.js": "9ddebe1bc671",
-    "i18n/ar.json": "d7f379ac6ce9",
-    "i18n/bn.json": "a94743e64dc9",
-    "i18n/en.json": "5d2d92bc0a5a",
-    "i18n/es.json": "923b8711da71",
-    "i18n/fr.json": "4935aeb76e06",
-    "i18n/gu.json": "ef9731fd91fb",
-    "i18n/hi.json": "32eecfc8a369",
-    "i18n/id.json": "c5e37ebc449b",
-    "i18n/ja.json": "fcb82316bc4c",
-    "i18n/kn.json": "b322dc661ea9",
-    "i18n/ko.json": "26cb1fdce560",
-    "i18n/ml.json": "634299fcda3c",
-    "i18n/mr.json": "86d165bbda66",
-    "i18n/pa.json": "5ab92fd68536",
-    "i18n/pt.json": "a18fcff0f9fb",
-    "i18n/ru.json": "145193878682",
-    "i18n/ta.json": "16d4e88c3d9b",
-    "i18n/te.json": "0704a59b7058",
-    "i18n/tr.json": "146c3b0c5a7f",
-    "i18n/ur.json": "cc84a7e5b03a",
-    "i18n/vi.json": "2e3035d53a77",
-    "i18n/zh.json": "6fa15a1e8283",
-    "image-variants.js": "206a66ac153d",
-    "index.html": "c6ec15fea01f",
-    "install-prompt.js": "f3d8588009e9",
-    "manifest.json": "6ccfd61d4297",
-    "nearby.js": "c3640d629ec7",
-    "pii-blur.js": "7e5398a010c5",
-    "places.js": "45c2565b646f",
-    "sentry-init.js": "1bc08e7032f4",
-    "styles.css": "4ee48d77323b",
-    "tier-config.js": "79b393bc143d",
-    "v4-flow.js": "38ff8ef08fc6",
+    "home-screen.js": "3b8729bae139",
+    "i18n/ar.json": "1b097977752f",
+    "i18n/bn.json": "4b22e8110075",
+    "i18n/en.json": "d001b3375457",
+    "i18n/es.json": "f4f1db02c349",
+    "i18n/fr.json": "4bc593bb77cc",
+    "i18n/gu.json": "03f154524f23",
+    "i18n/hi.json": "b0665eaeba71",
+    "i18n/id.json": "8306f8fe458b",
+    "i18n/ja.json": "eb2c2cd3a9db",
+    "i18n/kn.json": "b31cf274bde2",
+    "i18n/ko.json": "beb881e2f861",
+    "i18n/ml.json": "881e3f1029ed",
+    "i18n/mr.json": "1c2cdfac72ab",
+    "i18n/pa.json": "ab2a86d26c28",
+    "i18n/pt.json": "67469613a9d3",
+    "i18n/ru.json": "8680cd2b4602",
+    "i18n/ta.json": "cb8140e602c6",
+    "i18n/te.json": "127c53753fb2",
+    "i18n/tr.json": "6c45bfba5d25",
+    "i18n/ur.json": "38bff6003bf6",
+    "i18n/vi.json": "d84916d08b9b",
+    "i18n/zh.json": "ad1440aeeaff",
+    "image-variants.js": "17f2d7ea5a99",
+    "index.html": "3e68790e906d",
+    "install-prompt.js": "9781eca21ead",
+    "manifest.json": "c9f0068c5320",
+    "nearby.js": "ec00ecdae9ec",
+    "pii-blur.js": "e2faf0798289",
+    "places.js": "ea7eaff6208e",
+    "sentry-init.js": "731b9e996084",
+    "styles.css": "af577fb9ec7e",
+    "tier-config.js": "68e0ac770096",
+    "v4-flow.js": "70fef6f14b8b",
     "vendor/blazeface/blazeface.min.js": "e597d1f48a73",
     "vendor/blazeface/group1-shard1of1.bin": "60b481ab6c19",
     "vendor/blazeface/model.json": "7b6bb6f35e5a",
     "vendor/sentry.min.js": "25bf89b834f7",
     "vendor/tf/tf.min.js": "300dfae273d2",
-    "voice-readout.js": "d578b11e8bb6",
+    "voice-readout.js": "5457cb10b4eb",
 };
 // ── END SW_ASSET_MANIFEST ──
 
@@ -1961,21 +1961,21 @@ const STATIC_ASSETS = [
     SW_BASE + 'blur-worker.js',
     SW_BASE + 'image-variants.js',
     SW_BASE + 'blurhash.js',
-    SW_BASE + 'exif-gps.js',         // Sprint D — GPS EXIF embed before chunked upload
-    SW_BASE + 'building-select.js',  // UNDP §3.2 — building-footprint selector
+    SW_BASE + 'exif-gps.js',         // Sprint D - GPS EXIF embed before chunked upload
+    SW_BASE + 'building-select.js',  // UNDP §3.2 - building-footprint selector
     SW_BASE + 'auth.js',
     SW_BASE + 'install-prompt.js',
     SW_BASE + 'home-screen.js',
     SW_BASE + 'nearby.js',           // "Verified Reports Nearby" home intel module
     SW_BASE + 'voice-readout.js',
-    SW_BASE + 'device-telemetry.js', // Phase 5.1 — POSTs sanitised summary to /api/v1/devices/telemetry once / day
+    SW_BASE + 'device-telemetry.js', // Phase 5.1 - POSTs sanitised summary to /api/v1/devices/telemetry once / day
     SW_BASE + 'v4-flow.js',
     SW_BASE + 'badge-studio.js',     // reward-system v2 Canvas composer
-    SW_BASE + 'character-pack.js',   // reward-system v2 second pass — 8 hero SVGs
-    SW_BASE + 'tier-config.js',      // Phase 2.1 — canonical V4 tier metadata (generated from shared/tier-config.json)
-    SW_BASE + 'sentry-init.js',      // May 2026 — Sentry boot wrapper
-    SW_BASE + 'vendor/sentry.min.js', // May 2026 — vendored Sentry browser SDK (~70KB)
-    // HC89 (Sprint 1B, May 2026) — vendored TF.js + BlazeFace lib +
+    SW_BASE + 'character-pack.js',   // reward-system v2 second pass - 8 hero SVGs
+    SW_BASE + 'tier-config.js',      // Phase 2.1 - canonical V4 tier metadata (generated from shared/tier-config.json)
+    SW_BASE + 'sentry-init.js',      // May 2026 - Sentry boot wrapper
+    SW_BASE + 'vendor/sentry.min.js', // May 2026 - vendored Sentry browser SDK (~70KB)
+    // HC89 (Sprint 1B, May 2026) - vendored TF.js + BlazeFace lib +
     // model weights. Previously the JS libs were fetched from
     // cdn.jsdelivr.net at first capture (the model weights were
     // already vendored but runtime-cached). The May 2026 operator
@@ -1996,7 +1996,7 @@ const STATIC_ASSETS = [
     SW_BASE + 'favicon.svg',
     SW_BASE + 'assets/icon-192.png',
     SW_BASE + 'assets/icon-512.png',
-    // UNDP §3.1b — full 594-key translation packs, one per supported
+    // UNDP §3.1b - full 594-key translation packs, one per supported
     // locale. Precached so a user who installs the PWA online and goes
     // offline can pick ANY of the 22 supported languages and see the
     // UI in their language. `_loadLocaleJson()` in app.js fetches these
@@ -2051,7 +2051,7 @@ const RUNTIME_CACHE_HOSTS = [
 
 // ── Install: pre-cache static shell ──────────────────────────────────────────
 //
-// May 2026 — perf Sprint C.4 (#14): per-asset hash migration replaces
+// May 2026 - perf Sprint C.4 (#14): per-asset hash migration replaces
 // the old `cache.addAll(STATIC_ASSETS)` bulk-fetch. The SW_ASSET_MANIFEST
 // block above (auto-generated by scripts/generate-sw-manifest.mjs)
 // pairs every precached URL with a 12-char SHA-256 hash of its disk
@@ -2070,11 +2070,11 @@ const RUNTIME_CACHE_HOSTS = [
 // 47. Typical per-deploy bandwidth save per user: ~700-900 KB.
 //
 // First-install-after-this-ships pays the full refetch cost (no old
-// cache has the x-crisp-hash header — they all miss). One-time tax;
+// cache has the x-crisp-hash header - they all miss). One-time tax;
 // every subsequent deploy reaps the win.
 //
 // Safety: if any URL fails to migrate AND fails to fetch, the whole
-// install rejects — matches the old `cache.addAll` atomicity. Users
+// install rejects - matches the old `cache.addAll` atomicity. Users
 // keep the previous SW until the new install completes successfully.
 async function _precacheWithMigration(newCache) {
     // Snapshot every old crisp-v* cache so we can scavenge unchanged
@@ -2094,7 +2094,7 @@ async function _precacheWithMigration(newCache) {
         const manifestKey = relpath || 'index.html';
         const expectedHash = SW_ASSET_MANIFEST[manifestKey];
 
-        // Try migration first — walk every old cache until one yields
+        // Try migration first - walk every old cache until one yields
         // a Response whose stored x-crisp-hash matches the new manifest.
         if (expectedHash) {
             for (const oldCache of oldCaches) {
@@ -2152,7 +2152,7 @@ self.addEventListener('install', (event) => {
     // user taps "Update now" on the in-app banner (wired in app.js).
     // Without this gate, an installed PWA would silently flip versions
     // on the next navigation and could drop in-progress capture state.
-    // First install is unaffected — no existing controller to wait for,
+    // First install is unaffected - no existing controller to wait for,
     // so the worker activates directly.
 });
 
@@ -2162,12 +2162,12 @@ self.addEventListener('install', (event) => {
 // clean reload.
 self.addEventListener('message', (event) => {
     if (event.data && event.data.type === 'SKIP_WAITING') {
-        // HC75 (May 2026) — reply to the requesting client with our
+        // HC75 (May 2026) - reply to the requesting client with our
         // CACHE_NAME so the page can paint a "Upgraded to vNNN"
         // success toast before reloading. The reply lands BEFORE
         // skipWaiting + controllerchange fire (event.source is the
         // same client that posted SKIP_WAITING; postMessage on that
-        // port is synchronous-ish — the page's onmessage handler
+        // port is synchronous-ish - the page's onmessage handler
         // runs within the same tick the toast paint is queued from).
         try {
             if (event.source && typeof event.source.postMessage === 'function') {
@@ -2179,7 +2179,7 @@ self.addEventListener('message', (event) => {
         } catch (_) {}
         self.skipWaiting();
     } else if (event.data && event.data.type === 'GET_VERSION') {
-        // HC75 — also support a standalone version query (used by
+        // HC75 - also support a standalone version query (used by
         // the page if the user dismisses + re-opens the banner).
         try {
             if (event.source && typeof event.source.postMessage === 'function') {
@@ -2208,7 +2208,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
-    // May 2026 (perf Sprint C.3) — stale-while-revalidate on
+    // May 2026 (perf Sprint C.3) - stale-while-revalidate on
     // `/api/v1/reports/nearby`. The home stage polls this every 60 s
     // (and again on every Visibility-Change resume); for warm users
     // the cached payload renders the "12 reports nearby · 3 areas
@@ -2217,7 +2217,7 @@ self.addEventListener('fetch', (event) => {
     // cache: a cold-start home-stage paint pulls from SW cache in
     // ~5 ms instead of ~250 ms (slow-4G round-trip). Payload is
     // already aggregated server-side (group ids + counts + crisis
-    // type buckets — no individual reports), so the cached version
+    // type buckets - no individual reports), so the cached version
     // never reveals more than what the backend would have served
     // anonymously to the same lat/lng.
     //
@@ -2225,7 +2225,7 @@ self.addEventListener('fetch', (event) => {
     // `/api/v1/reports/nearby?lat=...&lng=...&radius=...`. We match
     // by pathname (not href) so all (lat,lng,radius) tuples share the
     // same intercept rule, but `caches.match(event.request)` still
-    // keys on the FULL URL — so a user who moves > 100 m gets a
+    // keys on the FULL URL - so a user who moves > 100 m gets a
     // separate cache entry rather than a stale-for-the-wrong-area
     // hit. SW cache LRU evicts the old entries over time; no manual
     // pruning needed at our payload size.
@@ -2250,7 +2250,7 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // ML model weights from TF.js model host (tfhub / jsdelivr / etc.) —
+    // ML model weights from TF.js model host (tfhub / jsdelivr / etc.) -
     // explicitly cache-first so offline capture can still run BlazeFace.
     const isMLAsset = RUNTIME_CACHE_HOSTS.includes(url.hostname);
 
@@ -2287,14 +2287,14 @@ self.addEventListener('fetch', (event) => {
 //   { title, body, tag, data: { report_id, status, url } }
 //
 // `tag` deduplicates: re-sending the same tag REPLACES the existing
-// notification rather than stacking — important if an analyst flips
+// notification rather than stacking - important if an analyst flips
 // a report's status multiple times in quick succession.
 self.addEventListener('push', (event) => {
     let payload = {};
     try {
         payload = event.data ? event.data.json() : {};
     } catch (_) {
-        // Non-JSON payload (e.g. provider keep-alive) — fall through
+        // Non-JSON payload (e.g. provider keep-alive) - fall through
         // with a generic title rather than silently dropping. Better UX
         // than a missed notification.
         payload = { title: 'CRISP', body: 'You have a new update.' };
@@ -2306,7 +2306,7 @@ self.addEventListener('push', (event) => {
         badge: '/mobile-app/src/assets/icon-96.png',
         tag: payload.tag || 'crisp-update',
         // `renotify: true` makes the device buzz/sound even when a
-        // notification with the same tag is already on-screen — desired
+        // notification with the same tag is already on-screen - desired
         // for a crisis-report status change because the user IS waiting
         // for that signal.
         renotify: true,
@@ -2354,9 +2354,9 @@ self.addEventListener('notificationclick', (event) => {
                     c.postMessage({ type: 'NOTIFICATION_OPEN', data });
                     return;
                 }
-            } catch (_) { /* malformed URL — skip */ }
+            } catch (_) { /* malformed URL - skip */ }
         }
-        // No matching tab — open a new one.
+        // No matching tab - open a new one.
         if (self.clients.openWindow) {
             await self.clients.openWindow(targetUrl);
         }
@@ -2384,7 +2384,7 @@ async function syncAllReports() {
 
     // Origin-aware backend host (matches app.js). On localhost dev the
     // page is served on :8080 with the backend on :8000, so swap port.
-    // In prod the page and API share an origin behind nginx — use it
+    // In prod the page and API share an origin behind nginx - use it
     // as-is.
     const _swHost = self.location.hostname;
     const _swIsLocalDev = ["localhost", "127.0.0.1", "0.0.0.0"].includes(_swHost);
@@ -2393,7 +2393,7 @@ async function syncAllReports() {
         : self.location.origin;
     console.log(`SW: Syncing ${items.length} queued reports`);
 
-    // If any active client (page) is open, wake its retry loop —
+    // If any active client (page) is open, wake its retry loop -
     // the page-side code owns the chunked-variant pipeline. The SW's
     // legacy single-PATCH path below only handles old-shape items
     // (no `photoVariants`); modern items get processed by the page.
@@ -2404,7 +2404,7 @@ async function syncAllReports() {
             clients.forEach((c) => {
                 try { c.postMessage({ type: 'SW_SYNC_WAKE', count: items.length }); } catch (_) {}
             });
-            // Don't return — still process legacy-shape items below.
+            // Don't return - still process legacy-shape items below.
         }
     } catch (_) {}
 
@@ -2415,7 +2415,7 @@ async function syncAllReports() {
             const stages = item.stages || {};
             let reportId = item.serverId || null;
 
-            // Skip modern variant-shape items in the legacy path — they're
+            // Skip modern variant-shape items in the legacy path - they're
             // owned by the page's retry loop, which knows about deferred
             // tiers + per-chunk progress + reconciliation. Touching them
             // here would risk falsely marking stages.photo true before
@@ -2454,7 +2454,7 @@ async function syncAllReports() {
             // (main only) and flip `stages.photo = true`. Extras in
             // `item.extraPhotos[]` were dropped on the floor, AND the
             // `stages.photo` flip caused the page's retry loop to skip
-            // the photo stage entirely on next replay — orphaning every
+            // the photo stage entirely on next replay - orphaning every
             // extra. Now: if extras are present, we DEFER the photo
             // stage to the page entirely (the page's `_uploadLegacyPhoto`
             // iterates extras with distinct photo_group_id per photo via
@@ -2477,12 +2477,12 @@ async function syncAllReports() {
                     await idbPut(db, 'pending-reports', item);
                     console.log(`SW: Photo synced for ${reportId}`);
                 }
-                // On failure, leave in queue — will retry next sync
+                // On failure, leave in queue - will retry next sync
             } else if (!stages.photo && item.photo && Array.isArray(item.extraPhotos) && item.extraPhotos.length > 0) {
                 // Defer: page's _uploadLegacyPhoto handles main + extras as
                 // distinct chunked uploads with per-photo photo_group_id.
                 console.log(
-                    `SW: deferring photo stage for ${reportId} — ` +
+                    `SW: deferring photo stage for ${reportId} - ` +
                     `${item.extraPhotos.length} extra photo(s) present; ` +
                     `page retry loop will handle multi-photo legacy path.`,
                 );
@@ -2494,7 +2494,7 @@ async function syncAllReports() {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        // Phase L (May 2026) — canonical SMALL (was LOW pre-L).
+                        // Phase L (May 2026) - canonical SMALL (was LOW pre-L).
                         type: 'AUDIO', resolution_tier: 'SMALL',
                         url: item.audioBlob, file_size_bytes: item.audioSize || 0
                     })

@@ -1,5 +1,5 @@
 /**
- * CRISP — Minimal EXIF GPS inserter for JPEGs (Sprint D, May 2026)
+ * CRISP - Minimal EXIF GPS inserter for JPEGs (Sprint D, May 2026)
  * ─────────────────────────────────────────────────────────────────
  *
  * Why we wrote our own instead of vendoring piexifjs:
@@ -13,20 +13,20 @@
  *     ONLY the GPS IFD, never the 0th IFD (camera Make/Model/Software),
  *     never any free-text PII field (UserComment / Artist / Copyright).
  *     This matches the strict GPS-IFD-only safety rule from the plan.
- *   - Auditability — every byte is inspectable in this one file.
+ *   - Auditability - every byte is inspectable in this one file.
  *
  * What's embedded (subset of EXIF GPSInfo IFD, 7-9 fields):
  *
- *   GPSVersionID            (0x0000) — [2,3,0,0]
- *   GPSLatitudeRef          (0x0001) — "N" | "S"
- *   GPSLatitude             (0x0002) — DMS rational triple
- *   GPSLongitudeRef         (0x0003) — "E" | "W"
- *   GPSLongitude            (0x0004) — DMS rational triple
- *   GPSTimeStamp            (0x0007) — UTC HH/MM/SS rational triple
- *   GPSDateStamp            (0x001D) — "YYYY:MM:DD"
- *   GPSImgDirection         (0x0011) — heading * 100 / 100  (optional)
- *   GPSImgDirectionRef      (0x0010) — "T" (true north)     (optional)
- *   GPSHPositioningError    (0x001F) — accuracy m * 100 / 100 (optional)
+ *   GPSVersionID            (0x0000) - [2,3,0,0]
+ *   GPSLatitudeRef          (0x0001) - "N" | "S"
+ *   GPSLatitude             (0x0002) - DMS rational triple
+ *   GPSLongitudeRef         (0x0003) - "E" | "W"
+ *   GPSLongitude            (0x0004) - DMS rational triple
+ *   GPSTimeStamp            (0x0007) - UTC HH/MM/SS rational triple
+ *   GPSDateStamp            (0x001D) - "YYYY:MM:DD"
+ *   GPSImgDirection         (0x0011) - heading * 100 / 100  (optional)
+ *   GPSImgDirectionRef      (0x0010) - "T" (true north)     (optional)
+ *   GPSHPositioningError    (0x001F) - accuracy m * 100 / 100 (optional)
  *
  * All multi-byte values are big-endian (TIFF "MM" byte order).
  *
@@ -42,7 +42,7 @@
  *   }
  *
  * If GPS state is missing or invalid the function resolves with the
- * ORIGINAL blob (additive, never destructive — the JSON payload still
+ * ORIGINAL blob (additive, never destructive - the JSON payload still
  * carries the geotag).
  */
 (function (root) {
@@ -99,32 +99,32 @@
     function buildExifApp1(loc) {
         // Build the GPS IFD entry list.
         const entries = [];
-        // 1. GPSVersionID — BYTE, count 4, inline [2,3,0,0]
+        // 1. GPSVersionID - BYTE, count 4, inline [2,3,0,0]
         entries.push({
             tag: 0x0000, type: T_BYTE, count: 4,
             data: new Uint8Array([2, 3, 0, 0]),
         });
-        // 2. GPSLatitudeRef — ASCII "N\0" or "S\0", count 2
+        // 2. GPSLatitudeRef - ASCII "N\0" or "S\0", count 2
         entries.push({
             tag: 0x0001, type: T_ASCII, count: 2,
             data: new Uint8Array([(loc.lat >= 0 ? 0x4E : 0x53), 0x00]),
         });
-        // 3. GPSLatitude — RATIONAL × 3 (24 bytes, OUT-OF-LINE)
+        // 3. GPSLatitude - RATIONAL × 3 (24 bytes, OUT-OF-LINE)
         entries.push({
             tag: 0x0002, type: T_RATIONAL, count: 3,
             data: rationalsToBytes(degToDmsRationals(loc.lat)),
         });
-        // 4. GPSLongitudeRef — ASCII "E\0" or "W\0"
+        // 4. GPSLongitudeRef - ASCII "E\0" or "W\0"
         entries.push({
             tag: 0x0003, type: T_ASCII, count: 2,
             data: new Uint8Array([(loc.lng >= 0 ? 0x45 : 0x57), 0x00]),
         });
-        // 5. GPSLongitude — RATIONAL × 3
+        // 5. GPSLongitude - RATIONAL × 3
         entries.push({
             tag: 0x0004, type: T_RATIONAL, count: 3,
             data: rationalsToBytes(degToDmsRationals(loc.lng)),
         });
-        // 6. GPSTimeStamp — UTC H/M/S, RATIONAL × 3
+        // 6. GPSTimeStamp - UTC H/M/S, RATIONAL × 3
         const now = new Date();
         entries.push({
             tag: 0x0007, type: T_RATIONAL, count: 3,
@@ -134,7 +134,7 @@
                 [now.getUTCSeconds(), 1],
             ]),
         });
-        // 7. GPSDateStamp — ASCII "YYYY:MM:DD\0", count 11
+        // 7. GPSDateStamp - ASCII "YYYY:MM:DD\0", count 11
         const dateStr =
             now.getUTCFullYear() + ':' +
             String(now.getUTCMonth() + 1).padStart(2, '0') + ':' +
@@ -143,7 +143,7 @@
             tag: 0x001D, type: T_ASCII, count: 11,
             data: asciiBytes(dateStr, 11),
         });
-        // 8. GPSImgDirectionRef + GPSImgDirection — heading (optional).
+        // 8. GPSImgDirectionRef + GPSImgDirection - heading (optional).
         if (typeof loc.heading === 'number' && isFinite(loc.heading)) {
             entries.push({
                 tag: 0x0010, type: T_ASCII, count: 2,
@@ -156,7 +156,7 @@
                 ]),
             });
         }
-        // 9. GPSHPositioningError — accuracy m, RATIONAL (optional).
+        // 9. GPSHPositioningError - accuracy m, RATIONAL (optional).
         if (typeof loc.accuracyMeters === 'number' && isFinite(loc.accuracyMeters)) {
             entries.push({
                 tag: 0x001F, type: T_RATIONAL, count: 1,
@@ -206,7 +206,7 @@
         const outOfLineStart = gpsIfdOffset + gpsIfdSize;
 
         // Pre-compute out-of-line offsets per entry (only for entries
-        // whose `data` doesn't fit in 4 bytes — i.e. data.length > 4).
+        // whose `data` doesn't fit in 4 bytes - i.e. data.length > 4).
         let tiffCursor = outOfLineStart;
         for (const e of entries) {
             if (e.data.length > 4) {
@@ -315,11 +315,11 @@
             const marker = jpegBytes[p + 1];
             // SOS (FF DA) = start-of-scan → image data follows; stop walking.
             if (marker === 0xDA) break;
-            // Standalone markers (no length) — uncommon in modern JPEGs;
+            // Standalone markers (no length) - uncommon in modern JPEGs;
             // we don't expect them between SOI and the EXIF slot.
             const segLen = (jpegBytes[p + 2] << 8) | jpegBytes[p + 3];
             if (marker === 0xE1) {
-                // Existing APP1 — drop it.
+                // Existing APP1 - drop it.
                 dropStart = p;
                 dropEnd = p + 2 + segLen;
                 break;
@@ -336,7 +336,7 @@
     }
 
     /**
-     * Public API — embed GPS EXIF into a JPEG blob.
+     * Public API - embed GPS EXIF into a JPEG blob.
      * Returns a Promise<Blob>; on any failure or missing GPS state,
      * resolves with the ORIGINAL blob (additive, never destructive).
      */

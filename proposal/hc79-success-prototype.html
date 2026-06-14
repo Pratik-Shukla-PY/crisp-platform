@@ -1,9 +1,9 @@
 <!doctype html>
 <!--
-  HC79.1 — Report-Submitted stage prototype.
+  HC79.1 - Report-Submitted stage prototype.
 
   Standalone HTML/CSS prototype for the redesigned `#stage-success` in
-  the CRISP PWA. NO production code is touched by this file — it lives
+  the CRISP PWA. NO production code is touched by this file - it lives
   alongside the existing UI:UX proposal artefacts and is a paint-only
   mockup so the operator can validate the visual direction BEFORE the
   production markup / CSS / JS lands in HC79.2.
@@ -25,7 +25,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>HC79.1 — Report Submitted (prototype)</title>
+<title>HC79.1 - Report Submitted (prototype)</title>
 <style>
 /* ── Design tokens (copied from mobile-app/src/styles.css :root) ── */
 :root {
@@ -192,7 +192,7 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   STAGE-SUCCESS — the surface under audit
+   STAGE-SUCCESS - the surface under audit
    ───────────────────────────────────────────────────────────────── */
 .stage-success {
   width: 100%;
@@ -203,7 +203,7 @@ body {
   font-family: var(--font);
 }
 
-/* HEADER (48 px) — uses the SAME brand cluster (logo SVG + wordmark
+/* HEADER (48 px) - uses the SAME brand cluster (logo SVG + wordmark
    + connectivity dot) the home stage uses, so the success stage
    reads as part of the same app, not a separate flow. */
 .v4-header-success {
@@ -298,7 +298,7 @@ body {
   overflow: hidden;
 }
 
-/* THANKS BAR — compact heart on the left, copy on the right.
+/* THANKS BAR - compact heart on the left, copy on the right.
    Horizontal layout (was stacked) per operator: saves ~30 px of
    vertical height so the success-stage budget on iPhone SE keeps
    comfortable headroom for the rest of the content.  */
@@ -325,7 +325,7 @@ body {
   flex: 0 0 auto;
 }
 .success-thanks-heart i {
-  color: #ff7a90;                            /* warm coral — heart is universal */
+  color: #ff7a90;                            /* warm coral - heart is universal */
   font-size: 22px;
   filter: drop-shadow(0 0 10px rgba(255,122,144,0.55));
   animation: success-heart-beat 1.8s ease-in-out infinite;
@@ -369,7 +369,7 @@ body {
   line-height: 1.3;
 }
 
-/* STATUS PILL — radar + label + meta (now sits BELOW the thanks bar) */
+/* STATUS PILL - radar + label + meta (now sits BELOW the thanks bar) */
 .success-status-pill {
   background: var(--surface);
   border: 1px solid var(--accent-soft);
@@ -478,7 +478,7 @@ body {
   50%      { filter: drop-shadow(0 0 8px rgba(9,209,199,0.8)); }
 }
 
-/* CONTRIBUTION STRIP — current tier on the left, next tier on the
+/* CONTRIBUTION STRIP - current tier on the left, next tier on the
    right with a connecting progress bar. Shows the operator's
    "Signal logo" (📣 = T2_SIGNAL per home-screen.js BADGE_LEVELS)
    as the visible next-tier target so the reporter understands
@@ -556,7 +556,7 @@ body {
   text-shadow: 0 1px 2px rgba(0,0,0,0.4);
 }
 
-/* NEARBY TRIGGER PILL — collapsed by default. Number-only summary
+/* NEARBY TRIGGER PILL - collapsed by default. Number-only summary
    that opens the bottom-sheet modal (mirrors home-page pattern
    `.nearby-sheet`).  No inline list on the success stage = max
    vertical breathing room for the rest of the content. */
@@ -648,7 +648,7 @@ body {
   transform: scaleX(-1);
 }
 
-/* Empty-state variant of the trigger pill — when nearby has 0 reports
+/* Empty-state variant of the trigger pill - when nearby has 0 reports
    the pill is unclickable + reads as the empty signal. */
 .success-nearby-trigger.is-empty {
   cursor: default;
@@ -657,7 +657,7 @@ body {
 }
 .success-nearby-trigger.is-empty .snt-chevron { display: none; }
 
-/* Flex-fill spacer — pushes the trigger pill up toward the
+/* Flex-fill spacer - pushes the trigger pill up toward the
    contribution strip so the CTAs at the bottom of the stage stay
    pinned to the footer instead of floating into the middle. */
 .success-spacer {
@@ -748,12 +748,12 @@ body {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
-/* NEARBY ROWS — mirror the home-stage .home-nearby-row DOM so the
+/* NEARBY ROWS - mirror the home-stage .home-nearby-row DOM so the
    success-stage feed reads as the same component the user sees on
    home (operator brief: "I am not alone. Others nearby are reporting
    too."). Verified-count + pending-count + summary uppercase eyebrow
    all preserved. Adds a pure-CSS ripple ring around the dot when the
-   row carries active (pending) reports — that's the "ripple effect
+   row carries active (pending) reports - that's the "ripple effect
    if reports exist nearby" the operator asked for. */
 .nearby-row {
   display: flex;
@@ -863,7 +863,7 @@ body {
   font-weight: 600;
 }
 
-/* Empty nearby state — compact (success-stage budget is tight). */
+/* Empty nearby state - compact (success-stage budget is tight). */
 .nearby-empty {
   display: flex;
   flex-direction: row;
@@ -922,7 +922,7 @@ body {
   line-height: 1.35;
 }
 
-/* FOOTER — stacked CTAs */
+/* FOOTER - stacked CTAs */
 .v4-footer {
   display: flex;
   flex-direction: column;
@@ -1026,7 +1026,7 @@ body {
 <body>
 
 <!-- ─────────────────────────────────────────────────────────────────
-     Prototype controls (NOT part of the production design — they
+     Prototype controls (NOT part of the production design - they
      just let the operator flip between states for visual review).
      ───────────────────────────────────────────────────────────── -->
 <div class="proto-controls" id="controls">
@@ -1093,7 +1093,7 @@ body {
     <!-- THE STAGE -->
     <div class="stage-success" id="stage-success" data-state="online" data-motion="default">
 
-      <!-- Header — same brand cluster (logo SVG + wordmark + dot)
+      <!-- Header - same brand cluster (logo SVG + wordmark + dot)
            the home stage uses (index.html lines 3212-3238). -->
       <div class="v4-header-success">
         <button type="button" class="success-brand" aria-label="Home">
@@ -1130,7 +1130,7 @@ body {
       <!-- Body -->
       <div class="success-body">
 
-        <!-- Thanks bar — heart on left, copy on right (horizontal
+        <!-- Thanks bar - heart on left, copy on right (horizontal
              layout per operator to reclaim vertical height). -->
         <div class="success-thanks">
           <div class="success-thanks-heart" aria-hidden="true">
@@ -1142,7 +1142,7 @@ body {
           </div>
         </div>
 
-        <!-- Status pill — radar + label + report-id + time-ago, now
+        <!-- Status pill - radar + label + report-id + time-ago, now
              on a single horizontal row to free up vertical space for
              the thanks bar above. -->
         <div class="success-status-pill">
@@ -1165,10 +1165,10 @@ body {
         <!-- Responder strip -->
         <div class="success-responder-strip">
           <i class="fa-solid fa-bolt" aria-hidden="true"></i>
-          <span>Responders reviewing — <strong>12 active nearby</strong></span>
+          <span>Responders reviewing - <strong>12 active nearby</strong></span>
         </div>
 
-        <!-- Contribution strip — current tier on the left, NEXT tier
+        <!-- Contribution strip - current tier on the left, NEXT tier
              on the right with a connecting progress bar. The Signal
              logo (📣 = T2_SIGNAL emoji from home-screen.js BADGE_LEVELS)
              is now visually surfaced as the goal, not just a text
@@ -1188,7 +1188,7 @@ body {
           </div>
         </button>
 
-        <!-- Nearby trigger pill — number-only summary. Tap opens
+        <!-- Nearby trigger pill - number-only summary. Tap opens
              the bottom-sheet modal with the full list (mirrors the
              home stage's .nearby-sheet pattern). -->
         <button type="button" class="success-nearby-trigger" id="nearby-trigger" aria-label="View nearby reports">
@@ -1247,7 +1247,7 @@ body {
 </div>
 
 <div class="proto-caption" id="proto-caption">iPhone SE · 375 × 667 · LTR · online · populated</div>
-<div class="proto-budget" id="proto-budget">stage body height: — px / available: — px</div>
+<div class="proto-budget" id="proto-budget">stage body height: - px / available: - px</div>
 
 <script>
 /* Prototype-only state machine. Pure paint; no production code. */
@@ -1303,14 +1303,14 @@ function renderNearby() {
         <div class="nearby-empty-pulse"><i class="fa-solid fa-satellite-dish"></i></div>
         <div class="nearby-empty-text">
           <div class="nearby-empty-title">You're the first eyes here</div>
-          <div class="nearby-empty-sub">No nearby reports yet — your signal matters</div>
+          <div class="nearby-empty-sub">No nearby reports yet - your signal matters</div>
         </div>
       </div>
     `;
     closeSheet();
     return;
   }
-  // Populated state — trigger pill shows total count + active areas.
+  // Populated state - trigger pill shows total count + active areas.
   const totalReports = POPULATED_NEARBY.reduce((sum, item) => sum + item.count, 0);
   const activeAreas = POPULATED_NEARBY.filter((item) => item.pending > 0).length;
   NEARBY_TRIGGER.classList.remove('is-empty');
@@ -1319,7 +1319,7 @@ function renderNearby() {
     `<span class="snt-count">${totalReports}</span>` +
     `<span>reports</span>` +
     `<span class="snt-meta-sub" id="snt-meta-sub">· ${activeAreas} areas active</span>`;
-  // Bottom-sheet list renders the FULL group set (no truncation —
+  // Bottom-sheet list renders the FULL group set (no truncation -
   // the sheet scrolls). Rows match the home-stage nearby-row DOM.
   NEARBY_LIST.innerHTML = POPULATED_NEARBY.map((item) => {
     const active = item.pending > 0 ? ' is-active' : '';
@@ -1370,7 +1370,7 @@ function applyState() {
 
   // Status pill copy adapts to online/offline.
   STATUS_LABEL.textContent = (state.state === 'offline')
-    ? 'Queued — will sync when online'
+    ? 'Queued - will sync when online'
     : 'Under review';
 
   renderNearby();
@@ -1413,7 +1413,7 @@ document.getElementById('reset-btn').addEventListener('click', () => {
   applyState();
 });
 
-// Time-ago ticker (visual only — prototype doesn't have real submit time).
+// Time-ago ticker (visual only - prototype doesn't have real submit time).
 let elapsed = 2;
 setInterval(() => {
   elapsed += 1;

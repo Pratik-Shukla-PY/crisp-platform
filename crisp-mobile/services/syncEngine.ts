@@ -1,5 +1,5 @@
 /**
- * CRISP Adaptive Sync Engine — Network-aware chunked upload with dynamic adaptation.
+ * CRISP Adaptive Sync Engine - Network-aware chunked upload with dynamic adaptation.
  *
  * Key behaviors:
  *   - Detects network tier (FAST/MEDIUM/SLOW/VERY_SLOW/OFFLINE)
@@ -23,7 +23,7 @@ import {
 import { swallow as telemetrySwallow } from './telemetry';
 
 const MAX_RETRIES = 10;
-const ORPHAN_AGE_MS = 10 * 60 * 1000;   // 10-min age gate — same as PWA
+const ORPHAN_AGE_MS = 10 * 60 * 1000;   // 10-min age gate - same as PWA
 let _isSyncing = false;
 let _successStreak = 0;  // Track consecutive successes for upgrade
 
@@ -35,8 +35,8 @@ let _successStreak = 0;  // Track consecutive successes for upgrade
 // On PROD 2026-05-13 a row queued by an interrupted PWA submit landed
 // in IndexedDB with stages.meta/text/audio = true but serverReportId =
 // null AND zero photo / audio / text payload. It could never make
-// forward progress — the row claimed it had attempted upload but had
-// nothing to upload — yet the retry loop kept probing the unreachable
+// forward progress - the row claimed it had attempted upload but had
+// nothing to upload - yet the retry loop kept probing the unreachable
 // server, inflating the "Retrying N reports…" toast and burning the
 // retry budget. PWA fix shipped as commit `49adad9` (v166).
 //
@@ -72,7 +72,7 @@ function _variantHasBytes(v: VariantSlot | null | undefined): boolean {
 }
 
 /**
- * Pure predicate — exported for unit testing only. Returns true iff
+ * Pure predicate - exported for unit testing only. Returns true iff
  * the row claims to have been queued for sync but has no path to
  * forward progress: no server id, no text, no audio, no photo bytes,
  * and it's been sitting that way for > 10 minutes.
@@ -80,7 +80,7 @@ function _variantHasBytes(v: VariantSlot | null | undefined): boolean {
 export function _isOrphanQueueRow(row: QueuedReport | null | undefined): boolean {
   if (!row || !row.client_report_id) return false;
 
-  // RN equivalent of PWA's `stagesClaimSent` — any non-draft status
+  // RN equivalent of PWA's `stagesClaimSent` - any non-draft status
   // means enqueueReport() has fired at least once. Draft rows (status
   // 'draft') aren't in the queue surface, but guard anyway.
   const stagesClaimSent =
@@ -118,7 +118,7 @@ export function _isOrphanQueueRow(row: QueuedReport | null | undefined): boolean
       const arr = JSON.parse(row.extra_photos);
       noLegacyExtras = !Array.isArray(arr) || arr.length === 0 ||
         arr.every((e: any) => !e || (typeof e === 'string' && e.length === 0));
-    } catch { /* corrupt — treat as empty so we don't false-protect */ }
+    } catch { /* corrupt - treat as empty so we don't false-protect */ }
   }
 
   const noPhotoBytes = mainPhotoEmpty && extrasEmpty && noLegacyPhoto && noLegacyExtras;
@@ -147,7 +147,7 @@ export async function selfHealOrphans(): Promise<number> {
       const short = row.client_report_id.substring(0, 8);
       console.warn(
         `[Queue:self-heal] orphan ${short} (status=${row.status}, ` +
-        `age=${Math.round((Date.now() - row.created_at) / 60000)}m) — ` +
+        `age=${Math.round((Date.now() - row.created_at) / 60000)}m) - ` +
         'no server_id + no payload. Auto-dequeue.',
       );
       try {
@@ -170,9 +170,9 @@ export async function processQueue(): Promise<number> {
 
   let synced = 0;
   try {
-    // Phase 7 (May 2026) — sweep orphans BEFORE pulling the queue
+    // Phase 7 (May 2026) - sweep orphans BEFORE pulling the queue
     // snapshot so a stuck zero-payload row from an interrupted
-    // submission doesn't waste a sync tick. Idempotent — the 10-min
+    // submission doesn't waste a sync tick. Idempotent - the 10-min
     // age gate inside _isOrphanQueueRow protects in-flight rows.
     try { await selfHealOrphans(); } catch (e) { telemetrySwallow('selfHealOrphans:boot', e); }
 
@@ -180,7 +180,7 @@ export async function processQueue(): Promise<number> {
     await detectNetworkTier();
     const tier = getCurrentTier();
     if (tier === 'OFFLINE') {
-      console.log('[Sync] Offline — skipping');
+      console.log('[Sync] Offline - skipping');
       _isSyncing = false;
       return 0;
     }
@@ -227,7 +227,7 @@ async function syncReport(report: QueuedReport): Promise<void> {
     try { await sendDescription(serverId, report.text_description); } catch (e) { telemetrySwallow('sendDescription', e); }
   }
 
-  // Stage 3: Guaranteed-delivery — tier-first interleaved photo upload.
+  // Stage 3: Guaranteed-delivery - tier-first interleaved photo upload.
   //
   // Every photo (main + extras) has three JPEG variants (SMALL/MEDIUM/LARGE)
   // generated on-device. We upload them in this order:
@@ -247,7 +247,7 @@ async function syncReport(report: QueuedReport): Promise<void> {
   type PhotoVariantsRec = { small: VariantRec; medium: VariantRec; large: VariantRec };
   type ExtraVariantsRec = PhotoVariantsRec & { groupId: string };
   // Phase L wire vocab (May 2026): backend enum is SMALL/MEDIUM/ORIGINAL.
-  // Internal RN tier names stay 'small'/'medium'/'large' — only the wire
+  // Internal RN tier names stay 'small'/'medium'/'large' - only the wire
   // payload uses the canonical names.
   const TIER_TO_RESOLUTION: Record<'small' | 'medium' | 'large', 'SMALL' | 'MEDIUM' | 'ORIGINAL'> = {
     small: 'SMALL', medium: 'MEDIUM', large: 'ORIGINAL',
@@ -298,7 +298,7 @@ async function syncReport(report: QueuedReport): Promise<void> {
     // Tier-first interleave.
     //
     // P1.4 (May 2026, audit follow-up to K.3.a): SMALL is the must-have
-    // tier — backend renders no chip at all without it, so we still
+    // tier - backend renders no chip at all without it, so we still
     // throw on SMALL failure to retry the whole report next pass.
     // MEDIUM and ORIGINAL are best-effort; catching failures here lets
     // us POST `/media/mark-deferred` after the loop so:
@@ -345,7 +345,7 @@ async function syncReport(report: QueuedReport): Promise<void> {
       }
     }
 
-    // Soft-drain signal — backend converts these to placeholder Media
+    // Soft-drain signal - backend converts these to placeholder Media
     // rows stamped abandon_reason='bandwidth_tier_deferred' so the
     // dashboard chip is accurate and Action ③ doesn't mis-classify
     // them as 'chunks_never_arrived' after 30 min idle.
@@ -360,7 +360,7 @@ async function syncReport(report: QueuedReport): Promise<void> {
           }),
         });
         if (!res.ok) {
-          console.warn(`[Sync] mark-deferred returned HTTP ${res.status} — non-fatal, Action ③ will catch it`);
+          console.warn(`[Sync] mark-deferred returned HTTP ${res.status} - non-fatal, Action ③ will catch it`);
         } else {
           console.log(`[Sync] mark-deferred signalled for ${Object.keys(deferred).length} group(s)`);
         }
@@ -372,7 +372,7 @@ async function syncReport(report: QueuedReport): Promise<void> {
       }
     }
   } else if (report.photo) {
-    // Legacy single-variant path — pre-variant reports stay functional.
+    // Legacy single-variant path - pre-variant reports stay functional.
     const b64 = extractBase64(report.photo);
     if (b64) {
       console.log(`[Sync] Legacy photo: ${Math.round(b64.length / 1024)}KB, network=${getCurrentTier()}`);
@@ -382,7 +382,7 @@ async function syncReport(report: QueuedReport): Promise<void> {
           await updateReportStatus(report.client_report_id, 'syncing', { photo_chunk_progress: progress });
         });
     }
-    // Legacy extra_photos (pre-variant) — keep the old per-index resume map.
+    // Legacy extra_photos (pre-variant) - keep the old per-index resume map.
     if (report.extra_photos) {
       try {
         const arr: string[] = JSON.parse(report.extra_photos);
@@ -444,13 +444,13 @@ async function syncReport(report: QueuedReport): Promise<void> {
 }
 
 // ── UNDP §5 binary-chunk transport (Apr 2026, Option A) ──────────────────
-// Master feature flag. Default ON — every new build uses binary chunks.
+// Master feature flag. Default ON - every new build uses binary chunks.
 // Disable in an incident by setting AsyncStorage key `crisp_binary_chunks`
 // to `"off"` before calling `processQueue()`.
 let _BINARY_CHUNKS_ENABLED = true;
 let _BINARY_FALLBACK_404 = false;   // session-scoped sticky flag on 404
 
-// Apr 2026 — capability detection: React-Native's Blob constructor does
+// Apr 2026 - capability detection: React-Native's Blob constructor does
 // NOT accept ArrayBuffer/Uint8Array parts ("Creating blobs from
 // 'ArrayBuffer' and 'ArrayBufferView' are not supported"). The PWA
 // Blob does. This happens synchronously at chunk-post time, BEFORE the
@@ -464,7 +464,7 @@ try {
 } catch {
   _BINARY_CAPABLE = false;
   _BINARY_FALLBACK_404 = true;   // permanent for this session
-  console.log('[Sync] Blob-from-bytes unsupported on this platform — pinning base64 chunk path');
+  console.log('[Sync] Blob-from-bytes unsupported on this platform - pinning base64 chunk path');
 }
 
 export function setBinaryChunksEnabled(on: boolean): void {
@@ -476,7 +476,7 @@ export function isBinaryChunksEnabled(): boolean {
 }
 
 // ── Upload-bandwidth probe (Apr 2026) ──────────────────────────────────────
-// Parity with the PWA fix — see `mobile-app/src/app.js::measureUploadBandwidth`.
+// Parity with the PWA fix - see `mobile-app/src/app.js::measureUploadBandwidth`.
 // Before the first chunk of an upload, POST an 8 KB probe to
 // `/reports/upload-probe` and measure actual round-trip throughput. This
 // bypasses the unreliable `navigator.connection.effectiveType` signal and
@@ -507,7 +507,7 @@ async function measureUploadBandwidth(): Promise<{ bytesPerSec: number; elapsedM
     });
     clearTimeout(timer);
     if (!res.ok) {
-      console.warn(`[Probe] HTTP ${res.status} — ignoring`);
+      console.warn(`[Probe] HTTP ${res.status} - ignoring`);
       return { bytesPerSec: 0, elapsedMs: 0, error: `HTTP ${res.status}` };
     }
     await res.json();
@@ -561,7 +561,7 @@ async function adaptTierViaProbe(opts: { force?: boolean } = {}): Promise<void> 
       else upgradeNetwork();
     }
   } else {
-    console.log(`[Probe] no measurement (${error || 'n/a'}) — keeping NetworkInfo-based tier`);
+    console.log(`[Probe] no measurement (${error || 'n/a'}) - keeping NetworkInfo-based tier`);
   }
 }
 
@@ -581,10 +581,10 @@ export function _getMeasuredBandwidth(): number { return _lastProbeBytesPerSec; 
 // Mirrors mobile-app/src/app.js `_crispAdaptive` block. Keep these two
 // blocks in sync; the RN app is the secondary surface, not the reference.
 //
-//  1. Per-device bandwidth cache via AsyncStorage — skip the first
+//  1. Per-device bandwidth cache via AsyncStorage - skip the first
 //     probe round-trip for repeat sessions (saves ~500 ms cold-start).
 //  2. Mid-upload re-probe with hysteresis (2× ratio threshold).
-//  3. Packet-loss detection — chunk retries >3 → tier shrink for the
+//  3. Packet-loss detection - chunk retries >3 → tier shrink for the
 //     remainder of the session.
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -597,7 +597,7 @@ const _BANDWIDTH_CACHE_KEY = 'crisp_bandwidth_last_bps';
 const _BANDWIDTH_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const _HYSTERESIS_RATIO = 2.0;
 const _PACKET_LOSS_RETRY_THRESHOLD = 3;
-/** Hook point count — exported so the chunk loop can `(seq+1) % X === 0`. */
+/** Hook point count - exported so the chunk loop can `(seq+1) % X === 0`. */
 export const MID_UPLOAD_REPROBE_EVERY = 8;
 
 async function _readCachedBandwidth(): Promise<number> {
@@ -639,14 +639,14 @@ export async function hydrateBandwidthFromCache(): Promise<void> {
     }
   }
 }
-// Kick hydration at module load — module import is the Metro bundler so
+// Kick hydration at module load - module import is the Metro bundler so
 // this runs exactly once per app launch.
 hydrateBandwidthFromCache().catch(() => {});
 
 /**
  * Mid-upload re-probe with hysteresis. Returns the (possibly new) tier.
  * Caller should invoke every MID_UPLOAD_REPROBE_EVERY chunks.
- * Fire-and-forget is fine — failures fall through to the prior tier.
+ * Fire-and-forget is fine - failures fall through to the prior tier.
  */
 export async function midUploadReprobe(): Promise<void> {
   const prevBps = _lastProbeBytesPerSec;
@@ -675,7 +675,7 @@ export async function midUploadReprobe(): Promise<void> {
       }
       console.log(
         `[Reprobe] ${Math.round(prevBps)}→${Math.round(newBps)} B/s ` +
-        `(ratio ${ratio.toFixed(2)}) — within hysteresis, staying on ${prevTier}`,
+        `(ratio ${ratio.toFixed(2)}) - within hysteresis, staying on ${prevTier}`,
       );
     }
   }
@@ -791,7 +791,7 @@ async function adaptiveUploadBinary(
       try {
         const res = await fetch(`${API_BASE}/reports/${reportId}/media/chunk-bin`, {
           method: 'POST',
-          // DO NOT set Content-Type — fetch auto-generates the boundary.
+          // DO NOT set Content-Type - fetch auto-generates the boundary.
           body: fd as any,
         });
 
@@ -799,21 +799,21 @@ async function adaptiveUploadBinary(
           sent = true;
           _successStreak++;
           if (_successStreak >= 10) { upgradeNetwork(); _successStreak = 0; }
-          // Phase-2.1 — record retry count for this chunk. `attempt` is
+          // Phase-2.1 - record retry count for this chunk. `attempt` is
           // 0-based: 0 = first try succeeded, >threshold = lossy.
           try { recordRetryCount(attempt); } catch { /* best-effort */ }
           break;
         }
         if (res.status === 404 && attempt === 0) {
-          // Legacy backend — sticky-fallback for the rest of the session.
-          console.warn('[Adaptive:bin] /chunk-bin returned 404 — falling back to base64 for the rest of this session');
+          // Legacy backend - sticky-fallback for the rest of the session.
+          console.warn('[Adaptive:bin] /chunk-bin returned 404 - falling back to base64 for the rest of this session');
           _BINARY_FALLBACK_404 = true;
           // Delegate this upload (from current offset) to the base64 path.
           // Convert the remaining bytes back to base64 for the legacy sender.
           const remainingB64 = bytesToBase64(bytes.slice(offset));
           return await adaptiveUploadLegacy(
             reportId, mediaId, type,
-            // Full base64 for resume accounting — offsets measured in b64
+            // Full base64 for resume accounting - offsets measured in b64
             // chars. Easiest: re-encode the whole buffer as base64.
             bytesToBase64(bytes),
             // Adjust startFrom into base64 space.
@@ -842,13 +842,13 @@ async function adaptiveUploadBinary(
     chunkIdx++;
     await onProgress(offset);
 
-    // Phase-1.6 + Phase-2.1 — packet-loss shrink + periodic re-probe.
+    // Phase-1.6 + Phase-2.1 - packet-loss shrink + periodic re-probe.
     // Both best-effort: throwing from the adaptive layer must never
     // abort an upload that's already successfully-transmitted a chunk.
     try {
       maybeShrinkTierForLoss();
       if (chunkIdx % MID_UPLOAD_REPROBE_EVERY === 0) {
-        // Fire-and-forget — don't block the next chunk.
+        // Fire-and-forget - don't block the next chunk.
         midUploadReprobe().catch(() => {});
       }
     } catch { /* ignore */ }
@@ -871,7 +871,7 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 /**
- * Adaptive chunked upload — adjusts chunk size based on network conditions.
+ * Adaptive chunked upload - adjusts chunk size based on network conditions.
  * Downgrades immediately on failure, upgrades gradually on success.
  *
  * UNDP §5 Apr 2026: this is now a router. When the binary-chunk flag is
@@ -880,7 +880,7 @@ function bytesToBase64(bytes: Uint8Array): string {
  * back via 404), we stay on `adaptiveUploadLegacy` which retains the
  * pre-April behaviour verbatim.
  *
- * Callers keep their existing signature — no migration needed on the
+ * Callers keep their existing signature - no migration needed on the
  * seven call-sites upstream.
  */
 async function adaptiveUpload(
@@ -889,7 +889,7 @@ async function adaptiveUpload(
   onProgress: (chunk: number) => Promise<void>,
   opts?: { resolution_tier?: 'SMALL' | 'MEDIUM' | 'ORIGINAL'; photo_group_id?: string | null },
 ): Promise<void> {
-  // Apr 2026 — measure actual upload throughput before committing to a
+  // Apr 2026 - measure actual upload throughput before committing to a
   // tier. Parity with the PWA fix. Cached 60 s so the three variants of
   // one photo share one probe.
   await adaptTierViaProbe();
@@ -913,7 +913,7 @@ async function adaptiveUpload(
 
 /**
  * Legacy base64 chunked upload. Preserved verbatim pre-April 2026
- * behaviour — retained for (a) the feature-flag-off path and (b) the
+ * behaviour - retained for (a) the feature-flag-off path and (b) the
  * sticky-404 fallback inside `adaptiveUploadBinary`.
  */
 async function adaptiveUploadLegacy(
@@ -928,7 +928,7 @@ async function adaptiveUploadLegacy(
   const totalLen = b64.length;
   _successStreak = 0;
 
-  // CRITICAL: Lock chunk size for the entire upload — NEVER change mid-upload.
+  // CRITICAL: Lock chunk size for the entire upload - NEVER change mid-upload.
   // If we changed chunkSize, seq_num and total_chunks would become inconsistent
   // on the server, causing assembly to stall at partial % forever.
   // Start conservative: pick smallest chunk size of current tier, stick with it.
@@ -950,7 +950,7 @@ async function adaptiveUploadLegacy(
       media_id: mediaId,
       type,
       seq_num: chunkIdx,
-      total_chunks: LOCKED_TOTAL_CHUNKS,   // LOCKED — server expects exactly this count
+      total_chunks: LOCKED_TOTAL_CHUNKS,   // LOCKED - server expects exactly this count
       data: chunk,
       checksum,
     };

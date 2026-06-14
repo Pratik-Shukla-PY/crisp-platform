@@ -1,6 +1,6 @@
-# CRISP — Prometheus alert rules
+# CRISP - Prometheus alert rules
 # ──────────────────────────────────────────────────────────────────────────
-# Phase K K.6.c (May 2026) — operator-facing SLI alerts for the submission
+# Phase K K.6.c (May 2026) - operator-facing SLI alerts for the submission
 # reliability hardening surface.
 #
 # Each alert pairs with one of the dashboard chips introduced in K.5.a so the
@@ -37,7 +37,7 @@ groups:
           severity: warning
           team: crisp-ops
         annotations:
-          summary: "CRISP — PARTIAL backlog growing without promotions"
+          summary: "CRISP - PARTIAL backlog growing without promotions"
           description: |
             No PARTIAL → SYNCED promotions in the last 10 minutes AND the
             AI retry queue has > 50 pending rows. The assembly recovery
@@ -63,7 +63,7 @@ groups:
           severity: warning
           team: crisp-ops
         annotations:
-          summary: "CRISP — > 20% of uploads losing higher tiers (slow networks)"
+          summary: "CRISP - > 20% of uploads losing higher tiers (slow networks)"
           description: |
             More than 20% of variant uploads in the last hour are being
             soft-drained as bandwidth_tier_deferred. Field network is
@@ -74,7 +74,7 @@ groups:
               • Lowering CRISP_PWA_HIGH_TIER_MAX_BYTES to push less data
 
       # ── Auth-token expiry rate ──────────────────────────────────────
-      # K.2.e flags Reports submitted with an expired Bearer token —
+      # K.2.e flags Reports submitted with an expired Bearer token -
       # the PWA captured while logged in but the queue drained after
       # JWT expiry. > 5%/h means JWT_ACCESS_TTL_MINUTES is too short
       # for typical capture-to-drain windows in this deployment.
@@ -90,7 +90,7 @@ groups:
           severity: warning
           team: crisp-ops
         annotations:
-          summary: "CRISP — > 5% of logged-in submissions losing attribution"
+          summary: "CRISP - > 5% of logged-in submissions losing attribution"
           description: |
             More than 5% of reports in the last hour were accepted with
             an expired Bearer token (reporter loses credit, dashboard
@@ -116,11 +116,11 @@ groups:
           severity: critical
           team: crisp-ops
         annotations:
-          summary: "CRISP — > 5% of incoming media has PII blur failed"
+          summary: "CRISP - > 5% of incoming media has PII blur failed"
           description: |
             More than 5% of new Media rows in the last hour have
             pii_blur_status='failed'. This is a UNDP must-have #7
-            regression — faces may be reaching the dashboard unblurred.
+            regression - faces may be reaching the dashboard unblurred.
             Page: check MediaPipe / easyocr availability on the backend
             (`GET /api/v1/health/pii`) AND BlazeFace availability on
             the PWA (`__crispPIIDebug()` in DevTools).
@@ -138,7 +138,7 @@ groups:
           severity: warning
           team: crisp-ops
         annotations:
-          summary: "CRISP — chunk uploads abandoned at > 0.5/sec"
+          summary: "CRISP - chunk uploads abandoned at > 0.5/sec"
           description: |
             More than 30 Media rows in the last 15 minutes flipped to
             failed/chunks_never_arrived. PWAs captured reports but
@@ -159,7 +159,7 @@ groups:
           severity: warning
           team: crisp-ops
         annotations:
-          summary: "CRISP — AI retry queue > 200 pending for 30m"
+          summary: "CRISP - AI retry queue > 200 pending for 30m"
           description: |
             Pending AI-retry rows have stayed above 200 for at least
             30 minutes. Either the daemon stalled (boot logs:
@@ -176,7 +176,7 @@ groups:
           severity: critical
           team: crisp-ops
         annotations:
-          summary: "CRISP — > 50 AI retries reached terminal_failed in 1h"
+          summary: "CRISP - > 50 AI retries reached terminal_failed in 1h"
           description: |
             More than 50 ai_retry_queue rows hit the 5-attempt
             terminal_failed state in the last hour. AI assessment data
@@ -198,7 +198,7 @@ groups:
           severity: critical
           team: crisp-ops
         annotations:
-          summary: "CRISP — assembly_worker_lost regression suspected"
+          summary: "CRISP - assembly_worker_lost regression suspected"
           description: |
             > 10 Media rows abandoned with reason=assembly_worker_lost
             in the last hour. The K.1.a/K.1.b atomic-SQL fixes should
@@ -210,7 +210,7 @@ groups:
       # ── Daemon false-abandon rate (R2.c, May 2026) ───────────────────
       # The recovery-sweep daemon abandons rows past 30 minutes of
       # inactivity. R1's chunk-handler revival path lets late-arriving
-      # chunks recover those rows — but if many rows ARE being
+      # chunks recover those rows - but if many rows ARE being
       # recovered, it means the 30-minute deadline is too aggressive
       # for the network conditions in the field. The "false-abandon
       # rate" is the ratio of recovered to abandoned (excluding hard
@@ -227,7 +227,7 @@ groups:
           severity: warning
           team: crisp-ops
         annotations:
-          summary: "CRISP — daemon false-abandon rate above 50 %"
+          summary: "CRISP - daemon false-abandon rate above 50 %"
           description: |
             More than half of soft-abandoned rows in the last hour
             ended up being recovered by the chunk-handler revival
@@ -249,7 +249,7 @@ groups:
           severity: warning
           team: crisp-ops
         annotations:
-          summary: "CRISP — hard-delete spike (Action ⑥)"
+          summary: "CRISP - hard-delete spike (Action ⑥)"
           description: |
             > 500 Media rows hard-deleted by Action ⑥ in the last
             hour. Either a one-time backlog clean-up (expected

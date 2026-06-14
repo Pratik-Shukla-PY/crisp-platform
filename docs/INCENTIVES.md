@@ -1,12 +1,12 @@
 # CRISP Non-Monetary Engagement Incentives
 
-**Policy document — April 2026.** Supersedes any prior badge copy in the
+**Policy document - April 2026.** Supersedes any prior badge copy in the
 codebase. When the PWA, RN app, or dashboard surfaces anything
 incentive-shaped, the behaviour MUST match this document.
 
 ## The UNDP requirement (verbatim)
 
-From the RAPIDA Problem Statement (*Appendix — Engagement Incentives*):
+From the RAPIDA Problem Statement (*Appendix - Engagement Incentives*):
 
 > "Participants shall propose a non-monetary rewarding system that
 > prevents users from repeating their reports or over-reporting for a
@@ -14,7 +14,7 @@ From the RAPIDA Problem Statement (*Appendix — Engagement Incentives*):
 
 The operative phrase is *prevents users from repeating their reports
 or over-reporting for a reward*. A rewarding system keyed off raw
-submission volume inverts this — it literally rewards the behaviour
+submission volume inverts this - it literally rewards the behaviour
 UNDP is asking us to discourage. Any historical CRISP UI that did so
 (the pre-April-2026 NEWCOMER → HELPER → GUARDIAN → HERO ladder) was
 out of compliance.
@@ -23,7 +23,7 @@ out of compliance.
 
 1. **Reward verified impact, not volume.** Every incentive surface
    (badge, headline metric, "My Reports" card) must be computed from
-   reports an analyst has *accepted and dispatched / resolved* — not
+   reports an analyst has *accepted and dispatched / resolved* - not
    from raw submissions. Volume metrics are allowed internally for
    fraud detection but must not be visible to the reporter as a
    goal-shaped number.
@@ -35,12 +35,12 @@ out of compliance.
    reporters by count. The badge is a private visual on the "My
    Reports" screen and is driven exclusively by `verified_count`.
 4. **Neutral fraud handling.** Flagged / duplicate / rejected reports
-   do not reduce a user's badge — they just fail to earn verification.
+   do not reduce a user's badge - they just fail to earn verification.
    This prevents a "reject to punish" dynamic that could be gamed in
    the opposite direction.
 5. **Crisis-agnostic categories.** Where we do want to recognise
    distinct contributions (e.g. "first responder in District X",
-   "multi-lingual reporter"), recognition is categorical — not
+   "multi-lingual reporter"), recognition is categorical - not
    competitive. Two users can both be "multi-lingual"; there's no
    top-10 list.
 
@@ -67,16 +67,16 @@ out of compliance.
 transitions from PENDING to VERIFIED / RESPONDING / RESOLVED. Further
 status moves (RESPONDING → RESOLVED) do not double-count.
 
-## Categorical recognitions (planned — v2)
+## Categorical recognitions (planned - v2)
 
 Following the "crisis-agnostic categories" principle, post-launch we
 intend to add small badge-like recognitions that are descriptive, not
 ranked:
 
-* **First responder in &lt;region&gt;** — earliest verified report for a
+* **First responder in &lt;region&gt;** - earliest verified report for a
   newly-opened crisis region.
-* **Multi-lingual reporter** — ≥ 3 verified reports in 2+ languages.
-* **Infrastructure expert** — ≥ 5 verified reports in one of the 7
+* **Multi-lingual reporter** - ≥ 3 verified reports in 2+ languages.
+* **Infrastructure expert** - ≥ 5 verified reports in one of the 7
   UNDP super-types.
 
 Each of these is a flag, not a rank. They appear alongside the badge
@@ -109,6 +109,6 @@ test in that class and update this document.
 This policy was introduced in the April-2026 UNDP-alignment sprint.
 Before April 2026, CRISP's badge ladder was keyed off
 `ReporterProfile.report_count` (raw volume). The gap analysis at
-`.claude/plans/swirling-forging-raccoon.md` §3.8 captured the
+the design plan §3.8 captured the
 compliance risk. This document + the code change in
 `_update_reporter_profile` close that gap.

@@ -9,7 +9,7 @@ CRISP is a multi-channel crisis reporting platform with 3 layers:
            ┌─────────────────────────┐     ┌──────────────────────────┐    ┌─────────────────────┐
            │  Mobile PWA             │     │  FastAPI Backend         │    │  Web Dashboard       │
            │  Telegram Bot           │────>│  Whisper Transcription   │───>│  Map + Clusters      │
-           │  WhatsApp Bot           │     │  Claude AI Geocoding     │    │  AI Assessment       │
+           │  WhatsApp Bot           │     │  AI Geocoding     │    │  AI Assessment       │
            │  SMS Gateway            │     │  Chunked Media Assembly  │    │  Satellite Verify    │
            │  IVR Voice Call         │     │  PostgreSQL 15           │    │  PDF Export          │
            └─────────────────────────┘     └──────────────────────────┘    └─────────────────────┘
@@ -52,7 +52,7 @@ User sends message to WhatsApp Business number
 User sends SMS: "Flood near Koramangala bridge, urgent"
   -> Twilio webhook POST
   -> Keyword parser extracts type/severity/location
-  -> Nominatim + Claude AI geocoding
+  -> Nominatim + AI geocoding
   -> POST /api/v1/reports/meta
 ```
 
@@ -63,7 +63,7 @@ Twilio calls user (or user calls Twilio number)
   -> TwiML: "Describe your problem" (Record, auto-stop 20s silence)
   -> TwiML: "Thank you, goodbye" (Hangup)
   -> Background: Download WAV -> Whisper transcribe (translate to English)
-  -> Claude AI fixes place names -> Mapbox geocodes
+  -> AI fixes place names -> Mapbox geocodes
   -> POST /api/v1/reports/meta (with caller_info: phone, network location)
   -> Chunked upload both audio recordings
 ```

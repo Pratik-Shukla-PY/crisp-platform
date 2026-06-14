@@ -1,8 +1,8 @@
-"""Operations redesign v2 — collapse operation status to {LIVE, ENDED}
+"""Operations redesign v2 - collapse operation status to {LIVE, ENDED}
 
 Revision ID: 0053_collapse_operation_status
 Revises: 0052_idx_building_esc_risk
-Create Date: 2026-06-14 (Operations redesign v2 — two-state status)
+Create Date: 2026-06-14 (Operations redesign v2 - two-state status)
 
 The operator simplified the operation lifecycle to TWO states only: LIVE and
 ENDED. DRAFT and PAUSED are removed (a "paused" op is just closed; operators
@@ -11,9 +11,9 @@ never-activated DRAFT is operationally closed too).
 
 `crisis_events.status` is a plain VARCHAR(20), NOT a Postgres ENUM (0046 created
 it with a string + server_default 'DRAFT'), so there is no `ALTER TYPE`/DROP
-VALUE to write — this migration is a pure data backfill + a CHECK constraint.
+VALUE to write - this migration is a pure data backfill + a CHECK constraint.
 
-Backfill rule (order matters — rescue active drafts BEFORE the catch-all sweep):
+Backfill rule (order matters - rescue active drafts BEFORE the catch-all sweep):
   · DRAFT + is_active=True + (no end window OR window still open) -> LIVE
   · everything else not already LIVE (DRAFT-inactive, PAUSED, past-ended, stray) -> ENDED + is_active=False
 

@@ -1,4 +1,4 @@
-"""Buildings API — Phase H.1.c Building Intelligence & Response
+"""Buildings API - Phase H.1.c Building Intelligence & Response
 Coordination read surface.
 
 Three endpoints in this commit:
@@ -87,17 +87,17 @@ def list_buildings(
         None,
         description="Filter by provenance: OSM | PROXIMITY | MANUAL (comma-separated)",
     ),
-    # Geo bbox (south, west, north, east) — defer PostGIS spatial index
+    # Geo bbox (south, west, north, east) - defer PostGIS spatial index
     # until the geom column is populated. Falls back to centroid_lat/lng
     # btree.
     bbox: Optional[str] = Query(
         None,
-        description="south,west,north,east — filter by centroid in this bounding box",
+        description="south,west,north,east - filter by centroid in this bounding box",
     ),
     # Delta sync
     since: Optional[datetime] = Query(
         None,
-        description="ISO-8601 cutoff — return only buildings updated after this point",
+        description="ISO-8601 cutoff - return only buildings updated after this point",
     ),
     # Ordering
     order_by: str = Query(
@@ -106,7 +106,7 @@ def list_buildings(
                     "activity_score, latest_report_at, first_report_at, report_count",
     ),
     order_dir: str = Query("desc", pattern="^(asc|desc)$"),
-    # Pagination — cursor-based for stable iteration even with concurrent writes.
+    # Pagination - cursor-based for stable iteration even with concurrent writes.
     limit: int = Query(100, ge=1, le=500),
     cursor: Optional[str] = Query(
         None,
@@ -116,7 +116,7 @@ def list_buildings(
     """List buildings with operator-grade filters.
 
     Default sort `humanitarian_priority DESC` so the highest-priority
-    buildings surface first — matches the dashboard's default-render
+    buildings surface first - matches the dashboard's default-render
     expectation for the Building Console list view.
 
     Pagination is cursor-based (offset-incompatible for live data
@@ -166,7 +166,7 @@ def list_buildings(
     if since is not None:
         q = q.filter(Building.latest_report_at > since)
 
-    # Ordering — allowlist the columns to avoid SQL injection via
+    # Ordering - allowlist the columns to avoid SQL injection via
     # arbitrary `?order_by=` values.
     SORT_COLS = {
         "humanitarian_priority": Building.humanitarian_priority,
@@ -188,11 +188,11 @@ def list_buildings(
     q = q.order_by(*sort_cols)
 
     # Filtered total for the response envelope. Use a clone of the query
-    # without ordering for the count — saves the Postgres planner from
+    # without ordering for the count - saves the Postgres planner from
     # an unnecessary sort.
     total = q.with_entities(Building.id).order_by(None).count()
 
-    # Cursor decode — base64-ish opaque token; we use plain JSON for
+    # Cursor decode - base64-ish opaque token; we use plain JSON for
     # debuggability since cursors aren't user-visible.
     if cursor:
         try:
@@ -252,7 +252,7 @@ def get_building(
 
     summary = _to_summary(b)
 
-    # Nested constituent reports — newest first, excluding soft-deleted.
+    # Nested constituent reports - newest first, excluding soft-deleted.
     # No joinedload here; the dashboard's existing /reports/ list call
     # already paid the N+1-prevention cost. We're surface-fetching a
     # single building's <~50 reports.
@@ -267,7 +267,7 @@ def get_building(
     )
     report_responses = [ReportResponse.model_validate(r) for r in reports]
 
-    # Satellite roll-up — aggregated across constituent reports.
+    # Satellite roll-up - aggregated across constituent reports.
     sat_rows = (
         db.query(SatelliteVerification)
         .join(Report, Report.id == SatelliteVerification.report_id)
@@ -288,7 +288,7 @@ def get_building(
     else:
         sat_rollup = SatelliteRollup(count=0)
 
-    # AI summary — pluck from the JSON column if cached.
+    # AI summary - pluck from the JSON column if cached.
     ai_payload: Optional[AISummaryPayload] = None
     if b.ai_summary:
         try:
@@ -298,7 +298,7 @@ def get_building(
             # the whole detail call. H.6 will refresh.
             ai_payload = None
 
-    # Phase H.3 — active responders + monitors (cleared_at IS NULL).
+    # Phase H.3 - active responders + monitors (cleared_at IS NULL).
     responders = (
         db.query(BuildingResponder)
         .filter(
@@ -318,7 +318,7 @@ def get_building(
         .all()
     )
 
-    # Phase H.4 — notes (newest-first, pinned first, capped at 50).
+    # Phase H.4 - notes (newest-first, pinned first, capped at 50).
     note_payloads = _load_notes_for_building(db, building_id, viewer=_user, limit=50)
 
     return BuildingDetail(
@@ -384,7 +384,7 @@ def _load_notes_for_building(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Phase H.3 — Responder coordination + watch list endpoints
+# Phase H.3 - Responder coordination + watch list endpoints
 # ──────────────────────────────────────────────────────────────────────
 @router.post("/{building_id}/responders", response_model=ResponderResponse)
 def assign_responder(
@@ -530,7 +530,7 @@ def start_monitor(
 ):
     """Add the current user to the building's watch list.
 
-    Idempotent — returns the existing active watch if one exists.
+    Idempotent - returns the existing active watch if one exists.
     Emits a MONITOR_STARTED BuildingEvent on first watch.
     """
     b = db.query(Building).filter(Building.id == building_id).first()
@@ -596,7 +596,7 @@ def clear_monitor(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Phase H.4 — Operator notes thread
+# Phase H.4 - Operator notes thread
 # ──────────────────────────────────────────────────────────────────────
 @router.post("/{building_id}/notes", response_model=NoteResponse)
 def add_note(
@@ -609,7 +609,7 @@ def add_note(
 
     Notes are the long-form context channel that BuildingEvent (audit
     log) + Building.ai_summary (machine brief) deliberately don't try
-    to be — free text, pinnable, edit + soft-delete.
+    to be - free text, pinnable, edit + soft-delete.
 
     Emits a NOTE_ADDED BuildingEvent for the timeline. ADMIN_ONLY
     visibility requires the caller to be an admin (gate enforced
@@ -642,7 +642,7 @@ def add_note(
         event_kind="NOTE_ADDED",
         actor_user_id=user.id if hasattr(user, "id") else None,
         actor_kind="OPERATOR",
-        # Don't ship the full body to the timeline — it can be 4 KB.
+        # Don't ship the full body to the timeline - it can be 4 KB.
         # A 80-char snippet + the note id is enough context for the
         # timeline reader to click through if they want the full text.
         payload={
@@ -758,7 +758,7 @@ def delete_note(
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
     if note.deleted_at:
-        # Idempotent — already deleted; project the existing tombstone.
+        # Idempotent - already deleted; project the existing tombstone.
         rows = _load_notes_for_building(db, building_id, viewer=user, limit=50)
         found = next((r for r in rows if r.id == note_id), None)
         return found or NoteResponse.model_validate(note)
@@ -789,7 +789,7 @@ def delete_note(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Phase H.6 — AI building summary (Claude-Haiku)
+# Phase H.6 - AI building summary (Claude-Haiku)
 # ──────────────────────────────────────────────────────────────────────
 # Rate-limit: a building can refresh its AI summary at most once every
 # 5 minutes. Earlier calls return 429 with retry-after telling the
@@ -875,7 +875,7 @@ async def refresh_ai_summary(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Phase H.5 — Consolidated dossier export (PDF + GeoJSON)
+# Phase H.5 - Consolidated dossier export (PDF + GeoJSON)
 # ──────────────────────────────────────────────────────────────────────
 def _log_dossier_export(db: Session, user, building_id: str, fmt: str, byte_size: int):
     """Append a DOSSIER_EXPORTED BuildingEvent so the operator timeline
@@ -906,7 +906,7 @@ def export_dossier_pdf(
 
     Combines intelligence scores + responder roster + operator notes +
     constituent reports + event timeline into one print-friendly
-    artefact. Heavy-but-bounded — typical building (≤50 reports) is
+    artefact. Heavy-but-bounded - typical building (≤50 reports) is
     ~30 KB; a hot building (200+ reports) caps at ~250 KB.
 
     Analyst-gated. PDF generation runs synchronously (reportlab is
@@ -1001,7 +1001,7 @@ def export_dossier_csv(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Phase H.10 — Related buildings (spatial proximity carousel)
+# Phase H.10 - Related buildings (spatial proximity carousel)
 # ──────────────────────────────────────────────────────────────────────
 @router.get("/{building_id}/related")
 def related_buildings(
@@ -1015,7 +1015,7 @@ def related_buildings(
 
     Used by the Building Intelligence Console's "Related buildings"
     carousel. Surfaces other buildings the operator may want to
-    consider in tandem — co-located incidents often share the same
+    consider in tandem - co-located incidents often share the same
     crisis (street-block flooding, neighbouring fires, blast radius).
 
     Distance computation is haversine on centroid_lat/lng. PostGIS
@@ -1132,7 +1132,7 @@ def cache_footprint(
     if centroid_lat is not None and centroid_lng is not None:
         b.centroid_lat = centroid_lat
         b.centroid_lng = centroid_lng
-    # Optional OSM metadata fields — only fill if not already set so
+    # Optional OSM metadata fields - only fill if not already set so
     # we don't overwrite operator-curated values with raw OSM names.
     if body.osm_name and not b.osm_name:
         b.osm_name = body.osm_name
@@ -1141,7 +1141,7 @@ def cache_footprint(
     if body.osm_addr_full and not b.osm_addr_full:
         b.osm_addr_full = body.osm_addr_full
 
-    # Optional PostGIS sync — keep the geometry column in step with
+    # Optional PostGIS sync - keep the geometry column in step with
     # the JSON cache if PostGIS is available. Wrapped in try so a
     # PostGIS-missing environment doesn't fail the whole POST.
     try:
@@ -1162,7 +1162,7 @@ def cache_footprint(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Phase H.2 — state transitions + timeline
+# Phase H.2 - state transitions + timeline
 # ──────────────────────────────────────────────────────────────────────
 @router.post("/{building_id}/state", response_model=BuildingSummary)
 def transition_state(
@@ -1180,7 +1180,7 @@ def transition_state(
     Operators with sufficient privilege (analyst+) can perform any
     transition the state machine declares legal. SUPER_ADMIN escape
     hatch for unusual cases is deferred to Phase H.6+ (not needed in
-    H.2's MVP — the state machine covers the operator-facing cases).
+    H.2's MVP - the state machine covers the operator-facing cases).
     """
     b = db.query(Building).filter(Building.id == building_id).first()
     if not b:
@@ -1286,7 +1286,7 @@ def get_timeline(
     """Newest-first audit-log entries for the building.
 
     Drives the Building Intelligence Console's timeline section. Paged
-    by simple `?limit=` — operators usually don't page past the first
+    by simple `?limit=` - operators usually don't page past the first
     100 entries (older history lives in the dossier export, H.5).
     """
     b = db.query(Building).filter(Building.id == building_id).first()
@@ -1320,7 +1320,7 @@ def _transition_with_event(
         raise HTTPException(status_code=404, detail="Building not found")
     from_state = b.state
     if from_state == to_state:
-        # Idempotent — no-op + return current summary.
+        # Idempotent - no-op + return current summary.
         return _to_summary(b)
     if not is_valid_building_state_transition(from_state, to_state):
         raise HTTPException(
@@ -1337,7 +1337,7 @@ def _transition_with_event(
     elif from_state == "ARCHIVED":
         b.archived_at = None
 
-    # Two events — the canonical STATE_CHANGED + the named event kind.
+    # Two events - the canonical STATE_CHANGED + the named event kind.
     db.add(BuildingEvent(
         building_id=building_id,
         event_kind="STATE_CHANGED",

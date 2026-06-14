@@ -1,9 +1,9 @@
 """
-Telegram Webhook — FastAPI router that receives updates from Telegram Bot API.
+Telegram Webhook - FastAPI router that receives updates from Telegram Bot API.
 Supports both webhook mode and polling mode (for local development).
 
-Webhook: POST /webhook/<secret> — receives updates from Telegram
-Polling: GET /start-polling — starts long-polling in background (no ngrok needed)
+Webhook: POST /webhook/<secret> - receives updates from Telegram
+Polling: GET /start-polling - starts long-polling in background (no ngrok needed)
 """
 import os
 import hashlib
@@ -37,12 +37,12 @@ _polling_task = None
 async def receive_update(request: Request, background_tasks: BackgroundTasks):
     """Receive an update from Telegram via webhook.
 
-    P2.16 — defence in depth:
+    P2.16 - defence in depth:
       1. The URL path itself includes a per-deploy secret (existing).
       2. Telegram's ``X-Telegram-Bot-Api-Secret-Token`` header is verified
          when ``TELEGRAM_WEBHOOK_SECRET_TOKEN`` is configured. Matches the
          value registered with ``setWebhook`` on Telegram's side.
-      3. Rate limit: 60 updates/min per source IP (= 1/s) — prevents a
+      3. Rate limit: 60 updates/min per source IP (= 1/s) - prevents a
          hostile actor who leaked the secret path from DoSing the endpoint.
     """
     import os
@@ -70,7 +70,7 @@ async def receive_update(request: Request, background_tasks: BackgroundTasks):
     return {"ok": True}
 
 
-# ── Polling Mode (for local dev — no ngrok needed) ─────────────────────────────
+# ── Polling Mode (for local dev - no ngrok needed) ─────────────────────────────
 
 async def _poll_loop():
     """Long-polling loop: fetches updates from Telegram API directly."""
@@ -90,8 +90,8 @@ async def _poll_loop():
                     "allowed_updates": '["message","callback_query"]',
                 })
                 if r.status_code == 409:
-                    # Another polling instance is active — wait and retry
-                    logger.warning("Polling conflict (409) — retrying in 3s")
+                    # Another polling instance is active - wait and retry
+                    logger.warning("Polling conflict (409) - retrying in 3s")
                     await asyncio.sleep(3)
                     continue
                 if r.status_code != 200:
@@ -158,7 +158,7 @@ async def start_polling(request: Request):
 
     _polling_active = True
     _polling_task = asyncio.create_task(_poll_loop())
-    return {"status": "Polling started — send a message to your bot on Telegram"}
+    return {"status": "Polling started - send a message to your bot on Telegram"}
 
 
 @telegram_router.get("/stop-polling")

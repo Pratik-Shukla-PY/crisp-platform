@@ -1,4 +1,4 @@
-"""building_events table — Phase H.2 audit trail
+"""building_events table - Phase H.2 audit trail
 
 Revision ID: 0029_building_events
 Revises: 0028_buildings_table
@@ -16,7 +16,7 @@ Event kinds (bounded vocabulary, not a Postgres enum so we can add
 new kinds without ALTER TYPE migrations):
 
   STATE_CHANGED          from_state, to_state in payload
-  REPORT_LINKED          report_id added — first or subsequent
+  REPORT_LINKED          report_id added - first or subsequent
   REPORT_UNLINKED        soft-deleted report removed from partition
   MONITOR_STARTED        operator added the building to watch list (H.3)
   MONITOR_CLEARED        operator removed the watch (H.3)
@@ -41,19 +41,19 @@ Schema:
   event_kind   varchar(40), bounded vocabulary above
   actor_user_id  FK to users.id (nullable for SYSTEM events)
   actor_kind   enum OPERATOR | SYSTEM | AI
-  payload      JSON — arbitrary diff data per event kind
+  payload      JSON - arbitrary diff data per event kind
                 (e.g. {from_state, to_state}, {report_id},
                 {note_id, body_prefix}, {model, tokens_used})
-  occurred_at  DateTime timezone — server timestamp
+  occurred_at  DateTime timezone - server timestamp
 
 Indexes:
 
-  (building_id, occurred_at) — drives the H.2 console timeline render
+  (building_id, occurred_at) - drives the H.2 console timeline render
                                 "newest events for this building, paginated"
 
 Cleanup policy: retain forever for ESCALATED + FALSE_ALARM buildings
 (compliance + audit); truncate to last 90d for ACTIVE / MONITORED /
-RESPONDING / RESOLVED (configurable). Implementation deferred —
+RESPONDING / RESOLVED (configurable). Implementation deferred -
 this migration just creates the structure.
 """
 from alembic import op
@@ -68,7 +68,7 @@ depends_on = None
 
 def upgrade() -> None:
     # actor_kind enum auto-created by sa.Enum at table-create time
-    # (default create_type=True). Mirrors the 0028 lesson — don't
+    # (default create_type=True). Mirrors the 0028 lesson - don't
     # double-create via a DO block.
     op.create_table(
         "building_events",

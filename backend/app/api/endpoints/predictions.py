@@ -1,5 +1,5 @@
 """
-Prediction API — Zone management + forecast triggering + results retrieval.
+Prediction API - Zone management + forecast triggering + results retrieval.
 Claude-powered multi-signal crisis risk prediction.
 """
 import logging

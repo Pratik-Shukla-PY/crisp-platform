@@ -1,5 +1,5 @@
 """
-Data Export Endpoints — CSV (HXL-tagged), GeoJSON, Shapefile, KML, PDF,
+Data Export Endpoints - CSV (HXL-tagged), GeoJSON, Shapefile, KML, PDF,
 analytics summary/sitrep, per-report evidence bundles, plus count /
 data-dictionary / recent-exports support endpoints.
 For UNDP judges, GIS tool integration, and humanitarian data sharing.
@@ -27,14 +27,14 @@ router = APIRouter()
 
 
 def _utc_date_stamp() -> str:
-    """Filename date stamp — UTC, not server-local (a 2am IST export was
+    """Filename date stamp - UTC, not server-local (a 2am IST export was
     getting the previous day's date)."""
     return datetime.now(timezone.utc).strftime("%Y%m%d")
 
 
 def _parse_iso(value: str, param: str) -> datetime:
     """ISO-8601 parse that FAILS LOUDLY. The old behaviour swallowed
-    ValueError and silently dropped the filter — an analyst typing a typo'd
+    ValueError and silently dropped the filter - an analyst typing a typo'd
     date got the FULL dataset labelled as a filtered one."""
     try:
         return datetime.fromisoformat(value)
@@ -51,7 +51,7 @@ def _query_reports(db: Session, status: Optional[str], crisis_type: Optional[str
                    crisis_event_id: Optional[str] = None):
     """Shared query builder for all export endpoints. Returns the QUERY so
     callers can count() or iterate. Eager-loads the per-report relations
-    every format consumes (location, verification, media) — the old lazy
+    every format consumes (location, verification, media) - the old lazy
     loading was an N+1 per row."""
     q = (
         db.query(Report)
@@ -71,7 +71,7 @@ def _query_reports(db: Session, status: Optional[str], crisis_type: Optional[str
     if crisis_type:
         q = q.filter(Report.crisis_type == crisis_type)
     if crisis_event_id:
-        # Operation-scoped export — the operation IS a CrisisEvent. Lets the
+        # Operation-scoped export - the operation IS a CrisisEvent. Lets the
         # dashboard export exactly the reports of one operation (was missing, so
         # exporting from inside an operation silently downloaded every report).
         q = q.filter(Report.crisis_event_id == crisis_event_id)
@@ -136,7 +136,7 @@ def _fetch_export_rows(db: Session, status, crisis_type, since, until,
 def _audit_export(db: Session, user, request: Optional[Request], fmt: str,
                   filters: dict, row_count: int) -> None:
     """Provenance record: who exported what dataset, when (humanitarian-data
-    accountability; the building dossier already logs DOSSIER_EXPORTED —
+    accountability; the building dossier already logs DOSSIER_EXPORTED -
     this extends the same discipline to bulk exports). Never lets audit
     failure break an export."""
     try:
@@ -162,14 +162,14 @@ def _report_to_row(r, tier_map: Optional[dict] = None):
       * crisis_category → derived from crisis_type at write time; falls
         back to an on-read lookup for historical rows.
 
-    Phase C.1 (May 2026, UNDP-grade rebuild) — satellite verification
+    Phase C.1 (May 2026, UNDP-grade rebuild) - satellite verification
     columns. Judges + downstream analysts pulling exports need to see
     truth scores, not just raw report data. Pulled from the related
     SatelliteVerification row (one-to-one on report_id). When no
     verification has run, the columns are blank rather than absent so
     CSV/GeoJSON consumers can rely on a stable schema.
 
-    Phase 2.1 (May 2026, audit follow-up) — flatten V4 fields. The
+    Phase 2.1 (May 2026, audit follow-up) - flatten V4 fields. The
     UNDP analyst doing data-driven needs assessment in Excel /
     QGIS / R cares about flat columns, not a JSON blob. We unpack
     ``service_status`` into ``electricity_status`` / ``water_status``
@@ -184,7 +184,7 @@ def _report_to_row(r, tier_map: Optional[dict] = None):
     loc = r.location
     damage = normalise_damage(r.damage_classification) or (r.damage_classification or "")
     crisis_cat = getattr(r, "crisis_category", None) or categorise_crisis(r.crisis_type) or ""
-    # Verification fields — pulled from the SatelliteVerification row
+    # Verification fields - pulled from the SatelliteVerification row
     # if present. Single-row 1:1 relationship via Report.verification.
     v = getattr(r, "verification", None)
 
@@ -198,7 +198,7 @@ def _report_to_row(r, tier_map: Optional[dict] = None):
     water_status       = str(ss.get("water", "")       or "")
     health_status      = str(ss.get("health", "")      or "")
     pressing_needs_raw = ss.get("pressing_needs", []) or []
-    # Semicolons not commas — CSV-safe AND aligns with the GIS
+    # Semicolons not commas - CSV-safe AND aligns with the GIS
     # convention for multi-valued attribute fields.
     pressing_needs_csv = ";".join(
         [str(x) for x in pressing_needs_raw if x] if isinstance(pressing_needs_raw, list) else []
@@ -211,7 +211,7 @@ def _report_to_row(r, tier_map: Optional[dict] = None):
     reporter_tier = (tier_map or {}).get(r.device_id, "") if r.device_id else ""
 
     # ── Jun 2026 metadata additions (export audit) ────────────────────
-    # Appended columns — the schema is append-only so existing consumers
+    # Appended columns - the schema is append-only so existing consumers
     # keep working by name. These were all DERIVABLE-BUT-OMITTED: the
     # values existed on the models but never reached any export.
     def _iso(dt):
@@ -244,7 +244,7 @@ def _report_to_row(r, tier_map: Optional[dict] = None):
         "damage_classification": damage,
         "crisis_type": r.crisis_type or "",
         "crisis_category": crisis_cat,
-        # Newlines flattened for spreadsheet sanity; commas PRESERVED — the
+        # Newlines flattened for spreadsheet sanity; commas PRESERVED - the
         # csv module quotes properly now (the old hand-rolled writer forced
         # `,`→`;` mangling, silently rewriting user testimony).
         "description": (r.description or "").replace("\n", " "),
@@ -253,7 +253,7 @@ def _report_to_row(r, tier_map: Optional[dict] = None):
         # downstream pipeline that already parses it; the flat
         # columns below are the new canonical surface.
         "service_status": json.dumps(r.service_status) if r.service_status else "",
-        # Phase 2.1 — V4 flat columns (UNDP analyst-friendly).
+        # Phase 2.1 - V4 flat columns (UNDP analyst-friendly).
         "electricity_status": electricity_status,
         "water_status":       water_status,
         "health_status":      health_status,
@@ -277,7 +277,7 @@ def _report_to_row(r, tier_map: Optional[dict] = None):
         # ── Jun 2026 appended metadata (export audit) ──────────────────
         # Offline chronology: client capture time alongside server receipt.
         "client_created_at": _iso(r.client_created_at),
-        # GPS quality + provenance — humanitarian IM officers weight point
+        # GPS quality + provenance - humanitarian IM officers weight point
         # reliability by horizontal accuracy and whether a human corrected
         # the pin.
         "accuracy_m": (str(loc.accuracy_meters) if loc and loc.accuracy_meters is not None else ""),
@@ -294,7 +294,7 @@ def _report_to_row(r, tier_map: Optional[dict] = None):
         # Crisis-event linkage + comms planning.
         "crisis_event_id": getattr(r, "crisis_event_id", "") or "",
         "detected_language": getattr(r, "detected_language", "") or "",
-        # Media presence (no bytes — stable thumb URL for the first photo).
+        # Media presence (no bytes - stable thumb URL for the first photo).
         "media_count": str(media_count),
         "first_photo_url": first_photo_url,
     }
@@ -309,7 +309,7 @@ EXPORT_HEADERS = [
     "infrastructure_type", "infrastructure_sub_type", "infrastructure_name",
     "damage_classification", "crisis_type", "crisis_category",
     "description", "debris_clearing_needed", "service_status",
-    # Phase 2.1 (May 2026) — UNDP analyst-friendly flat V4 columns.
+    # Phase 2.1 (May 2026) - UNDP analyst-friendly flat V4 columns.
     "electricity_status", "water_status", "health_status",
     "pressing_needs", "reporter_tier",
     "building_id", "latitude", "longitude", "location_name",
@@ -325,7 +325,7 @@ EXPORT_HEADERS = [
     "detected_language", "media_count", "first_photo_url",
 ]
 
-# HXL hashtag row (https://hxlstandard.org) — the HDX convention puts the
+# HXL hashtag row (https://hxlstandard.org) - the HDX convention puts the
 # tags on row 2, under the human-readable headers. HXL-aware tools (HDX,
 # Quick Charts, hxl-proxy) auto-detect them; everything else treats the row
 # as one extra data row. Blank where no standard tag fits.
@@ -347,7 +347,7 @@ _NUMERIC_RE = re.compile(r"-?\d+(\.\d+)?")
 
 def _csv_cell(value) -> str:
     """Spreadsheet formula-injection guard: a leading = + - @ makes Excel /
-    Sheets execute the cell. Prefix a quote — except for plain numbers
+    Sheets execute the cell. Prefix a quote - except for plain numbers
     (negative latitudes/longitudes must stay numeric)."""
     s = "" if value is None else str(value)
     if s[:1] in ("=", "+", "-", "@") and not _NUMERIC_RE.fullmatch(s):
@@ -369,7 +369,7 @@ def export_csv(
     bbox: Optional[str] = Query(None, description="minLng,minLat,maxLng,maxLat"),
     hxl: bool = Query(True, description="Include the HXL hashtag row (row 2)"),
 ):
-    """Export reports as CSV (proper RFC-4180 quoting via the csv module —
+    """Export reports as CSV (proper RFC-4180 quoting via the csv module -
     the old hand-rolled f'\"{v}\"' writer corrupted any field containing a
     double quote), with an HXL hashtag row for HDX interoperability and a
     formula-injection guard."""
@@ -415,7 +415,7 @@ def export_geojson(
     bbox: Optional[str] = Query(None, description="minLng,minLat,maxLng,maxLat"),
 ):
     """Export reports as a GeoJSON FeatureCollection. Reports without a
-    Location row can't be point features — they are counted in the foreign
+    Location row can't be point features - they are counted in the foreign
     `metadata` member instead of silently vanishing."""
     rows, total, reports = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox, crisis_event_id=crisis_event_id)
     features = []
@@ -497,7 +497,7 @@ def export_shapefile(
     w.field("BUILDING", "C", 40)
     w.field("DESCRIPT", "C", 254)
     w.field("TIMESTAMP", "C", 30)
-    # Phase 2.1 (May 2026) — V4 columns. Shapefile DBF caps column
+    # Phase 2.1 (May 2026) - V4 columns. Shapefile DBF caps column
     # names at 10 chars + values per type-spec; ESRI-style abbrevs:
     #   ELEC_STAT   → service_status.electricity
     #   WATER_STAT  → service_status.water
@@ -509,7 +509,7 @@ def export_shapefile(
     w.field("HEALTH_ST", "C", 25)
     w.field("NEEDS", "C", 200)
     w.field("REPRT_TIER", "C", 20)
-    # Jun 2026 (export audit) — satellite verification columns. Their
+    # Jun 2026 (export audit) - satellite verification columns. Their
     # absence violated UNDP must-have #11 ("CSV/GeoJSON/Shapefile/KML
     # always include the 6 satellite verification columns"); the Shapefile
     # was the only bulk format missing them. DBF caps names at 10 chars.
@@ -532,7 +532,7 @@ def export_shapefile(
             row["infrastructure_name"][:255], row["damage_classification"][:20],
             row["crisis_type"][:20], row["debris_clearing_needed"][:10],
             row["building_id"][:40], row["description"][:254], row["timestamp"][:30],
-            # V4 columns — slice to the DBF column width so the
+            # V4 columns - slice to the DBF column width so the
             # shapefile writer never silently truncates mid-write.
             row["electricity_status"][:25], row["water_status"][:25],
             row["health_status"][:25], row["pressing_needs"][:200],
@@ -574,7 +574,7 @@ def export_shapefile(
 # human-readable one-page summary alongside the GIS formats. ReportLab is
 # Python-native, no headless-browser dependency, and outputs accessible
 # tagged PDFs (PDF/UA-adjacent). The CSV + GeoJSON + Shapefile + KML + PDF
-# stack is what the pitch deck claims — this endpoint makes that true.
+# stack is what the pitch deck claims - this endpoint makes that true.
 
 @router.get("/pdf")
 def export_pdf(
@@ -610,7 +610,7 @@ def export_pdf(
     truncated = total > len(reports)
     if truncated:
         logger.warning(
-            f"[exports/pdf] hit limit={limit} (total={total}) — export truncated."
+            f"[exports/pdf] hit limit={limit} (total={total}) - export truncated."
         )
     _audit_export(db, user, request, "pdf",
                   {"status": status, "crisis_type": crisis_type, "since": since,
@@ -637,7 +637,7 @@ def export_pdf(
         "label", parent=body, fontName="Helvetica-Bold", fontSize=9,
     )
 
-    # May 2026 audit Item 3 — for embedding SMALL-tier thumbnails into
+    # May 2026 audit Item 3 - for embedding SMALL-tier thumbnails into
     # the PDF's media section, we read bytes via the storage abstraction.
     # Lazy-import inside the endpoint so an exports.py import doesn't
     # pull in the storage stack on every request.
@@ -653,25 +653,25 @@ def export_pdf(
     # Cover block
     story.append(Paragraph("CRISP Crisis-Report Dossier", h1))
     story.append(Paragraph(
-        "UNDP RAPIDA Appendix-1 aligned export — damage classification uses "
+        "UNDP RAPIDA Appendix-1 aligned export - damage classification uses "
         "MINIMAL / PARTIAL / COMPLETE; infrastructure uses the seven UNDP "
         "super-types + OTHER.",
         small,
     ))
     story.append(Paragraph(
         f"Generated at {datetime.now(timezone.utc).isoformat().replace('+00:00', '')}Z "
-        f"— {len(reports)} of {total} matching report(s) included.",
+        f"- {len(reports)} of {total} matching report(s) included.",
         small,
     ))
     if truncated:
-        # Jun 2026 (export audit) — truncation must be VISIBLE in the
+        # Jun 2026 (export audit) - truncation must be VISIBLE in the
         # artifact, not just a server log line the operator never sees.
         warn_style = ParagraphStyle(
             "warn", parent=small, textColor=colors.HexColor("#b45309"),
             fontName="Helvetica-Bold",
         )
         story.append(Paragraph(
-            f"NOTE: result truncated at limit={limit} — {total - len(reports)} matching "
+            f"NOTE: result truncated at limit={limit} - {total - len(reports)} matching "
             f"report(s) are NOT in this document. Narrow the filters or raise ?limit (max 1000).",
             warn_style,
         ))
@@ -689,12 +689,12 @@ def export_pdf(
             story.append(PageBreak())
         row = row_by_id[r.id]
         story.append(Paragraph(
-            f"Report {row['id'][:8]} — {row['infrastructure_type'] or 'UNKNOWN'} / {row['damage_classification'] or 'UNKNOWN'}",
+            f"Report {row['id'][:8]} - {row['infrastructure_type'] or 'UNKNOWN'} / {row['damage_classification'] or 'UNKNOWN'}",
             h2,
         ))
         story.append(Spacer(1, 0.2 * cm))
 
-        # May 2026 audit Item 3 — building version ordinal in the table
+        # May 2026 audit Item 3 - building version ordinal in the table
         # when the report belongs to a multi-version building chain.
         # Operators viewing a dossier need to know "this is version 3
         # of 5 reports on this building." Pre-fix the field was only
@@ -725,7 +725,7 @@ def export_pdf(
         data.extend([
             ["Damage Classification",  row["damage_classification"]],
             ["Debris Clearing",        row["debris_clearing_needed"]],
-            # Phase 2.1 — V4 fields on the analyst-facing PDF.
+            # Phase 2.1 - V4 fields on the analyst-facing PDF.
             # Empty values are kept in the table for layout
             # consistency across reports (analyst can tell at a
             # glance which signals the reporter answered).
@@ -739,14 +739,14 @@ def export_pdf(
             ["Lives Impacted",         row["lives_impacted"]],
             ["Captured at (client)",   row.get("client_created_at", "")],
             ["Submitted at",           row["timestamp"]],
-            # Jun 2026 — review/response audit trail on the dossier.
+            # Jun 2026 - review/response audit trail on the dossier.
             ["Reviewer Verdict",       row.get("reviewer_verdict", "")],
             ["Reviewed at",            row.get("reviewed_at", "")],
             ["Help Dispatched at",     row.get("help_dispatched_at", "")],
             ["Help Arrived at",        row.get("help_arrived_at", "")],
         ])
 
-        # May 2026 audit Item 3 — append satellite verification rows
+        # May 2026 audit Item 3 - append satellite verification rows
         # (UNDP must-have #11). Pre-fix the PDF only contained 20
         # plain-text fields with ZERO satellite columns even though
         # _report_to_row already builds them and CSV/GeoJSON/KML
@@ -787,7 +787,7 @@ def export_pdf(
             for k, v in (r.service_status or {}).items():
                 story.append(Paragraph(_xml_escape(f"{k}: {v}"), body))
 
-        # May 2026 audit Item 3 — Media section. Pre-fix the PDF
+        # May 2026 audit Item 3 - Media section. Pre-fix the PDF
         # contained ZERO photos and ZERO audio references regardless of
         # what was actually attached to the report. Now we group media
         # by photo_group_id, embed the SMALL-tier thumbnail inline (if
@@ -848,7 +848,7 @@ def export_pdf(
                 for it in items:
                     tname = (it.resolution_tier.value if it.resolution_tier else "?")
                     status_s = it.assembly_status or "?"
-                    abandon = f" — abandoned: {it.abandon_reason}" if it.abandon_reason else ""
+                    abandon = f" - abandoned: {it.abandon_reason}" if it.abandon_reason else ""
                     url_stable = f"/api/v1/reports/media/{it.id}/file"
                     tier_lines.append(
                         f"{tname}: {status_s}{abandon} → {url_stable}"
@@ -862,14 +862,14 @@ def export_pdf(
                 story.append(Paragraph("Audio", label))
                 for ai, a in enumerate(audio_items):
                     a_status = a.assembly_status or "?"
-                    abandon = f" — abandoned: {a.abandon_reason}" if a.abandon_reason else ""
+                    abandon = f" - abandoned: {a.abandon_reason}" if a.abandon_reason else ""
                     url_stable = f"/api/v1/reports/media/{a.id}/file"
                     story.append(Paragraph(
                         f"Audio {ai + 1}: {a_status}{abandon} → {url_stable}",
                         small,
                     ))
 
-    # Handle empty result gracefully — don't ship an empty PDF.
+    # Handle empty result gracefully - don't ship an empty PDF.
     if not reports:
         story.append(Paragraph("No reports matched the supplied filters.", body))
 
@@ -925,15 +925,15 @@ def export_kml(
         if not loc:
             continue
         row = row_by_id[r.id]
-        name = f"{row['infrastructure_type']} — {row['severity']}"
-        # Phase 2.1 (May 2026) — surface V4 service-status + reporter
+        name = f"{row['infrastructure_type']} - {row['severity']}"
+        # Phase 2.1 (May 2026) - surface V4 service-status + reporter
         # tier in the KML description so a humanitarian analyst
         # clicking the pushpin in Google Earth sees the same signals
         # they get from the CSV / dashboard. Empty values are
-        # rendered as "—" so the structure is obvious even when the
+        # rendered as "-" so the structure is obvious even when the
         # reporter didn't answer a particular question.
         def _or_dash(v):
-            return v if v else "—"
+            return v if v else "-"
         desc_parts = [
             f"Crisis: {row['crisis_type']}",
             f"Damage: {row['damage_classification']}",
@@ -957,7 +957,7 @@ def export_kml(
             "electricity_status", "water_status", "health_status",
             "pressing_needs", "reporter_tier", "damage_classification",
             "crisis_type", "crisis_category", "infrastructure_type",
-            # Jun 2026 (export audit) — satellite verification columns
+            # Jun 2026 (export audit) - satellite verification columns
             # (must-have #11): KML ExtendedData previously omitted them.
             "satellite_verdict", "satellite_total_score",
             "satellite_acquisition_date", "satellite_days_gap",
@@ -992,7 +992,7 @@ def export_count(
     severity: Optional[str] = Query(None),
     bbox: Optional[str] = Query(None, description="minLng,minLat,maxLng,maxLat"),
 ):
-    """Row count for a prospective export — lets the Export Center show
+    """Row count for a prospective export - lets the Export Center show
     'N reports match this scope' BEFORE the user downloads anything."""
     q = _query_reports(db, status, crisis_type, since, until, severity, bbox,
                        crisis_event_id=crisis_event_id)
@@ -1011,7 +1011,7 @@ def recent_exports(
     db: Session = Depends(get_db),
     limit: int = Query(10, ge=1, le=50),
 ):
-    """Last N export provenance records (who pulled what dataset, when) —
+    """Last N export provenance records (who pulled what dataset, when) -
     the Export Center's audit-trail panel. Org-wide visibility by design:
     operational transparency in a shared crisis room."""
     from app.models.auth import AuthAuditLog
@@ -1033,7 +1033,7 @@ def recent_exports(
     } for r in rows]
 
 
-# Column descriptions for the data dictionary — kept beside EXPORT_HEADERS so
+# Column descriptions for the data dictionary - kept beside EXPORT_HEADERS so
 # a new column without a description is caught in review.
 _COLUMN_DESCRIPTIONS = {
     "id": "Report UUID (server-assigned)",
@@ -1048,7 +1048,7 @@ _COLUMN_DESCRIPTIONS = {
     "crisis_type": "UNDP crisis taxonomy value",
     "crisis_category": "Natural / technological / human-made (derived)",
     "description": "Reporter free text (newlines flattened)",
-    "debris_clearing_needed": "UNDP core question — True/False/blank(unanswered)",
+    "debris_clearing_needed": "UNDP core question - True/False/blank(unanswered)",
     "service_status": "Legacy JSON blob of the V4 service answers",
     "electricity_status": "V4 flat: power status at the site",
     "water_status": "V4 flat: water status at the site",
@@ -1085,7 +1085,7 @@ _COLUMN_DESCRIPTIONS = {
 @router.get("/data-dictionary")
 def export_data_dictionary(user=Depends(require_viewer)):
     """Machine+human readable data dictionary for the export schema
-    (column, HXL hashtag, description) — downloadable CSV so every shared
+    (column, HXL hashtag, description) - downloadable CSV so every shared
     dataset can travel with its own documentation."""
     def generate():
         buf = io.StringIO()
@@ -1100,12 +1100,12 @@ def export_data_dictionary(user=Depends(require_viewer)):
     )
 
 
-# ── Analytics exports (Jun 2026 — the analytics surface had NO export) ───────
+# ── Analytics exports (Jun 2026 - the analytics surface had NO export) ───────
 
 def _summary_payload(db: Session, user, window_hours: int = 24):
     """Reuse the dashboard's cached operational summary computation."""
     from app.api.endpoints.analytics import operational_summary
-    # crisis_event_id MUST be passed explicitly — these CSV/PDF exports are GLOBAL.
+    # crisis_event_id MUST be passed explicitly - these CSV/PDF exports are GLOBAL.
     # Omitting it lets operational_summary's FastAPI `Query(None)` DEFAULT object
     # leak through as the value (it's truthy → reaches the SQL filter →
     # "can't adapt type Query"). This is the only programmatic caller path.
@@ -1159,7 +1159,7 @@ def export_sitrep(
 ):
     """One-page situation-report PDF: the operational summary (counts,
     attention queue, distributions, timings, intake deltas) in a shareable
-    briefing artifact — the 'sitrep' humanitarian coordination expects."""
+    briefing artifact - the 'sitrep' humanitarian coordination expects."""
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import cm
@@ -1185,7 +1185,7 @@ def export_sitrep(
         Paragraph("CRISP Situation Report", styles["Heading1"]),
         Paragraph(
             f"Generated at {datetime.now(timezone.utc).isoformat().replace('+00:00', '')}Z "
-            f"· window: last {window_hours}h · total reports on platform: {d.get('total_reports', '—')}",
+            f"· window: last {window_hours}h · total reports on platform: {d.get('total_reports', '-')}",
             small,
         ),
         Spacer(1, 0.4 * cm),
@@ -1193,7 +1193,7 @@ def export_sitrep(
 
     def _table(title, pairs):
         story.append(Paragraph(title, styles["Heading2"]))
-        tbl = Table([[k, str(v if v is not None else "—")] for k, v in pairs],
+        tbl = Table([[k, str(v if v is not None else "-")] for k, v in pairs],
                     colWidths=[8 * cm, None], hAlign="LEFT")
         tbl.setStyle(TableStyle([
             ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
@@ -1255,7 +1255,7 @@ def export_sitrep(
     )
 
 
-# ── Evidence bundle (Jun 2026 — judge-friendly single-report package) ─────────
+# ── Evidence bundle (Jun 2026 - judge-friendly single-report package) ─────────
 
 @router.get("/evidence-bundle/{report_id}")
 def export_evidence_bundle(
@@ -1266,7 +1266,7 @@ def export_evidence_bundle(
 ):
     """ZIP package for one report: evidence JSON (same payload as the public
     share page), every completed media file, satellite snapshots when stored,
-    and a README — so a verifier can review a report fully OFFLINE instead of
+    and a README - so a verifier can review a report fully OFFLINE instead of
     fetching media one stable URL at a time."""
     report = (
         db.query(Report)
@@ -1319,13 +1319,13 @@ def export_evidence_bundle(
                     logger.warning(f"[evidence-bundle] satellite read failed ({label}): {se2}")
                     skipped.append(f"satellite/{label}.png -> stored at {url}")
         readme = [
-            f"CRISP evidence bundle — report {report_id}",
+            f"CRISP evidence bundle - report {report_id}",
             f"Generated at {datetime.now(timezone.utc).isoformat().replace('+00:00', '')}Z",
             "",
             "Contents:",
-            "  evidence.json — verification evidence (same payload as the public share page)",
-            "  media/        — completed photo/audio files attached to the report",
-            "  satellite/    — stored satellite snapshots used for verification",
+            "  evidence.json - verification evidence (same payload as the public share page)",
+            "  media/        - completed photo/audio files attached to the report",
+            "  satellite/    - stored satellite snapshots used for verification",
             "",
             "Timestamps are ISO-8601 UTC. Coordinates are WGS84 decimal degrees.",
         ]

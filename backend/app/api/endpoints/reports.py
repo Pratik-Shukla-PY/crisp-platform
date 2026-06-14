@@ -67,13 +67,13 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # UNDP scaling. Media reads/writes route through the
 # pluggable storage backend (LocalStorage by default; S3Storage when
 # MEDIA_BACKEND=s3). UPLOAD_DIR remains the local-disk path so legacy
-# rows keep working — the abstraction handles the actual file IO so
+# rows keep working - the abstraction handles the actual file IO so
 # call-sites don't have to know which backend is active.
 from app.services.storage import get_storage as _get_media_storage  # noqa: E402
 
 
 def _resolve_user_location_name(loc_data: dict) -> None:
-    """HC55 (May 2026) — forward-geocode an offline-typed place name
+    """HC55 (May 2026) - forward-geocode an offline-typed place name
     through the proper cascade (Mapbox → rate-limited Nominatim) and
     mutate ``loc_data`` with the resolved coordinates.
 
@@ -82,7 +82,7 @@ def _resolve_user_location_name(loc_data: dict) -> None:
     in violation of Nominatim's usage policy. Both callers were
     synchronous routes, so we bridge to the async ``geocode_text``
     helper via ``asyncio.run`` (FastAPI runs sync routes in a thread
-    pool, so this is safe — no event loop is already running here).
+    pool, so this is safe - no event loop is already running here).
 
     Best-effort: failures are logged and swallowed so the report row
     still saves with the user-typed name and (0, 0) coords.
@@ -127,7 +127,7 @@ def _normalize_crisis_type(value):
     the canonical name (matches the UNDP-aligned grouping in the backend
     enum file) and rewrite `HURRICANE` to `CYCLONE` at every write site.
 
-    Idempotent — passing through `CYCLONE`, `EARTHQUAKE`, etc. returns
+    Idempotent - passing through `CYCLONE`, `EARTHQUAKE`, etc. returns
     them unchanged. `None` / empty string / unknown values are returned
     unchanged too (validation happens at the Pydantic / SQLAlchemy enum
     layer, not here).
@@ -161,7 +161,7 @@ def _content_type_for(filename: str) -> str:
 #
 # Root cause: the legacy single-shot base64 attach path (attach_media
 # + create_full_report) used `ext = "jpg" if "image" in header else
-# "webm"` — every audio data: URL got renamed to `.webm` regardless of
+# "webm"` - every audio data: URL got renamed to `.webm` regardless of
 # what the client actually recorded. iOS Safari records as MP4/AAC
 # (the data: URL header is `data:audio/mp4;base64,...`); after
 # rewrite the file landed as `<id>.webm` with Content-Type=audio/webm,
@@ -175,12 +175,12 @@ def _detect_audio_format(data_url_header: str, raw_bytes: bytes) -> tuple[str, s
     """Resolve (extension, content_type) for an audio data: URL.
 
     `data_url_header` is the prefix part of `data:audio/mp4;base64,...`
-    up to the comma. `raw_bytes` is the decoded payload — magic bytes
+    up to the comma. `raw_bytes` is the decoded payload - magic bytes
     win because the data: URL header sometimes lies (e.g. when a PWA
     uses MediaRecorder.mimeType="audio/webm" but the underlying iOS
     decoder hands back MP4 anyway).
 
-    Returns ("m4a", "audio/mp4") for unknown/empty input — that's the
+    Returns ("m4a", "audio/mp4") for unknown/empty input - that's the
     safest default since AAC-in-MP4 is universally supported across
     browsers and (uniquely) plays cleanly on iOS Safari without
     transcoding.
@@ -195,7 +195,7 @@ def _detect_audio_format(data_url_header: str, raw_bytes: bytes) -> tuple[str, s
     if len(raw_bytes) >= 4 and raw_bytes[0:4] == b'RIFF':
         return ("wav", "audio/wav")
     if len(raw_bytes) >= 4 and raw_bytes[0:4] == b'caff':
-        # Apple Core Audio — the assembly pipeline transcodes these
+        # Apple Core Audio - the assembly pipeline transcodes these
         # to WAV, but on the single-shot attach path we leave it; PyAV
         # would've already mucked with it if the chunked path saw it.
         return ("caf", "audio/x-caf")
@@ -215,7 +215,7 @@ def _detect_audio_format(data_url_header: str, raw_bytes: bytes) -> tuple[str, s
     if "audio/mpeg" in h or "audio/mp3" in h:
         return ("mp3", "audio/mpeg")
 
-    # Truly unknown — fall back to m4a/aac which is the most-portable
+    # Truly unknown - fall back to m4a/aac which is the most-portable
     # audio container. Worst case is a re-decode failure on the
     # dashboard side, but that's strictly no worse than the prior
     # behaviour of always-webm.
@@ -228,12 +228,12 @@ def _detect_audio_format(data_url_header: str, raw_bytes: bytes) -> tuple[str, s
 
 # UNDP scaling, Phase 2. The inline processing pipeline
 # (CAFF→WAV transcode, server-side PII blur, perceptual hash, Whisper
-# transcription) is filesystem-based — cv2.imread, PIL.Image.open,
+# transcription) is filesystem-based - cv2.imread, PIL.Image.open,
 # faster-whisper all expect a path on disk. To keep the persistent
 # UPLOAD_DIR empty under MEDIA_BACKEND=s3, we stage the bytes in a
 # tempfile under /tmp/ for the lifetime of the worker call, then
 # delete it. /tmp is independent of UPLOAD_DIR (the persistent media
-# volume) and doesn't accumulate across uploads — even at UNDP scale
+# volume) and doesn't accumulate across uploads - even at UNDP scale
 # (500k reports/incident) we never exceed `<concurrent_uploads> ×
 # <single_image_size>` in /tmp, which is bounded by the assembly +
 # AI executor pool sizes (4+2 = 6 workers max).
@@ -283,7 +283,7 @@ def _stage_bytes(filename: str, data: bytes):
         except OSError:
             pass
 
-# P2.2 — bounded thread pool for background assembly.
+# P2.2 - bounded thread pool for background assembly.
 #
 # Previously every final-chunk arrival called `threading.Thread(...).start()`
 # directly. Under 100 concurrent uploads this would spawn 100 OS threads, all
@@ -292,7 +292,7 @@ def _stage_bytes(filename: str, data: bytes):
 #
 # 4 workers is chosen to match typical cloud instance core counts and because
 # the bottleneck is Python's GIL + disk I/O + ffmpeg/Torch workloads that
-# release the GIL — so more threads past cores adds overhead without speedup.
+# release the GIL - so more threads past cores adds overhead without speedup.
 # Override via CRISP_ASSEMBLY_WORKERS env var for bigger boxes.
 _ASSEMBLY_WORKERS = max(1, int(os.getenv("CRISP_ASSEMBLY_WORKERS", "4")))
 _assembly_executor = ThreadPoolExecutor(
@@ -300,7 +300,7 @@ _assembly_executor = ThreadPoolExecutor(
     thread_name_prefix="assembly",
 )
 
-# P2.3 — separate pool for the slow AI tasks (PII blur with MediaPipe +
+# P2.3 - separate pool for the slow AI tasks (PII blur with MediaPipe +
 # easyocr, and Whisper transcription). These can each take 5–30 s on CPU
 # and would otherwise back up the assembly pool. Two workers is deliberately
 # conservative: Whisper and easyocr both spawn internal thread pools that
@@ -317,7 +317,7 @@ logger_for_pool.info(
 )
 
 
-# ── Phase L L.12.6 — server-side ORIGINAL 5 MB cap ────────────────────────
+# ── Phase L L.12.6 - server-side ORIGINAL 5 MB cap ────────────────────────
 #
 # The PWA / RN / Telegram-bot / WhatsApp-bot encoder ladders (L.2.b /
 # L.2.b' / L.2.b'') apply the quality + downscale ladder before
@@ -356,7 +356,7 @@ def djb2_bytes(b: bytes) -> str:
     Used by the April-2026 binary chunk endpoint
     ``/reports/{id}/media/chunk-bin`` where the payload ships as raw
     bytes (multipart/form-data). The polynomial is identical to
-    ``djb2_checksum`` — the only difference is the input alphabet
+    ``djb2_checksum`` - the only difference is the input alphabet
     (full byte range 0–255 vs. base64 ASCII).
 
     Client parity: mirrored by ``djb2Bytes()`` in
@@ -373,18 +373,18 @@ def djb2_bytes(b: bytes) -> str:
 def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optional[str]:
     """Concatenate all received chunks in seq order and write to disk.
 
-    April 2026 — dual-transport assembly. A chunk row stores its payload
+    April 2026 - dual-transport assembly. A chunk row stores its payload
     in ONE of two columns:
 
-      * ``data_binary`` (LargeBinary) — new `/media/chunk-bin` endpoint.
-      * ``data_b64``    (Text)        — legacy `/media/chunk` endpoint.
+      * ``data_binary`` (LargeBinary) - new `/media/chunk-bin` endpoint.
+      * ``data_b64``    (Text)        - legacy `/media/chunk` endpoint.
 
     We read each chunk row and take whichever column is populated. The
     CHECK constraint on ``media_chunks`` guarantees exactly one is set.
 
     Mixed-format chunks for a single ``media_id`` are not produced by
     client logic (one upload session picks one transport), but if they
-    ever appear — e.g. retry across an app update — the assembler
+    ever appear - e.g. retry across an app update - the assembler
     concatenates them transparently since both columns ultimately yield
     bytes.
     """
@@ -418,13 +418,13 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
             continue
         logger.error(
             f"Chunk {media_id} seq={c.seq_num} has neither data_binary nor "
-            f"data_b64 — CHECK constraint violated; aborting assembly."
+            f"data_b64 - CHECK constraint violated; aborting assembly."
         )
         return None
 
     file_bytes = b"".join(parts)
 
-    # Phase L L.12.6 (May 2026) — server-side ORIGINAL 5 MB cap on the
+    # Phase L L.12.6 (May 2026) - server-side ORIGINAL 5 MB cap on the
     # chunked-assembly path. Same rationale as the /attach guard: even if
     # a client (or future channel) bypasses the L.2.b encoder ladder, the
     # backend rejects oversized ORIGINAL rows so storage + downstream
@@ -437,7 +437,7 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
             and getattr(getattr(media_row_for_cap, "resolution_tier", None), "value", None) == "ORIGINAL"
             and len(file_bytes) > _ORIGINAL_MAX_BYTES):
         logger.error(
-            "[Assembly:size-cap] %s ORIGINAL tier %d bytes exceeds %d cap — "
+            "[Assembly:size-cap] %s ORIGINAL tier %d bytes exceeds %d cap - "
             "marking row failed (abandon_reason=original_too_large). Client "
             "must apply the Phase L L.2.b compression ladder.",
             media_id, len(file_bytes), _ORIGINAL_MAX_BYTES,
@@ -467,11 +467,11 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
             )
         return None
 
-    # Phase C.1 (May 2026) — whole-asset integrity check. The PWA computes
+    # Phase C.1 (May 2026) - whole-asset integrity check. The PWA computes
     # djb2 over the FULL original bytes once before chunking and ships it
     # on chunk 0. We re-compute over the concatenated payload here and
     # compare. NULL on the Media row means the client didn't send one
-    # (legacy / pre-Phase-C.1 PWA) — skip the check entirely, preserving
+    # (legacy / pre-Phase-C.1 PWA) - skip the check entirely, preserving
     # back-compat. Mismatch => abort assembly, flag the row failed in the
     # caller (`_try_full_assembly_bg` already handles None-returns), and
     # bump the metric so the failure shows up on the Prometheus dashboard.
@@ -482,7 +482,7 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
     if expected_checksum:
         computed_checksum = djb2_bytes(file_bytes)
         if computed_checksum != expected_checksum:
-            # Phase L (May 2026) — canonical tier label is SMALL for the
+            # Phase L (May 2026) - canonical tier label is SMALL for the
             # "minimum-fidelity" tier. Pre-L wrote 'LOW' here; rows are
             # backfilled by alembic 0035, so falling back to SMALL is
             # consistent with the post-migration vocabulary.
@@ -492,7 +492,7 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
             except Exception:
                 pass
             logger.error(
-                "[Assembly:integrity] %s tier=%s djb2 MISMATCH expected=%s got=%s — "
+                "[Assembly:integrity] %s tier=%s djb2 MISMATCH expected=%s got=%s - "
                 "aborting assembly, marking row failed. Most likely cause: "
                 "_assemble_media_file sort/decode/concat regression OR a "
                 "compromised chunk row that bypassed the per-chunk djb2 check.",
@@ -502,7 +502,7 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
                 media_asset_integrity_fail_total.labels(tier=tier_label).inc()
             except Exception:
                 pass
-            # K.2.c (May 2026, Phase K) — propagate the checksum-mismatch
+            # K.2.c (May 2026, Phase K) - propagate the checksum-mismatch
             # signal to the Media row's abandon metadata so the dashboard
             # can render an explicit "Media corrupt" chip (K.5.a) instead
             # of the generic "failed" state. Was previously just
@@ -520,7 +520,7 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
                     synchronize_session=False,
                 )
                 db.commit()
-                # K.6.c — operator-visible abandon-reason SLI.
+                # K.6.c - operator-visible abandon-reason SLI.
                 try:
                     from app.core.observability import media_abandon_reason_total
                     media_abandon_reason_total.labels(
@@ -538,13 +538,13 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
     else:
         # Audio: sniff format for correct extension
         if len(file_bytes) > 12 and file_bytes[4:8] == b'ftyp':
-            ext = 'm4a'       # MPEG-4 Audio (AAC) — iOS, Android
+            ext = 'm4a'       # MPEG-4 Audio (AAC) - iOS, Android
         elif len(file_bytes) >= 4 and file_bytes[0:4] == b'OggS':
-            ext = 'ogg'       # Ogg container (Opus) — WhatsApp, Telegram
+            ext = 'ogg'       # Ogg container (Opus) - WhatsApp, Telegram
         elif len(file_bytes) >= 4 and file_bytes[0:4] == b'\x1a\x45\xdf\xa3':
             ext = 'webm'      # WebM (PWA MediaRecorder)
         elif len(file_bytes) >= 4 and file_bytes[0:4] == b'caff':
-            # Apple Core Audio Format — older iOS recorder configs produced
+            # Apple Core Audio Format - older iOS recorder configs produced
             # this silently. Not playable in HTML5 <audio>; we transcode it
             # to .m4a via ffmpeg below so the dashboard player works.
             ext = 'caf'
@@ -557,7 +557,7 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
 
     filename = f"{media_id}_assembled.{ext}"
 
-    # (PR 2 — UNDP scaling) — the assembly path no longer
+    # (PR 2 - UNDP scaling) - the assembly path no longer
     # writes to UPLOAD_DIR. CAFF→WAV transcode runs on PyAV BytesIO
     # in memory; the assembled bytes go directly to the storage
     # backend (S3 in prod). Workers receive the storage URL +
@@ -617,7 +617,7 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
 
     # Defense-in-depth PII blur (always runs, regardless of client_blur_applied).
     # Worker gets (media_id, file_url, filename) and uses storage.read()
-    # + a /tmp/ tempfile for cv2 — no persistent local disk usage.
+    # + a /tmp/ tempfile for cv2 - no persistent local disk usage.
     if media_type == 'IMAGE':
         media_row = db.query(Media).filter(Media.id == media_id).first()
         client_claim = bool(getattr(media_row, 'client_blur_applied', False)) if media_row else False
@@ -628,26 +628,26 @@ def _assemble_media_file(media_id: str, media_type: str, db: Session) -> Optiona
         _ai_executor.submit(_run_server_pii_blur, media_id, file_url, filename)
         logger.info(
             f"Server PII blur queued for {media_id} "
-            f"(client_blur_applied={client_claim} — server runs anyway for defense-in-depth)"
+            f"(client_blur_applied={client_claim} - server runs anyway for defense-in-depth)"
         )
         # Perceptual-hash for redundancy detection. Same /tmp/ pattern
-        # — worker stages from storage, computes phash, deletes tempfile.
+        # - worker stages from storage, computes phash, deletes tempfile.
         _ai_executor.submit(_run_photo_phash, media_id, file_url, filename)
     else:
-        # K.2.b (May 2026, Phase K) — AUDIO leg of the chunked-assembly
+        # K.2.b (May 2026, Phase K) - AUDIO leg of the chunked-assembly
         # path. Audio bypasses PII blur entirely, so 'not_needed' is
         # the correct terminal state. Mirrors the /attach handler's
         # audio default (the row-create branch around line 2862 stamps
         # pii_blur_outcome='not_needed' for audio).
         # Pre-fix this branch left pii_blur_status=NULL, which broke
         # the "non-NULL always" invariant for every audio capture from
-        # the PWA — the PWA exclusively uses chunked transport for
+        # the PWA - the PWA exclusively uses chunked transport for
         # audio, so 100% of production audio rows were affected.
         db.query(Media).filter(Media.id == media_id).update(
             {'pii_blur_status': 'not_needed'}, synchronize_session=False
         )
         db.commit()
-        # K.6.c — bump the persisted-state SLI to match what the /attach
+        # K.6.c - bump the persisted-state SLI to match what the /attach
         # path does at row-create time. Counts the PERSISTED column
         # value, not the worker outcome (audio has no worker).
         try:
@@ -665,11 +665,11 @@ def _run_photo_phash(media_id: str, db_url: str, filename: str) -> None:
 
     Fire-and-forget helper invoked from `_assemble_media_file` after the
     PII-blur submission. Opens a short-lived DB session so we don't piggy-
-    back on the caller's transaction. Any failure is logged + swallowed —
+    back on the caller's transaction. Any failure is logged + swallowed -
     `photo_phash` stays NULL and the dashboard treats that as "not yet
     scanned" rather than "unique".
 
-    Apr 2026 (PR 2) — reads bytes through the storage abstraction +
+    Apr 2026 (PR 2) - reads bytes through the storage abstraction +
     stages a /tmp/ tempfile for the PIL.Image.open call. No persistent
     local-disk usage.
     """
@@ -695,12 +695,12 @@ def _run_photo_phash(media_id: str, db_url: str, filename: str) -> None:
 
 
 def _maybe_geotag_stamp(media_id: str, db_url: str, filename: str, tmp_path: str) -> None:
-    """HC98 — burn a geotag caption + GPS EXIF into the stored photo, AFTER PII
+    """HC98 - burn a geotag caption + GPS EXIF into the stored photo, AFTER PII
     blur. Only MEDIUM/ORIGINAL image tiers (SMALL is a thumbnail). Keeps a
-    pristine pre-stamp ORIGINAL in the internal archival store. Best-effort —
+    pristine pre-stamp ORIGINAL in the internal archival store. Best-effort -
     the caller wraps this so a failure never changes the blur outcome.
 
-    ALWAYS re-uploads the stamped bytes — including for the `complete_clean`
+    ALWAYS re-uploads the stamped bytes - including for the `complete_clean`
     path that otherwise skips re-upload (conditional save). cv2 re-encodes at
     q95 so quality holds. Coordinates come from the report's Location (not image
     EXIF), so they're correct regardless of capture orientation.
@@ -725,7 +725,7 @@ def _maybe_geotag_stamp(media_id: str, db_url: str, filename: str, tmp_path: str
         if tier not in geotag_stamp.WATERMARK_TIERS:
             return  # SMALL / LOW thumbnails skipped
         if getattr(m, "watermark_applied", False):
-            return  # idempotent — already stamped
+            return  # idempotent - already stamped
         rep = db.query(_Report).filter(_Report.id == m.report_id).first()
         loc = getattr(rep, "location", None) if rep else None
         if not loc or loc.latitude is None or loc.longitude is None:
@@ -750,7 +750,7 @@ def _maybe_geotag_stamp(media_id: str, db_url: str, filename: str, tmp_path: str
             building=building, time_str=time_str,
             write_exif=getattr(settings, "CRISP_GEOTAG_EXIF_ENABLED", True),
         )
-        # Re-upload the stamped bytes (always — the clean path skips re-upload).
+        # Re-upload the stamped bytes (always - the clean path skips re-upload).
         with open(tmp_path, "rb") as _fh:
             _get_media_storage().save(filename, _fh.read(), _content_type_for(filename))
         db.query(_Media).filter(_Media.id == media_id).update(
@@ -769,11 +769,11 @@ def _maybe_geotag_stamp(media_id: str, db_url: str, filename: str, tmp_path: str
 
 def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
     """Server-side PII blur (MediaPipe faces + easyocr PII text). Runs in
-    the AI thread pool so it doesn't block assembly. Never raises —
+    the AI thread pool so it doesn't block assembly. Never raises -
     failure is logged and the media row's ``pii_blur_status`` is updated
     accordingly so the dashboard can flag the file.
 
-    May 2026 (Batch B-A) — writes the canonical 4-state taxonomy
+    May 2026 (Batch B-A) - writes the canonical 4-state taxonomy
     (alembic 0037). Outcome resolution:
 
       - blur ran + detections found  → 'complete_with_redactions'
@@ -783,9 +783,9 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
       - blur ran + backends missing  → 'failed'
                                        (was 'skipped' pre-0037;
                                        bytes are unblurred; red chip
-                                       — operator must investigate)
+                                       - operator must investigate)
       - blur raised an exception     → 'failed'
-                                       (red chip — operator action)
+                                       (red chip - operator action)
 
     Observability:
       * bumps ``pii_blur_runs_total{outcome}`` Prometheus counter
@@ -793,7 +793,7 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
       * writes ``pii_blur_status`` on the Media row
 
     URL gating: while pii_blur_status='pending', the public-facing
-    ``GET /media/{id}/file`` route returns 425 Too Early — the
+    ``GET /media/{id}/file`` route returns 425 Too Early - the
     operator can't accidentally fetch unblurred bytes through any
     cache layer. The 425 lifts as soon as this worker writes the
     terminal status.
@@ -805,7 +805,7 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
         from app.services.pii_blur import blur_pii, blur_pii_with_hints
         from app.db.session import SessionLocal
 
-        # B-C (May 2026, alembic 0038) — pick up client-supplied face
+        # B-C (May 2026, alembic 0038) - pick up client-supplied face
         # box hints (PWA's BlazeFace pass). If present, the union of
         # client + server boxes is blurred; if absent, server-only
         # MediaPipe behaviour is preserved (back-compat with non-PWA
@@ -820,7 +820,7 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
             try: _read_db.close()
             except Exception: pass
 
-        # B-F (May 2026, alembic 0039) — pre-blur retention. Before
+        # B-F (May 2026, alembic 0039) - pre-blur retention. Before
         # blur runs, snapshot the assembled bytes into the internal
         # `pre_blur/` store. If a higher-tier arrival later detects
         # additional PII, the retroactive upgrade path reads from this
@@ -860,7 +860,7 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
 
         # Stage bytes from storage into a /tmp/ tempfile for the
         # filesystem-based cv2.imread inside blur_pii. The tempfile
-        # is auto-deleted when the context exits — EC2's persistent
+        # is auto-deleted when the context exits - EC2's persistent
         # disk stays empty regardless of upload volume.
         with _stage_from_storage(db_url, filename) as tmp_path:
             if client_hints:
@@ -882,7 +882,7 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
                     # Re-upload the blurred bytes back to storage. blur_pii
                     # rewrote tmp_path in place; we read the new bytes and
                     # storage.save() to overwrite the original (S3 PUT or
-                    # local-disk write — backend agnostic).
+                    # local-disk write - backend agnostic).
                     try:
                         with open(tmp_path, "rb") as _fh:
                             blurred_bytes = _fh.read()
@@ -892,36 +892,36 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
                     except Exception as _re_e:
                         logger.warning(
                             f"Re-upload of blurred bytes failed for {filename}: {_re_e}. "
-                            "Storage object may still hold unblurred bytes — re-run blur worker to fix."
+                            "Storage object may still hold unblurred bytes - re-run blur worker to fix."
                         )
                 elif pii_result.get('clean'):
-                    # B-B (May 2026) — explicit conditional-save path.
+                    # B-B (May 2026) - explicit conditional-save path.
                     # Pipeline ran end-to-end, found NO PII. blur_pii
                     # did NOT call cv2.imwrite; the bytes on disk are
                     # byte-identical to the assembled input. We skip
-                    # the re-upload entirely — storage still has the
+                    # the re-upload entirely - storage still has the
                     # original assembled bytes, full JPEG quality
                     # preserved. Important for the 70-80 % of crisis
                     # photos that legitimately have no PII.
                     outcome = 'complete_clean'
                     logger.info(
-                        f"PII blur ran on {filename}: no PII detected — "
+                        f"PII blur ran on {filename}: no PII detected - "
                         f"bytes unchanged (B-B conditional save)"
                     )
                 else:
-                    # ran=True but neither blurred nor clean — defensive
+                    # ran=True but neither blurred nor clean - defensive
                     # fallback (shouldn't happen given blur_pii contract).
                     outcome = 'complete_clean'
                     logger.warning(
                         f"PII blur ran on {filename} but neither blurred "
-                        f"nor clean flag set — defaulting to complete_clean. "
+                        f"nor clean flag set - defaulting to complete_clean. "
                         f"Result: {pii_result!r}"
                     )
 
-                # HC98 — server-side geotag embed. After blur (so the caption
+                # HC98 - server-side geotag embed. After blur (so the caption
                 # isn't blurred), for completed IMAGE tiers MEDIUM/ORIGINAL,
                 # burn lat/long + building + time + GPS EXIF into the stored
-                # bytes (always re-uploads; clean path included). Best-effort —
+                # bytes (always re-uploads; clean path included). Best-effort -
                 # never changes the blur outcome above.
                 if outcome in ('complete_with_redactions', 'complete_clean'):
                     try:
@@ -929,21 +929,21 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
                     except Exception as _gt_e:
                         logger.warning(f"[geotag] stamp skipped for {media_id[:8]}: {_gt_e}")
             else:
-                # Backends unavailable — the storage object still holds
+                # Backends unavailable - the storage object still holds
                 # the unblurred bytes. Treated as 'failed' under the new
-                # taxonomy (was 'skipped' pre-0037 — same operational
+                # taxonomy (was 'skipped' pre-0037 - same operational
                 # meaning, unified vocabulary).
                 outcome = 'failed'
                 logger.error(
                     f"PII-BLUR FAILED (backends unavailable) for {filename}: "
-                    f"{pii_result.get('error')} — object kept as-is, dashboard "
+                    f"{pii_result.get('error')} - object kept as-is, dashboard "
                     "will flag via pii_blur_status='failed'."
                 )
     except Exception as e:
         outcome = 'failed'
         logger.warning(f"PII blur failed for {filename}: {e}")
     finally:
-        # Update the Media row in a fresh session — this runs on the
+        # Update the Media row in a fresh session - this runs on the
         # `_ai_executor` worker thread which doesn't carry the request's
         # DB session. Swallow DB errors so one bad commit doesn't wedge
         # the worker.
@@ -963,9 +963,9 @@ def _run_server_pii_blur(media_id: str, db_url: str, filename: str) -> None:
                 except Exception: pass
         # Prometheus counters. `import inside` + try/except so a missing
         # observability module can't break the blur worker.
-        #   pii_blur_runs_total   — counts worker EXECUTIONS by outcome
+        #   pii_blur_runs_total   - counts worker EXECUTIONS by outcome
         #                            (success/fail of this thread).
-        #   pii_blur_status_total — counts the row's PERSISTED
+        #   pii_blur_status_total - counts the row's PERSISTED
         #                            pii_blur_status as actually stored.
         # These usually agree, but diverge when the DB update above
         # raised: the worker ran (runs ticks) yet the row stays NULL
@@ -1004,8 +1004,8 @@ def _assemble_partial_image(media_id: str, db: Session) -> Optional[str]:
     if len(chunks) < 3:
         return None
 
-    # Collect only consecutive chunks (stop at first gap — no gaps in
-    # partial JPEG). April 2026: dual-transport — each chunk decodes to
+    # Collect only consecutive chunks (stop at first gap - no gaps in
+    # partial JPEG). April 2026: dual-transport - each chunk decodes to
     # bytes separately, then we concat. Parity with the full-assembly
     # path so partial-render works regardless of transport mix.
     byte_parts: List[bytes] = []
@@ -1034,13 +1034,13 @@ def _assemble_partial_image(media_id: str, db: Session) -> Optional[str]:
         logger.warning(f"Partial assembly decode failed for {media_id}: {e}")
         return None
 
-    # Phase-2.3 safeguards — don't write an unreadable partial.
+    # Phase-2.3 safeguards - don't write an unreadable partial.
     #   (a) Validate JPEG Start-Of-Image marker. A truncated JPEG at least
     #       has to start with 0xFFD8 to even attempt to render; without
     #       this the dashboard shows a "broken image" icon which is worse
     #       UX than no placeholder at all.
     #   (b) Minimum byte threshold. At VERY_SLOW tier (1 KB chunks), a
-    #       3-chunk prefix is only 3 KB — too small to contain the quant
+    #       3-chunk prefix is only 3 KB - too small to contain the quant
     #       + Huffman tables for most JPEG encoders, so the file would be
     #       unreadable. 2 KB is the empirical floor below which partial
     #       rendering is useless; above it most decoders will render a
@@ -1060,7 +1060,7 @@ def _assemble_partial_image(media_id: str, db: Session) -> Optional[str]:
 
     filename = f"{media_id}_partial.jpg"
 
-    # (PR 2) — partial-image PII blur via /tmp/ tempfile so
+    # (PR 2) - partial-image PII blur via /tmp/ tempfile so
     # we never write to UPLOAD_DIR. blur_pii is filesystem-based; we
     # stage briefly, blur in place, read back, and storage.save().
     # Tempfile is auto-deleted on context exit.
@@ -1136,7 +1136,7 @@ def _assemble_partial_audio(media_id: str, db: Session) -> Optional[str]:
 
     filename = f"{media_id}_partial.{ext}"
 
-    # (PR 2) — direct in-memory persist via storage abstraction.
+    # (PR 2) - direct in-memory persist via storage abstraction.
     # The partial-transcription worker (Whisper, _run_partial_transcription_bg)
     # reads via storage.read() + a /tmp/ tempfile when it runs, so we
     # don't need to keep a local working copy here.
@@ -1152,7 +1152,7 @@ def _assemble_partial_audio(media_id: str, db: Session) -> Optional[str]:
 def _run_partial_transcription_bg(report_id: str, partial_url: str):
     """Background task: transcribe partial audio to English as chunks arrive.
 
-    Apr 2026 (PR 2) — reads bytes via the storage abstraction + stages a
+    Apr 2026 (PR 2) - reads bytes via the storage abstraction + stages a
     /tmp/ tempfile for faster-whisper. No persistent local-disk usage.
     """
     from app.db.session import SessionLocal
@@ -1178,7 +1178,7 @@ def _run_partial_transcription_bg(report_id: str, partial_url: str):
 
 
 def _run_ai_pipeline_bg(report_id: str, media_type: str, file_url: str):
-    """Background task wrapper — opens its own DB session so the HTTP response
+    """Background task wrapper - opens its own DB session so the HTTP response
     is not blocked by Whisper transcription (which can take 10–30 s).
 
     Phase K K.6.b: any uncaught exception lands a row in
@@ -1226,7 +1226,7 @@ def _run_ai_pipeline_bg(report_id: str, media_type: str, file_url: str):
 
 
 def _try_partial_image_bg(media_id: str):
-    """Background partial-image assembly — runs PII blur (slow: easyocr + MediaPipe).
+    """Background partial-image assembly - runs PII blur (slow: easyocr + MediaPipe).
     Non-blocking so the chunk handler can return in <100ms."""
     # ── OOM hotfix (May 2026): partial-preview pipeline disabled by default ──
     # Root cause of the PROD OOM crash-loop: _assemble_partial_image ran the
@@ -1237,7 +1237,7 @@ def _try_partial_image_bg(media_id: str):
     # pii_blur_status='pending' → GET /media/{id}/file 425 forever
     # ("Checking PII" broken images). Disabling the partial preview removes the
     # storm: each image now runs ONE final blur, and the dashboard shows the
-    # 425-gated FINAL image instead of an unblurred progressive partial — so we
+    # 425-gated FINAL image instead of an unblurred progressive partial - so we
     # also never serve an unblurred face (UNDP must-have #7).
     # Re-enable ONLY behind a memory-safe partial path: set CRISP_PARTIAL_PREVIEW=1.
     import os as _os
@@ -1276,7 +1276,7 @@ def _try_partial_audio_bg(media_id: str, report_id: str):
             if media.assembly_status != 'complete':
                 media.thumbnail_url = partial_url
                 db.commit()
-            # Live transcription (translates to English) — own try/except in the fn
+            # Live transcription (translates to English) - own try/except in the fn
             _run_partial_transcription_bg(report_id, partial_url)
     except Exception as e:
         logger.warning(f"[PartialAudioBG] {media_id[:8]} failed: {e}")
@@ -1291,7 +1291,7 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
       1) iOS fetch timing out on the last chunk while the server runs PII blur
          + file I/O (5–15 s). When the client aborts mid-handler we can end up
          with received_chunks == total but assembly_status still 'pending'
-         (the symptom we saw for media b36a0511 — image stuck at 50–100 %).
+         (the symptom we saw for media b36a0511 - image stuck at 50–100 %).
       2) Concurrent retries racing each other inside the same handler.
 
     The task is idempotent: it flips status 'pending' → 'assembling' in a single
@@ -1307,7 +1307,7 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
             logger.warning(f"[AssemblyBG] media {media_id} not found")
             return
         if media.assembly_status == 'complete':
-            logger.info(f"[AssemblyBG] {media_id[:8]} already complete — skip")
+            logger.info(f"[AssemblyBG] {media_id[:8]} already complete - skip")
             return
         if media.chunk_count == 0 or media.received_chunks < media.chunk_count:
             logger.info(
@@ -1317,10 +1317,10 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
             return
 
         # Optimistic lock: accept either 'pending' (we got here before the
-        # handler pre-claimed — rare) OR 'assembling' (the handler pre-claimed
+        # handler pre-claimed - rare) OR 'assembling' (the handler pre-claimed
         # the slot for us via its own CAS in the chunk endpoint, which is the
         # common path). We must NOT bail on 'assembling' because the handler's
-        # CAS IS our handoff signal — before this fix, every chunk logged
+        # CAS IS our handoff signal - before this fix, every chunk logged
         # "acquired assembly lock" on the handler side and then "lock lost"
         # on the worker side, leaving the media in 'assembling' forever.
         # We still exclude 'complete' and 'failed' so re-submissions no-op.
@@ -1330,7 +1330,7 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
         ).update({'assembly_status': 'assembling'}, synchronize_session=False)
         db.commit()
         if locked == 0:
-            logger.info(f"[AssemblyBG] {media_id[:8]} already terminal (complete/failed) — skip")
+            logger.info(f"[AssemblyBG] {media_id[:8]} already terminal (complete/failed) - skip")
             return
 
         logger.info(
@@ -1341,7 +1341,7 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
         # Guaranteed-delivery: capture tier + group NOW (before assembly) so
         # we can label metrics even on the failure branches. `tier_label` is
         # kept as the Enum value's string form for stable Prometheus label sets.
-        # Phase L (May 2026) — fallback to canonical 'SMALL' (was 'LOW' pre-L).
+        # Phase L (May 2026) - fallback to canonical 'SMALL' (was 'LOW' pre-L).
         _tier_label = getattr(getattr(media, 'resolution_tier', None), 'value', 'SMALL') or 'SMALL'
         _group_id = getattr(media, 'photo_group_id', None)
 
@@ -1362,7 +1362,7 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
 
         if not file_url:
             logger.error(f"[AssemblyBG] {media_id[:8]} assemble returned no url")
-            # K.2.c (May 2026, Phase K) — only stamp `assembly_status='failed'`
+            # K.2.c (May 2026, Phase K) - only stamp `assembly_status='failed'`
             # if the checksum-mismatch path didn't already do it (in which
             # case `abandon_reason='checksum_mismatch'` is already set and
             # we'd otherwise overwrite assembly_status redundantly without
@@ -1388,11 +1388,11 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
         media.assembly_status = 'complete'
         media.is_synced = True
         media.completion_pct = 100.0
-        # R1 (May 2026) — stamp recovery audit trail. The row reaches
+        # R1 (May 2026) - stamp recovery audit trail. The row reaches
         # this branch via either the happy path (never abandoned) or the
         # recovery path (abandoned by daemon Action ②/③, revived by a
         # subsequent chunk arrival in the handler's else branch). Only
-        # the recovery path needs the timestamp — abandoned_at would be
+        # the recovery path needs the timestamp - abandoned_at would be
         # NULL on the happy path. Idempotent (won't overwrite an existing
         # value) so a re-assembly after a partial-bytes window doesn't
         # update a previously-stamped row.
@@ -1414,7 +1414,7 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
                 # counters haven't been wired yet.
                 pass
 
-        # K.1.a (May 2026, Phase K) — atomic SQL increment.
+        # K.1.a (May 2026, Phase K) - atomic SQL increment.
         # Previous read-modify-write `report.received_media = (report.received_media or 0) + 1`
         # raced with concurrent /attach calls + parallel assembly-bg
         # threads; the count could diverge from reality (stuck PARTIAL
@@ -1439,7 +1439,7 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
         # Reclaim the reassembly buffer (May 2026). media_chunks rows hold
         # the raw uploaded bytes ONLY for assembly; once the file is durably
         # in storage (assembly_status='complete' + url set) nothing reads
-        # them again — the public GET /media/{id}/file route serves
+        # them again - the public GET /media/{id}/file route serves
         # media.url from storage, never the chunks. We gate the delete on
         # storage.exists(file_url) so the rows drop ONLY after the assembled
         # object is CONFIRMED present; if the check is False/errors we keep
@@ -1460,7 +1460,7 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
                     )
             else:
                 logger.warning(
-                    f"[AssemblyBG] chunk reclaim SKIPPED for {media_id[:8]} — "
+                    f"[AssemblyBG] chunk reclaim SKIPPED for {media_id[:8]} - "
                     f"storage.exists({file_url}) False; keeping chunks for the "
                     f"backfill sweep"
                 )
@@ -1492,7 +1492,7 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
                         first_in_group = sibling_count == 0
                     if first_in_group and delta >= 0:
                         time_to_first_image_seconds.observe(delta)
-                    # Phase L — `time_to_full_image_seconds` measures
+                    # Phase L - `time_to_full_image_seconds` measures
                     # time-to-highest-tier-landed (ORIGINAL post-rename).
                     if _tier_label == 'ORIGINAL' and delta >= 0:
                         time_to_full_image_seconds.observe(delta)
@@ -1500,7 +1500,7 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
                 # Metrics must never break the assembly pipeline.
                 logger.debug(f"[AssemblyBG] variant metric skipped: {e}")
 
-        # P2.3 — dispatch AI pipeline (Whisper / vision) to the AI pool instead
+        # P2.3 - dispatch AI pipeline (Whisper / vision) to the AI pool instead
         # of running it inline. Whisper alone can take 10–30 s on CPU; keeping
         # it here would hold an assembly worker idle for that entire window.
         _ai_executor.submit(_run_ai_pipeline_bg, report_id, media_type, file_url)
@@ -1511,7 +1511,7 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
 def _run_ai_pipeline(report_id: str, media_type: str, file_url: str, db: Session):
     """Trigger transcription or image analysis after media assembly.
 
-    Apr 2026 (PR 2) — reads bytes via the storage abstraction + stages
+    Apr 2026 (PR 2) - reads bytes via the storage abstraction + stages
     a /tmp/ tempfile for the underlying filesystem APIs (faster-whisper,
     cv2 image analyzer). No persistent local-disk usage.
     """
@@ -1570,19 +1570,19 @@ def _audit_report_action(
     report_id: str,
     details: Optional[dict] = None,
 ):
-    """Phase F.2.b — Write an AuthAuditLog row for admin actions taken
+    """Phase F.2.b - Write an AuthAuditLog row for admin actions taken
     on a report. The dashboard surfaces these as a compact ribbon
     above the per-incident timeline so operators have an at-a-glance
     "what happened, by whom, when" view.
 
     Bounded vocabulary for `action`:
-      REPORT_DISPATCH    — operator dispatched help
-      REPORT_RESOLVE     — operator marked resolved
-      REPORT_FALSE_ALARM — operator marked false alarm
-      REPORT_ACCEPT      — analyst accepted verdict
-      REPORT_REJECT      — analyst rejected verdict
-      REPORT_DELETE      — operator soft-deleted (grace window)
-      REPORT_VERIFY      — analyst kicked off satellite verification
+      REPORT_DISPATCH    - operator dispatched help
+      REPORT_RESOLVE     - operator marked resolved
+      REPORT_FALSE_ALARM - operator marked false alarm
+      REPORT_ACCEPT      - analyst accepted verdict
+      REPORT_REJECT      - analyst rejected verdict
+      REPORT_DELETE      - operator soft-deleted (grace window)
+      REPORT_VERIFY      - analyst kicked off satellite verification
     """
     from app.models.auth import AuthAuditLog
     db.add(AuthAuditLog(
@@ -1593,7 +1593,7 @@ def _audit_report_action(
         resource_id=report_id,
         details=details,
     ))
-    # No db.commit() here — caller already commits.
+    # No db.commit() here - caller already commits.
 
 
 @router.patch("/{report_id}/false-alarm", response_model=ReportResponse)
@@ -1612,7 +1612,7 @@ def mark_false_alarm(report_id: str, user=Depends(require_analyst), db: Session 
 
 @router.patch("/{report_id}/dispatch", response_model=ReportResponse)
 def dispatch_team(report_id: str, user=Depends(require_analyst), db: Session = Depends(get_db)):
-    """Mark a report as RESPONDING — rescue team has been dispatched.
+    """Mark a report as RESPONDING - rescue team has been dispatched.
 
     April 2026: the first time a report leaves PENDING for a verified
     status (RESPONDING / RESOLVED) we bump the reporter's
@@ -1623,7 +1623,7 @@ def dispatch_team(report_id: str, user=Depends(require_analyst), db: Session = D
     (status transition from PENDING). For the parallel-request race
     (two analysts both dispatch + resolve at the same instant), the
     real idempotency gate is inside
-    ``_mark_report_verified_for_credibility`` — it uses
+    ``_mark_report_verified_for_credibility`` - it uses
     ``SELECT … FOR UPDATE`` + a ``first_verified_at`` timestamp check
     to serialize. See May 2026 audit C-2 fix."""
     report = db.query(Report).filter(Report.id == report_id).first()
@@ -1636,7 +1636,7 @@ def dispatch_team(report_id: str, user=Depends(require_analyst), db: Session = D
         # so the in-memory status change above does NOT reach the DB
         # before ``_mark_report_verified_for_credibility`` runs.
         # Inside that function ``_recompute_tier`` COUNTS reports by
-        # status via a fresh DB query — without an explicit flush,
+        # status via a fresh DB query - without an explicit flush,
         # the count returns 0 RESPONDING / RESOLVED rows and the
         # profile falls back to T2_SIGNAL instead of promoting to
         # T3_CHANGEMAKER. Operator-facing UX of "click Dispatch →
@@ -1653,14 +1653,14 @@ def dispatch_team(report_id: str, user=Depends(require_analyst), db: Session = D
 
 @router.patch("/{report_id}/resolve", response_model=ReportResponse)
 def resolve_report(report_id: str, user=Depends(require_analyst), db: Session = Depends(get_db)):
-    """Mark a report as RESOLVED — situation handled."""
+    """Mark a report as RESOLVED - situation handled."""
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     was_pending = report.status == ReportStatusEnum.PENDING
     report.status = ReportStatusEnum.RESOLVED
     if was_pending:
-        # See dispatch_team for the autoflush rationale — flush the
+        # See dispatch_team for the autoflush rationale - flush the
         # status change BEFORE the recompute counts by status.
         db.flush()
         _mark_report_verified_for_credibility(report, db)
@@ -1671,7 +1671,7 @@ def resolve_report(report_id: str, user=Depends(require_analyst), db: Session = 
     return report
 
 
-# ── Phase 5 — reviewer workflow ─────────────────────────────────
+# ── Phase 5 - reviewer workflow ─────────────────────────────────
 
 @router.patch("/{report_id}/review", response_model=ReportResponse)
 def set_review_verdict(
@@ -1714,7 +1714,7 @@ def set_review_verdict(
     except Exception:
         pass
 
-    # Phase F.2.b — audit the analyst verdict for the per-report ribbon.
+    # Phase F.2.b - audit the analyst verdict for the per-report ribbon.
     if verdict == "ACCEPTED":
         _audit_report_action(db, user, "REPORT_ACCEPT", report_id)
     elif verdict == "REJECTED":
@@ -1797,7 +1797,7 @@ def _resolve_device_id(device_hash: str, db: Session) -> Optional[str]:
 
 
 def _attach_reporter_tier(db: Session, reports: list) -> None:
-    """Phase 1.6 (May 2026) — Dashboard V4 field parity helper.
+    """Phase 1.6 (May 2026) - Dashboard V4 field parity helper.
 
     Bulk-attaches the reporter's gamification tier (one of T1_SCOUT /
     T2_SIGNAL / T3_CHANGEMAKER / T4_LIFEKEEPER) onto each Report as a
@@ -1840,7 +1840,7 @@ def _attach_reporter_tier(db: Session, reports: list) -> None:
         # (T1_SCOUT / T2_SIGNAL / T3_CHANGEMAKER / T4_LIFEKEEPER).
         # Legacy badge_level values (HERO/GUARDIAN/HELPER/NEWCOMER)
         # are skipped so the dashboard doesn't render a stale label
-        # — operators see "no tier badge" until the next dispatch
+        # - operators see "no tier badge" until the next dispatch
         # re-credits the device under the new taxonomy.
         _V4_TIERS = {"T1_SCOUT", "T2_SIGNAL", "T3_CHANGEMAKER", "T4_LIFEKEEPER"}
         for r in reports:
@@ -1851,23 +1851,23 @@ def _attach_reporter_tier(db: Session, reports: list) -> None:
             if tier in _V4_TIERS:
                 # Stamp the transient attribute. Pydantic's
                 # `from_attributes=True` config picks this up by
-                # name when serialising ReportResponse — no schema-
+                # name when serialising ReportResponse - no schema-
                 # side validator needed.
                 r.reporter_tier = tier  # type: ignore[attr-defined]
     except Exception:
         logger.exception("Failed to attach reporter_tier to reports list")
-        # Best-effort — leave unset. The dashboard already handles NULL.
+        # Best-effort - leave unset. The dashboard already handles NULL.
         return
 
 
 def _attach_operation_name(db: Session, reports: list) -> None:
-    """Operations redesign v2 — bulk-attach each report's operation NAME as a
+    """Operations redesign v2 - bulk-attach each report's operation NAME as a
     transient ``crisis_event_name`` attribute so the dashboard's new-report
     notification can show which operation an incident belongs to (or "Global"
     when it belongs to none). Same shape as ``_attach_reporter_tier``: ONE query
     for the page's distinct crisis_event_ids → name map, in-memory lookup per
     report (no N+1). Pydantic's ``from_attributes=True`` picks the attribute up
-    by name. Best-effort — any error leaves it unset (Optional → "Global")."""
+    by name. Best-effort - any error leaves it unset (Optional → "Global")."""
     if not reports:
         return
     try:
@@ -1891,7 +1891,7 @@ def get_device_reports(device_hash: str, db: Session = Depends(get_db)):
     """List all reports submitted by a specific device (for privacy/deletion UI).
     Accepts the client-side device_hash (e.g. DEV-XXXXXXXX) and resolves it.
 
-    Phase 1.6 follow-up (May 2026) — also stamps ``reporter_tier`` on
+    Phase 1.6 follow-up (May 2026) - also stamps ``reporter_tier`` on
     every returned row, same bulk-join as the dashboard list endpoint.
     The PWA / RN "My Reports" pages render the reporter-tier chip per
     row; without this attach the chip stayed blank on those surfaces
@@ -1979,14 +1979,14 @@ def get_device_status_since(device_hash: str, since: str = None, db: Session = D
     reports = q.all()
 
     def _iso(dt):
-        # Z-suffixed UTC — same guarantee as ReportResponse's field
+        # Z-suffixed UTC - same guarantee as ReportResponse's field
         # serializers. Bare isoformat() depends on the datetime being
         # tz-aware (true on Postgres timestamptz today, but fragile) and
         # emits '+00:00' instead of 'Z'.
         return _utc_iso(dt)
 
     def _rt(r):
-        """Computed response_time_seconds — same formula as ReportResponse."""
+        """Computed response_time_seconds - same formula as ReportResponse."""
         end = r.help_arrived_at or r.help_dispatched_at
         if not (r.reviewed_at and end):
             return None
@@ -1997,12 +1997,12 @@ def get_device_status_since(device_hash: str, since: str = None, db: Session = D
         return delta if delta >= 0 else None
 
     def _thumb_url(r):
-        """Pick the SMALL photo variant if available — cheap to download,
+        """Pick the SMALL photo variant if available - cheap to download,
         always sized for a card thumbnail. Falls back to MEDIUM → any
         complete IMAGE → first IMAGE's thumbnail_url. Returns None when
         the report has no photos yet.
 
-        May 2026 (Phase 16, Delta-thumb-S1) — bug fix: this helper used to
+        May 2026 (Phase 16, Delta-thumb-S1) - bug fix: this helper used to
         return ``m.url`` raw, which on PROD (``MEDIA_BACKEND=s3``) is an
         ``s3://crisp-uploads/...`` URI. ``MediaResponse``'s
         ``field_serializer`` rewrites those to ``/api/v1/reports/media/<id>/<file|thumb>``
@@ -2011,7 +2011,7 @@ def get_device_status_since(device_hash: str, since: str = None, db: Session = D
         ``s3://...`` and concatenated it onto the host, producing a 404 and
         the onerror placeholder for every card thumbnail. The
         ``_stable_url`` helper mirrors the serializer's logic so the
-        rewrite happens here too — guaranteeing stable thumbnails across
+        rewrite happens here too - guaranteeing stable thumbnails across
         every list / detail / recent-reports surface that consumes this
         endpoint.
         """
@@ -2097,7 +2097,7 @@ def get_device_status_since(device_hash: str, since: str = None, db: Session = D
 def set_lives_impacted(report_id: str, payload: dict, user=Depends(require_analyst), db: Session = Depends(get_db)):
     """Set the number of lives impacted by this incident.
 
-    May 2026 — also recomputes the reporter's tier so a transition
+    May 2026 - also recomputes the reporter's tier so a transition
     from 0 → ≥1 lives saved fires the T4 LIFEKEEPER promotion on the
     next /profile read. The PWA picks this up via the My-Reports
     tier-up delta toast (see ``_renderSubmittedReports`` snapshot-v2
@@ -2110,11 +2110,11 @@ def set_lives_impacted(report_id: str, payload: dict, user=Depends(require_analy
     db.commit()
     # Tier recompute walks the device's reports; runs AFTER the commit
     # above so the SUM query sees the new value. Failures here must
-    # never break the analyst's PATCH — wrap defensively.
+    # never break the analyst's PATCH - wrap defensively.
     try:
         _mark_report_lives_impacted_for_tier(report, db)
         db.commit()
-    except Exception as e:  # pragma: no cover — observability only
+    except Exception as e:  # pragma: no cover - observability only
         logger.warning(f"[Tier] recompute on /impact failed for report {report_id[:8]}: {e}")
     return {"id": report_id, "lives_impacted": report.lives_impacted}
 
@@ -2144,12 +2144,12 @@ def delete_report(report_id: str, user=Depends(require_admin), grace_minutes: in
 
     report.deletion_requested_at = datetime.now(timezone.utc)
     report.deletion_grace_minutes = grace_minutes
-    # Phase F.2.b — audit the soft-delete for the per-report ribbon.
+    # Phase F.2.b - audit the soft-delete for the per-report ribbon.
     _audit_report_action(db, user, "REPORT_DELETE", report_id,
                          details={"grace_minutes": grace_minutes, "source": deletion_source})
     db.commit()
     grace_label = f"{grace_minutes} minutes" if grace_minutes < 120 else f"{grace_minutes // 60} hours"
-    logger.info(f"Soft-delete: report {report_id} ({deletion_source}) — permanent in {grace_label}")
+    logger.info(f"Soft-delete: report {report_id} ({deletion_source}) - permanent in {grace_label}")
     return {"id": report_id, "deletion_requested_at": report.deletion_requested_at.isoformat(),
             "message": f"Your data will be permanently deleted within {grace_label}."}
 
@@ -2165,11 +2165,11 @@ def undo_delete(report_id: str, db: Session = Depends(get_db)):
     # Check if 24h has passed
     elapsed = (datetime.now(timezone.utc) - report.deletion_requested_at.replace(tzinfo=timezone.utc)).total_seconds()
     if elapsed > 86400:
-        raise HTTPException(status_code=410, detail="Grace period expired — data already scheduled for permanent deletion")
+        raise HTTPException(status_code=410, detail="Grace period expired - data already scheduled for permanent deletion")
     report.deletion_requested_at = None
     db.commit()
     db.refresh(report)
-    logger.info(f"Undo delete for report {report_id} — restored to active")
+    logger.info(f"Undo delete for report {report_id} - restored to active")
     return report
 
 
@@ -2177,7 +2177,7 @@ def _purge_expired_deletions(db: Session):
     """Permanently delete reports whose grace period has expired.
     Uses per-report grace_minutes (default 24h, mobile=30min).
 
-    Apr 2026 PR 2 — ALSO decrements the corresponding `ReporterProfile`
+    Apr 2026 PR 2 - ALSO decrements the corresponding `ReporterProfile`
     counters. The counter was previously incremented on submit
     (`_update_reporter_profile`) but never decremented anywhere, so a
     user who deleted all their reports still saw "7 REPORTS SUBMITTED"
@@ -2194,14 +2194,14 @@ def _purge_expired_deletions(db: Session):
         # the mobile "purge immediately" path uses) into a 24-hour
         # grace, so a user who asked to delete a report NOW would
         # actually wait a full day. `is None` is the correct null-
-        # coalesce — 0 is a legitimate value meaning "no grace".
+        # coalesce - 0 is a legitimate value meaning "no grace".
         grace = r.deletion_grace_minutes if r.deletion_grace_minutes is not None else 1440
         # Coerce to UTC safely regardless of whether the column returned
-        # a naive datetime (SQLite behaviour — DateTime(timezone=True) is
+        # a naive datetime (SQLite behaviour - DateTime(timezone=True) is
         # advisory there, values come back without tzinfo) or a real
         # tz-aware datetime (Postgres). `.replace(tzinfo=utc)` on an
         # already-aware datetime OVERWRITES the offset without shifting
-        # the wall-clock — which silently shifted the cutoff 5.5h into
+        # the wall-clock - which silently shifted the cutoff 5.5h into
         # the future on IST-defaulted Postgres servers. `.astimezone`
         # correctly converts; the naive-branch replacement assumes the
         # stored value is already UTC (matches how the column is written).
@@ -2247,7 +2247,7 @@ def _purge_expired_deletions(db: Session):
                     try: os.remove(sat_path)
                     except: pass
 
-        # Accumulate counter decrements — look up the device hash before
+        # Accumulate counter decrements - look up the device hash before
         # we delete the row so we still have report.device.device_hash.
         device_hash = None
         try:
@@ -2314,7 +2314,7 @@ def _enforce_retention_policy(db: Session, batch_limit: int = 1000) -> int:
     now = datetime.now(timezone.utc)
     cutoff_ts = now - timedelta(days=window_days)
 
-    # Query 1 — standalone reports (no crisis activation), anchored on
+    # Query 1 - standalone reports (no crisis activation), anchored on
     # creation. server_created_at is indexed, so this is scale-safe.
     standalone = (
         db.query(Report)
@@ -2327,12 +2327,12 @@ def _enforce_retention_policy(db: Session, batch_limit: int = 1000) -> int:
         .all()
     )
 
-    # Query 2 — reports tied to an ENDED crisis, anchored on the crisis's
+    # Query 2 - reports tied to an ENDED crisis, anchored on the crisis's
     # close time (ended_at; fall back to updated_at if the operator ended it
     # without stamping a date).
     #
     # Gated by CRISP_PRESERVE_REPORTS_ON_CRISIS_CLOSE (default True): an
-    # operation's reports must survive its closure — an ENDED crisis becomes a
+    # operation's reports must survive its closure - an ENDED crisis becomes a
     # read-only historical record, not a delete trigger. With the flag set, this
     # query is skipped entirely; only standalone (no-crisis) reports above are
     # subject to the time-window sweep. Flip the flag to False to restore the
@@ -2428,23 +2428,23 @@ def purge_all_pending_deletions(request: Request, db: Session = Depends(get_db))
     return {"purged": count}
 
 
-# ── Progressive Upload: Stage 1 — metadata only (tiny, instant) ───────────────
+# ── Progressive Upload: Stage 1 - metadata only (tiny, instant) ───────────────
 def _optional_user_from_auth(request: Request, db: Session):
-    """Phase 1 (Apr 2026 — Optional reporter login) — extract the
+    """Phase 1 (Apr 2026 - Optional reporter login) - extract the
     authenticated user from a Bearer token IF one is present, return
     None otherwise. Never raises: an expired / invalid token silently
-    falls back to anonymous submission (crisis-reporting posture — we
+    falls back to anonymous submission (crisis-reporting posture - we
     ALWAYS accept the report, even if we can't attribute it).
 
-    K.2.e (May 2026, Phase K) — now returns a 2-tuple (user, downgrade_reason)
+    K.2.e (May 2026, Phase K) - now returns a 2-tuple (user, downgrade_reason)
     so the caller can distinguish:
-      - (None, None)          — no auth header (genuine anonymous)
-      - (None, 'expired_token') — Bearer token sent but expired beyond grace.
+      - (None, None)          - no auth header (genuine anonymous)
+      - (None, 'expired_token') - Bearer token sent but expired beyond grace.
                                   Caller stamps Report.submitted_as_anonymous_due_to_expired_token
                                   so the dashboard surfaces "Attribution lost" chip.
-      - (None, 'invalid_token') — Bearer token sent but malformed / not-a-real-user.
+      - (None, 'invalid_token') - Bearer token sent but malformed / not-a-real-user.
                                   Also anonymous, also flagged.
-      - (User, None)          — happy path.
+      - (User, None)          - happy path.
     """
     auth = request.headers.get("authorization") or request.headers.get("Authorization")
     if not auth or not auth.lower().startswith("bearer "):
@@ -2489,21 +2489,21 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
     Stage 1 of progressive upload: Accept metadata only (< 1KB).
     Creates a PARTIAL report immediately. Media follows via PATCH.
 
-    Phase 1 (Apr 2026 — Optional reporter login): if the caller sends
+    Phase 1 (Apr 2026 - Optional reporter login): if the caller sends
     an `Authorization: Bearer <token>` header AND the token is valid,
     the created row is decorated with `user_id`. Invalid/expired tokens
-    are silently ignored — the report still lands as anonymous.
+    are silently ignored - the report still lands as anonymous.
     """
     auth_user, _auth_downgrade_reason = _optional_user_from_auth(request, db)
     # Rate limit: 30 reports/min per device
     from app.main import check_rate_limit
     if not check_rate_limit(f"meta:{meta_in.device_hash}", 30, 60):
-        raise HTTPException(status_code=429, detail="Rate limit exceeded — try again later")
+        raise HTTPException(status_code=429, detail="Rate limit exceeded - try again later")
 
     # Idempotency + collision detection (P1.6).
     # Same-device retry must return the existing Report (idempotent). A
-    # different-device collision — astronomically rare with UUID-v4 but
-    # possible with short device-side IDs — is a potential data-loss path:
+    # different-device collision - astronomically rare with UUID-v4 but
+    # possible with short device-side IDs - is a potential data-loss path:
     # device B's submission would be silently discarded and its media
     # chunks redirected to device A's Report. Guard with a 409 so the
     # client regenerates its UUID and retries.
@@ -2531,7 +2531,7 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
                 status_code=409,
                 detail={
                     "code": "client_report_id_conflict",
-                    "message": "client_report_id already used by a different device — regenerate and retry",
+                    "message": "client_report_id already used by a different device - regenerate and retry",
                     "existing_report_id": existing.id,
                 }
             )
@@ -2555,7 +2555,7 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
         "location", "device_hash",
         "crisis_event_id", "form_pack_id", "form_pack_version", "form_data",
     })
-    # UNDP must-have #6 — pre-create the parent `buildings` row for any
+    # UNDP must-have #6 - pre-create the parent `buildings` row for any
     # PWA-supplied OSM footprint so the FK on the subsequent report INSERT
     # is satisfied. Without this, a fresh DB (or any client that taps a
     # building not yet mirrored into `buildings`) trips
@@ -2581,14 +2581,14 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
     extra_cols = {}
     if auth_user is not None:
         extra_cols["user_id"] = auth_user.id
-    # K.2.e (May 2026, Phase K) — stamp the "lost attribution" flag
+    # K.2.e (May 2026, Phase K) - stamp the "lost attribution" flag
     # when the caller presented a Bearer token but it had expired or
-    # was invalid. The report is still accepted (UNDP must-have #9 —
+    # was invalid. The report is still accepted (UNDP must-have #9 -
     # anonymous submission always works) but the flag surfaces via
     # the K.5.a dashboard chip so operators / the reporter can know.
     if _auth_downgrade_reason == 'expired_token':
         extra_cols["submitted_as_anonymous_due_to_expired_token"] = True
-        # K.6.c — surface field-wide token-expiry rate. Operator
+        # K.6.c - surface field-wide token-expiry rate. Operator
         # alert fires at > 5%/h, indicating reporter-side auth-TTL
         # is too short for typical capture → drain windows.
         try:
@@ -2599,7 +2599,7 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
         except Exception:
             pass
         logger.info(
-            f"meta create — accepted as anonymous due to expired Bearer "
+            f"meta create - accepted as anonymous due to expired Bearer "
             f"token (device={meta_in.device_hash[:12]}, "
             f"client_report_id={meta_in.client_report_id})"
         )
@@ -2632,18 +2632,18 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
                 pack_ver.schema_json, meta_in.form_data or {}, meta_in.source.value)
             if _errs:
                 raise HTTPException(status_code=422, detail={"crisis_form_errors": _errs})
-            # Derive the owning CrisisEvent SERVER-SIDE — never blind-trust the
+            # Derive the owning CrisisEvent SERVER-SIDE - never blind-trust the
             # client's crisis_event_id. A pack can be reused across events (no
             # uniqueness on CrisisEvent.form_pack_id), so form_pack_id alone can't
             # identify the event. Resolution order:
-            #   1. Verify the client-echoed event_id actually owns this pack — the
+            #   1. Verify the client-echoed event_id actually owns this pack - the
             #      client got the (event, pack) pair atomically from /active, so a
             #      cheap PK lookup + ownership check is authoritative.
             #   2. Else re-resolve from the submitted location via the SAME matcher
             #      /active uses (covers GPS chat channels that send only the pack,
             #      and self-heals a stale /active cache), accepting only a match
             #      whose pack equals the answered pack.
-            #   3. Else NULL — a validated form with no resolvable active owner
+            #   3. Else NULL - a validated form with no resolvable active owner
             #      degrades to a standard report (multi-channel parity #1).
             owning_event = None
             if meta_in.crisis_event_id:
@@ -2664,14 +2664,14 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
             report_dict["form_data"] = _fd or None
             report_dict.update(_fc)   # canonical column overrides (enum-guarded by the validator)
     elif meta_in.crisis_event_id and meta_in.location:
-        # Operation linkage WITHOUT a form pack — for GPS-capable channels that
+        # Operation linkage WITHOUT a form pack - for GPS-capable channels that
         # resolve the active zone but don't render the dynamic Stage 2/3 pack
         # (Telegram / WhatsApp share a precise location, call /crisis-forms/active,
         # and echo the event id). They send NO form_pack_id, so no form validation
         # runs (sending an unfilled pack would 422 on required fields). The server
-        # RE-DERIVES crisis_event_id from the submitted location — the client hint
+        # RE-DERIVES crisis_event_id from the submitted location - the client hint
         # only opts the report in; location is authoritative. Channels that never
-        # resolve a zone (SMS / IVR — coarse text/audio geocoding, no fake-matching)
+        # resolve a zone (SMS / IVR - coarse text/audio geocoding, no fake-matching)
         # omit the hint and stay GLOBAL (crisis_event_id NULL).
         from app.api.endpoints.crisis_forms import resolve_active_event
         _lat = getattr(meta_in.location, "latitude", None)
@@ -2695,7 +2695,7 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
     # Attach location
     if meta_in.location:
         loc_data = meta_in.location.model_dump()
-        # HC55 — server-side forward-geocoding now routes through
+        # HC55 - server-side forward-geocoding now routes through
         # _resolve_user_location_name(), which uses the same Mapbox →
         # rate-limited Nominatim cascade as /geocode/describe. The
         # previous inline Nominatim hit (no UA, no throttle, no Mapbox
@@ -2713,10 +2713,10 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
     # Update reporter gamification profile
     _update_reporter_profile(meta_in.device_hash, db)
 
-    # Phase 3 (May 2026, docs §6.1 + §6.2) — sync trust-score updates.
+    # Phase 3 (May 2026, docs §6.1 + §6.2) - sync trust-score updates.
     # Run BEFORE the final commit so the device's spam_score change
     # lands in the same txn as the report. Both helpers are best-
-    # effort + swallow their own errors — they can never block a
+    # effort + swallow their own errors - they can never block a
     # legitimate user submission.
     from app.services import fraud_detector as _fraud
     _fraud.increment_reports_count(db, db_report.device_id)
@@ -2805,7 +2805,7 @@ def update_report_classification(report_id: str, request: dict, db: Session = De
 async def geocode_from_description(payload: dict):
     """Resolve a free-text location description to lat/lng + place name.
 
-    Called by the PWA / RN app when GPS lock fails — the user gets a
+    Called by the PWA / RN app when GPS lock fails - the user gets a
     "describe your location" text box as the graceful fallback, and
     this endpoint pipes the result through the same multi-layer
     geocoder (Claude Haiku → Mapbox → Nominatim) the IVR + SMS channels
@@ -2816,7 +2816,7 @@ async def geocode_from_description(payload: dict):
         {
             "text":          "near the big mosque in Koramangala 5th block",
             "country_hint":  "India"  (optional, helps scope fuzzy matches),
-            "language":      "ar"     (optional, ISO 639-1 — UNDP §3.1f.5),
+            "language":      "ar"     (optional, ISO 639-1 - UNDP §3.1f.5),
             "include_w3w":   true      (optional)
         }
 
@@ -2854,7 +2854,7 @@ async def geocode_from_description(payload: dict):
     result = await geocode_text(text, country_hint=country_hint, language=language)
 
     # Optional what3words enrichment. Only resolves if the caller opted in
-    # AND the operator supplied W3W_API_KEY — otherwise the field is null
+    # AND the operator supplied W3W_API_KEY - otherwise the field is null
     # (no cost, no leakage of the raw text to a 3rd-party API).
     w3w = None
     if payload.get("include_w3w") and result.get("latitude"):
@@ -2884,7 +2884,7 @@ async def geocode_from_description(payload: dict):
 async def reverse_geocode(payload: dict, db: Session = Depends(get_db)):
     """Reverse geocode lat/lng → place name.
 
-    HC55 (May 2026) — closes the production-grade gap the operator's
+    HC55 (May 2026) - closes the production-grade gap the operator's
     2026-05-24 HAR exposed: the PWA was calling
     ``https://nominatim.openstreetmap.org/reverse`` directly from the
     browser and getting 429-rate-limited (every "Refresh GPS" tap fell
@@ -2898,7 +2898,7 @@ async def reverse_geocode(payload: dict, db: Session = Depends(get_db)):
         {
             "lat":      12.852765,    (required, -90..90)
             "lng":      77.679423,    (required, -180..180)
-            "language": "en"          (optional, ISO 639-1 — UNDP §3.1f.5)
+            "language": "en"          (optional, ISO 639-1 - UNDP §3.1f.5)
         }
 
     Response:
@@ -2910,12 +2910,12 @@ async def reverse_geocode(payload: dict, db: Session = Depends(get_db)):
             "longitude":      77.679423
         }
 
-    The response shape is uniform — even when both upstream providers
+    The response shape is uniform - even when both upstream providers
     fail, the route returns a synthetic "12.85°, 77.68°" location_name
     with ``source: "fallback"`` so the PWA never has to special-case
     null returns.
     """
-    # Lazy import — symlink-package pattern (see /geocode/describe).
+    # Lazy import - symlink-package pattern (see /geocode/describe).
     import sys as _sys
     _sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
     from messaging_bot.sms.geocoder import reverse_geocode_coords
@@ -2961,11 +2961,11 @@ def update_report_location(report_id: str, loc_data: dict, db: Session = Depends
     Operation re-evaluation: when ``reresolve_operation: true`` is passed, the
     EDITED location is treated as authoritative and the report's owning
     operation (``crisis_event_id``) is RE-DERIVED from the new coords via the
-    SAME smallest-radius matcher /crisis-forms/active + intake use — so a
+    SAME smallest-radius matcher /crisis-forms/active + intake use - so a
     corrected pin re-homes the report to the operation containing it, or clears
     the link when it leaves every active zone. Precise-GPS channels opt in
     (Telegram / WhatsApp / dashboard pin-correction). AI/SMS/IVR backfill OMITS
-    the flag, so ``crisis_event_id`` is untouched — coarse text/audio geocoding
+    the flag, so ``crisis_event_id`` is untouched - coarse text/audio geocoding
     stays GLOBAL by design (no fake-matching).
     """
     report = db.query(Report).filter(Report.id == report_id).first()
@@ -3133,7 +3133,7 @@ async def ai_assess_report(
 ):
     """Multi-signal intelligence assessment: builds 360° dossier and sends to Claude for analysis.
 
-    Phase 3.3 (May 2026) — Idempotent by report id. The endpoint
+    Phase 3.3 (May 2026) - Idempotent by report id. The endpoint
     re-uses ``report.ai_assessment`` if it's already populated;
     repeated dashboard clicks (two analysts hitting "Credibility
     Check" in parallel, the dashboard's auto-refresh re-rendering
@@ -3147,7 +3147,7 @@ async def ai_assess_report(
 
     Cache bypass: pass ``?force=true`` to ignore the cache. The
     dashboard's reviewer-workflow "Re-run AI" button should set
-    this flag. Cost is bounded by analyst headcount — only
+    this flag. Cost is bounded by analyst headcount - only
     explicit force-clicks re-bill.
     """
     import httpx
@@ -3169,7 +3169,7 @@ async def ai_assess_report(
         cached["_cached"] = True
         # Stamp the cached-at time if the persisted blob carries one;
         # otherwise the dashboard infers from the report's
-        # `updated_at`. Idempotent — never overwrites the original.
+        # `updated_at`. Idempotent - never overwrites the original.
         logger.info(
             "AI assessment served from cache: %s (pass ?force=true to re-run)",
             report_id,
@@ -3230,29 +3230,29 @@ async def ai_assess_report(
     # Service status
     ss = report.service_status or {}
 
-    # ── System prompt (CACHED — 90% token savings) ──
+    # ── System prompt (CACHED - 90% token savings) ──
     system_prompt = """You are the Chief Intelligence Analyst for CRISP, a UN crisis response platform deployed in active disaster zones. Your assessment determines whether rescue teams are dispatched to save lives. You receive a full intelligence dossier per incident.
 
 DECISION FRAMEWORK:
-1. LIVES AT STAKE — a false negative (dismissing real crisis) kills people. A false positive wastes resources. ALWAYS err toward saving lives.
-2. MULTI-SIGNAL FUSION — weight evidence by quality, not just presence. A HERO reporter with photo + verified satellite > 5 anonymous text-only reports.
-3. CORROBORATION IS KING — multiple independent sources reporting the same event from different channels (IVR + Telegram + App) is the strongest possible signal.
-4. TEMPORAL URGENCY — reports waiting >2 hours need expedited review. Night reports deserve benefit of doubt.
-5. INFRASTRUCTURE CRITICALITY — hospital/water/power damage has cascading community-wide effects. Weight higher.
-6. HISTORICAL PATTERNS — recurring reports from the same area may indicate chronic vulnerability OR persistent real damage.
+1. LIVES AT STAKE - a false negative (dismissing real crisis) kills people. A false positive wastes resources. ALWAYS err toward saving lives.
+2. MULTI-SIGNAL FUSION - weight evidence by quality, not just presence. A HERO reporter with photo + verified satellite > 5 anonymous text-only reports.
+3. CORROBORATION IS KING - multiple independent sources reporting the same event from different channels (IVR + Telegram + App) is the strongest possible signal.
+4. TEMPORAL URGENCY - reports waiting >2 hours need expedited review. Night reports deserve benefit of doubt.
+5. INFRASTRUCTURE CRITICALITY - hospital/water/power damage has cascading community-wide effects. Weight higher.
+6. HISTORICAL PATTERNS - recurring reports from the same area may indicate chronic vulnerability OR persistent real damage.
 
 REPORTER CREDIBILITY WEIGHTS:
 - HERO (25+ verified reports, <5% false alarm): weight testimony at 95%
 - GUARDIAN (10+ reports): 85%
 - HELPER (3+ reports): 70%
-- NEWCOMER (<3 reports): 50% — rely more on other signals
+- NEWCOMER (<3 reports): 50% - rely more on other signals
 - IVR/SMS (traceable phone): +10% trust bonus regardless of badge
 
 SOURCE RULES:
 - IVR/SMS: CANNOT send photos. NEVER penalize for missing visual evidence.
 - App/Telegram/WhatsApp: CAN send photos. Missing photo on SEVERE claim = mild flag (not automatic rejection).
 
-SCORE COMPUTATION — You MUST compute and return a breakdown:
+SCORE COMPUTATION - You MUST compute and return a breakdown:
 1. text_voice_score (0-100): Specificity, local knowledge, genuine detail, distress indicators
 2. visual_evidence_score (0-100): Photo quality/relevance, or 50 baseline for IVR/SMS (cannot penalize)
 3. satellite_score (0-100): Truth verification score, or 50 baseline if not yet verified
@@ -3262,7 +3262,7 @@ SCORE COMPUTATION — You MUST compute and return a breakdown:
 7. penalties (-20 to 0): Batch submission, high false-alarm rate, contradictions
 8. final_score: weighted average + bonuses + penalties, clamped 0-100
 
-RESPONSE FORMAT — Return ONLY valid JSON:
+RESPONSE FORMAT - Return ONLY valid JSON:
 {
   "priority_level": "P1_IMMEDIATE | P2_URGENT | P3_STANDARD | P4_MONITOR | P5_LIKELY_FALSE",
   "confidence_score": 0-100,
@@ -3288,7 +3288,7 @@ RESPONSE FORMAT — Return ONLY valid JSON:
   "reasoning": "6-10 line cross-verification analysis explaining how each signal was weighed."
 }"""
 
-    # ── Dynamic intelligence dossier (NOT cached — unique per report) ──
+    # ── Dynamic intelligence dossier (NOT cached - unique per report) ──
     corr_details = ""
     for c in corr["details"][:3]:
         corr_details += f"\n    • {c['dist_m']}m away: {c['type']} ({c['severity']}) via {c['source']}, {'verified '+str(c['v_score'])+'/100' if c['v_score'] else 'unverified'}, {c['hours_ago']}h ago"
@@ -3318,7 +3318,7 @@ Credibility Score: {cred['credibility_score']}/100
 Identity: {caller.get('phone', 'Anonymous app user') if caller else 'Anonymous'}
 
 ── SECTION 4: SATELLITE VERIFICATION ──
-{f"Score: {v.total_score}/100 — {v.verdict}" if v and v.total_score else "Not yet verified (baseline 50)"}
+{f"Score: {v.total_score}/100 - {v.verdict}" if v and v.total_score else "Not yet verified (baseline 50)"}
 {f"Scene: {(v.satellite_scene_description or '')[:250]}" if v else ""}
 {f"Findings: {'; '.join((v.key_findings or [])[:3])}" if v and v.key_findings else ""}
 {f"Photo vs Satellite: {(v.photo_analysis or '')[:200]}" if v and v.photo_analysis else ""}
@@ -3326,7 +3326,7 @@ Identity: {caller.get('phone', 'Anonymous app user') if caller else 'Anonymous'}
 ── SECTION 5: CORROBORATION ──
 Nearby (5km): {corr['nearby_total']} reports ({corr['nearby_verified']} verified, {corr['nearby_same_type']} same type)
 Source Diversity: {corr['source_diversity']} channels
-Temporal Cluster (2h): {'YES — likely real event' if corr['temporal_cluster'] else 'No'}
+Temporal Cluster (2h): {'YES - likely real event' if corr['temporal_cluster'] else 'No'}
 Strongest Score: {corr['strongest_score']}/100{corr_details}
 
 ── SECTION 6: HISTORICAL CONTEXT ──
@@ -3340,7 +3340,7 @@ Electricity: {ss.get('electricity', 'Unknown')} | Water: {ss.get('water', 'Unkno
 Pressing Needs: {', '.join(ss.get('pressing_needs', [])) or 'Not specified'}
 
 ── SECTION 8: URGENCY SIGNALS ──
-Night Report: {'YES' if is_night else 'No'} | Batch Submission: {'YES — SUSPICIOUS' if batch >= 3 else 'No'}
+Night Report: {'YES' if is_night else 'No'} | Batch Submission: {'YES - SUSPICIOUS' if batch >= 3 else 'No'}
 Response Wait: {wait_hours}h | Data Completeness: {completeness}%
 
 Compute the score breakdown and return JSON as specified."""
@@ -3365,7 +3365,7 @@ Compute the score breakdown and return JSON as specified."""
                 except:
                     data = {"summary": text[:200], "suggested_action": "Review Needed", "reasoning": text, "confidence_score": 0}
 
-                # Phase 3.3 — stamp the assessment with metadata so
+                # Phase 3.3 - stamp the assessment with metadata so
                 # later cache hits can surface "computed at X". The
                 # nested keys are namespaced under `_meta` to stay
                 # clear of any Claude-emitted field names.
@@ -3396,7 +3396,7 @@ Compute the score breakdown and return JSON as specified."""
 
                 db.commit()
                 logger.info(f"AI assessment saved: {report_id} score={data.get('confidence_score','?')} priority={data.get('priority_level','?')}")
-                # Phase 3.3 — `_cached: False` so the dashboard can
+                # Phase 3.3 - `_cached: False` so the dashboard can
                 # show "fresh assessment" vs "cached".
                 data["_cached"] = False
                 return data
@@ -3432,7 +3432,7 @@ def update_ai_summary(report_id: str, data: dict, db: Session = Depends(get_db))
     return {"status": "ok", "report_id": report_id}
 
 
-# ── Progressive Upload: Stage 2/3 — attach one media file ────────────────────
+# ── Progressive Upload: Stage 2/3 - attach one media file ────────────────────
 @router.patch("/{report_id}/media/attach", response_model=ReportResponse)
 def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(get_db)):
     """
@@ -3440,7 +3440,7 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
     Updates sync_status from PARTIAL → SYNCED when all expected media received.
     Triggers AI pipeline for each media type received.
     """
-    # K.2.a (May 2026, Phase K) — row-level lock on the Report row.
+    # K.2.a (May 2026, Phase K) - row-level lock on the Report row.
     # The "find existing media → maybe insert" pattern below
     # (lines 2645-2675) is a check-then-act race: two concurrent
     # /attach calls for the same (report_id, type) can both observe
@@ -3460,7 +3460,7 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
     # "webm" for everything non-image, which produced unplayable
     # audio when iOS recorded MP4/AAC).
     file_url = media_in.url
-    # K.2.b (May 2026, Phase K) — default for non-data: URL paths (an
+    # K.2.b (May 2026, Phase K) - default for non-data: URL paths (an
     # S3 URL passed directly). 'not_needed' is the right semantic for
     # audio and for paths that bypass our blur stage.
     pii_blur_outcome = 'not_needed'
@@ -3471,7 +3471,7 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
             if not file_data:
                 raise ValueError("Empty base64 data")
 
-            # Phase L L.12.6 (May 2026) — server-side 5 MB cap on the
+            # Phase L L.12.6 (May 2026) - server-side 5 MB cap on the
             # ORIGINAL tier. The PWA/RN/bot encoder ladders should keep
             # bytes ≤ 5 MB before reaching this endpoint; this guard is
             # defense in depth (3rd-party integrations, buggy clients,
@@ -3504,24 +3504,24 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
                 ext, content_type = _detect_audio_format(header, file_data)
             filename = f"{report.id}_{time.time()}.{ext}"
 
-            # (PR 2) — single-shot attach path. PII blur runs
+            # (PR 2) - single-shot attach path. PII blur runs
             # via /tmp/ tempfile (filesystem-based cv2), then we
             # storage.save() the (possibly blurred) bytes.
             final_data = file_data  # default: original bytes pass through
-            # May 2026 (Batch B-A) — track PII blur outcome on the
+            # May 2026 (Batch B-A) - track PII blur outcome on the
             # Media row using the canonical 4-state vocabulary
             # (alembic 0037). Mirrors the chunked-assembly path's
             # _run_server_pii_blur outcomes at reports.py:650-740.
-            #   'complete_with_redactions' — blur ran AND PII blurred
-            #   'complete_clean'           — blur ran, no PII detected
-            #   'failed'                   — backends unavailable OR
+            #   'complete_with_redactions' - blur ran AND PII blurred
+            #   'complete_clean'           - blur ran, no PII detected
+            #   'failed'                   - backends unavailable OR
             #                                 exception raised; file
             #                                 kept as-is, dashboard
             #                                 flags for manual review
-            #   'not_needed'               — audio media (set below at
+            #   'not_needed'               - audio media (set below at
             #                                 row creation)
             #
-            # Batch B-B (May 2026) — conditional save. blur_pii now
+            # Batch B-B (May 2026) - conditional save. blur_pii now
             # returns explicit `clean=True` when the pipeline ran and
             # found nothing. We branch on that field to skip the
             # disk read-back (final_data already equals file_data) and
@@ -3538,7 +3538,7 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
                         # B-B: read back ONLY when blur actually re-encoded
                         # the file (redactions case). On clean / failed /
                         # backends-unavailable paths the tmp file is bit-
-                        # identical to file_data — no read needed.
+                        # identical to file_data - no read needed.
                         if pii_result.get('blurred'):
                             with open(tmp_path, "rb") as _fh:
                                 final_data = _fh.read()
@@ -3553,25 +3553,25 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
                             pii_blur_outcome = 'complete_clean'
                             logger.info(
                                 f"PII blur ran on attached {filename}: "
-                                f"no PII detected — bytes unchanged (B-B conditional save)"
+                                f"no PII detected - bytes unchanged (B-B conditional save)"
                             )
                         else:
-                            # ran=True but neither blurred nor clean —
+                            # ran=True but neither blurred nor clean -
                             # shouldn't happen, defensive log.
                             pii_blur_outcome = 'complete_clean'
                             logger.warning(
                                 f"PII blur ran on attached {filename} but "
-                                f"neither blurred nor clean flag set — "
+                                f"neither blurred nor clean flag set - "
                                 f"defaulting to complete_clean. Result: {pii_result!r}"
                             )
                     else:
-                        # backends unavailable — pii_blur_outcome stays 'failed'.
+                        # backends unavailable - pii_blur_outcome stays 'failed'.
                         # Pre-0037 this was 'skipped'; the new vocabulary
                         # unifies "blur didn't happen, file may have PII"
                         # under 'failed' so operators see a single red chip.
                         logger.error(
                             f"PII-BLUR FAILED (backends unavailable) for attached {filename}: "
-                            f"{pii_result.get('error')} — object kept as-is, "
+                            f"{pii_result.get('error')} - object kept as-is, "
                             f"dashboard will flag via pii_blur_status='failed'."
                         )
                 except Exception as e:
@@ -3584,7 +3584,7 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
                 f"({len(final_data)} bytes) → {file_url}"
             )
         except HTTPException:
-            # Phase L L.12.6 — re-raise HTTPException unchanged so the
+            # Phase L L.12.6 - re-raise HTTPException unchanged so the
             # 5 MB cap (413) doesn't get rewrapped into a 400. Pre-L
             # this except-Exception caught HTTPException too because
             # HTTPException is-a Exception in FastAPI.
@@ -3601,10 +3601,10 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
     ).first()
 
     if existing_media:
-        # Update existing — don't create duplicate
+        # Update existing - don't create duplicate
         existing_media.url = file_url
         existing_media.file_size_bytes = media_in.file_size_bytes or (len(file_data) if file_data else 0)
-        # K.2.b — refresh pii_blur_status to reflect this fresher upload's
+        # K.2.b - refresh pii_blur_status to reflect this fresher upload's
         # blur outcome. If the operator re-uploads after an earlier failure,
         # the new status takes precedence (most recent blur attempt wins).
         existing_media.pii_blur_status = pii_blur_outcome
@@ -3628,7 +3628,7 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
             is_synced=True,
             assembly_status='complete',
             completion_pct=100.0,
-            # K.2.b (May 2026, Phase K) — surface PII blur outcome so the
+            # K.2.b (May 2026, Phase K) - surface PII blur outcome so the
             # dashboard can render a chip ('PII review needed' on 'failed'
             # / 'skipped'). Audio gets 'not_needed'. Was NULL pre-fix.
             pii_blur_status=pii_blur_outcome,
@@ -3637,7 +3637,7 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
         db.flush()  # ensure the INSERT lands before the atomic UPDATE so
                     # concurrent /attach calls correctly observe the new row
 
-        # K.6.c — operator-visible PII-blur outcome SLI. Distinct
+        # K.6.c - operator-visible PII-blur outcome SLI. Distinct
         # from the existing `crisp_pii_blur_runs_total` (which counts
         # AI-executor run outcomes); this measures the /persisted/
         # state stamped on every Media row at ingest time.
@@ -3649,7 +3649,7 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
         except Exception:
             pass
 
-        # K.1.a (May 2026, Phase K) — atomic SQL increment (was non-atomic
+        # K.1.a (May 2026, Phase K) - atomic SQL increment (was non-atomic
         # `report.received_media = (report.received_media or 0) + 1`).
         # Concurrent /attach for different tiers + parallel assembly-bg
         # threads previously could interleave reads + writes; either lost
@@ -3672,7 +3672,7 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
 
     db.commit()
 
-    # Trigger AI pipeline for this specific media. (PR 3) —
+    # Trigger AI pipeline for this specific media. (PR 3) -
     # was previously gated on `file_url.startswith("/static/")`, which
     # silently skipped both transcription + image-vision once the
     # storage backend flipped to S3 (every new file_url is `s3://...`).
@@ -3695,7 +3695,7 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
                     db.add(ai)
                 db.commit()
         except Exception as e:
-            # Best-effort — never block the attach response on a
+            # Best-effort - never block the attach response on a
             # transcription failure. The dashboard renders without
             # transcription; an analyst can retry from the admin panel.
             logger.warning(f"Audio transcription failed for {file_url}: {e}")
@@ -3724,7 +3724,7 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
     return report
 
 
-# ── Progressive Upload: Stage 2 — thumbnail (fast preview before full chunks) ─
+# ── Progressive Upload: Stage 2 - thumbnail (fast preview before full chunks) ─
 @router.post("/{report_id}/media/thumbnail", status_code=status.HTTP_200_OK)
 def attach_thumbnail(report_id: str, payload: ThumbnailPayload, db: Session = Depends(get_db)):
     """
@@ -3736,14 +3736,14 @@ def attach_thumbnail(report_id: str, payload: ThumbnailPayload, db: Session = De
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    # Decode + persist via the storage abstraction. (PR 3) —
+    # Decode + persist via the storage abstraction. (PR 3) -
     # was previously writing directly to UPLOAD_DIR + emitting
     # `/static/<file>`. Under MEDIA_BACKEND=s3 that violated the
     # zero-persistent-disk mandate (every fast-preview thumbnail
     # accumulated on the EC2 volume forever). Now uses the same
     # storage.save() path as full media + chunked uploads, so the
     # backend selection decides where the bytes physically land.
-    # PII blur still runs but via _stage_bytes — cv2.imread needs a
+    # PII blur still runs but via _stage_bytes - cv2.imread needs a
     # real path on disk, so we stage to /tmp/ for the duration of the
     # blur call and read the (possibly mutated) bytes back. Net effect
     # for S3 backend: persistent disk untouched, /tmp/ tempfile auto-
@@ -3764,7 +3764,7 @@ def attach_thumbnail(report_id: str, payload: ThumbnailPayload, db: Session = De
                     with open(tmp_path, "rb") as _fh:
                         final_bytes = _fh.read()
             except Exception as e:
-                # Blur failure must not block the fast-preview write —
+                # Blur failure must not block the fast-preview write -
                 # raw thumbnail still goes up, server-side blur on the
                 # full chunked photo will catch the same content later.
                 logger.warning(f"Thumbnail PII blur failed (non-fatal): {e}")
@@ -3775,7 +3775,7 @@ def attach_thumbnail(report_id: str, payload: ThumbnailPayload, db: Session = De
         except Exception as e:
             logger.warning(f"Thumbnail save failed (non-fatal): {e}")
 
-    # Upsert Media record — create if not exists, update thumbnail if already exists
+    # Upsert Media record - create if not exists, update thumbnail if already exists
     existing = db.query(Media).filter(Media.id == payload.media_id).first()
     if existing:
         if thumbnail_url:
@@ -3800,7 +3800,7 @@ def attach_thumbnail(report_id: str, payload: ThumbnailPayload, db: Session = De
     return {"status": "ok", "thumbnail_url": thumbnail_url, "media_id": payload.media_id}
 
 
-# ── Progressive Upload: Stage 2/3 — one ~1KB media chunk (PRD §3.3) ──────────
+# ── Progressive Upload: Stage 2/3 - one ~1KB media chunk (PRD §3.3) ──────────
 @router.post("/{report_id}/media/chunk", status_code=status.HTTP_200_OK)
 def attach_media_chunk(
     report_id: str,
@@ -3814,10 +3814,10 @@ def attach_media_chunk(
     - Verifies checksum for data integrity (PRD §3.7)
     - Idempotent: duplicate packets are silently ignored
     - Assembles full file when all chunks received
-    - Triggers AI pipeline in background (non-blocking — P-1 fix)
+    - Triggers AI pipeline in background (non-blocking - P-1 fix)
     - Returns completion_pct for client progress tracking
 
-    P1.5 — rate limited to 180 chunks/minute per client IP (= 3/s). A healthy
+    P1.5 - rate limited to 180 chunks/minute per client IP (= 3/s). A healthy
     1 MB upload at 512 KB chunks is ~2 chunks; even a 10 MB upload at 1 KB
     chunks (worst-case very-slow tier) is 10,000 chunks over many minutes.
     180/min therefore comfortably covers every real scenario while blocking
@@ -3848,7 +3848,7 @@ def attach_media_chunk(
                 detail=f"Checksum mismatch seq={payload.seq_num}: expected {payload.checksum}, got {computed}"
             )
 
-    # Transport observability — emit after integrity check so checksum-mismatch
+    # Transport observability - emit after integrity check so checksum-mismatch
     # failures land in the `rejected` bucket above and only healthy uploads
     # hit `accepted` here.
     try:
@@ -3863,7 +3863,7 @@ def attach_media_chunk(
     # here, which meant tier mismatches were silently lost. Use the values
     # from the payload; legacy clients that don't send them still work
     # because the schema defaults are `LOW` + null.
-    # K.1.b (May 2026, Phase K) — race-safe Media row create. Two
+    # K.1.b (May 2026, Phase K) - race-safe Media row create. Two
     # concurrent chunk-0 submissions for a new media_id both observe
     # `media=None`, both INSERT, the second hits media.id (PK) unique
     # violation → 500. Wrap in try/except so the loser re-reads the
@@ -3874,7 +3874,7 @@ def attach_media_chunk(
     # Chunk-cleanup guard (May 2026): once a media assembles, its chunk rows
     # are reclaimed (see _assemble_media_file). A late/duplicate chunk for an
     # already-'complete' media must NOT re-insert an orphan that re-seeds the
-    # emptied table — the upload is done. Ack idempotently, touch nothing.
+    # emptied table - the upload is done. Ack idempotently, touch nothing.
     if media is not None and media.assembly_status == 'complete':
         return {
             "media_id": payload.media_id,
@@ -3899,15 +3899,15 @@ def attach_media_chunk(
                 completion_pct=0.0,
                 assembly_status='pending',
                 # : persist the client-blur flag from the first chunk.
-                # Subsequent chunks for the same media_id don't update it —
+                # Subsequent chunks for the same media_id don't update it -
                 # all chunks for one upload share the same blur status.
                 client_blur_applied=bool(payload.client_blur_applied),
-                # Phase C.1 — whole-asset checksum from the PWA's djb2 over the
+                # Phase C.1 - whole-asset checksum from the PWA's djb2 over the
                 # full original bytes. Sent on chunk 0 only; the assembler will
                 # verify after concatenation. NULL on later chunks / legacy
                 # clients => check skipped (back-compat).
                 full_asset_checksum=(payload.full_asset_checksum if payload.seq_num == 0 else None),
-                # R2.a — first-chunk row creation seeds the epoch from the
+                # R2.a - first-chunk row creation seeds the epoch from the
                 # client's claim. Legacy clients omit it; pydantic defaults
                 # to 1 which matches the row's server_default.
                 upload_generation=payload.upload_generation,
@@ -3925,7 +3925,7 @@ def attach_media_chunk(
                     detail="media row creation race could not be reconciled",
                 )
     else:
-        # R2.a — epoch / generation check. If the client's claimed
+        # R2.a - epoch / generation check. If the client's claimed
         # generation doesn't match the row's, reject with 409 + the
         # server's truth so the client can resync. Stale tabs /
         # zombie service-workers replaying chunks from a pre-revival
@@ -3955,7 +3955,7 @@ def attach_media_chunk(
                     ),
                 },
             )
-        # ── R1 (May 2026) — soft-abandon revival (legacy JSON endpoint) ─
+        # ── R1 (May 2026) - soft-abandon revival (legacy JSON endpoint) ─
         # Mirrors the chunk-bin handler's revival rule. See that handler
         # for the full design notes. Hard-abandons (checksum_mismatch /
         # original_too_large) reject with 410 Gone; soft-abandons revive
@@ -3987,7 +3987,7 @@ def attach_media_chunk(
                 and media.abandon_reason in _SOFT_ABANDON_REASONS_LEGACY):
             update_payload = {
                 'assembly_status': 'pending',
-                # R2.a — bump the epoch on revival so any pre-revival
+                # R2.a - bump the epoch on revival so any pre-revival
                 # zombie chunk replay 409s harmlessly.
                 'upload_generation': Media.upload_generation + 1,
             }
@@ -4027,10 +4027,10 @@ def attach_media_chunk(
                     pass
             db.flush()
             db.refresh(media)
-            # R2.a — after revival, the client's chunk MUST carry the
+            # R2.a - after revival, the client's chunk MUST carry the
             # NEW generation. If we got here with the OLD generation
             # (the revival happened on the same chunk that triggered
-            # it — a legitimate client coming back online), accept it:
+            # it - a legitimate client coming back online), accept it:
             # we bumped on behalf of the recovering client. But if a
             # SEPARATE stale-session chunk arrives with the OLD value,
             # reject with 409 on the next request.
@@ -4040,15 +4040,15 @@ def attach_media_chunk(
             # first chunk predated the client-blur release). Upgrade the media
             # row so the assembler picks it up.
             media.client_blur_applied = True
-        # Phase C.1 — late-arriving whole-asset checksum (chunk 0 retried
+        # Phase C.1 - late-arriving whole-asset checksum (chunk 0 retried
         # after others landed first). Accept iff the row doesn't already
         # carry one; never overwrite the canonical first-write value.
         if payload.seq_num == 0 and payload.full_asset_checksum and not media.full_asset_checksum:
             media.full_asset_checksum = payload.full_asset_checksum
         # Tier upgrade: /media/thumbnail used to hard-code MEDIUM when it
         # created the row, which stranded ORIGINAL-tier rows at MEDIUM
-        # whenever the thumbnail landed first. Conservative rule — only
-        # upgrade SMALL/MEDIUM → ORIGINAL, never downgrade — so the
+        # whenever the thumbnail landed first. Conservative rule - only
+        # upgrade SMALL/MEDIUM → ORIGINAL, never downgrade - so the
         # dashboard "Originals pending" pill (filters on
         # resolution_tier === 'ORIGINAL') sees the full-quality variant
         # once the chunks declare it.
@@ -4056,8 +4056,8 @@ def attach_media_chunk(
                 and media.resolution_tier in (ResolutionEnum.SMALL, ResolutionEnum.MEDIUM)):
             media.resolution_tier = ResolutionEnum.ORIGINAL
 
-    # Idempotent chunk insert — check for duplicate before incrementing counter.
-    # K.1.b (May 2026, Phase K) — race-safe insert. The query-then-add
+    # Idempotent chunk insert - check for duplicate before incrementing counter.
+    # K.1.b (May 2026, Phase K) - race-safe insert. The query-then-add
     # pattern below has a check-then-act race: two concurrent calls with
     # the same (media_id, seq_num) both observe `existing_chunk=None`,
     # both attempt to INSERT, the second hits the
@@ -4094,14 +4094,14 @@ def attach_media_chunk(
     if is_new_chunk:
         # P-6 fix: atomic SQL-level increment avoids race condition on concurrent retries
         #
-        # Phase-2.4 invariant — `chunk_count` is updated on every
+        # Phase-2.4 invariant - `chunk_count` is updated on every
         # chunk insert to `payload.total_chunks`. The assumption this relies
         # on: **chunks within a single media_id are UNIFORM size**, so
         # `total_chunks` never changes mid-upload. Clients enforce this via
         # a `LOCKED_TOTAL_CHUNKS` (RN) / `const total = ...` (PWA) computed
         # once at upload-start. Mid-upload tier switches in the adaptive
         # layer (Phase 1.6 re-probe, Phase 2.1 packet-loss shrink) only
-        # affect the chunk SIZE of the NEXT media — they do NOT re-chunk
+        # affect the chunk SIZE of the NEXT media - they do NOT re-chunk
         # in-flight data. If a future adaptive change ever re-chunks a live
         # upload, it MUST allocate a new media_id for the post-switch bytes;
         # overwriting `chunk_count` on a live media with a different-sized
@@ -4119,7 +4119,7 @@ def attach_media_chunk(
 
     db.commit()
 
-    # Progressive partial assembly — BUT skip it if this chunk completes the
+    # Progressive partial assembly - BUT skip it if this chunk completes the
     # upload (full assembly will produce the final file anyway, so partial is
     # redundant and just delays it). FastAPI BackgroundTasks run serially, so
     # a partial task with slow PII blur would queue up in front of the full
@@ -4140,7 +4140,7 @@ def attach_media_chunk(
         background_tasks.add_task(_try_partial_audio_bg, payload.media_id, report_id)
 
     # Full assembly when all chunks received (PRD §3.6).
-    # Run in background so the HTTP response returns immediately — otherwise
+    # Run in background so the HTTP response returns immediately - otherwise
     # PII blur + disk I/O on the final chunk can hold the handler open long
     # enough for mobile clients to time out and leave the media stuck at
     # 'pending' despite received_chunks == total_chunks. See _try_full_assembly_bg.
@@ -4150,7 +4150,7 @@ def attach_media_chunk(
         f"received={media.received_chunks}/{payload.total_chunks} "
         f"status={media.assembly_status} new={is_new_chunk}"
     )
-    # P1.1 — Atomic-CAS lock before spawning. Previously two concurrent chunk
+    # P1.1 - Atomic-CAS lock before spawning. Previously two concurrent chunk
     # handlers could both see status='pending' and each spawn a thread; the
     # second thread would no-op inside _try_full_assembly_bg's own CAS but
     # spawning a wasted thread per retry is still avoidable. Here we flip
@@ -4174,7 +4174,7 @@ def attach_media_chunk(
         db.commit()
         if locked:
             logger.info(f"[Chunk] acquired assembly lock for {payload.media_id[:8]}; enqueuing to pool")
-            # P2.2 — submit to the bounded ThreadPoolExecutor instead of
+            # P2.2 - submit to the bounded ThreadPoolExecutor instead of
             # spawning an unbounded threading.Thread. The pool caps concurrent
             # assemblies at CRISP_ASSEMBLY_WORKERS (default 4) which prevents
             # thread explosion under load. Queued jobs run as workers free up.
@@ -4204,7 +4204,7 @@ def attach_media_chunk(
 # a media upload to measure actual upload throughput. Fixes a class of
 # bugs where the client's network-tier detector (`detectPWANetworkTier`)
 # trusts `navigator.connection.effectiveType`, which Chrome DevTools
-# throttling does NOT update at runtime — leading to the client picking
+# throttling does NOT update at runtime - leading to the client picking
 # MEDIUM tier (128 KB chunks, 30 s timeout) on a 2 Kbps throttled link,
 # every chunk timing out, upload stuck forever.
 #
@@ -4213,12 +4213,12 @@ def attach_media_chunk(
 # (bandwidth is a public property of the link; hiding this endpoint
 # doesn't add security). Rate-limited 60/min per client IP so it can't
 # be abused for DoS.
-# Phase F (May 2026) — RETIRED: POST /api/v1/reports/classify-suggest
+# Phase F (May 2026) - RETIRED: POST /api/v1/reports/classify-suggest
 # (AI pre-fill endpoint, Claude Haiku-backed). The feature pre-filled the
 # 3 classify chip rows with AI-suggested infra/crisis/damage values when
 # the user captured a photo on a fast network. Operator decision: the
 # feature is being removed entirely (PWA never had a stable client caller
-# anyway — only a header comment in v4-flow.js referenced the endpoint).
+# anyway - only a header comment in v4-flow.js referenced the endpoint).
 # The service file (app/services/classify_suggest.py) + its test slice
 # (backend/tests/test_classify_suggest.py) are deleted in the same
 # commit. building_ai_summary.py only referenced "the existing
@@ -4232,7 +4232,7 @@ async def upload_probe(request: Request, data: UploadFile = File(...)):
     """Echo `len(data)` for client-side bandwidth measurement.
 
     Client usage:
-      * generate an N-byte payload (8 KB recommended — enough signal,
+      * generate an N-byte payload (8 KB recommended - enough signal,
         fast enough at worst-case bandwidth)
       * `performance.now()` before the POST
       * `performance.now()` after the 200 response arrives
@@ -4242,7 +4242,7 @@ async def upload_probe(request: Request, data: UploadFile = File(...)):
     client_ip = request.client.host if request.client else 'unknown'
     if not check_rate_limit(f"probe:{client_ip}", max_requests=60, window=60):
         raise HTTPException(status_code=429, detail="probe rate limit exceeded")
-    # 64 KB hard cap — stops abuse where a client POSTs 100 MB "probes".
+    # 64 KB hard cap - stops abuse where a client POSTs 100 MB "probes".
     content = await data.read()
     if len(content) > 65_536:
         raise HTTPException(status_code=422, detail="probe payload too large (max 64 KB)")
@@ -4257,15 +4257,15 @@ async def upload_probe(request: Request, data: UploadFile = File(...)):
 # UNDP scale work: replaces the base64-over-JSON chunk transport with a raw
 # multipart/form-data binary upload. The request body carries:
 #
-#     media_id           — string, UUID chosen by the client
-#     seq_num            — int, 0-indexed chunk sequence
-#     total_chunks       — int, total chunks for this media
-#     type               — "IMAGE" | "AUDIO"
-#     resolution_tier    — "LOW" | "MEDIUM" | "HIGH"   (default "LOW")
-#     photo_group_id     — string, UUID grouping the 3 variants of one photo
-#     client_blur_applied — "true"/"false"/"1"/"0"
-#     checksum           — hex djb2 over the raw bytes (optional)
-#     data               — UploadFile, the raw-byte chunk payload
+#     media_id           - string, UUID chosen by the client
+#     seq_num            - int, 0-indexed chunk sequence
+#     total_chunks       - int, total chunks for this media
+#     type               - "IMAGE" | "AUDIO"
+#     resolution_tier    - "LOW" | "MEDIUM" | "HIGH"   (default "LOW")
+#     photo_group_id     - string, UUID grouping the 3 variants of one photo
+#     client_blur_applied - "true"/"false"/"1"/"0"
+#     checksum           - hex djb2 over the raw bytes (optional)
+#     data               - UploadFile, the raw-byte chunk payload
 #
 # Preserves 100 % of the legacy endpoint's business logic:
 #   * rate limit 180 chunks/min per client IP (same Redis-free key)
@@ -4294,11 +4294,11 @@ async def attach_media_chunk_bin(
     photo_group_id: Optional[str] = Form(None),
     client_blur_applied: str = Form("false"),
     checksum: Optional[str] = Form(None),
-    # Phase C.1 — whole-asset djb2 checksum, sent on chunk 0 only.
+    # Phase C.1 - whole-asset djb2 checksum, sent on chunk 0 only.
     # Absent / NULL on later chunks and on legacy clients; the assembler
     # skips the integrity check when the column is NULL on the Media row.
     full_asset_checksum: Optional[str] = Form(None),
-    # R2.a — upload epoch / generation. Default 1 so legacy clients
+    # R2.a - upload epoch / generation. Default 1 so legacy clients
     # that don't send the field continue to match the row's default. The
     # server rejects mismatches with 409 Conflict and bumps the row's
     # value on every soft-abandon revival so any post-revival stale
@@ -4327,7 +4327,7 @@ async def attach_media_chunk_bin(
     if type_upper not in {"IMAGE", "AUDIO"}:
         raise HTTPException(status_code=422, detail=f"invalid type: {type!r}")
     tier_upper = str(resolution_tier).upper()
-    # Phase L (May 2026) — canonical 3-value vocabulary. Pre-L
+    # Phase L (May 2026) - canonical 3-value vocabulary. Pre-L
     # vocabulary was LOW/MEDIUM/HIGH/ORIGINAL; alembic 0036 dropped
     # LOW + HIGH from the Postgres enum.
     if tier_upper not in {"SMALL", "MEDIUM", "ORIGINAL"}:
@@ -4336,7 +4336,7 @@ async def attach_media_chunk_bin(
         # logging enabled (caught us during Batch 2 rollout).
         logger.warning(
             "[chunk-bin] rejected non-canonical tier=%r from report=%s "
-            "media=%s — client must send SMALL/MEDIUM/ORIGINAL",
+            "media=%s - client must send SMALL/MEDIUM/ORIGINAL",
             resolution_tier, report_id, media_id,
         )
         raise HTTPException(status_code=422, detail=f"invalid resolution_tier: {resolution_tier!r}")
@@ -4367,7 +4367,7 @@ async def attach_media_chunk_bin(
                 detail=f"Checksum mismatch seq={seq_num}: expected {checksum}, got {computed}"
             )
 
-    # Transport observability — post-checksum-verify so rejected uploads
+    # Transport observability - post-checksum-verify so rejected uploads
     # don't bloat the `accepted` bucket.
     try:
         chunk_transport_total.labels(transport='binary', outcome='accepted').inc()
@@ -4380,12 +4380,12 @@ async def attach_media_chunk_bin(
     if photo_group == "":
         photo_group = None
 
-    # B-C (May 2026, alembic 0038) — client-supplied normalized face
+    # B-C (May 2026, alembic 0038) - client-supplied normalized face
     # boxes. PWA's BlazeFace pass at capture time emits a list of
     # {x, y, w, h} in [0.0, 1.0] coords; ships them on every chunk
     # upload via the X-Client-Face-Boxes header (same value on all
     # chunks for one media row). Server-side blur worker takes the
-    # union with its own MediaPipe detection — privacy ratchets
+    # union with its own MediaPipe detection - privacy ratchets
     # forward only.
     #
     # Parse defensively: malformed JSON, oversized payloads, or
@@ -4396,7 +4396,7 @@ async def attach_media_chunk_bin(
     client_face_boxes: Optional[list] = None
     _hdr = request.headers.get("X-Client-Face-Boxes")
     if _hdr:
-        # Guard rail on header size — a malicious client shouldn't
+        # Guard rail on header size - a malicious client shouldn't
         # be able to ship MB of JSON in this header. 8 KB is huge
         # for the realistic case (~20 boxes × ~50 bytes each).
         if len(_hdr) > 8192:
@@ -4455,11 +4455,11 @@ async def attach_media_chunk_bin(
                 # B-C: optional client face-box hints. May be None
                 # (non-PWA / legacy); server blur worker handles both.
                 client_face_boxes_normalized=client_face_boxes,
-                # Phase C.1 — persist the PWA-computed whole-asset checksum on
+                # Phase C.1 - persist the PWA-computed whole-asset checksum on
                 # creation. Only chunk 0 carries this field; later chunks pass
                 # None and `seq_num != 0` short-circuits the assignment below.
                 full_asset_checksum=(full_asset_checksum if seq_num == 0 else None),
-                # R2.a — seed epoch from client claim.
+                # R2.a - seed epoch from client claim.
                 upload_generation=upload_generation,
             )
             db.add(media)
@@ -4473,7 +4473,7 @@ async def attach_media_chunk_bin(
                     detail="media row creation race could not be reconciled",
                 )
     else:
-        # R2.a — epoch / generation check (chunk-bin endpoint). See
+        # R2.a - epoch / generation check (chunk-bin endpoint). See
         # legacy chunk handler for the design notes. Run BEFORE R1
         # revival so stale-session chunks can't accidentally trigger
         # a revival.
@@ -4500,7 +4500,7 @@ async def attach_media_chunk_bin(
                     ),
                 },
             )
-        # ── R1 (May 2026) — generalised soft-abandon revival ─────────────
+        # ── R1 (May 2026) - generalised soft-abandon revival ─────────────
         # The chunk handler is the only place with positive evidence of
         # client-side recovery (actual bytes arriving). The recovery
         # sweep daemon stays conservative and never auto-revives
@@ -4508,23 +4508,23 @@ async def attach_media_chunk_bin(
         # chunk arrival.
         #
         # Soft abandons (revivable on chunk arrival):
-        #   - chunks_never_arrived     — daemon Action ③, client just
+        #   - chunks_never_arrived     - daemon Action ③, client just
         #                                 came back online
-        #   - assembly_worker_lost     — daemon Action ②, worker died
+        #   - assembly_worker_lost     - daemon Action ②, worker died
         #                                 mid-assembly but chunks may
         #                                 not all be in yet; client
         #                                 resending finishes the job
-        #   - bandwidth_tier_deferred  — PWA pre-emptive defer; client
+        #   - bandwidth_tier_deferred  - PWA pre-emptive defer; client
         #                                 retried after bandwidth recovered
         #
-        # Hard abandons (NOT revivable — reject with 410 Gone at the top
+        # Hard abandons (NOT revivable - reject with 410 Gone at the top
         # of the handler so we don't pile chunks against a row whose
         # disk bytes are corrupt or already-rejected):
-        #   - checksum_mismatch        — assembly worker found whole-
+        #   - checksum_mismatch        - assembly worker found whole-
         #                                 asset djb2 mismatch; bytes on
         #                                 disk are wrong, can't fix by
         #                                 resending more chunks
-        #   - original_too_large       — 5 MB cap rejected; resending
+        #   - original_too_large       - 5 MB cap rejected; resending
         #                                 doesn't shrink the asset
         #
         # The revival is one atomic UPDATE with the full WHERE clause so
@@ -4544,7 +4544,7 @@ async def attach_media_chunk_bin(
         })
         if (media.abandoned_at is not None
                 and media.abandon_reason in _HARD_ABANDON_REASONS):
-            # Reject — the client must allocate a fresh media_id.
+            # Reject - the client must allocate a fresh media_id.
             logger.warning(
                 f"[chunk-bin] rejecting chunk for hard-abandoned media "
                 f"{media_id[:8]} (reason={media.abandon_reason}); "
@@ -4563,7 +4563,7 @@ async def attach_media_chunk_bin(
                 and media.recovered_at is None
                 and media.abandon_reason in _SOFT_ABANDON_REASONS):
             # Atomic revival. Only flips when the row matches exactly
-            # the state we expect — if the daemon raced us into a
+            # the state we expect - if the daemon raced us into a
             # different state, this UPDATE is a no-op and assembly
             # proceeds from whatever state actually exists.
             #
@@ -4573,7 +4573,7 @@ async def attach_media_chunk_bin(
             # tells the dashboard the row recovered.
             update_payload = {
                 'assembly_status': 'pending',
-                # R2.a — bump epoch so post-revival stale chunks 409.
+                # R2.a - bump epoch so post-revival stale chunks 409.
                 'upload_generation': Media.upload_generation + 1,
             }
             # bandwidth_tier_deferred had two extra side effects in
@@ -4581,7 +4581,7 @@ async def attach_media_chunk_bin(
             # the new total AND re-credit expected_media on the parent
             # report (mark-deferred decremented it when it abandoned
             # the row). We preserve those for this specific reason
-            # only — other soft-abandon reasons don't need them
+            # only - other soft-abandon reasons don't need them
             # (chunks_never_arrived / assembly_worker_lost left
             # chunk_count and expected_media intact at abandon time).
             if media.abandon_reason == 'bandwidth_tier_deferred':
@@ -4626,22 +4626,22 @@ async def attach_media_chunk_bin(
         # B-C: late-arriving face-box hints. If the row was created
         # without boxes (e.g. chunk 0 carried no header) but a later
         # chunk does have them, stamp them now. Don't overwrite an
-        # existing non-empty value (the first one is canonical — the
+        # existing non-empty value (the first one is canonical - the
         # PWA emits the same coords on every chunk for the same
         # media_id).
         if client_face_boxes and not media.client_face_boxes_normalized:
             media.client_face_boxes_normalized = client_face_boxes
-        # Phase C.1 — late-arriving full-asset checksum. If chunk 0 was lost
+        # Phase C.1 - late-arriving full-asset checksum. If chunk 0 was lost
         # or re-sent after an intermediate chunk landed first, accept the
         # value when the row doesn't already carry one. Don't overwrite an
         # existing non-NULL value (the original is canonical).
         if seq_num == 0 and full_asset_checksum and not media.full_asset_checksum:
             media.full_asset_checksum = full_asset_checksum
-        # Tier upgrade — same conservative rule as the legacy JSON endpoint.
+        # Tier upgrade - same conservative rule as the legacy JSON endpoint.
         # See attach_media_chunk's else branch for the full why.
         # Phase L (May 2026): the canonical "promote to top tier" trigger is
         # ORIGINAL now, not HIGH. _RE2.LOW / _RE2.HIGH were removed from
-        # ResolutionEnum in alembic 0036 — referencing them here would
+        # ResolutionEnum in alembic 0036 - referencing them here would
         # AttributeError. Use SMALL / ORIGINAL.
         from app.models.report import ResolutionEnum as _RE2
         if (tier_upper == "ORIGINAL"
@@ -4650,7 +4650,7 @@ async def attach_media_chunk_bin(
 
     # ── Idempotent insert. Mirrors the legacy endpoint byte-for-byte
     #    except the column we write (data_binary instead of data_b64).
-    # K.1.b (May 2026, Phase K) — race-safe insert. See the legacy
+    # K.1.b (May 2026, Phase K) - race-safe insert. See the legacy
     # `attach_media_chunk` handler for the full rationale.
     from sqlalchemy.exc import IntegrityError as _IntegrityError_bin
 
@@ -4666,7 +4666,7 @@ async def attach_media_chunk_bin(
                 media_id=media_id,
                 seq_num=seq_num,
                 total_chunks=total_chunks,
-                data_b64=None,            # legacy column NULL — binary wins
+                data_b64=None,            # legacy column NULL - binary wins
                 data_binary=raw_bytes,
                 checksum=checksum,
             ))
@@ -4677,7 +4677,7 @@ async def attach_media_chunk_bin(
             is_new_chunk = False
 
     if is_new_chunk:
-        # Atomic SQL-level increment — same race-safe pattern as the legacy path.
+        # Atomic SQL-level increment - same race-safe pattern as the legacy path.
         db.query(Media).filter(Media.id == media_id).update(
             {"received_chunks": Media.received_chunks + 1,
              "chunk_count": total_chunks},
@@ -4689,7 +4689,7 @@ async def attach_media_chunk_bin(
 
     db.commit()
 
-    # ── Progressive partial assembly — same trigger cadence as legacy
+    # ── Progressive partial assembly - same trigger cadence as legacy
     #    endpoint. FastAPI BackgroundTasks requires passing the Request
     #    chain, but we only need the side-effect; use the module-level
     #    executor directly for parity with the full-assembly trigger.
@@ -4752,20 +4752,20 @@ async def attach_media_chunk_bin(
     }
 
 
-# ── F3 — operator-gated media reclaim ──────────────────────────────────────
+# ── F3 - operator-gated media reclaim ──────────────────────────────────────
 #
 # Phase F image-reliability (May 2026). Operator surface for stuck / abandoned
-# media uploads — companion to the periodic recovery sweep in app.main and
+# media uploads - companion to the periodic recovery sweep in app.main and
 # the dashboard tri-state render. Two modes:
 #
-#   retry_assembly  — Only valid when received_chunks >= chunk_count (all
+#   retry_assembly  - Only valid when received_chunks >= chunk_count (all
 #                     chunks ARE on disk). Resets assembly_status to
 #                     'pending', clears abandon metadata, and re-submits
 #                     the row to the assembly pool. Salvages a sweep-
 #                     abandoned row whose chunks were always there but
 #                     the worker had died.
 #
-#   mark_abandoned  — Operator-declared terminal failure. Flips
+#   mark_abandoned  - Operator-declared terminal failure. Flips
 #                     assembly_status to 'failed', stamps abandoned_at +
 #                     abandon_reason='operator_manual'. Use when the
 #                     operator KNOWS the upload won't ever complete (e.g.
@@ -4783,15 +4783,15 @@ class MediaReclaimRequest(_ReclaimBaseModel):
     mode: str  # "retry_assembly" | "mark_abandoned"
 
 
-# ── K.2.d — mark-deferred endpoint (Phase K, May 2026) ───────────────────────
+# ── K.2.d - mark-deferred endpoint (Phase K, May 2026) ───────────────────────
 class MarkDeferredRequest(_ReclaimBaseModel):
     """PWA soft-drain / pre-emptive defer signal:
     'I gave up on these tiers per photo group'.
 
     Two callers:
-      1. Soft-drain reconciler at dequeue time (K.3.a) — PWA tried to upload
+      1. Soft-drain reconciler at dequeue time (K.3.a) - PWA tried to upload
          MEDIUM/ORIGINAL, the server doesn't show them. Mark deferred.
-      2. Pre-emptive defer on VERY_SLOW networks (May 2026 follow-up) —
+      2. Pre-emptive defer on VERY_SLOW networks (May 2026 follow-up) -
          PWA decided not to attempt MEDIUM/ORIGINAL because bandwidth was
          insufficient. Mark deferred so the dashboard chip is accurate.
 
@@ -4850,7 +4850,7 @@ def mark_media_deferred(
         )
 
     reason = payload.reason or "bandwidth_tier_deferred"
-    # Phase L (May 2026) — canonical vocabulary only. Legacy LOW/HIGH
+    # Phase L (May 2026) - canonical vocabulary only. Legacy LOW/HIGH
     # tier names are rejected (dropped from enum in alembic 0036).
     valid_tiers = {"SMALL", "MEDIUM", "ORIGINAL"}
     valid_reasons = {
@@ -4887,7 +4887,7 @@ def mark_media_deferred(
 
             if existing:
                 # If already in a terminal state with this reason, skip
-                # (idempotent). If complete, also skip — a SMALL/MEDIUM
+                # (idempotent). If complete, also skip - a SMALL/MEDIUM
                 # /HIGH that DID land beats the PWA's soft-drain claim.
                 if existing.assembly_status == "complete":
                     continue
@@ -4957,7 +4957,7 @@ def mark_media_deferred(
     db.commit()
     db.refresh(report)
 
-    # K.6.c — bandwidth_tier_deferred SLI. Only count rows we
+    # K.6.c - bandwidth_tier_deferred SLI. Only count rows we
     # actually flipped (idempotent re-call returns 0 here so we
     # don't double-count an operator's retry).
     if newly_stamped > 0:
@@ -5022,7 +5022,7 @@ def reclaim_media(
         db.commit()
         db.refresh(media)
 
-        # Resubmit to the assembly pool — _try_full_assembly_bg's own CAS
+        # Resubmit to the assembly pool - _try_full_assembly_bg's own CAS
         # handles double-submits safely.
         try:
             _assembly_executor.submit(
@@ -5081,9 +5081,9 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
     # Rate limit: 30 reports/min per device
     from app.main import check_rate_limit
     if not check_rate_limit(f"report:{report_in.device_hash}", 30, 60):
-        raise HTTPException(status_code=429, detail="Rate limit exceeded — try again later")
+        raise HTTPException(status_code=429, detail="Rate limit exceeded - try again later")
     
-    # 0. Idempotency + collision detection (P1.6 — same guard as /meta).
+    # 0. Idempotency + collision detection (P1.6 - same guard as /meta).
     if report_in.client_report_id:
         existing = db.query(Report).filter(
             Report.client_report_id == report_in.client_report_id
@@ -5104,7 +5104,7 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
                 status_code=409,
                 detail={
                     "code": "client_report_id_conflict",
-                    "message": "client_report_id already used by a different device — regenerate and retry",
+                    "message": "client_report_id already used by a different device - regenerate and retry",
                     "existing_report_id": existing.id,
                 }
             )
@@ -5121,7 +5121,7 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
     # 2. Report Creation
     # Dump Pydantic model excluding nested objects for manual handling
     report_dict = report_in.model_dump(exclude={"location", "media", "device_hash"})
-    # UNDP must-have #6 — pre-create the parent `buildings` row for any
+    # UNDP must-have #6 - pre-create the parent `buildings` row for any
     # PWA-supplied OSM footprint so the FK on the subsequent report INSERT
     # is satisfied. Same rationale as in /reports/meta: without this, a
     # tap on an OSM footprint not yet mirrored into `buildings` trips
@@ -5150,7 +5150,7 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
     if report_in.location:
         loc_data = report_in.location.model_dump()
 
-        # HC55 — server-side forward-geocoding for offline-typed names
+        # HC55 - server-side forward-geocoding for offline-typed names
         # now routes through _resolve_user_location_name() so the
         # cascade enjoys Mapbox primary + rate-limited Nominatim
         # fallback + cache.
@@ -5196,7 +5196,7 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
                         ext, content_type = _detect_audio_format(header, file_data)
                     filename = f"{db_report.id}_{time.time()}.{ext}"
 
-                    # (PR 2) — write through the storage
+                    # (PR 2) - write through the storage
                     # backend (S3 in prod). No persistent EC2 disk usage.
                     file_url = _get_media_storage().save(filename, file_data, content_type)
                     logger.info(
@@ -5219,19 +5219,19 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
             db.add(db_media)
             saved_media_entities.append(db_media)
 
-    # K.2.g (May 2026, Phase K) — count the media we just persisted +
+    # K.2.g (May 2026, Phase K) - count the media we just persisted +
     # promote sync_status if everything expected has landed. Pre-fix
     # this endpoint added Media rows but never incremented
     # `received_media` or evaluated the SYNCED gate, so 3rd-party
     # integrations hitting the one-shot path got reports stuck at
     # PARTIAL forever. PWA / Telegram / messaging-bot all use
-    # /meta + /chunk-bin so they avoided the bug — but the endpoint
+    # /meta + /chunk-bin so they avoided the bug - but the endpoint
     # is still public and we shouldn't leave a foot-gun.
     if saved_media_entities:
         db_report.received_media = len(saved_media_entities)
         if (db_report.expected_media is None) or (db_report.expected_media == 0):
             # Caller didn't declare expected; infer it from what
-            # actually landed. Conservative — we know at least these
+            # actually landed. Conservative - we know at least these
             # arrived; if more were intended the dashboard's
             # Action ④ idle-promote will still catch up.
             db_report.expected_media = len(saved_media_entities)
@@ -5311,7 +5311,7 @@ def list_report_markers(
     status: Optional[str] = Query(None, description="comma-separated"),
     crisis_event_id: Optional[str] = Query(None, description="scope to one operation"),
 ):
-    """Lightweight map markers — id + coords + severity/status/type ONLY (a
+    """Lightweight map markers - id + coords + severity/status/type ONLY (a
     column tuple query joined to Location; NO media/AI/verification eager loads).
 
     The dashboard map used GET /reports/?limit=200 (heavy rows, capped at 500),
@@ -5382,7 +5382,7 @@ def get_reports(
             "ONLY reports whose own row, or any of their media rows, has been "
             "updated since this time. Dashboard reads X-Server-Time on each "
             "response and echoes it back as `since` on the next poll for "
-            "incremental delta sync — typical poll body drops from ~440 KB to "
+            "incremental delta sync - typical poll body drops from ~440 KB to "
             "<2 KB on idle dashboards. Omit `since` for the initial full load."
         ),
     ),
@@ -5402,16 +5402,16 @@ def get_reports(
     By default, excludes reports pending deletion (24h grace period).
     Pass ?include_deleted=true to see them (admin use).
 
-    P2.1 — the serializer walks every Report's media + ai_analysis + location
+    P2.1 - the serializer walks every Report's media + ai_analysis + location
     + verification. Without eager loading this is an N+1: a 1000-row dashboard
     fetch fires 4001+ queries. `joinedload` pulls all relationships in one
     wide SELECT per relationship, taking the query count to ~5 regardless of N.
 
-    P2.11 — also returns X-Total-Count header and caps `limit` at 500 so a
+    P2.11 - also returns X-Total-Count header and caps `limit` at 500 so a
     misbehaving client can't pull the whole table in one shot. The dashboard
     reads the header to drive its pagination / infinite-scroll.
 
-    Phase 3 (May 2026, HAR-driven) — `since` parameter enables incremental
+    Phase 3 (May 2026, HAR-driven) - `since` parameter enables incremental
     delta polling. The dashboard's per-poll body shrank from ~440 KB to ~1-2 KB
     when no reports changed in the last 4 s. We capture `cursor` BEFORE
     running the query and emit it via X-Server-Time so any reports landing
@@ -5443,7 +5443,7 @@ def get_reports(
     # Media.updated_at, and partial-upload progress visualisation in the
     # dashboard would stop animating without the EXISTS clause.
     if since is not None:
-        # Strip tzinfo for the comparison if the column is tz-naive — but
+        # Strip tzinfo for the comparison if the column is tz-naive - but
         # our columns are tz-aware (DateTime(timezone=True)) so a tz-aware
         # comparand is correct. Normalise to UTC just in case the client
         # sends an offset-bearing value.
@@ -5473,12 +5473,12 @@ def get_reports(
          .all()
     )
 
-    # Phase 1.6 (May 2026) — Dashboard V4 field parity. The
+    # Phase 1.6 (May 2026) - Dashboard V4 field parity. The
     # ReportResponse schema carries `reporter_tier` for the masked
     # reporter badge. Bulk-fetch tier mappings for every device_hash
     # in this page in ONE query (no N+1), then stash on each Report
     # as a transient attribute. The model_validator on
-    # `_compute_identity_badge` picks it up — keeps the join logic in
+    # `_compute_identity_badge` picks it up - keeps the join logic in
     # the endpoint where the session is live, and the projection
     # logic in the schema where the rest of the derived fields live.
     _attach_reporter_tier(db, reports)
@@ -5489,7 +5489,7 @@ def get_reports(
     # media row's id+updated_at+completion_pct. Catches changes in the
     # parent report AND in chunked-upload progress (which doesn't always
     # bump the parent's updated_at). Already-loaded SQLAlchemy objects
-    # — zero extra DB hits.
+    # - zero extra DB hits.
     #
     # When the dashboard's If-None-Match header matches our ETag, we
     # return 304 Not Modified with no body. That skips the joinedload
@@ -5509,12 +5509,12 @@ def get_reports(
     response.headers["X-Total-Count"] = str(total)
     response.headers["X-Limit"] = str(safe_limit)
     response.headers["X-Offset"] = str(safe_skip)
-    # Phase 3: ISO 8601 with `Z` suffix — same shape as our datetime
+    # Phase 3: ISO 8601 with `Z` suffix - same shape as our datetime
     # serialization elsewhere. Dashboard reads this and echoes it back
     # as `?since=<value>` on the next poll.
     response.headers["X-Server-Time"] = cursor.isoformat().replace("+00:00", "Z")
     response.headers["ETag"] = etag_value
-    # `Cache-Control: no-cache` — browsers MUST revalidate (send
+    # `Cache-Control: no-cache` - browsers MUST revalidate (send
     # If-None-Match) on every poll. Without this, a stale cached body
     # would short-circuit the conditional check.
     response.headers["Cache-Control"] = "no-cache"
@@ -5524,7 +5524,7 @@ def get_reports(
     )
 
     # If the dashboard echoed our previous ETag back, short-circuit with
-    # 304 — saves the schema-validation + JSON-encoding cost on the
+    # 304 - saves the schema-validation + JSON-encoding cost on the
     # backend AND the body-transfer bandwidth on the wire.
     client_etag = request.headers.get("if-none-match", "")
     if client_etag and client_etag == etag_value:
@@ -5549,9 +5549,9 @@ def get_reports(
     return reports
 
 
-# ── "Verified Reports Nearby" — Public intel summary ─────────────────────────
+# ── "Verified Reports Nearby" - Public intel summary ─────────────────────────
 #
-# Public endpoint (no auth) — the response is heavily privacy-projected
+# Public endpoint (no auth) - the response is heavily privacy-projected
 # via ReportNearbyResponse + the aggregator service. No device_id,
 # no user_id, no description, no individual report id, no precise
 # per-report coords. Same trust model as the existing share-token +
@@ -5560,22 +5560,22 @@ def get_reports(
 # Drives the home-stage "Verified Reports Nearby" module on the PWA +
 # RN companion. Reporters get ambient awareness ("12 reports nearby
 # at Green Valley Apartments") without compromising any reporter's
-# anonymity. The module is INVISIBLE when offline / GPS denied — see
+# anonymity. The module is INVISIBLE when offline / GPS denied - see
 # the offline-behavior matrix in the design plan.
 #
 # UNDP alignment:
-#   • must-have #6 (building footprints) — primary group key
-#   • must-have #7 (PII protection)      — strict allow-list projection
-#   • must-have #9 (anonymity)           — zero reporter identification
-#   • must-have #12 (scale)              — bbox pre-filter + top-N + cache
+#   • must-have #6 (building footprints) - primary group key
+#   • must-have #7 (PII protection)      - strict allow-list projection
+#   • must-have #9 (anonymity)           - zero reporter identification
+#   • must-have #12 (scale)              - bbox pre-filter + top-N + cache
 
 _NEARBY_CACHE: dict = {}
 _NEARBY_CACHE_TTL_SECONDS = 90
 
-# Phase 5.1 (docs/NEARBY_REPORTS_PIPELINE.md §9.3) — runtime detection of
+# Phase 5.1 (docs/NEARBY_REPORTS_PIPELINE.md §9.3) - runtime detection of
 # the locations.geom PostGIS column added by migration 0023. When the
 # column exists AND has populated rows, the /nearby query uses
-# ST_DWithin(geom, ST_MakePoint(lng, lat)::geography, radius_m) — exact
+# ST_DWithin(geom, ST_MakePoint(lng, lat)::geography, radius_m) - exact
 # metric filtering with the GiST index doing the heavy lifting, and the
 # Python haversine post-filter pass becomes redundant.
 #
@@ -5584,7 +5584,7 @@ _NEARBY_CACHE_TTL_SECONDS = 90
 # re-running the check on every request.
 #
 # In dev / CI without PostGIS the cached value stays False and the
-# existing bbox + haversine path runs — Phase 5's graceful-degradation
+# existing bbox + haversine path runs - Phase 5's graceful-degradation
 # contract preserved.
 _POSTGIS_GEOM_AVAILABLE: Optional[bool] = None
 
@@ -5631,7 +5631,7 @@ def _nearby_cache_key(lat3: float, lng3: float, radius_km: float,
                      caller_device_hash: Optional[str] = None) -> str:
     # caller_device_hash is part of the key when provided so different
     # callers don't share each other's filtered cache rows. The hash
-    # itself is short (~40 chars) and never logged elsewhere — see the
+    # itself is short (~40 chars) and never logged elsewhere - see the
     # privacy comment in get_nearby_reports.
     suffix = f"|caller={caller_device_hash}" if caller_device_hash else ""
     return f"{lat3:.3f}|{lng3:.3f}|{radius_km:.1f}|{since_iso}|{group_by}|{limit}|{max_age_hours}{suffix}"
@@ -5647,7 +5647,7 @@ def get_nearby_reports(
                        description="Longitude of the user's location. Client SHOULD round to 3dp (~110m) before sending."),
     radius_km: float = Query(5.0, ge=0.1, le=100.0,
                              description="Search radius in kilometres. Default 5, max 100. "
-                                         "HC81 (May 2026) — bucket-ring UI uses thresholds "
+                                         "HC81 (May 2026) - bucket-ring UI uses thresholds "
                                          "1/5/10/20/100 km, so the outer bucket needs the "
                                          "validator to accept up to 100. Previously capped at 25."),
     since: Optional[datetime] = Query(None,
@@ -5679,24 +5679,24 @@ def get_nearby_reports(
       ✓ Same-device contributions capped at 1 per group (anti-spam)
       ✓ Status REJECTED / DUPLICATE / FALSE_ALARM excluded
 
-    Self-report exclusion (May 21, 2026 — audit Item 2):
+    Self-report exclusion (May 21, 2026 - audit Item 2):
       The PWA's nearby feed was showing the caller's own submissions
       back to them, which broke the "community awareness" intent.
       The client now opts into server-side filtering via the
-      `X-Caller-Device-Hash` HEADER (not a query param — uvicorn
+      `X-Caller-Device-Hash` HEADER (not a query param - uvicorn
       access logs capture query strings but not custom headers, so
       the hash never enters log files). If the caller's resolved
       device_id is in the candidate set, those rows are dropped
       BEFORE the aggregator runs. Privacy posture: the hash is used
       to compute the device_id lookup + the cache key, then dropped.
-      It is NEVER logged — every log line below uses rounded coords
+      It is NEVER logged - every log line below uses rounded coords
       only.
     """
     # Resolve caller's device_id (if a hash was provided in the
     # `X-Caller-Device-Hash` header) before building the cache key.
     # The lookup itself is a fast indexed read on Device.device_hash.
     # We log only "filter active" / "filter off", never the hash value
-    # itself — see privacy posture above. Using a header instead of a
+    # itself - see privacy posture above. Using a header instead of a
     # query param keeps the value out of uvicorn's request-line access
     # log; cookies/headers don't appear in the default Apache-combined
     # format uvicorn uses.
@@ -5731,13 +5731,13 @@ def get_nearby_reports(
     now_ts = datetime.now(timezone.utc).timestamp()
     cached = _NEARBY_CACHE.get(cache_key)
     if cached and (now_ts - cached["ts"] < _NEARBY_CACHE_TTL_SECONDS):
-        # Cache hit — replay headers + serve cached payload.
+        # Cache hit - replay headers + serve cached payload.
         cached_payload = cached["payload"]
         response.headers["Cache-Control"] = "private, max-age=60"
         response.headers["X-Cache"] = "HIT"
         return cached_payload
 
-    # Phase 5.1 (docs §9.5) — hot-region snapshot lookup BEFORE the
+    # Phase 5.1 (docs §9.5) - hot-region snapshot lookup BEFORE the
     # live aggregator. When CRISP_NEARBY_HOT_REGIONS=1 + caller is
     # inside a configured + fresh region, return the precomputed
     # payload directly. Stale or missing snapshots fall through to
@@ -5751,13 +5751,13 @@ def get_nearby_reports(
 
     # ── DB query ──────────────────────────────────────────────────────
     # Three possible query paths, in priority order:
-    #   1. H3 cell-set       (docs §9.4) — when CRISP_NEARBY_H3_MODE=1
+    #   1. H3 cell-set       (docs §9.4) - when CRISP_NEARBY_H3_MODE=1
     #      AND the python h3 wheel is installed. Uses
     #      WHERE locations.h3_idx IN (centre + k-ring). Backfilled NULLs
     #      remain on the slower paths via the OR'd predicate below.
-    #   2. PostGIS ST_DWithin (docs §9.3) — when `locations.geom` is
+    #   2. PostGIS ST_DWithin (docs §9.3) - when `locations.geom` is
     #      populated. Exact metric distance with the GiST index.
-    #   3. bbox + Python haversine — the original Phase 0 fallback.
+    #   3. bbox + Python haversine - the original Phase 0 fallback.
     from app.services import h3_helper as _h3h
     use_h3 = _h3h.is_h3_mode_enabled()
     use_postgis = (not use_h3) and _has_populated_geom_column(db)
@@ -5765,18 +5765,18 @@ def get_nearby_reports(
     # Bbox pre-filter on indexed lat/lng columns. cos(lat) handles
     # meridian convergence; we widen at high latitudes but the
     # haversine post-filter still nails the actual radius.
-    # (Computed unconditionally — cheap, used by the fallback path.)
+    # (Computed unconditionally - cheap, used by the fallback path.)
     lat_min, lat_max, lng_min, lng_max = bbox_for_radius(lat, lng, radius_km)
 
     # Cut-off for `max_age_hours`. server_created_at index narrows the
     # scan further.
     age_cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
 
-    # Phase 1 (May 2026, docs §3.6) — status whitelist EXPANDED:
-    #   • VERIFIED, PENDING  — active reports needing attention (kept)
-    #   • RESPONDING         — responders active; gives citizens
+    # Phase 1 (May 2026, docs §3.6) - status whitelist EXPANDED:
+    #   • VERIFIED, PENDING  - active reports needing attention (kept)
+    #   • RESPONDING         - responders active; gives citizens
     #                          transparency that help is en route
-    #   • RESOLVED           — KEPT only if within RESOLVED_RECENT
+    #   • RESOLVED           - KEPT only if within RESOLVED_RECENT
     #                          retention window (additional SQL clause
     #                          below); aggregator re-tags these as
     #                          kind='resolved_recent' and the endpoint
@@ -5785,7 +5785,7 @@ def get_nearby_reports(
     #                          UI shows "Recently Resolved: N" as a
     #                          subtotal (does NOT inflate active count).
     # Explicitly EXCLUDED: REJECTED, DUPLICATE, FALSE_ALARM
-    # (spam / mis-reports — privacy + abuse-suppression invariant).
+    # (spam / mis-reports - privacy + abuse-suppression invariant).
     resolved_cutoff = datetime.now(timezone.utc) - timedelta(
         hours=RESOLVED_RECENT_RETENTION_HOURS
     )
@@ -5796,7 +5796,7 @@ def get_nearby_reports(
     if use_h3:
         # H3 cell-set filter (docs §9.4). The caller's centre cell + a
         # k-ring covering the requested radius is the candidate set.
-        # Backfilled-NULL h3_idx rows would otherwise vanish — guard
+        # Backfilled-NULL h3_idx rows would otherwise vanish - guard
         # with `OR h3_idx IS NULL AND <bbox>` so partial backfills
         # don't regress recall. Once backfill completes the NULL branch
         # is dead and the planner skips it.
@@ -5836,7 +5836,7 @@ def get_nearby_reports(
             nearby_radius_m=radius_km * 1000.0,
         ))
     else:
-        # Fallback bbox pre-filter — used when PostGIS extension is
+        # Fallback bbox pre-filter - used when PostGIS extension is
         # unavailable or the geom column hasn't been populated yet.
         q = (
             q.filter(Location.latitude.between(lat_min, lat_max))
@@ -5866,7 +5866,7 @@ def get_nearby_reports(
           .options(joinedload(Report.location))
     )
 
-    # Self-report exclusion (May 21, 2026 — audit Item 2). If the
+    # Self-report exclusion (May 21, 2026 - audit Item 2). If the
     # caller's device hash resolved to a known device_id, drop their
     # own reports from the candidate set BEFORE the aggregator runs.
     # The aggregator's per-device cap-at-1 anti-spam pass would
@@ -5885,7 +5885,7 @@ def get_nearby_reports(
 
     # Execute the candidate query. The PostGIS path (ST_DWithin on the
     # geom geography) can fail at the DB layer independently of the query
-    # LOGIC — a corrupted PostGIS catalog (e.g. spatial_ref_sys missing
+    # LOGIC - a corrupted PostGIS catalog (e.g. spatial_ref_sys missing
     # SRID 4326), a dropped extension, or a geom-index planner error.
     # None of that should 500 the nearby feature for every caller: fall
     # back to the plain lat/lng bbox filter (no PostGIS, no SRID lookup)
@@ -5900,7 +5900,7 @@ def get_nearby_reports(
         if not (use_postgis and not use_h3):
             raise
         logger.warning(
-            "nearby: PostGIS query failed (%s) — falling back to bbox filter",
+            "nearby: PostGIS query failed (%s) - falling back to bbox filter",
             _nearby_db_exc.__class__.__name__,
         )
         db.rollback()  # the failed statement aborted the transaction
@@ -5933,7 +5933,7 @@ def get_nearby_reports(
         candidates = q.all()
         nearby_postgis_fell_back = True
 
-    # Phase 3 (May 2026, docs §6.1) — pre-fetch trust info for every
+    # Phase 3 (May 2026, docs §6.1) - pre-fetch trust info for every
     # candidate device in ONE query so we don't N+1 inside the loop.
     candidate_device_ids = {r.device_id for r in candidates if r.device_id}
     devices_by_id: dict = {}
@@ -5945,7 +5945,7 @@ def get_nearby_reports(
         )
         devices_by_id = {d.id: d for d in device_rows}
 
-    # Exact haversine post-filter — drops bbox false-positives.
+    # Exact haversine post-filter - drops bbox false-positives.
     # Phase 5.1 (docs §9.3 + §9.4): when ST_DWithin OR H3 did the
     # radius filtering at the SQL layer, the post-filter is redundant
     # but cheap. Keep the location-presence guard since SQLAlchemy may
@@ -5992,13 +5992,13 @@ def get_nearby_reports(
             latitude=r.location.latitude,
             longitude=r.location.longitude,
             server_created_at=r.server_created_at or datetime.now(timezone.utc),
-            # Phase 2 (docs §3.5 + §8.1) — account-linked reports
+            # Phase 2 (docs §3.5 + §8.1) - account-linked reports
             # used as the initial trust proxy for HIGH/LOW acute
             # grading.
             user_id=getattr(r, "user_id", None),
-            # Phase 3 (docs §6.1) — pre-resolved device trust weight.
+            # Phase 3 (docs §6.1) - pre-resolved device trust weight.
             trust_weight=weight,
-            # Phase F.8.c — honest latest_at for offline-drained
+            # Phase F.8.c - honest latest_at for offline-drained
             # submissions. The aggregator falls back to server time
             # when this is NULL, so legacy rows stay correct.
             client_created_at=getattr(r, "client_created_at", None),
@@ -6008,7 +6008,7 @@ def get_nearby_reports(
     #
     # Defensive guard: the aggregators sanitize their own inputs (drop
     # unusable coords, normalize naive/aware timestamps), but /nearby is a
-    # PUBLIC batch endpoint — it must NEVER return 500 to every caller
+    # PUBLIC batch endpoint - it must NEVER return 500 to every caller
     # because of one malformed report in range. On any unforeseen
     # aggregation error we log the full traceback + the candidate report
     # ids (so the offending row is identifiable from the logs) and degrade
@@ -6023,7 +6023,7 @@ def get_nearby_reports(
             max_groups=limit,
         )
 
-        # Phase 4 (May 2026, docs §3.8) — disaster-mode promotion. If the
+        # Phase 4 (May 2026, docs §3.8) - disaster-mode promotion. If the
         # initial cascade returned > CRISP_DISASTER_MODE_GROUPS groups OR
         # > CRISP_DISASTER_MODE_REPORTS raw reports inside the radius,
         # re-aggregate into area-level mega-zones for the heat-map render.
@@ -6040,7 +6040,7 @@ def get_nearby_reports(
                 reports=inputs,
                 user_lat=lat,
                 user_lng=lng,
-                # HC83 — plumb the caller's actual radius through so the
+                # HC83 - plumb the caller's actual radius through so the
                 # relevance-sort proximity normalizer matches the query
                 # window. Pre-HC83 this was implicitly hardcoded to 25 km
                 # inside the aggregator, which silently flattened proximity
@@ -6054,7 +6054,7 @@ def get_nearby_reports(
             response.headers["X-Crisp-Density-Mode"] = "normal"
     except Exception:
         logger.exception(
-            "[nearby] aggregation failed — degrading to empty result "
+            "[nearby] aggregation failed - degrading to empty result "
             "(lat=%.4f lng=%.4f radius=%.1f candidates=%d ids=%s)",
             lat, lng, radius_km, len(inputs),
             [getattr(i, "report_id", None) for i in inputs[:50]],
@@ -6064,14 +6064,14 @@ def get_nearby_reports(
         response.headers["X-Crisp-Density-Mode"] = "normal"
         response.headers["X-Crisp-Nearby-Degraded"] = "aggregation_error"
 
-    # Phase 1 (May 2026, docs §3.2 + §3.6 + §14) — split aggregator
+    # Phase 1 (May 2026, docs §3.2 + §3.6 + §14) - split aggregator
     # output into ACTIVE vs RECENTLY-RESOLVED, and gate T1 (weak)
     # groups behind the deployment flag for anonymous (citizen)
     # callers. Admins always see T1.
     #
     # Authentication detection: any caller carrying a valid JWT is
     # treated as a non-citizen for visibility purposes. This is
-    # intentionally permissive — any authenticated user gets richer
+    # intentionally permissive - any authenticated user gets richer
     # data; the deployment-flag suppression only protects the
     # anonymous / first-time citizen path.
     is_anonymous_caller = "authorization" not in {
@@ -6124,11 +6124,11 @@ def get_nearby_reports(
         density_mode=("disaster" if disaster_mode else "normal"),
     )
 
-    # Phase 2 (May 2026, docs §3.7) — lifecycle transition detection.
+    # Phase 2 (May 2026, docs §3.7) - lifecycle transition detection.
     # Diff the fresh aggregation against the prior cached aggregation
     # for this cache_key and emit one nearby_group_events row per
     # transition (promote / downgrade / acute_on / fading / created /
-    # removed / resolved). Best-effort; errors logged, swallowed —
+    # removed / resolved). Best-effort; errors logged, swallowed -
     # a DB write can NEVER poison the user-facing response.
     prior_entry = _NEARBY_CACHE.get(cache_key)
     prior_groups = prior_entry.get("raw_groups", []) if prior_entry else []
@@ -6138,7 +6138,7 @@ def get_nearby_reports(
                 db, prior_groups=prior_groups, current_groups=groups,
             )
         except Exception:                          # pragma: no cover
-            # Belt-and-suspenders — the service already swallows DB
+            # Belt-and-suspenders - the service already swallows DB
             # errors, but a missing module / import bug should never
             # take down /nearby. Endpoint stays the priority.
             pass
@@ -6165,7 +6165,7 @@ def get_nearby_reports(
     return payload
 
 
-# Phase 5.1 (docs §9.5) — entry point used by the hot-region refresh
+# Phase 5.1 (docs §9.5) - entry point used by the hot-region refresh
 # admin endpoint. Calls the live /nearby endpoint function with a
 # synthetic Request/Response so all the same logic runs (DB query,
 # aggregation, lifecycle persist, cache write) and returns the result
@@ -6177,7 +6177,7 @@ def _aggregate_nearby_for_region(
 ) -> dict:
     from starlette.requests import Request as _Request
     from starlette.responses import Response as _Response
-    # Minimal ASGI scope — get_nearby_reports only touches
+    # Minimal ASGI scope - get_nearby_reports only touches
     # request.headers, so an empty headers list satisfies the contract
     # AND keeps the caller in the anonymous-citizen branch (so the
     # snapshot is what citizens would see, which is the intent).
@@ -6230,7 +6230,7 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
     if not loc or not loc.latitude or not loc.longitude:
         raise HTTPException(
             status_code=422,
-            detail="Report has no GPS coordinates — cannot fetch satellite image"
+            detail="Report has no GPS coordinates - cannot fetch satellite image"
         )
 
     ai = report.ai_analysis
@@ -6244,7 +6244,7 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
     if not sat_data:
         raise HTTPException(
             status_code=503,
-            detail="Could not fetch satellite imagery — check SENTINEL_HUB_CLIENT_ID/SECRET and MAPBOX_TOKEN in .env"
+            detail="Could not fetch satellite imagery - check SENTINEL_HUB_CLIENT_ID/SECRET and MAPBOX_TOKEN in .env"
         )
 
     # Save satellite image to the configured storage backend.
@@ -6262,7 +6262,7 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
 
     # multi-provider fan-out: save EVERY successful provider's
     # image to the storage backend so the dashboard can render a 2×2
-    # grid. The primary is duplicated as `images[0]` for consistency —
+    # grid. The primary is duplicated as `images[0]` for consistency -
     # we save with the suffixed filename so the response can list every
     # image with the same naming pattern.
     sat_images_list: list[dict] = []
@@ -6288,7 +6288,7 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
     # Bug history: the previous implementation hard-coded
     # `os.path.join(UPLOAD_DIR, img_media.url.replace("/static/", ""))`,
     # which works for `/static/abc.jpg` (LocalStorage) but FAILS for
-    # `s3://abc.jpg` (S3Storage) — `os.path.join` produces a nonsensical
+    # `s3://abc.jpg` (S3Storage) - `os.path.join` produces a nonsensical
     # path that doesn't exist on disk, so `user_image_path` stayed None
     # and Claude scored the satellite + text only, with NO ground-truth
     # photo corroboration. Damage scores were silently unreliable on
@@ -6315,7 +6315,7 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
             elif url_lc.endswith(".webp"):
                 suffix = ".webp"
             else:
-                suffix = ".jpg"  # safe default — Claude infers from bytes anyway
+                suffix = ".jpg"  # safe default - Claude infers from bytes anyway
             tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
             try:
                 tmp.write(img_bytes)
@@ -6324,7 +6324,7 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
             user_image_path = tmp.name
             user_image_tmp = tmp.name
         except Exception as exc:
-            # Don't block verification if the photo can't be loaded —
+            # Don't block verification if the photo can't be loaded -
             # Claude still scores satellite + text, with the data_quality
             # score reflecting the missing photo via its `has_photo` input.
             logger.warning(
@@ -6345,7 +6345,7 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
             satellite_data    = sat_data,
             has_audio         = has_audio,
             has_gps           = True,
-            # B4 — feed the geo-gated crisis-pack context into the credibility
+            # B4 - feed the geo-gated crisis-pack context into the credibility
             # chain. NULL for default-flow reports → byte-identical scoring.
             form_data         = report.form_data,
             crisis_type       = report.crisis_type,  # String(30) column, not an enum
@@ -6353,7 +6353,7 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
             form_pack_version = report.form_pack_version,
         )
     finally:
-        # Clean up the temp file — both on success and on Claude API failure.
+        # Clean up the temp file - both on success and on Claude API failure.
         # Best-effort: a leaked temp file is cheaper than a 500.
         if user_image_tmp:
             try:
@@ -6390,7 +6390,7 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
     v.satellite_days_gap           = sat_meta.get("days_gap")
     v.satellite_image_url          = sat_image_url
     v.error                        = result.get("error")
-    # .2 — stamp the time the
+    # .2 - stamp the time the
     # Claude scoring run completed so the dashboard can render
     # "Last verified Xm ago" + analysts know whether to re-verify.
     # The column already exists on SatelliteVerification; the schema
@@ -6442,7 +6442,7 @@ async def verify_report(report_id: str, db: Session = Depends(get_db)):
 def get_reporter_profile(device_hash: str, db: Session = Depends(get_db)):
     """Get reporter's gamification profile (4-tier ladder + impact + progress).
 
-    Apr 2026 PR 2 — defense-in-depth against stored-counter drift. The
+    Apr 2026 PR 2 - defense-in-depth against stored-counter drift. The
     stored `ReporterProfile.report_count` is only decremented in
     `_purge_expired_deletions`. If the purge job hasn't run yet (or
     failed), the stored counter can be higher than the actual live
@@ -6450,24 +6450,24 @@ def get_reporter_profile(device_hash: str, db: Session = Depends(get_db)):
     number that's greater than the reports the user can actually see.
     Same for `verified_count`.
 
-    May 2026 second-pass — extended response shape for the 4-tier
+    May 2026 second-pass - extended response shape for the 4-tier
     reward ladder (SCOUT / SIGNAL / CHANGEMAKER / LIFEKEEPER):
 
-      * ``responded_count`` — live count of reports in
+      * ``responded_count`` - live count of reports in
         {RESPONDING, RESOLVED} (drives the T3 promotion).
-      * ``lives_saved_total`` — sum of ``lives_impacted`` across the
+      * ``lives_saved_total`` - sum of ``lives_impacted`` across the
         device's reports (drives the T4 promotion + the home/My-Reports
         Lives Saved aggregate).
-      * ``badge_level`` — one of T1_SCOUT / T2_SIGNAL / T3_CHANGEMAKER
+      * ``badge_level`` - one of T1_SCOUT / T2_SIGNAL / T3_CHANGEMAKER
         / T4_LIFEKEEPER. Recomputed on the fly here so a stale stored
         value (e.g. from before the v2 migration) corrects itself on
         the next read.
-      * ``badge_legacy`` — same tier mapped to the old 3-tier names
+      * ``badge_legacy`` - same tier mapped to the old 3-tier names
         (NEWCOMER / CONTRIBUTOR / TRUSTED) for pre-v145 PWA shells
         that haven't picked up the new BADGE_LEVELS map yet. Removed
         in a post-submission cleanup once SW cache invalidation has
         propagated.
-      * ``tier`` object — current tier id, next tier id, and a
+      * ``tier`` object - current tier id, next tier id, and a
         machine-readable ``progress`` block telling the PWA exactly
         what action moves the user up. The PWA renders this verbatim
         in the badge-chip sub-line so backend stays the single source
@@ -6476,7 +6476,7 @@ def get_reporter_profile(device_hash: str, db: Session = Depends(get_db)):
     from app.models.report import ReporterProfile
     profile = db.query(ReporterProfile).filter(ReporterProfile.device_hash == device_hash).first()
     if not profile:
-        # Race-safe auto-create (May 21, 2026 — fix discovered during
+        # Race-safe auto-create (May 21, 2026 - fix discovered during
         # cellular smoke 5 backend-log audit). The PWA home-screen polls
         # this endpoint every ~5 s. On the first poll for a brand-new
         # device, two concurrent requests can both observe profile=None
@@ -6495,7 +6495,7 @@ def get_reporter_profile(device_hash: str, db: Session = Depends(get_db)):
             db.commit()
             db.refresh(profile)
         except _IntegrityError_profile:
-            # Concurrent request won the race — re-SELECT the winning row
+            # Concurrent request won the race - re-SELECT the winning row
             # and proceed. Idempotent: the response is the same regardless
             # of who created the row.
             db.rollback()
@@ -6511,7 +6511,7 @@ def get_reporter_profile(device_hash: str, db: Session = Depends(get_db)):
                 )
 
     # Live count of un-deleted rows for this device. If the device row
-    # doesn't exist (rare — only for fresh profiles), fall back to 0.
+    # doesn't exist (rare - only for fresh profiles), fall back to 0.
     live_count = 0
     live_verified = 0
     live_responded = 0
@@ -6573,7 +6573,7 @@ def get_reporter_profile(device_hash: str, db: Session = Depends(get_db)):
         progress = {"needs": "responded", "needed": 1, "have": live_responded, "label_key": "tier_progress_verified_1"}
     elif current == "T3_CHANGEMAKER":
         progress = {"needs": "lives_saved", "needed": 1, "have": live_lives_total, "label_key": "tier_progress_lives_1"}
-    else:  # T4 — top tier
+    else:  # T4 - top tier
         progress = {"needs": None, "needed": 0, "have": live_lives_total, "label_key": "tier_progress_top_share"}
 
     return {
@@ -6601,16 +6601,16 @@ def _update_reporter_profile(device_hash: str, db: Session):
     explicit: the rewarding system must NOT encourage users to repeat
     reports or over-report for a reward. The previous badge ladder
     (NEWCOMER → HELPER → GUARDIAN → HERO) was keyed off raw
-    ``report_count`` — i.e. it rewarded exactly the behaviour UNDP
+    ``report_count`` - i.e. it rewarded exactly the behaviour UNDP
     warned against.
 
-    May 2026 second-pass — extended to a 4-tier identity-forward
+    May 2026 second-pass - extended to a 4-tier identity-forward
     ladder (SCOUT → SIGNAL → CHANGEMAKER → LIFEKEEPER). Promotion
     triggers are concrete impact events, never raw volume:
-      * T2 SIGNAL       — ≥1 report submitted (this function)
-      * T3 CHANGEMAKER  — ≥1 report dispatched (RESPONDING/RESOLVED
-                          — see ``_mark_report_verified_for_credibility``)
-      * T4 LIFEKEEPER   — analyst set ``lives_impacted ≥ 1`` on any
+      * T2 SIGNAL       - ≥1 report submitted (this function)
+      * T3 CHANGEMAKER  - ≥1 report dispatched (RESPONDING/RESOLVED
+                          - see ``_mark_report_verified_for_credibility``)
+      * T4 LIFEKEEPER   - analyst set ``lives_impacted ≥ 1`` on any
                           report owned by the device (see the
                           ``set_lives_impacted`` PATCH handler at
                           ~line 1410, which now calls
@@ -6632,22 +6632,22 @@ def _update_reporter_profile(device_hash: str, db: Session):
 
 
 def _recompute_tier(profile, db: Session) -> None:
-    """4-tier reward ladder — May 2026 second-pass redesign.
+    """4-tier reward ladder - May 2026 second-pass redesign.
 
     Replaces ``_recompute_badge_from_verified`` (3-tier, verified-count
     only). The new ladder is quality-driven across THREE signals:
     submission, dispatch (help sent), and lives impacted. Every
     promotion requires either an analyst action or a real downstream
-    impact event — never raw volume alone.
+    impact event - never raw volume alone.
 
     Tier criteria:
-      * T4 LIFEKEEPER   — sum(lives_impacted across device's reports) ≥ 1
+      * T4 LIFEKEEPER   - sum(lives_impacted across device's reports) ≥ 1
                           (requires analyst to call ``/impact``)
-      * T3 CHANGEMAKER  — ≥1 report in {RESPONDING, RESOLVED}
+      * T3 CHANGEMAKER  - ≥1 report in {RESPONDING, RESOLVED}
                           (requires analyst to call ``/dispatch`` or
                           ``/resolve``)
-      * T2 SIGNAL       — ≥1 report submitted (any status)
-      * T1 SCOUT        — default
+      * T2 SIGNAL       - ≥1 report submitted (any status)
+      * T1 SCOUT        - default
 
     INCENTIVES.md compliance note (re-verified May 2026 audit):
     T2_SIGNAL fires on the FIRST submission as a one-time
@@ -6657,8 +6657,8 @@ def _recompute_tier(profile, db: Session) -> None:
       · 50 submissions → still T2 (no further reward from raw volume)
       · 1 verified    → T3 (analyst action required)
       · 1 life saved  → T4 (downstream impact required)
-    The fraud-prevention guarantee — that flooding reports does NOT
-    advance the tier beyond T2 — is upheld. The home-stage HERO STAT
+    The fraud-prevention guarantee - that flooding reports does NOT
+    advance the tier beyond T2 - is upheld. The home-stage HERO STAT
     visible to the reporter is ``verified_count``, not submitted
     count, so volume is not surfaced as a goal-shaped number.
 
@@ -6677,7 +6677,7 @@ def _recompute_tier(profile, db: Session) -> None:
         profile.badge_level = "T1_SCOUT"
         return
 
-    # Soft-deleted rows are excluded — they were either restored within
+    # Soft-deleted rows are excluded - they were either restored within
     # the grace window or genuinely retracted; either way they should
     # not keep contributing to a tier promotion.
     base_q = db.query(Report).filter(
@@ -6710,7 +6710,7 @@ def _recompute_tier(profile, db: Session) -> None:
 # 3-tier name. Both call sites in this file have been updated to
 # ``_recompute_tier``; the alias remains for one release cycle.
 def _recompute_badge_from_verified(profile) -> None:  # pragma: no cover
-    """DEPRECATED — kept as a shim so any external import doesn't crash
+    """DEPRECATED - kept as a shim so any external import doesn't crash
     during the v1 → v2 transition. The new function ``_recompute_tier``
     requires the db session; callers should migrate."""
     vc = profile.verified_count or 0
@@ -6729,23 +6729,23 @@ def _mark_report_verified_for_credibility(report, db: Session) -> None:
 
     Idempotent on TWO levels (May 2026 gamification audit fix):
 
-    1. ``report.first_verified_at`` short-circuit — once this column
+    1. ``report.first_verified_at`` short-circuit - once this column
        is non-NULL, this function returns immediately. The endpoint-
        level ``was_pending`` guard catches the common case (status
        transition), but is NOT safe under parallel dispatch + resolve
        requests where both transactions see ``status == PENDING``
        before either commits.
-    2. ``SELECT … FOR UPDATE`` row lock on the report — serializes
+    2. ``SELECT … FOR UPDATE`` row lock on the report - serializes
        concurrent calls inside Postgres. The second transaction
        blocks until the first commits, then sees
        ``first_verified_at`` already set and bails.
 
     Net effect: ``verified_count`` is bumped at most ONCE per report,
     even when called twice from racing parallel endpoints. The audit
-    finding C-2 (CRITICAL — `verified_count` non-idempotent under
+    finding C-2 (CRITICAL - `verified_count` non-idempotent under
     race) is resolved by this gate.
 
-    May 2026 — also calls ``_recompute_tier`` so T3 CHANGEMAKER promotion
+    May 2026 - also calls ``_recompute_tier`` so T3 CHANGEMAKER promotion
     fires immediately on first dispatch / resolve (without waiting for
     the next submit).
     """
@@ -6819,7 +6819,7 @@ def get_building_history(building_id: str, db: Session = Depends(get_db)):
     """Versioned history of all reports tied to one building.
 
     UNDP brief (Apr 2026): "multiple damage report submissions about the
-    same building, with different levels of damage — the system should
+    same building, with different levels of damage - the system should
     support 'versioning' of damage levels, to show the latest, most up-to-
     date information about the damage status. This most likely would be
     achieved through biasing towards the most recent, complete damage
@@ -6836,14 +6836,14 @@ def get_building_history(building_id: str, db: Session = Depends(get_db)):
     Each `ReportResponse` element is augmented in-place with two read-
     only fields the dashboard renders as a ribbon on the detail panel:
 
-        `building_version_ordinal` — 1-based index within this building's
+        `building_version_ordinal` - 1-based index within this building's
             history (1 = latest). Human-rendered as "V 2 of 3".
-        `building_is_latest`       — true for ordinal 1, false otherwise.
+        `building_is_latest`       - true for ordinal 1, false otherwise.
 
     "Latest complete" bias: if a newer report exists but is still in
     PARTIAL sync status (chunks incomplete), we still consider it the
     latest. Operators value freshness over "complete" flag. A future
-    tightening would check Media.assembly_status instead — noted in
+    tightening would check Media.assembly_status instead - noted in
     docs/UNDP-ALIGNMENT-CHANGELOG.md for the followup sprint.
     """
     reports = db.query(Report).filter(
@@ -6851,7 +6851,7 @@ def get_building_history(building_id: str, db: Session = Depends(get_db)):
         Report.deletion_requested_at.is_(None)
     ).order_by(Report.server_created_at.desc()).all()
 
-    # Phase F.5.c (May 2026) — building_version_ordinal +
+    # Phase F.5.c (May 2026) - building_version_ordinal +
     # building_is_latest are now canonical columns on the Report
     # row (alembic 0027 + the _apply_building_versioning hook in
     # app/models/report.py). Convention: ordinal 1 = OLDEST, max =
@@ -6861,7 +6861,7 @@ def get_building_history(building_id: str, db: Session = Depends(get_db)):
     # Previous implementation OVERWROTE these from the in-flight
     # sort order (newest-first → ordinal 1). That conflicted with
     # the canonical DB state. The endpoint now respects whatever
-    # the DB says — Pydantic serialisation picks up the columns
+    # the DB says - Pydantic serialisation picks up the columns
     # directly from the row. The response is still sorted newest-
     # first for dashboard display convenience, but the ordinal
     # values flow from the source of truth.
@@ -6869,7 +6869,7 @@ def get_building_history(building_id: str, db: Session = Depends(get_db)):
     total = len(serialised)
     # latest_id is the row WHERE building_is_latest = true (canonical).
     # Fallback to the first (newest-first sorted) row if no row carries
-    # the flag — happens when the row that originally carried the flag
+    # the flag - happens when the row that originally carried the flag
     # was soft-deleted (the hook flipped its sibling to false at insert
     # time, but it doesn't re-stamp on delete). Surface the fallback
     # honestly: also FLIP the response's first-row is_latest to true
@@ -6896,7 +6896,7 @@ def get_building_history(building_id: str, db: Session = Depends(get_db)):
 
 # ── Stable media URLs ────────────────────────────────────────────
 #
-# Background — the dashboard's HAR analysis showed every ~4 s API poll
+# Background - the dashboard's HAR analysis showed every ~4 s API poll
 # generated a FRESH presigned S3 URL for every media row, because
 # MediaResponse._resolve_url called storage.public_url() on each
 # serialization. Same image bytes → 49 different X-Amz-Signature
@@ -6904,14 +6904,14 @@ def get_building_history(building_id: str, db: Session = Depends(get_db)):
 # bytes (~2.5 MB wasted per dashboard tab per 6 minutes). Same story
 # for thumbnails on partial uploads.
 #
-# Fix — MediaResponse now emits a STABLE backend-routed URL of the form
+# Fix - MediaResponse now emits a STABLE backend-routed URL of the form
 # `/api/v1/reports/media/<media_id>/<file|thumb>`. The browser caches
 # under that URL key and reuses bytes across polls. The endpoint below
 # is what those URLs resolve to: a 302 redirect to a freshly-presigned
 # S3 URL, with a 1-hour Cache-Control on the redirect itself so even
 # cold caches hit the backend at most once per hour per image.
 #
-# Auth model — intentionally NO auth on this endpoint. The previous
+# Auth model - intentionally NO auth on this endpoint. The previous
 # behaviour embedded presigned S3 URLs directly in the API response,
 # making media accessible to anyone who held a presigned URL (no auth
 # header needed). The new behaviour matches that exactly: anyone with
@@ -6925,7 +6925,7 @@ def _redirect_cache_control(storage, target: str) -> str:
     ``storage.PRESIGN_TTL_SEC``. If the browser caches THIS redirect longer
     than that signature lives, the cached redirect outlives its target: the
     image renders, then 403s ("expired signature") the moment the presign
-    dies and stays broken until the redirect cache clears (the PROD symptom —
+    dies and stays broken until the redirect cache clears (the PROD symptom -
     media render for ~15 min after a report finishes, then every image
     breaks). Cap the cache safely BELOW the presign TTL (120 s margin for
     clock skew + the browser→cache write delay). Non-expiring local
@@ -6948,7 +6948,7 @@ def get_media_redirect(
 
     The dashboard receives this URL in MediaResponse instead of a churning
     presigned S3 URL. Every poll renders the same `<img src>`, so the
-    browser HTTP cache reuses the bytes — eliminating the per-poll
+    browser HTTP cache reuses the bytes - eliminating the per-poll
     refetch storm documented in HAR analysis.
 
     `/file` → media.url (full image / audio / video)
@@ -6956,7 +6956,7 @@ def get_media_redirect(
               assembly bytes during chunked upload)
 
     Cache-Control: the redirect is cached, but never longer than the
-    presigned target's signature TTL (see `_redirect_cache_control`) — else
+    presigned target's signature TTL (see `_redirect_cache_control`) - else
     a cached redirect would outlive its presign and 403. Non-expiring local
     /static/ URLs keep the full hour. The S3 object cache TTL is bucket-side.
 
@@ -6966,7 +6966,7 @@ def get_media_redirect(
     assembled-but-unblurred bytes and a /file request would otherwise
     redirect to them. The 425 lifts the moment `_run_server_pii_blur`
     writes the terminal status (complete_clean /
-    complete_with_redactions / failed). Thumbnails are NOT gated —
+    complete_with_redactions / failed). Thumbnails are NOT gated -
     they're explicitly partial-assembly previews and operators expect
     them to lead the full file.
     """
@@ -6983,12 +6983,12 @@ def get_media_redirect(
     if not is_thumb and getattr(media, 'type', None) == 'IMAGE':
         blur_status = getattr(media, 'pii_blur_status', None)
         if blur_status == 'pending':
-            # 425 Too Early — RFC 8470. Tells caching layers (CDN,
+            # 425 Too Early - RFC 8470. Tells caching layers (CDN,
             # browsers) that this is a transient state, not a 404 to
             # cache. Retry-After advises a polite poll cadence.
             raise HTTPException(
                 status_code=425,
-                detail="PII blur in progress — retry shortly",
+                detail="PII blur in progress - retry shortly",
                 headers={"Retry-After": "2"},
             )
 
@@ -7026,7 +7026,7 @@ def get_media_redirect(
 # assembled?" If a tier is missing or stuck partial, the PWA keeps
 # the queue item and retries on the next sync pass.
 #
-# No Bearer auth — same anonymity contract as the chunk endpoints
+# No Bearer auth - same anonymity contract as the chunk endpoints
 # (UNDP must-have #9: submission must work without login). The
 # report_id is a UUID and only the original submitter knows the
 # media_ids associated with it.
@@ -7091,26 +7091,26 @@ def get_report_tier_status(
 
 # ── Stable satellite URLs ────────────────────────────────────────
 #
-# Background — the satellite verification feature stores 1 primary image,
+# Background - the satellite verification feature stores 1 primary image,
 # 0-1 alternate images, and a 4-cell multi-provider grid (AWS Sentinel-2 +
 # Microsoft Planetary Computer + ESA Copernicus + Mapbox). Before this
 # refactor, VerificationResponse._resolve_sat_url called
 # storage.public_url() directly, regenerating a fresh X-Amz-Signature on
 # every dashboard poll. Worse, the dashboard hard-coded
-# `${BACKEND_HOST}${v.satellite_image_url}` at 11 render sites — when
+# `${BACKEND_HOST}${v.satellite_image_url}` at 11 render sites - when
 # MEDIA_BACKEND=s3 and the serializer returned a signed
 # `https://s3.../...` URL, the dashboard prepended BACKEND_HOST and
 # produced `https://undp/.../https://s3.../...` → 404.
 #
-# Fix — VerificationResponse now emits a STABLE backend-routed URL of the
+# Fix - VerificationResponse now emits a STABLE backend-routed URL of the
 # form `/api/v1/reports/{report_id}/satellite/<primary|alt|grid/<idx>>`.
 # This endpoint resolves to a fresh presigned target on demand and tags
 # the redirect via `_redirect_cache_control` (cache capped below the
 # presign TTL). Same browser-cache-friendly pattern as the media redirect.
 #
-# Auth model — intentionally NO auth (matches `get_media_redirect` and the
+# Auth model - intentionally NO auth (matches `get_media_redirect` and the
 # previous behaviour where presigned URLs were embedded in API responses).
-# The report_id is a UUID, unguessable — listing report_ids still requires
+# The report_id is a UUID, unguessable - listing report_ids still requires
 # Bearer auth via /api/v1/reports/.
 
 def _satellite_redirect(
@@ -7125,7 +7125,7 @@ def _satellite_redirect(
     `which` is one of "primary", "alt", "grid". For "grid", `grid_idx`
     selects the entry from the multi-provider list.
 
-    Same `_redirect_cache_control` as `get_media_redirect` — the redirect is
+    Same `_redirect_cache_control` as `get_media_redirect` - the redirect is
     cached, but never longer than the presigned URL's signature TTL.
     """
     v = db.query(SatelliteVerification).filter(
@@ -7140,7 +7140,7 @@ def _satellite_redirect(
     elif which == "alt":
         db_url = v.satellite_image_url_alt
     elif which == "grid":
-        # Decode the JSON column. Forgiving — malformed JSON yields no URL
+        # Decode the JSON column. Forgiving - malformed JSON yields no URL
         # rather than a 500.
         if grid_idx is None or grid_idx < 0:
             raise HTTPException(status_code=404, detail="Invalid grid index")
@@ -7185,7 +7185,7 @@ def get_satellite_primary(
 
     Maps to `SatelliteVerification.satellite_image_url`. The "primary"
     is whichever provider the chain picked first (typically Sentinel-2
-    via AWS, Microsoft, or ESA — Mapbox only when all Sentinel-2
+    via AWS, Microsoft, or ESA - Mapbox only when all Sentinel-2
     sources fail or are heavily clouded)."""
     return _satellite_redirect(db, report_id, "primary")
 
@@ -7197,7 +7197,7 @@ def get_satellite_alt(
 ):
     """Stable URL → 302 to the alternate satellite image.
 
-    Maps to `SatelliteVerification.satellite_image_url_alt` — typically
+    Maps to `SatelliteVerification.satellite_image_url_alt` - typically
     the higher-resolution Mapbox/Maxar fallback fetched alongside the
     primary Sentinel-2 result."""
     return _satellite_redirect(db, report_id, "alt")
@@ -7212,7 +7212,7 @@ def get_satellite_grid_cell(
     """Stable URL → 302 to the Nth cell of the multi-provider 2×2 grid.
 
     Maps to entry `idx` in `SatelliteVerification.satellite_images_json`
-    (the Apr 2026 multi-provider fan-out — AWS / Microsoft / ESA /
+    (the Apr 2026 multi-provider fan-out - AWS / Microsoft / ESA /
     Mapbox). Order matches what the chain returned."""
     return _satellite_redirect(db, report_id, "grid", grid_idx=idx)
 
@@ -7226,12 +7226,12 @@ def get_satellite_grid_cell(
 #   https://undp.crisplabs.tech/web-dashboard/src/evidence.html?id=<report_id>
 #
 # That static page (web-dashboard/src/evidence.html) fetches the JSON
-# below — no Bearer auth, no login flow. Trust model matches the
+# below - no Bearer auth, no login flow. Trust model matches the
 # existing presigned-URL pattern: anyone with the report_id (a UUID,
 # unguessable) can view. Listing report_ids still requires auth via
 # /api/v1/reports/.
 #
-# Returned shape is intentionally compact and stable — designed for a
+# Returned shape is intentionally compact and stable - designed for a
 # UNDP submission demo where judges click a link and instantly see a
 # clean evidence page. NO chunked-upload metadata, NO operator-only
 # flags. Just the headline truth-score + sat imagery + reasoning.
@@ -7251,7 +7251,7 @@ def get_public_evidence(
 
     Returns 404 if the report doesn't exist or has been soft-deleted.
     Returns 200 with `verification: null` if no verification has run
-    yet — the evidence page renders an "awaiting verification" state.
+    yet - the evidence page renders an "awaiting verification" state.
     """
     r = db.query(Report).options(
         joinedload(Report.media),
@@ -7268,7 +7268,7 @@ def get_public_evidence(
     v = r.verification
 
     # Pick the highest-tier complete IMAGE the citizen submitted. Stable
-    # /api/v1/reports/media/<id>/file URL — no auth, browser-cacheable.
+    # /api/v1/reports/media/<id>/file URL - no auth, browser-cacheable.
     photo_url = None
     img = next(
         (m for m in r.media or [] if m.type == MediaTypeEnum.IMAGE
@@ -7287,7 +7287,7 @@ def get_public_evidence(
     # Verification block (compact, demo-friendly shape).
     verification_block = None
     if v:
-        # Multi-provider grid URLs — same stable URLs the dashboard uses.
+        # Multi-provider grid URLs - same stable URLs the dashboard uses.
         sat_grid: List[dict] = []
         try:
             import json as _json
@@ -7376,9 +7376,9 @@ def get_media_duplicates(
     Returns candidates whose pHash Hamming distance ≤ `threshold` (default
     10 / 64), scoped to the last `window_hours` (default 24 h) so we don't
     drag in unrelated historical matches. Same-report media is filtered
-    out — a photo is not its own duplicate.
+    out - a photo is not its own duplicate.
 
-    Scope intentionally time-windowed + hash-filtered — NOT an O(N²) join.
+    Scope intentionally time-windowed + hash-filtered - NOT an O(N²) join.
     The typical working set is a few hundred candidates per crisis cell,
     which Python-side Hamming filtering dispatches in milliseconds.
     """
@@ -7389,7 +7389,7 @@ def get_media_duplicates(
     if not source:
         raise HTTPException(status_code=404, detail="Media not found")
     if not source.photo_phash:
-        # The row hasn't been scanned yet — no false "unique" claim.
+        # The row hasn't been scanned yet - no false "unique" claim.
         return {
             "media_id": media_id, "phash": None,
             "candidates": [],
@@ -7436,18 +7436,18 @@ def _ensure_building_for_pwa_pick(
 
     Background: `_apply_building_link` (after_insert hook) is responsible
     for maintaining the buildings cache, but it fires AFTER the report
-    INSERT — too late for the FK check. The `_auto_assign_building_id`
+    INSERT - too late for the FK check. The `_auto_assign_building_id`
     path below handles the proximity-cluster case, but early-returns
     when the PWA has already supplied a `building_id`. The result on a
     fresh DB: a PWA tap on an OSM footprint that hasn't been mirrored
     into `buildings` yet 500s the entire submission with
-    `psycopg2.errors.ForeignKeyViolation` on `fk_reports_building_id` —
+    `psycopg2.errors.ForeignKeyViolation` on `fk_reports_building_id` -
     UNDP must-have #6 regression.
 
     Returns the same `building_id` on success. On a DB error, returns
     None so the caller can fall through to `building_id=NULL +
     infrastructure_name_from_osm=False` (the "needs mapping" bucket
-    per CLAUDE.md UNDP must-have #6) rather than 500ing the submission.
+    per the project invariants UNDP must-have #6) rather than 500ing the submission.
     """
     if not building_id:
         return building_id
@@ -7476,7 +7476,7 @@ def _auto_assign_building_id(report: Report, db: Session):
     Phase H.1 (May 2026) added `fk_reports_building_id` from
     `reports.building_id` → `buildings.id`. The `_apply_building_link`
     `after_insert` hook in app/models/report.py inserts the parent
-    `buildings` row, but that hook fires AFTER the report INSERT — the
+    `buildings` row, but that hook fires AFTER the report INSERT - the
     FK is checked during the INSERT itself, so it fails when a freshly
     generated building_id has no matching parent row.
 
@@ -7532,7 +7532,7 @@ def _auto_assign_building_id(report: Report, db: Session):
 
 
 # ══════════════════════════════════════════════════════════════════════
-# Phase F.2.b (May 2026) — Per-report admin-action ribbon
+# Phase F.2.b (May 2026) - Per-report admin-action ribbon
 # ══════════════════════════════════════════════════════════════════════
 @router.get("/{report_id}/audit")
 def get_report_audit_trail(
@@ -7547,7 +7547,7 @@ def get_report_audit_trail(
     `_audit_report_action`. Newest-first; capped at `limit` (default 8
     so the dashboard ribbon stays compact).
 
-    The response shape is intentionally thin — id / action / user
+    The response shape is intentionally thin - id / action / user
     email / timestamp / details. The dashboard joins user_id back
     against the report's reviewer profile when needed.
     """
@@ -7590,7 +7590,7 @@ def get_report_audit_trail(
 
 
 # ══════════════════════════════════════════════════════════════════════
-# Phase G.5 (May 2026) — Bulk multi-select operations
+# Phase G.5 (May 2026) - Bulk multi-select operations
 # ══════════════════════════════════════════════════════════════════════
 # The single-report verify endpoint above is heavy (10-25 s per call:
 # satellite fetch + Claude vision). Operators reviewing 10+ pending
@@ -7600,7 +7600,7 @@ def get_report_audit_trail(
 #
 # This endpoint fans out the existing `verify_report` handler with a
 # small concurrency cap and streams progress events back to the
-# dashboard as Server-Sent Events. Idempotent per report-id —
+# dashboard as Server-Sent Events. Idempotent per report-id -
 # `verify_report` already handles re-runs gracefully (overwrites the
 # previous SatelliteVerification row).
 #
@@ -7636,7 +7636,7 @@ async def batch_verify(
     summary tally.
     """
     ids = [str(i) for i in (body.report_ids or []) if isinstance(i, str)]
-    # Hard cap — bigger batches should run in a background worker
+    # Hard cap - bigger batches should run in a background worker
     # queue (out of scope this phase, see roadmap F.10).
     if len(ids) > 100:
         raise HTTPException(
@@ -7660,13 +7660,13 @@ async def batch_verify(
         async with sem:
             try:
                 # Each verify_report call manages its own db session
-                # internally via Depends — we replicate that here by
+                # internally via Depends - we replicate that here by
                 # calling it with a fresh Session per task so the
                 # nested transactions don't fight each other.
                 from app.db.session import SessionLocal
                 inner_db = SessionLocal()
                 try:
-                    # Synchronous shim — verify_report is async + takes a
+                    # Synchronous shim - verify_report is async + takes a
                     # Depends-injected db; call its core path directly.
                     await verify_report(report_id=rid, db=inner_db)
                     return {"report_id": rid, "status": "ok"}

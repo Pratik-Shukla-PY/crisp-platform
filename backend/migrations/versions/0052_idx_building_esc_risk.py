@@ -1,4 +1,4 @@
-"""Operations redesign P3 — index buildings.escalation_risk (scalability)
+"""Operations redesign P3 - index buildings.escalation_risk (scalability)
 
 Revision ID: 0052_idx_building_esc_risk
 Revises: 0051_crisis_event_place_name
@@ -8,7 +8,7 @@ The "escalating hotspots" predicate (Building.escalation_risk >= 70) is evaluate
 on EVERY /analytics/summary call AND every /operations rollup. escalation_risk had
 no index (its sibling 5-score columns severity_score / humanitarian_priority do),
 so the filter was a full Building scan that degrades as building count grows. Add a
-plain B-tree on escalation_risk — the selective >=70 range scan now hits the index.
+plain B-tree on escalation_risk - the selective >=70 range scan now hits the index.
 
 CONCURRENTLY (no table lock) so it's safe to apply online; hence op.execute with an
 autocommit block rather than op.create_index inside the migration transaction.
@@ -25,7 +25,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # CONCURRENTLY can't run inside a transaction — use an autocommit connection.
+    # CONCURRENTLY can't run inside a transaction - use an autocommit connection.
     with op.get_context().autocommit_block():
         op.execute(
             "CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_buildings_escalation_risk "

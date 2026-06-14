@@ -1,4 +1,4 @@
-# CRISP — Security & Privacy Design
+# CRISP - Security & Privacy Design
 
 > **Scope**: UNDP Crisis Mapping Challenge submission v2.1 (Apr 2026).
 > Owner: engineering team. Audience: UNDP evaluators + deploying
@@ -7,7 +7,7 @@
 This document explains how CRISP meets UNDP's "**Secure data handling
 and hosting: compliance with global data security standards and privacy
 practices**" must-have clause. Every claim here is backed by a
-file path in the repo — no aspirational text, no future-work.
+file path in the repo - no aspirational text, no future-work.
 
 ---
 
@@ -17,14 +17,14 @@ file path in the repo — no aspirational text, no future-work.
 |----------------------------|---------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
 | **S**poofing               | JWT auth; Refresh-token rotation; WhatsApp/Telegram/SMS webhook signature verification                              | `app/core/security.py`, `messaging_bot/whatsapp/webhook.py::_verify_signature`  |
 | **T**ampering              | HTTPS-only in prod; DB integrity via per-chunk `djb2` checksums; CHECK constraint on MediaChunk payload              | `app/api/endpoints/reports.py::attach_media_chunk`, migrations 0004            |
-| **R**epudiation            | `auth_audit_log` table — every LOGIN/LOGOUT/DELETE/FAILED_LOGIN, IP, user-agent, 30-day retention                     | `app/models/auth.py::AuthAuditLog` + `app/api/endpoints/auth.py::_audit`        |
+| **R**epudiation            | `auth_audit_log` table - every LOGIN/LOGOUT/DELETE/FAILED_LOGIN, IP, user-agent, 30-day retention                     | `app/models/auth.py::AuthAuditLog` + `app/api/endpoints/auth.py::_audit`        |
 | **I**nformation disclosure | Face-blur at-source (BlazeFace in-browser/RN) + server MediaPipe + easyocr safety net; no PII in URL params          | `pii-blur.js`, `app/services/pii_blur.py`, `/api/v1/health/pii`                 |
 | **D**oS                    | Per-IP + per-device rate limits (30/min meta, 180/min chunk); Nginx/ALB rate-limit layer above                        | `app/main.py::check_rate_limit`, `docs/DEPLOYMENT_RUNBOOK.md#rate-limits`       |
 | **E**levation of privilege | Role-based auth (SUPER_ADMIN / ADMIN / ANALYST / VIEWER); `require_admin` dependency on every mutating admin route  | `app/core/deps.py::require_analyst`, `require_admin`                            |
 
 ---
 
-## 2. PII flow — where personal data can exist, for how long, and what protects it
+## 2. PII flow - where personal data can exist, for how long, and what protects it
 
 ```
                   ┌─────────────── CAPTURE ────────────────┐
@@ -58,7 +58,7 @@ file path in the repo — no aspirational text, no future-work.
                   ┌────────── ACCESS ─────────────────────┐ │
                   │ Dashboard (JWT)                        │ │
                   │ Exports (CSV / GeoJSON / KML / PDF)    │ │
-                  │ CloudWatch (structured logs — no PII)  │ │
+                  │ CloudWatch (structured logs - no PII)  │ │
                   └────────────────────────────────────────┘ │
                   └─────────────────────────────────────────┘
 ```
@@ -77,7 +77,7 @@ file path in the repo — no aspirational text, no future-work.
 ### 2.2 What is **not** captured
 
 - No IMEI, SIM, MAC, advertising ID, browser fingerprint.
-- No IP-address-based location lookup on the client — the device may
+- No IP-address-based location lookup on the client - the device may
   fall back to IP-geolocation for a coarse map pin, but the IP itself
   is never persisted beyond the single request's audit log entry.
 - No contact list, calendar, saved-password access.
@@ -122,7 +122,7 @@ Production boot refuses `CORS_ORIGINS=*` and any URL-embedded DB password
 
 - RDS + S3 deployed in one AWS region per UNDP-partner's jurisdiction.
   No cross-region replication unless explicitly requested.
-- Client-side Leaflet tiles fetch from CartoDB / OSM public endpoints —
+- Client-side Leaflet tiles fetch from CartoDB / OSM public endpoints -
   no CRISP data flows to those third parties; URL params only carry
   `{z}/{x}/{y}` tile coordinates.
 - Messaging webhooks (Twilio, Telegram, WhatsApp) transit via their
@@ -143,7 +143,7 @@ Production boot refuses `CORS_ORIGINS=*` and any URL-embedded DB password
 | API ↔ RDS                    | `sslmode=require` in the psycopg2 DSN                                     |
 | RDS at rest                  | AWS-managed KMS (default RDS encryption); snapshots encrypted             |
 | S3 at rest                   | AES-256 (SSE-S3) on bucket default; versioning + lifecycle policy enabled |
-| Local disk fallback (dev)    | No encryption — **dev only**; production uses S3                          |
+| Local disk fallback (dev)    | No encryption - **dev only**; production uses S3                          |
 
 ---
 
@@ -166,7 +166,7 @@ Production boot refuses `CORS_ORIGINS=*` and any URL-embedded DB password
 
 - Per-device rate limit: 30 report submissions/min (`app/main.py:check_rate_limit`).
 - Per-IP rate limit on chunk uploads: 180/min (typical capture needs < 10).
-- Badge / reputation keyed on `verified_count`, NOT submission volume —
+- Badge / reputation keyed on `verified_count`, NOT submission volume -
   a bad-faith user flooding duplicates never earns status
   (`docs/INCENTIVES.md`, `tests/test_reporter_profile_counter.py::TestUNDPQualityBasedCredibility`).
 - Perceptual-hash dedup (W3, Apr 2026) flags near-duplicate photos
@@ -212,7 +212,7 @@ Production boot refuses `CORS_ORIGINS=*` and any URL-embedded DB password
   before go-live; until then, WhatsApp submissions 404 without data loss.
 - **CLOUDHSM / FIPS 140-2** is not enabled by default; recommend for
   UNDP deployments handling OCHA-classified data.
-- **Granular audit retention per region** — today the 30-day cron is
+- **Granular audit retention per region** - today the 30-day cron is
   global; multi-region deployment should tune per jurisdiction.
 
 ---

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Sprint C.1 (May 2026) — Prune orphan CSS rule blocks.
+ * Sprint C.1 (May 2026) - Prune orphan CSS rule blocks.
  *
  * The home-stage redesign waves over the past two months left behind
  * a graveyard of CSS selectors whose corresponding HTML / JS class
@@ -26,7 +26,7 @@
  *
  * The script removes ONLY top-level single-class rule blocks. Compound
  * selectors (`.a, .b`), descendant selectors (`.parent .child`), and
- * pseudo-class selectors (`.foo:hover`) are LEFT IN PLACE — safer
+ * pseudo-class selectors (`.foo:hover`) are LEFT IN PLACE - safer
  * fallback. Some orphan-named compounds will linger; that's OK because
  * they collapse to harmless dead-CSS rather than visible bugs.
  *
@@ -51,7 +51,7 @@ const YELLOW = "\x1b[33m";
 const RESET = "\x1b[0m";
 
 /**
- * Conservative orphan denylist — every class here has been manually
+ * Conservative orphan denylist - every class here has been manually
  * verified absent from index.html + every PWA JS module. Compound
  * selectors are intentionally NOT in this list because their behaviour
  * depends on the parent / sibling context.
@@ -65,7 +65,7 @@ const ORPHAN_CLASSES = [
     "home-title",
     // Phase 6 rewards tile drop
     "home-action-tile--rewards",
-    // Phase 5.1 channels rewrite — old single-channel naming
+    // Phase 5.1 channels rewrite - old single-channel naming
     "home-channel",
     "home-channels",
     "home-channels-six",
@@ -204,7 +204,7 @@ async function main() {
     }
 
     await writeFile(CSS_PATH, working, "utf8");
-    ok(`pruned ${totalRemoved} orphan rule block(s) — saved ${savedBytes} bytes`);
+    ok(`pruned ${totalRemoved} orphan rule block(s) - saved ${savedBytes} bytes`);
     for (const [cls, n] of Object.entries(report)) {
         console.log(`    .${cls}: ${n} block(s) removed`);
     }

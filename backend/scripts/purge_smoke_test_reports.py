@@ -1,6 +1,6 @@
 """Purge accumulated CI smoke-test reports from prod.
 
-Background — May 2026: the GitHub Actions `prod-smoke` Playwright job
+Background - May 2026: the GitHub Actions `prod-smoke` Playwright job
 ran on every deploy and submitted a synthetic report with
 `device_hash = "prod-smoke-<timestamp>"` via POST /reports/meta to
 verify the meta endpoint works end-to-end. The test never cleaned up
@@ -12,7 +12,7 @@ hash matches `prod-smoke-*`. From the May 2026 sprint onwards the
 spec itself wraps in try/finally + DELETE /reports/device/{hash},
 so this is needed once for the historical accumulation.
 
-Idempotent — re-runs are safe (matches zero rows on second pass).
+Idempotent - re-runs are safe (matches zero rows on second pass).
 Dry-run by default; `--confirm` actually deletes.
 
 Usage:
@@ -23,8 +23,8 @@ Usage:
       "python /app/backend/scripts/purge_smoke_test_reports.py --confirm"
 
 Match policy:
-  Default — `device.hash` LIKE `prod-smoke-%`.
-  --include-test-prefix — also matches LIKE `TEST-%` (older test
+  Default - `device.hash` LIKE `prod-smoke-%`.
+  --include-test-prefix - also matches LIKE `TEST-%` (older test
   fixtures from the SQLite era; should be empty in current prod but
   kept for completeness).
 """
@@ -47,7 +47,7 @@ def main(dry_run: bool, include_test_prefix: bool) -> int:
     # before we touch Report (which has a FK to users.id). Without this
     # the script fails at first .query(Report) with "Foreign key
     # associated with column 'reports.user_id' could not find table
-    # 'users'" — same gotcha as any cold-bootstrap script that bypasses
+    # 'users'" - same gotcha as any cold-bootstrap script that bypasses
     # the FastAPI app boot path that normally wires every model in.
     from app.models import auth as _auth  # noqa: F401
     from app.models.report import Report, Device, Media
@@ -86,12 +86,12 @@ def main(dry_run: bool, include_test_prefix: bool) -> int:
             logger.info(f"  {hash_str}: {n} report(s)")
 
         if dry_run:
-            logger.info("Dry run — pass --confirm to actually delete.")
+            logger.info("Dry run - pass --confirm to actually delete.")
             return 0
 
         # Real run: delete the reports + the devices themselves.
         # Use the existing endpoint helper (delete_device_data) logic
-        # rather than duplicating it — same media-file cleanup, same
+        # rather than duplicating it - same media-file cleanup, same
         # commit semantics. Hits HTTP-internal directly via TestClient
         # would be overkill; raw SQL DELETE is fine since the smoke
         # rows have no associated media files (no chunked upload).

@@ -1,6 +1,6 @@
 """Generate a VAPID keypair for Web Push (RFC 8292).
 
-VAPID is "Voluntary Application Server Identification" — the mechanism
+VAPID is "Voluntary Application Server Identification" - the mechanism
 push providers (APNs, FCM, Mozilla autopush) use to verify that the
 server sending a push is the same server that issued the subscription.
 We generate ONE keypair per deployment; both halves get persisted to
@@ -8,7 +8,7 @@ secrets management.
 
   • The PUBLIC key gets returned by GET /api/v1/push/vapid-public so
     the PWA can pass it to PushManager.subscribe(). Browsers embed the
-    public key into the subscription endpoint URL — so if you rotate
+    public key into the subscription endpoint URL - so if you rotate
     the public key, every existing subscription becomes invalid.
   • The PRIVATE key signs the JWT we send to providers when delivering
     a push. Lives in env vars + AWS Secrets Manager, never the repo.
@@ -18,7 +18,7 @@ Run once per environment:
     python scripts/generate_vapid.py
 
 Output is two `KEY=value` lines suitable for .env / Secrets Manager.
-Append the third (VAPID_CONTACT_EMAIL) yourself — providers use it as
+Append the third (VAPID_CONTACT_EMAIL) yourself - providers use it as
 the abuse-contact for your push traffic per RFC 8292 §2.
 
 Re-running this script invalidates every existing push subscription;
@@ -40,7 +40,7 @@ def main() -> None:
     private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
 
-    # Public key: uncompressed point per SEC 1 §2.3.3 — `0x04 || X || Y`,
+    # Public key: uncompressed point per SEC 1 §2.3.3 - `0x04 || X || Y`,
     # 65 bytes total. This is the format browsers expect inside the
     # `applicationServerKey` parameter of PushManager.subscribe().
     pub_numbers = public_key.public_numbers()

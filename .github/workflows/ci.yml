@@ -31,7 +31,7 @@ permissions:
   # security-events: needed if we ever upload SARIF from gitleaks/trivy
   # to GitHub's Code Scanning surface. Keep it tight for now.
   security-events: write
-  # pull-requests: read — gitleaks-action calls
+  # pull-requests: read - gitleaks-action calls
   # `GET /repos/{owner}/{repo}/pulls/{pr}/commits` so it can scope its
   # scan to just the PR's new commits (not re-scan the whole history
   # on every PR run). Without this, the API returns 403 "Resource not
@@ -52,10 +52,10 @@ jobs:
     env:
       APP_ENV: dev       # ← bypass P1.2/P1.8 fail-fast boot checks
       PYTHONUNBUFFERED: "1"
-      # Apr 2026 — CRISP is Postgres-only. The backend refuses to boot
+      # Apr 2026 - CRISP is Postgres-only. The backend refuses to boot
       # without a Postgres DSN. The service container below exposes
       # crisp/crisp/crisp_test on :5432. Database name MUST end in
-      # `_test` — the `conftest.py` seatbelt (added Apr 2026 after
+      # `_test` - the `conftest.py` seatbelt (added Apr 2026 after
       # the dev-DB wipe incident) hard-refuses any non-`_test`
       # target so pytest can't DROP SCHEMA CASCADE a production-
       # shaped DB.
@@ -95,7 +95,7 @@ jobs:
       - name: Run pytest
         working-directory: backend
         run: |
-          pytest -q --tb=short || (echo "Pytest failed — see logs above." && exit 1)
+          pytest -q --tb=short || (echo "Pytest failed - see logs above." && exit 1)
 
   mobile:
     name: React Native typecheck
@@ -161,13 +161,13 @@ jobs:
       - name: .env must be ignored
         run: |
           if git ls-files | grep -E '^\.env$|^backend/\.env$'; then
-            echo "ERROR: .env is tracked in git — it must be gitignored."
+            echo "ERROR: .env is tracked in git - it must be gitignored."
             exit 1
           fi
-          echo "OK — .env is not tracked."
+          echo "OK - .env is not tracked."
 
   i18n-validation:
-    name: i18n — locale parity + template-var preservation
+    name: i18n - locale parity + template-var preservation
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -186,7 +186,7 @@ jobs:
           if [ -f scripts/validate-i18n.mjs ]; then
             node scripts/validate-i18n.mjs
           else
-            echo "scripts/validate-i18n.mjs not found — skipping"
+            echo "scripts/validate-i18n.mjs not found - skipping"
           fi
           # Crisis-pack curated-option coverage: every stock pack question +
           # select option must have a cp_/cpopt_ key in en.json (the PWA pack
@@ -195,37 +195,37 @@ jobs:
           if [ -f scripts/validate-crisis-pack-i18n.mjs ]; then
             node scripts/validate-crisis-pack-i18n.mjs
           else
-            echo "scripts/validate-crisis-pack-i18n.mjs not found — skipping"
+            echo "scripts/validate-crisis-pack-i18n.mjs not found - skipping"
           fi
       - name: Check Sentry release tags match SW cache names
-        # Phase 3.2 (May 2026) — bisectable errors. The PWA + dashboard
+        # Phase 3.2 (May 2026) - bisectable errors. The PWA + dashboard
         # service workers carry the canonical build version
         # (CACHE_NAME / APP_CACHE); Sentry's release ID comes from a
         # `<meta name="crisp-release">` tag in each HTML entrypoint.
         # A PR that bumps SW but forgets the meta tag tags Sentry
-        # events with the WRONG build — making prod errors hard to
+        # events with the WRONG build - making prod errors hard to
         # bisect. Fail CI here so the drift is caught at PR review.
         run: |
           if [ -f scripts/sync-release-tags.mjs ]; then
             node scripts/sync-release-tags.mjs --check
           else
-            echo "scripts/sync-release-tags.mjs not found — skipping"
+            echo "scripts/sync-release-tags.mjs not found - skipping"
           fi
       - name: Check tier-config sync (PWA / dashboard / RN / shared)
-        # Phase 2.1 (May 2026) — single source of truth for the V4
+        # Phase 2.1 (May 2026) - single source of truth for the V4
         # reward ladder. `shared/tier-config.json` is canonical; the
         # PWA + dashboard read auto-generated `tier-config.js`, RN
         # reads `crisp-mobile/shared/tier-config.ts`. A PR that
         # edits the JSON but forgets to re-run the generator drifts
-        # the consumers — fail here so it's caught at PR review.
+        # the consumers - fail here so it's caught at PR review.
         run: |
           if [ -f scripts/sync-tier-config.mjs ]; then
             node scripts/sync-tier-config.mjs --check
           else
-            echo "scripts/sync-tier-config.mjs not found — skipping"
+            echo "scripts/sync-tier-config.mjs not found - skipping"
           fi
       - name: Check SW asset manifest sync
-        # Sprint 1A (May 2026, post-HC88) — closes the silent-drift bug
+        # Sprint 1A (May 2026, post-HC88) - closes the silent-drift bug
         # class that hit us in HC84/85. The pre-commit hook gates this
         # locally; CI is the second backstop in case anyone bypasses
         # the hook with --no-verify or commits from a non-husky env.
@@ -235,10 +235,10 @@ jobs:
           if [ -f scripts/generate-sw-manifest.mjs ]; then
             node scripts/generate-sw-manifest.mjs --check
           else
-            echo "scripts/generate-sw-manifest.mjs not found — skipping"
+            echo "scripts/generate-sw-manifest.mjs not found - skipping"
           fi
       - name: Check inline 22-locale i18n pack sync
-        # Sprint 1A (May 2026, post-HC88) — catches the inline-pack
+        # Sprint 1A (May 2026, post-HC88) - catches the inline-pack
         # equivalent of the SW manifest drift: a locale JSON edit
         # without a generate-home-i18n-inline.mjs re-run. Drift here
         # reintroduces the language-flash bug for the affected locale
@@ -247,7 +247,7 @@ jobs:
           if [ -f scripts/generate-home-i18n-inline.mjs ]; then
             node scripts/generate-home-i18n-inline.mjs --check
           else
-            echo "scripts/generate-home-i18n-inline.mjs not found — skipping"
+            echo "scripts/generate-home-i18n-inline.mjs not found - skipping"
           fi
       - name: Check report-lifecycle reset completeness
         # Permanent guard against the recurring "stale report state leaks into
@@ -261,7 +261,7 @@ jobs:
           if [ -f scripts/validate-report-reset.mjs ]; then
             node scripts/validate-report-reset.mjs
           else
-            echo "scripts/validate-report-reset.mjs not found — skipping"
+            echo "scripts/validate-report-reset.mjs not found - skipping"
           fi
 
   python-security:
@@ -273,8 +273,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - name: Install pip-audit (pinned 2.9.0 — see comment)
-        # Pinned May 2026 — pip-audit 2.10.0 has an unhandled
+      - name: Install pip-audit (pinned 2.9.0 - see comment)
+        # Pinned May 2026 - pip-audit 2.10.0 has an unhandled
         # KeyError('ranges') when the OSV API returns an advisory entry
         # without a `ranges` field (regression in _service/osv.py:135).
         # Crashes the entire audit; not a vulnerability detection,
@@ -284,25 +284,25 @@ jobs:
         # an except KeyError fallthrough in the OSV service shim).
         run: pip install 'pip-audit==2.9.0'
       - name: Audit backend dependencies
-        # Hard-fail on any unsuppressed advisory — keeps the supply
+        # Hard-fail on any unsuppressed advisory - keeps the supply
         # chain honest. Each `--ignore-vuln` MUST be accompanied by a
         # comment explaining why we're safe; revisit when upstream
         # ships a fix.
         #
-        #   GHSA-rrmf-rvhw-rf47 (torch <= 2.12.0 — torch.jit.script
+        #   GHSA-rrmf-rvhw-rf47 (torch <= 2.12.0 - torch.jit.script
         #     memory corruption, published Jun 2026)
         #     Local-host attack vector only (CVSS AV:L/PR:L, low C/I/A).
         #     torch is transitive via easyocr (server-side PII-blur OCR
         #     net); the backend never calls torch.jit.script and never
         #     feeds TorchScript from untrusted input, so the vector is
         #     unreachable through the API surface. NO fixed release
-        #     exists (2.12.0 is last_affected) — revisit when upstream
+        #     exists (2.12.0 is last_affected) - revisit when upstream
         #     ships a patched version.
         #
-        #   CVE-2024-23342 (ecdsa 0.19.x — Minerva timing attack)
+        #   CVE-2024-23342 (ecdsa 0.19.x - Minerva timing attack)
         #     Transitive via python-jose. We sign JWTs with HS256
         #     (HMAC-SHA256), which doesn't go through the ecdsa code
-        #     path. No upstream fix as of Apr 2026 — the ecdsa
+        #     path. No upstream fix as of Apr 2026 - the ecdsa
         #     maintainers consider constant-time crypto out of scope
         #     for the pure-Python lib. Re-evaluate if we ever switch
         #     JWT_ALGORITHM to ES256 / ES384, OR if we adopt cryptography
@@ -319,22 +319,22 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
-        # Sprint 2/3 (May 2026) — switched to working-tree-only scanning
+        # Sprint 2/3 (May 2026) - switched to working-tree-only scanning
         # via `gitleaks detect --no-git` (see below). Full-history scans
         # were running 14+ min wall-clock on a 494 MB / 860-commit repo,
         # repeatedly hitting the job timeout on GHA. Working-tree scans
         # finish in seconds and catch the same set of issues at HEAD:
         # any historical leak was already caught at the time of THAT
         # commit's push (we'd ratcheted up the gitleaks ruleset
-        # continuously). No `fetch-depth: 0` needed — default shallow
+        # continuously). No `fetch-depth: 0` needed - default shallow
         # clone is enough for a working-tree scan.
-      # May 2026 (Sprint 4 — Node 20 deprecation cleanup) — replaced
+      # May 2026 (Sprint 4 - Node 20 deprecation cleanup) - replaced
       # gitleaks/gitleaks-action@v2 (last released Apr 2025, still on
       # Node 20, no v3 in flight) with a direct call to the gitleaks
       # Go binary. Two reasons:
       #   1. Node 20 is being deprecated by GitHub Actions mid-2026;
       #      pinning a wrapper that's stuck there is technical debt.
-      #   2. The Go binary is more reproducible — explicit version pin
+      #   2. The Go binary is more reproducible - explicit version pin
       #      + sha256 verification at install time, no Node runtime.
       # Functional parity: same `gitleaks detect` invocation the action
       # wraps under the hood. We lose the action's "@author notify"
@@ -360,20 +360,20 @@ jobs:
           sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
           gitleaks version
       - name: Scan working tree for secrets
-        # `--no-git`     — scan files in the checked-out working tree
+        # `--no-git`     - scan files in the checked-out working tree
         #                  rather than walking git history. ~10s wall-
         #                  clock vs ~14m for full history. Catches the
         #                  same surface at HEAD (file currently exists =
         #                  any historical leak that survived to HEAD is
         #                  still detectable). Old leaks deleted from
         #                  HEAD won't be re-flagged; that's intentional
-        #                  — they were caught when they were originally
+        #                  - they were caught when they were originally
         #                  pushed (we've never had a push slip past).
-        # `--redact`     — strips actual secret values from log output
+        # `--redact`     - strips actual secret values from log output
         #                  so a false positive doesn't leak the secret
         #                  it found.
-        # `--no-banner`  — keeps CI logs clean.
-        # `--exit-code 1` — findings hard-fail the job.
+        # `--no-banner`  - keeps CI logs clean.
+        # `--exit-code 1` - findings hard-fail the job.
         # Config lives in `.gitleaks.toml` at repo root (path allowlist
         # for known false positives in vendored libs + i18n keys).
         run: gitleaks detect --no-git --redact --no-banner --exit-code 1
@@ -392,7 +392,7 @@ jobs:
           find scripts -type f -name "*.sh" -print0 | xargs -0 -n1 shellcheck -x
 
   actionlint:
-    # May 2026 (Sprint 3 institutional safeguards) — hard gate on
+    # May 2026 (Sprint 3 institutional safeguards) - hard gate on
     # workflow YAML correctness. Would have caught both deploy-night
     # regressions in one shot:
     #   1. `actions/checkout@v4` etc. emitting Node 20 deprecation
@@ -415,7 +415,7 @@ jobs:
           ACTIONLINT_VERSION: 1.7.12
         run: |
           set -euo pipefail
-          # GitHub releases mirror is the canonical install path —
+          # GitHub releases mirror is the canonical install path -
           # binary is signed by rhysd's release workflow. We pin the
           # full version + verify it via sha256 against the release
           # checksum file (which itself lives at the same content-

@@ -21,9 +21,9 @@ audit/verification window, after which it is **permanently deleted**.
 | **User-requested deletion** (per-report or "delete all my reports") | **24-hour** soft-delete grace, then permanent | `deletion_requested_at` | Undo within 24 h; then `_purge_expired_deletions()`. Mobile "delete now" uses a 30-min grace. |
 | **Account deletion** (signed-in users) | **30-day** grace, then permanent | `gdpr_deletion_requested_at` | `POST /auth/me/delete-account`. |
 | **Auth audit log** (login/logout/delete events) | **30 days** rolling | `created_at` | Scheduled purge. |
-| **Deletion audit log** (anonymized forensic snapshot of purged reports) | Retained (non-personal: no raw PII, device hash only) | — | Accountability record; never contains photo/description. |
-| **Geocode cache** | Transient (TTL) | — | Operational cache, not personal data. |
-| **Anonymous aggregate statistics** (counts, regional totals) | Indefinite (non-personal) | — | Outside the scope of the privacy policy — never identifies an individual. |
+| **Deletion audit log** (anonymized forensic snapshot of purged reports) | Retained (non-personal: no raw PII, device hash only) | - | Accountability record; never contains photo/description. |
+| **Geocode cache** | Transient (TTL) | - | Operational cache, not personal data. |
+| **Anonymous aggregate statistics** (counts, regional totals) | Indefinite (non-personal) | - | Outside the scope of the privacy policy - never identifies an individual. |
 
 ## Configuration
 
@@ -36,7 +36,7 @@ code change.
 ## Crisis-close semantics
 
 A `CrisisEvent` has status `DRAFT | LIVE | ENDED`. Reports tied to a `LIVE`
-(or `DRAFT`) crisis are **never** retention-purged — the response is still
+(or `DRAFT`) crisis are **never** retention-purged - the response is still
 active. Once an operator marks the crisis `ENDED` (stamping `ended_at`), the
 1-year clock for its reports starts. Standalone reports (no crisis activation)
 use their own creation date as the anchor, so a report older than the window
@@ -45,5 +45,5 @@ is purged even without an associated crisis event.
 ## Review
 
 This policy and the DPIA are reviewed at least annually (UNDP Annex 3
-obligation) — see `docs/dpia.md` M4. Risk R10 (retention drift) is mitigated
+obligation) - see `docs/dpia.md` M4. Risk R10 (retention drift) is mitigated
 by the automated sweep documented here.

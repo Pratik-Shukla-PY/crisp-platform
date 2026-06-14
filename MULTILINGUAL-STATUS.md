@@ -1,4 +1,4 @@
-# Multilingual & Localization System — Status Report
+# Multilingual & Localization System - Status Report
 
 ## Current State vs Requirements
 
@@ -8,10 +8,10 @@
 |-------------|-----------|----------|----------|-----|-----|---------|
 | **6 UN Languages (en,fr,es,ar,zh,ru)** | 6/6 | 4/6 (no zh,ru) | 0/6 (en only) | 0/6 (en only) | 0/6 (hi only) | N/A |
 | **Local languages** | 80+ mapped | 7 (en,hi,es,fr,ar,pt,sw) | None | None | None | Whisper handles all |
-| **Auto-detect from location** | GPS + IP geo + country map | Telegram locale | None | None | None | — |
-| **Manual language override** | Button switcher | Flag buttons | None | None | None | — |
-| **LANG command** | No (buttons) | No (buttons) | None | None | None | — |
-| **Offline translation cache** | IndexedDB + localStorage | No | No | N/A | N/A | — |
+| **Auto-detect from location** | GPS + IP geo + country map | Telegram locale | None | None | None | - |
+| **Manual language override** | Button switcher | Flag buttons | None | None | None | - |
+| **LANG command** | No (buttons) | No (buttons) | None | None | None | - |
+| **Offline translation cache** | IndexedDB + localStorage | No | No | N/A | N/A | - |
 | **Store original language** | No | No | No | No | No | No field |
 | **Store original + translated text** | No | No | No | No | No | Partial (transcription vs ai_summary) |
 | **Auto-translation API** | No | No | No | No | No | Whisper translate only |
@@ -79,7 +79,7 @@ Remove `"zh": "en"` and `"ru": "en"` from `_LANG_FALLBACK`.
 **Files:** `messaging-bot/sms/parser.py`, `webhook.py`
 
 1. Detect language from phone number country prefix
-2. Add multilingual reply templates (6 UN languages — short, SMS-optimized)
+2. Add multilingual reply templates (6 UN languages - short, SMS-optimized)
 3. Support "LANG EN" / "LANG HI" keyword to switch
 4. Keep keyword parsing in English (backend normalizes) but replies in user language
 
@@ -115,7 +115,7 @@ Dashboard can filter/sort by language.
 For dynamic user content that isn't audio (text messages from SMS/WhatsApp):
 - Whisper already handles audio → English translation
 - For text: Use Claude Haiku (already available) as lightweight translator
-- Prompt: "Translate to English: {text}" — cacheable, cheap
+- Prompt: "Translate to English: {text}" - cacheable, cheap
 - Store both `original_text` and `translated_text` in description
 
 ### G8: IVR Multi-Language TTS (2 hours)
@@ -140,7 +140,7 @@ Map language selection to AWS Polly voices:
 
 ---
 
-## Apr 2026 — audio capture screen UX rewrite
+## Apr 2026 - audio capture screen UX rewrite
 
 The audio capture screen (`stage-audio` in the PWA / `screen === 'audio'` in
 RN) was rewritten with low-literacy-friendly copy: bullet prompts + worked
@@ -160,16 +160,16 @@ and universal `next` → "Continue".
 |--------|---|---|
 | English (en) | ✅ authoritative | ✅ authoritative |
 | Hindi (hi) | ✅ full | ✅ full |
-| Kannada (kn) | ✅ full | — (RN has no kn locale yet) |
-| Tamil (ta) | ✅ full | — |
+| Kannada (kn) | ✅ full | - (RN has no kn locale yet) |
+| Tamil (ta) | ✅ full | - |
 | Spanish (es) | ✅ full | ✅ full |
 | French (fr) | ✅ full | ✅ full |
 | Arabic (ar) | ✅ full | ✅ full |
-| Portuguese (pt) | ✅ full | — |
+| Portuguese (pt) | ✅ full | - |
 | Chinese (zh) | ✅ full | ✅ full |
-| Bengali (bn) | ✅ full | — |
-| All other PWA locales (~27 languages: de, it, tr, ja, ko, ur, th, vi, id, ms, ne, my, fa, ru, pl, ro, so, sw, am, he, el, ml, te, mr, gu, pa, or, as) | ⚠️ fall back to English for new keys | — |
-| RN ru locale | ⚠️ uses old `audio_title` + `audio_sub`, no bullets/example/mic_lang | — |
+| Bengali (bn) | ✅ full | - |
+| All other PWA locales (~27 languages: de, it, tr, ja, ko, ur, th, vi, id, ms, ne, my, fa, ru, pl, ro, so, sw, am, he, el, ml, te, mr, gu, pa, or, as) | ⚠️ fall back to English for new keys | - |
+| RN ru locale | ⚠️ uses old `audio_title` + `audio_sub`, no bullets/example/mic_lang | - |
 
 ### Follow-up
 
@@ -177,4 +177,4 @@ Translators filling in remaining locales should aim for tone parity with the
 English master: **short, concrete, low-literacy**. Bullet copy must fit on
 one line of a small phone screen. Example text should read like a real
 crisis message (not marketing copy). When in doubt, prefer sentence over
-phrase — the redundancy helps comprehension under stress.
+phrase - the redundancy helps comprehension under stress.

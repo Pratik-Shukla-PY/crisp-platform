@@ -1,5 +1,5 @@
 /**
- * IconTile — single source of truth for coloured glyphs on the RN capture flow.
+ * IconTile - single source of truth for coloured glyphs on the RN capture flow.
  *
  * Mirrors the PWA's inline-SVG pattern (mobile-app/src/components/icon-pack.js)
  * by rendering the same 24x24 viewBox path data through react-native-svg.
@@ -10,13 +10,13 @@
  * - `name` is any key defined in ./iconPaths. Unknown keys fall through to
  *   the OTHER glyph (question-mark-in-circle) so rendering never crashes
  *   on a typo'd chip key.
- * - `color` drives both stroke and — where relevant — fill. Severity/
+ * - `color` drives both stroke and - where relevant - fill. Severity/
  *   category palettes match the PWA accent colours so a FLOOD chip on
  *   mobile looks identical to the PWA chip.
  * - `size` is square px; default 28 keeps the existing chip row compact.
  *
  * Implementation notes:
- *   · Stroke-only rendering (fill="none") — matches Lucide defaults and
+ *   · Stroke-only rendering (fill="none") - matches Lucide defaults and
  *     the PWA pack. The COMPLETE damage glyph is the one exception: it's
  *     a filled ring with a white X; handled via the `filled` branch.
  *   · `|` in the path string splits into multiple <Path> children, which
@@ -28,7 +28,7 @@ import Svg, { Path } from 'react-native-svg';
 import { pathFor } from './iconPaths';
 
 type Props = {
-  /** Glyph lookup key — any entry in ICON_PATHS (see iconPaths.ts). */
+  /** Glyph lookup key - any entry in ICON_PATHS (see iconPaths.ts). */
   name: string;
   /** Stroke / fill colour applied to every sub-path. */
   color?: string;
@@ -62,7 +62,7 @@ export default function IconTile({
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      // aria-hidden equivalent — the parent TouchableOpacity owns the a11y label.
+      // aria-hidden equivalent - the parent TouchableOpacity owns the a11y label.
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >

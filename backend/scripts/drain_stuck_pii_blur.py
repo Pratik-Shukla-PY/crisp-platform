@@ -1,6 +1,6 @@
 """Drain the stuck PII-blur backlog (media pinned at pii_blur_status='pending').
 
-Background — May 2026: a multi-image upload triggered a partial-preview blur
+Background - May 2026: a multi-image upload triggered a partial-preview blur
 storm (full MediaPipe + easyocr blur on every partial render) that drove the
 backend RSS to the host ceiling and OOM-killed uvicorn repeatedly. Each restart
 orphaned the in-memory `_ai_executor` blur queue, leaving a subset of Media rows
@@ -10,15 +10,15 @@ re-polls forever and the image shows an amber "Checking PII…" chip indefinitel
 
 The backend fix (Stage 1-3) kills the storm, caps memory, and adds a periodic +
 boot-time recovery sweep that drains the backlog automatically. This script is the
-one-shot manual companion for the EXISTING backlog — useful when you need to lift
+one-shot manual companion for the EXISTING backlog - useful when you need to lift
 the 425 **immediately** (e.g. before the fix is deployed) without waiting for the
 sweep's cadence.
 
 ──────────────────────────────────────────────────────────────────────────────
-PII SAFETY (UNDP must-have #7 — never expose a raw face)
+PII SAFETY (UNDP must-have #7 - never expose a raw face)
 ──────────────────────────────────────────────────────────────────────────────
-The /file gate returns 425 ONLY while status='pending'; EVERY other status —
-including 'failed' — falls through to a 302 that serves the stored bytes. So
+The /file gate returns 425 ONLY while status='pending'; EVERY other status -
+including 'failed' - falls through to a 302 that serves the stored bytes. So
 lifting the gate is only safe when the bytes are already face-redacted:
 
   • client_blur_applied = TRUE  → the PWA's BlazeFace pass blurred faces BEFORE
@@ -36,11 +36,11 @@ Modes
   --mode fail  (default)  DB-only. Flip stuck client-blurred 'pending' rows →
                           'failed'. Lifts the 425 instantly; the dashboard shows
                           a red "redaction failed" chip and renders the
-                          client-blurred image. No ML deps, no memory pressure —
+                          client-blurred image. No ML deps, no memory pressure -
                           SAFE to run during an active OOM window.
 
   --mode redrive          Loads the blur stack and re-runs server PII blur
-                          SEQUENTIALLY (one row at a time — never concurrent,
+                          SEQUENTIALLY (one row at a time - never concurrent,
                           since concurrent blur is what caused the OOM) so rows
                           land a clean 'complete_*' status (no red chip).
                           Heavier: run post-deploy / post-swap when memory is
@@ -50,7 +50,7 @@ Modes
 
 Dry-run by default; pass --confirm to actually act.
 
-Idempotent — re-runs are safe (matches zero rows once the backlog is cleared).
+Idempotent - re-runs are safe (matches zero rows once the backlog is cleared).
 
 Usage:
     cd ~/crisp
@@ -83,13 +83,13 @@ logger = logging.getLogger("drain_stuck_pii_blur")
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-# Skip a row if its blur was (re)dispatched within this many minutes — it may be
+# Skip a row if its blur was (re)dispatched within this many minutes - it may be
 # actively running; don't race it. Overridable via --min-age-min.
 _DEFAULT_MIN_AGE_MIN = 2
 
 
 def _filename_from_url(url: str) -> str:
-    """Storage filename from a media.url tail — works for /static/<f> and
+    """Storage filename from a media.url tail - works for /static/<f> and
     s3://<f> alike (same derivation the AI pipeline + recovery sweep use)."""
     return url.rsplit("/", 1)[-1].split("://", 1)[-1].rsplit("/", 1)[-1]
 
@@ -106,7 +106,7 @@ def main(
 
     from app.db.session import SessionLocal
     # Register the auth models (users/organizations) before touching Media,
-    # which has FKs into them — same cold-bootstrap gotcha as the other
+    # which has FKs into them - same cold-bootstrap gotcha as the other
     # scripts that bypass the FastAPI app-boot path.
     from app.models import auth as _auth  # noqa: F401
     from app.models.report import Media
@@ -170,7 +170,7 @@ def main(
 
         if dry_run:
             logger.info(
-                f"Dry run — would {mode} {len(targets)} row(s). "
+                f"Dry run - would {mode} {len(targets)} row(s). "
                 "Pass --confirm to act."
             )
             return 0
@@ -203,7 +203,7 @@ def main(
             logger.info(f"  re-blurring {m.id} ({fn}) …")
             _run_server_pii_blur(m.id, url, fn)  # synchronous; writes terminal status
             done += 1
-            time.sleep(0.5)  # bound peak memory — never overlap two blurs
+            time.sleep(0.5)  # bound peak memory - never overlap two blurs
         logger.info(f"Re-drove {done} row(s) through server PII blur.")
         return 0
     except Exception as e:

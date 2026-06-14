@@ -20,7 +20,7 @@ flow (no active pack) is byte-identical at every step.
 
 3. CAPTURE    Inside an active zone the PWA renders the pack's extra questions
               after the hardcoded chips (and skips the redundant "what caused
-              it?" step — the event already fixes the crisis type). The canonical
+              it?" step - the event already fixes the crisis type). The canonical
               chips still populate the first-class columns (parity, must-have #1).
 
 4. SUBMIT     At submit, form_data = {stock pack answers} ∪ {maps_to fields
@@ -58,7 +58,7 @@ Feeding them into the credibility chain means:
 
 - **Corroboration, not substitution.** Curated answers strengthen (or, if they
   contradict the photo/satellite, weaken) the assessment. They never replace
-  visual confirmation — the prompt says so explicitly.
+  visual confirmation - the prompt says so explicitly.
 - **The whole chain is considered.** crisis_type is event-confirmed (not just a
   reporter claim), so the scorer treats the infrastructure/damage claims in the
   context of a known event type.

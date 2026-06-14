@@ -1,5 +1,5 @@
 /**
- * lhci.config.smoke.cjs — Pull-Request smoke variant.
+ * lhci.config.smoke.cjs - Pull-Request smoke variant.
  *
  * May 2026 (Sprint 3 institutional safeguards). The full
  * `lhci.config.cjs` runs 2 URLs × 3 runs = 6 audits and takes
@@ -8,8 +8,8 @@
  * noisy for every PR push.
  *
  * Smoke variant:
- *   - 1 URL (PWA only — that's where the LCP-critical user lands)
- *   - 1 run per URL (no median — we accept noise on the smoke surface)
+ *   - 1 URL (PWA only - that's where the LCP-critical user lands)
+ *   - 1 run per URL (no median - we accept noise on the smoke surface)
  *   - WARN-only thresholds (no hard fail; the main-branch run is
  *     the floor enforcement). PR authors get a heads-up via the
  *     PR comment; they don't get blocked on smoke noise.
@@ -32,13 +32,13 @@ module.exports = {
         collect: {
             ...base.ci.collect,
             numberOfRuns: 1,
-            // PWA only — the public-facing LCP-critical entry point.
+            // PWA only - the public-facing LCP-critical entry point.
             // The dashboard lives behind login and isn't on the
             // typical first-paint critical path.
             url: ['/mobile-app/src/'],
         },
         assert: {
-            // Flat warn-only assertions (not an assertMatrix — we
+            // Flat warn-only assertions (not an assertMatrix - we
             // only audit one URL, so there's nothing to discriminate
             // on). Pulls thresholds from the PWA block of the main
             // config so the floors stay in sync.

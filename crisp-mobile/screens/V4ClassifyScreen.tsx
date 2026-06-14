@@ -1,20 +1,20 @@
 /**
- * V4ClassifyScreen — RN port of the PWA's #stage-v4-classify.
+ * V4ClassifyScreen - RN port of the PWA's #stage-v4-classify.
  *
- * May 2026 — Phase 4 of the 8-phase RN ↔ PWA parity plan.
+ * May 2026 - Phase 4 of the 8-phase RN ↔ PWA parity plan.
  * Three sub-views (damage → infra → crisis) on one screen, with
  * tile-tap auto-progress matching the PWA's 200 ms pulse + advance.
  *
- *   §A  Header        — back + 3-step progress (Step 2 of 3)
- *   §B  Sub-step bar  — "Step 2 — How bad · 1 of 3"
- *   §C  Question       — sub-view title (e.g. "How bad is the damage?")
- *   §D  Options grid   — sub-view-specific tile layout
+ *   §A  Header        - back + 3-step progress (Step 2 of 3)
+ *   §B  Sub-step bar  - "Step 2 - How bad · 1 of 3"
+ *   §C  Question       - sub-view title (e.g. "How bad is the damage?")
+ *   §D  Options grid   - sub-view-specific tile layout
  *
  * Sub-views:
- *   damage  — 3 radio rows (MINIMAL / PARTIAL / COMPLETE)
- *   infra   — 8-tile grid (RESIDENTIAL / COMMERCIAL / … / OTHER)
+ *   damage  - 3 radio rows (MINIMAL / PARTIAL / COMPLETE)
+ *   infra   - 8-tile grid (RESIDENTIAL / COMMERCIAL / … / OTHER)
  *             OTHER reveals a free-text input + waits for blur/Enter
- *   crisis  — 9 tiles under 3 group headers (Natural / Tech / Human)
+ *   crisis  - 9 tiles under 3 group headers (Natural / Tech / Human)
  *
  * Auto-progress (per PWA's _scheduleClassifyAdvance):
  *   t=0    tap → mark .is-selected + write parent state + pulse anim
@@ -145,7 +145,7 @@ export interface V4ClassifyScreenProps {
   /** Called at the terminal sub-view (crisis tile, or the crisispack Continue). */
   onContinue: () => void;
 
-  // RNV4-P3 — geo-scoped crisis pack. When present with renderable fields, a 4th
+  // RNV4-P3 - geo-scoped crisis pack. When present with renderable fields, a 4th
   // 'crisispack' sub-step renders the extra questions (mirrors the PWA). Optional
   // so the default flow + existing tests are unaffected when omitted.
   crisisPack?: any;
@@ -162,12 +162,12 @@ function ti(key: string, fallback: string): string {
 export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
   const insets = useSafeAreaInsets();
 
-  // ── Internal state — current sub-step + reduced-motion preference
+  // ── Internal state - current sub-step + reduced-motion preference
   const [step, setStep] = useState<ClassifyStep>('damage');
   const [reducedMotion, setReducedMotion] = useState(false);
   const advancingRef = useRef<ClassifyStep | null>(null);
 
-  // RNV4-P3 — dynamic sub-step order + the renderable pack fields. Both come
+  // RNV4-P3 - dynamic sub-step order + the renderable pack fields. Both come
   // from the pure helpers in services/crisisForm.ts (mirror of the PWA's
   // _classifyOrder / _crisisPackFields), so the order logic is unit-tested
   // independently of this screen.
@@ -183,7 +183,7 @@ export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
     AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion).catch(() => {});
   }, []);
 
-  // Clear race guard whenever the visible sub-step changes — re-taps
+  // Clear race guard whenever the visible sub-step changes - re-taps
   // after Back navigation work cleanly.
   useEffect(() => { advancingRef.current = null; }, [step]);
 
@@ -238,7 +238,7 @@ export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
     setStep(order[idx + 1]);
   };
 
-  // Back — within classify or out to onBack.
+  // Back - within classify or out to onBack.
   const goBack = () => {
     const idx = order.indexOf(step);
     if (idx <= 0) {
@@ -255,7 +255,7 @@ export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order]);
 
-  // OTHER infra tile — text-input blur trigger advances.
+  // OTHER infra tile - text-input blur trigger advances.
   const tryOtherAdvance = () => {
     if (props.infraType !== 'OTHER') return;
     const name = (props.infraName || '').trim();
@@ -272,7 +272,7 @@ export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
                   : 'summary_details';
 
   return (
-    // (May 2026 — Fix-R3) — KAV so the soft keyboard doesn't cover
+    // (May 2026 - Fix-R3) - KAV so the soft keyboard doesn't cover
     // the "Other" infrastructure free-text input (line ~435) when
     // the user taps it on the infra sub-step.
     <KeyboardAvoidingView
@@ -322,7 +322,7 @@ export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
           <Text style={styles.substepOf}>{` · ${subStepNum} of ${order.length}`}</Text>
         </View>
 
-        {/* §C + §D — switch by step */}
+        {/* §C + §D - switch by step */}
         {step === 'damage' && (
           <DamageView
             value={props.damageClass}
@@ -343,7 +343,7 @@ export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
             onSelect={(v) => {
               props.onSetInfra(v);
               if (v === 'OTHER') {
-                // Pulse but DON'T auto-advance — wait for text input
+                // Pulse but DON'T auto-advance - wait for text input
                 // blur/Enter via tryOtherAdvance.
                 const tileId = `infra:${v}`;
                 const scale = getScale(tileId);
@@ -373,7 +373,7 @@ export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
           />
         )}
 
-        {/* §C.4 — geo-scoped crisis pack (RNV4-P3). The extra Stage-2/3
+        {/* §C.4 - geo-scoped crisis pack (RNV4-P3). The extra Stage-2/3
             questions the chips don't capture. Unlike the auto-advancing chip
             steps, this one has an explicit Continue gated on required fields
             (mirrors the PWA's revealed footer on its 'crisispack' step). */}
@@ -402,7 +402,7 @@ export default function V4ClassifyScreen(props: V4ClassifyScreenProps) {
         )}
       </ScrollView>
 
-      {/* §E — No pinned Continue button. The PWA hides it on classify too —
+      {/* §E - No pinned Continue button. The PWA hides it on classify too -
           auto-progress carries the user through the chip steps; the crisispack
           step renders its own in-scroll Continue (above). Back-button only. */}
     </View>
@@ -701,7 +701,7 @@ const styles = StyleSheet.create({
   },
   substepOf: { color: 'rgba(255,255,255,0.42)', fontSize: 10.5, fontWeight: '600' },
 
-  // §C.4 crisis-pack Continue (RNV4-P3) — the one classify sub-step with an
+  // §C.4 crisis-pack Continue (RNV4-P3) - the one classify sub-step with an
   // explicit gated Continue (the chip steps auto-advance).
   cpContinue: {
     marginTop: 8, backgroundColor: Colors.accent, borderRadius: 12,

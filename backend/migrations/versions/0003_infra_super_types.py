@@ -45,7 +45,7 @@ CHIP_TO_UNDP = {
     "POWER":      "UTILITY",
     "WATER":      "UTILITY",
     "TELECOM":    "UTILITY",
-    # GOVERNMENT already aligns with UNDP — no remap needed.
+    # GOVERNMENT already aligns with UNDP - no remap needed.
 }
 
 
@@ -78,7 +78,7 @@ def upgrade() -> None:
     #       VALUE IF NOT EXISTS` must be OUTSIDE any transaction per
     #       Postgres semantics; we use `autocommit_block()` for that.
     #
-    #   (b) `UPPER(enum_col)` isn't valid in Postgres — the planner
+    #   (b) `UPPER(enum_col)` isn't valid in Postgres - the planner
     #       refuses the call without an explicit text cast. Hence
     #       `infrastructure_type::text` in the WHERE.
     with op.get_context().autocommit_block():
@@ -110,7 +110,7 @@ def downgrade() -> None:
     # varying". Explicit `::infratypeenum` cast makes it portable.
     #
     # Further caveat: we ALSO constrain the cast to values that ARE in
-    # the enum — a sub_type value like 'HOSPITAL' that WAS originally a
+    # the enum - a sub_type value like 'HOSPITAL' that WAS originally a
     # legacy chip is still in the enum (migration 0003 only ADDED the
     # UNDP super-types; it didn't REMOVE the legacy labels). So the
     # cast is safe for every value that legitimately came from the

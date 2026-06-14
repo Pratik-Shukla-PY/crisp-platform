@@ -1,4 +1,4 @@
-"""media_client_face_boxes — Batch B-C client face-box hints
+"""media_client_face_boxes - Batch B-C client face-box hints
 
 Revision ID: 0038_media_client_face_boxes
 Revises: 0037_pii_blur_status_4state
@@ -16,7 +16,7 @@ column and calls ``blur_pii_with_hints(image_path, client_boxes)``
 which:
   1. Runs MediaPipe on the assembled bytes (safety net).
   2. Computes UNION of (client_boxes, server_boxes).
-  3. Applies blur on the union. Privacy ratchets forward only —
+  3. Applies blur on the union. Privacy ratchets forward only -
      a box that any detector saw is honoured.
 
 Column shape: JSON array of objects
@@ -26,7 +26,7 @@ Column shape: JSON array of objects
 Why JSON not JSONB?
    The column is write-once / read-once per row. We never query
    inside it. JSON keeps round-trip text fidelity (preserves key
-   ordering on round-trip — useful if we ever debug a coord
+   ordering on round-trip - useful if we ever debug a coord
    mismatch). If high-volume querying becomes a need later, a
    migration to JSONB is one-line.
 
@@ -35,7 +35,7 @@ boxes (pre-B-C uploads, non-PWA channels) leave NULL, and the
 server blur path falls back to MediaPipe-only detection (its
 existing behaviour).
 
-Downgrade drops the column. No data loss concern — the column
+Downgrade drops the column. No data loss concern - the column
 is a HINT, not authoritative state.
 """
 

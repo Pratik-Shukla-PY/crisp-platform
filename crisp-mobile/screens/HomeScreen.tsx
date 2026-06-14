@@ -1,19 +1,19 @@
 /**
- * HomeScreen — RN port of the PWA home stage.
+ * HomeScreen - RN port of the PWA home stage.
  *
- * May 2026 — Phase 2 of the 8-phase RN ↔ PWA parity plan (see
+ * May 2026 - Phase 2 of the 8-phase RN ↔ PWA parity plan (see
  * V4_PARITY_DEFERRED.md). Ports the PWA's redesigned home stage
  * (mobile-app/src/index.html lines ~530-895) into a single React
- * Native screen. Visual EQUIVALENCE not pixel parity — CSS
+ * Native screen. Visual EQUIVALENCE not pixel parity - CSS
  * gradients / box-shadows / glow effects don't map 1:1 to RN, so
  * we use platform-native primitives (StyleSheet, react-native-svg,
  * react-native-safe-area-context, Linking).
  *
  * Layout sections (3-group flex per the May 2026 redesign):
- *   §A  Top         — brand row (logo + CRISP), lang pill, Lifekeeper inline pill
- *   §B  Hero        — consent toggle, BIG CTA "Report an Incident" with subtitle,
+ *   §A  Top         - brand row (logo + CRISP), lang pill, Lifekeeper inline pill
+ *   §B  Hero        - consent toggle, BIG CTA "Report an Incident" with subtitle,
  *                     5-tile utility row (Download / Login / My Reports / Rewards / Audio)
- *   §C  Bottom      — "Other ways to report" 3×2 channels grid, Privacy footer,
+ *   §C  Bottom      - "Other ways to report" 3×2 channels grid, Privacy footer,
  *                     device-ID pill
  *
  * Single 20-px horizontal gutter throughout. Safe-area insets respected
@@ -47,7 +47,7 @@ import { t, getAvailableLanguages } from '../services/i18n';
 import NearbyReports from '../components/NearbyReports';
 
 // ── Deep navy bg gradient (Phase 2 v5 redesign) ────────────────────
-// SVG full-screen rect with radial gradient — RN doesn't support CSS
+// SVG full-screen rect with radial gradient - RN doesn't support CSS
 // radial-gradient on Views so we paint an absolute-positioned SVG
 // behind the ScrollView content. Matches the PWA's
 // `radial-gradient(circle at top, #21466f 0%, #1a3b62 30%, #16365c 55%, #10284a 100%)`.
@@ -78,7 +78,7 @@ function BgRadial({ width, height }: { width: number; height: number }) {
   );
 }
 
-// ── Cyan glow blob (Phase 2 v5 — sits behind the hero card) ─────────
+// ── Cyan glow blob (Phase 2 v5 - sits behind the hero card) ─────────
 // Mock's hero card has a soft cyan radial bloom behind the top-right
 // corner that suggests an HUD light source. RN port via an absolute-
 // positioned SVG circle with a radial fade. PWA parity:
@@ -109,7 +109,7 @@ function HeroGlowBlob() {
   );
 }
 
-// ── Brand mark — port of mobile-app/src/favicon.svg ─────────────────
+// ── Brand mark - port of mobile-app/src/favicon.svg ─────────────────
 // 256×256 viewBox, dark-navy tile with 4 concentric response rings
 // (faint outer → bright inner), cyan epicenter dot, coral responder
 // dot on the second ring.
@@ -133,7 +133,7 @@ function CrispRippleLogo({ size = 32 }: { size?: number }) {
   );
 }
 
-// ── Tier ladder — Phase 2.1 (May 2026), sourced from shared canonical config.
+// ── Tier ladder - Phase 2.1 (May 2026), sourced from shared canonical config.
 // `crisp-mobile/shared/tier-config.ts` is auto-generated from
 // `shared/tier-config.json`; see scripts/sync-tier-config.mjs.
 import {
@@ -171,7 +171,7 @@ const CHANNELS: Array<{
   live: boolean;
   url?: string;
 }> = [
-  // v168.1 — both live channels now use the live_now key ("Live")
+  // v168.1 - both live channels now use the live_now key ("Live")
   // for parity with the operator's "Live with glowing green" ask;
   // voice_reporting remains in the i18n bundle for future use.
   { id: 'telegram', emoji: '✈️', labelKey: 'channel_telegram', statusKey: 'live_now',      live: true,  url: 'https://t.me/CrispUNDPbot' },
@@ -218,12 +218,12 @@ export interface HomeScreenProps {
 
   // Reward / tier
   badgeLevel?: string | null; // T1_SCOUT … T4_LIFEKEEPER or legacy
-  badgeLivesSaved?: number;   // For T4 — shown inline in the pill
+  badgeLivesSaved?: number;   // For T4 - shown inline in the pill
 
   // App version (footer)
   appVersion?: string;
 
-  // "Verified Reports Nearby" — already-cached GPS from the v4
+  // "Verified Reports Nearby" - already-cached GPS from the v4
   // capture flow. NEVER prompted from the home stage. When either
   // is null, the NearbyReports module stays hidden.
   nearbyLat?: number | null;
@@ -249,7 +249,7 @@ export default function HomeScreen(props: HomeScreenProps) {
 
   useEffect(() => {
     if (reducedMotion) return undefined;
-    // Two staggered loops — ring2 starts 1.6 s after ring1 so the
+    // Two staggered loops - ring2 starts 1.6 s after ring1 so the
     // user always sees a ring expanding somewhere mid-cycle.
     const makeLoop = (v: Animated.Value, delay: number) =>
       Animated.loop(
@@ -277,7 +277,7 @@ export default function HomeScreen(props: HomeScreenProps) {
   const tier = props.badgeLevel ? TIER_META[props.badgeLevel] : null;
   const isLifekeeper = props.badgeLevel === 'T4_LIFEKEEPER' || props.badgeLevel === 'HERO';
 
-  // Lifekeeper pill stat line — for T4 reporters with lives_saved > 0
+  // Lifekeeper pill stat line - for T4 reporters with lives_saved > 0
   // we render "{n} lives saved"; lower tiers show the tier progress hint.
   const tierStatLine = useMemo(() => {
     if (!tier) return '';
@@ -297,7 +297,7 @@ export default function HomeScreen(props: HomeScreenProps) {
     return _t(progressKey, '');
   }, [tier, isLifekeeper, props.badgeLivesSaved, props.badgeLevel]);
 
-  // Channel tile — single source of truth for deep-link dispatch.
+  // Channel tile - single source of truth for deep-link dispatch.
   const handleChannel = (id: string, url?: string) => {
     if (props.onChannelPress) {
       props.onChannelPress(id, url);
@@ -308,11 +308,11 @@ export default function HomeScreen(props: HomeScreenProps) {
     }
   };
 
-  // Compact viewport detection — drops the channels-section title to
+  // Compact viewport detection - drops the channels-section title to
   // an eyebrow on the shortest phones (iPhone SE) so the page still
   // fits in 100dvh without scroll.
   const isShortViewport = width < 380;
-  // (May 2026 — Fix-R4) — also compress the primary CTA's minHeight on
+  // (May 2026 - Fix-R4) - also compress the primary CTA's minHeight on
   // short viewports (iPhone SE: 568 dp tall; Galaxy S9+: ≈640 dp). The
   // original 110 dp ate 19 % of the viewport on iPhone SE, pushing the
   // utility tile row below the home indicator. 88 dp keeps the WCAG
@@ -333,11 +333,11 @@ export default function HomeScreen(props: HomeScreenProps) {
           paddingTop: Math.max(16, insets.top),
           paddingBottom: Math.max(12, insets.bottom),
           paddingHorizontal: 20,
-          // (May 2026 — Fix-R1) flexGrow: 1 is the canonical RN
+          // (May 2026 - Fix-R1) flexGrow: 1 is the canonical RN
           // pattern for "content container fills the ScrollView's
           // visible area when content is shorter". `minHeight: '100%'`
           // (string percentage) is silently ignored by RN's flex
-          // layout engine — was producing inconsistent heights on
+          // layout engine - was producing inconsistent heights on
           // notched phones (iPhone 12 vs 13 mini vs Pixel 6).
           flexGrow: 1,
         }}
@@ -345,7 +345,7 @@ export default function HomeScreen(props: HomeScreenProps) {
         // safety net for content overflow on very small landscape phones.
         showsVerticalScrollIndicator={false}
       >
-      {/* ── §A.1 Header row — brand left, lang pill right ─────── */}
+      {/* ── §A.1 Header row - brand left, lang pill right ─────── */}
       <View style={styles.headerRow} testID="home-header">
         <View style={styles.brandWrap}>
           <View style={styles.brandLogo}>
@@ -354,7 +354,7 @@ export default function HomeScreen(props: HomeScreenProps) {
           <Text style={styles.brandWordmark}>CRISP</Text>
         </View>
 
-        {/* Lang pill — compact horizontal selector. Renders the current
+        {/* Lang pill - compact horizontal selector. Renders the current
             locale's flag emoji as the pill content; tapping cycles to
             the next locale in the picker order. */}
         <TouchableOpacity
@@ -379,7 +379,7 @@ export default function HomeScreen(props: HomeScreenProps) {
       </View>
 
       {/* ── §B HERO CARD ────────────────────────────────────────────
-          Phase 1 v5 redesign (May 2026) — Lifekeeper pill + consent +
+          Phase 1 v5 redesign (May 2026) - Lifekeeper pill + consent +
           primary CTA + offline-reassurance helper grouped into ONE
           glass card. Matches the PWA's .home-hero-card in
           mobile-app/src/index.html. Eliminates the "floating
@@ -388,7 +388,7 @@ export default function HomeScreen(props: HomeScreenProps) {
           card's top-right corner (HUD-light suggestion). */}
       <View style={styles.heroCard} testID="home-hero-card">
 
-        {/* Cyan glow accent — sits BEHIND the card content via
+        {/* Cyan glow accent - sits BEHIND the card content via
             absolute positioning + parent overflow:hidden. PWA parity:
             .home-stage .home-hero-card::before. */}
         <HeroGlowBlob />
@@ -430,11 +430,11 @@ export default function HomeScreen(props: HomeScreenProps) {
           </Text>
         </Pressable>
 
-        {/* §B.3 PRIMARY CTA — the anchor */}
+        {/* §B.3 PRIMARY CTA - the anchor */}
         <TouchableOpacity
           style={[
             styles.cta,
-            { minHeight: ctaMinHeight },        // Fix-R4 — responsive
+            { minHeight: ctaMinHeight },        // Fix-R4 - responsive
             !props.consentGiven && styles.ctaDisabled,
           ]}
           onPress={() => { if (props.consentGiven) props.onStartReport(); }}
@@ -450,13 +450,13 @@ export default function HomeScreen(props: HomeScreenProps) {
               {_t('home_cta_primary', 'Report an Incident')}
             </Text>
           </View>
-          {/* v169.1 (May 2026, operator) — "CAPTURE · VERIFY · HELP"
+          {/* v169.1 (May 2026, operator) - "CAPTURE · VERIFY · HELP"
               visible subtitle removed. accessibilityHint above still
               announces the value-prop for VoiceOver / TalkBack users.
               The home_cta_sub i18n key + ctaSub style stay as orphans. */}
         </TouchableOpacity>
 
-        {/* §B.4 Reassurance helper — addresses operator ask for an
+        {/* §B.4 Reassurance helper - addresses operator ask for an
             "emotionally reassuring" CTA. Surfaces offline-first
             promise next to the action so disaster-zone reporters
             trust their tap. PWA parity: .home-hero-helper. */}
@@ -466,9 +466,9 @@ export default function HomeScreen(props: HomeScreenProps) {
         </Text>
       </View>
 
-      {/* ── §B.3 Utility tile row — 5 tiles distribute via flex:1 ─ */}
+      {/* ── §B.3 Utility tile row - 5 tiles distribute via flex:1 ─ */}
       <View style={styles.utilityRow} testID="home-utility-row">
-        {/* Download App — visible only when not installed (RN: always
+        {/* Download App - visible only when not installed (RN: always
             hidden on actual install; we expose via prop) */}
         {props.onInstall ? (
           <UtilityTile
@@ -479,7 +479,7 @@ export default function HomeScreen(props: HomeScreenProps) {
           />
         ) : null}
 
-        {/* Login — auth state dot */}
+        {/* Login - auth state dot */}
         <UtilityTile
           icon="👤"
           label={props.authLoggedIn
@@ -516,7 +516,7 @@ export default function HomeScreen(props: HomeScreenProps) {
       </View>
 
       {/* ── §C.0 "Verified Reports Nearby" intel module ──────────
-          Phase 1 (May 2026) — replaces the static-24 pulse per the
+          Phase 1 (May 2026) - replaces the static-24 pulse per the
           operator-approved design plan. The component itself:
             ✓ stays hidden when offline + no fresh cache
             ✓ never prompts for GPS on this screen
@@ -525,7 +525,7 @@ export default function HomeScreen(props: HomeScreenProps) {
             ✓ shows reassuring "All clear" empty state when fresh
               data shows zero nearby reports
           The pulse animation machinery above (reducedMotion +
-          pulseRing1/pulseRing2 refs) is kept in place for Phase 2 —
+          pulseRing1/pulseRing2 refs) is kept in place for Phase 2 -
           a brief loading halo before the first list paint. */}
       <NearbyReports
         lat={props.nearbyLat ?? null}
@@ -533,7 +533,7 @@ export default function HomeScreen(props: HomeScreenProps) {
         online={props.isOnline}
       />
 
-      {/* ── §C.1 Channels — "Other ways to report" 3×2 grid ────── */}
+      {/* ── §C.1 Channels - "Other ways to report" 3×2 grid ────── */}
       <View style={styles.channelsSection} testID="home-channels">
         <Text style={styles.channelsTitle}>
           {_t('home_channels_title', 'Other ways to report')}
@@ -584,7 +584,7 @@ export default function HomeScreen(props: HomeScreenProps) {
         </TouchableOpacity>
       )}
 
-      {/* ── §C.3 Footer row — single horizontal line (v168.1) ─────
+      {/* ── §C.3 Footer row - single horizontal line (v168.1) ─────
           Operator: "the bottom design (privacy, open Source etc) also
           match exactly with my previously shared image same as in
           that one." Links LEFT, device-ID pill RIGHT, separated by
@@ -607,7 +607,7 @@ export default function HomeScreen(props: HomeScreenProps) {
           </Text>
         </View>
 
-        {/* Device-ID pill — moved INTO the footer row. */}
+        {/* Device-ID pill - moved INTO the footer row. */}
         {props.deviceId ? (
           <View style={styles.devidBadge} testID="home-devid">
             <Text style={styles.devidText}>{props.deviceId}</Text>
@@ -620,7 +620,7 @@ export default function HomeScreen(props: HomeScreenProps) {
 }
 
 /**
- * UtilityTile — single tile in the §B.3 utility row.
+ * UtilityTile - single tile in the §B.3 utility row.
  * Vertical layout: icon top, label below. Optional auth-state dot
  * (top-right). Tiles flex:1 inside the parent row so they share width
  * evenly + redistribute when one is hidden.
@@ -680,7 +680,7 @@ const styles = StyleSheet.create({
   brandWordmark: {
     color: Colors.text, fontSize: 17, fontWeight: '800', letterSpacing: 0.5,
   },
-  // Lang pill v6.1 (May 2026, operator screenshot pass 2) — navy
+  // Lang pill v6.1 (May 2026, operator screenshot pass 2) - navy
   // capsule + visible cyan ambient glow + grounding shadow. RN
   // can't replicate the PWA's linear-gradient on a plain View
   // without an extra dep, so we use a single navy shade (#152238
@@ -690,7 +690,7 @@ const styles = StyleSheet.create({
   // invisible against the dark home bg; v6.1 cranks both so the
   // halo actually reads as a live glow. borderRadius 24 → 999 for
   // full capsule regardless of content height. PWA parity at the
-  // structural level — same ordering, same green dot, same flag +
+  // structural level - same ordering, same green dot, same flag +
   // code text.
   langPill: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -709,7 +709,7 @@ const styles = StyleSheet.create({
     color: '#fff', fontSize: 12.5, fontWeight: '700', letterSpacing: 0.4,
   },
 
-  // §B Hero card — Phase 1 v5 redesign (May 2026). Groups
+  // §B Hero card - Phase 1 v5 redesign (May 2026). Groups
   // Lifekeeper + consent + CTA + helper into one glass block.
   // Phase 2 v5: cyan glow blob lives inside (overflow:hidden clips
   // it to the card's rounded corners).
@@ -750,7 +750,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
 
-  // §B.1 Consent — inside hero card, no top margin (card gap owns spacing)
+  // §B.1 Consent - inside hero card, no top margin (card gap owns spacing)
   consentRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 12, paddingVertical: 10,
@@ -771,13 +771,13 @@ const styles = StyleSheet.create({
     flex: 1, color: 'rgba(255,255,255,0.78)', fontSize: 12, lineHeight: 17,
   },
 
-  // §B.2 CTA — the anchor (inside hero card, no top margin)
+  // §B.2 CTA - the anchor (inside hero card, no top margin)
   cta: {
     marginTop: 0, paddingHorizontal: 24, paddingVertical: 22,
     minHeight: 110, borderRadius: 18,
     backgroundColor: '#09D1C7',
     alignItems: 'center', justifyContent: 'center', gap: 6,
-    // Drop shadow + inset highlight — RN approximation of PWA's
+    // Drop shadow + inset highlight - RN approximation of PWA's
     // mint-glow + 1px inner ring + 1px top highlight.
     shadowColor: '#09D1C7', shadowOpacity: 0.32, shadowRadius: 18, shadowOffset: { width: 0, height: 12 },
     elevation: 10,
@@ -790,7 +790,7 @@ const styles = StyleSheet.create({
   ctaPlay: { color: '#062b1b', fontSize: 20, fontWeight: '900' },
   ctaLabel: {
     // Phase 1 v5: bumped from 22 to 24 to match the PWA's
-    // clamp(1.2rem, 4.6vw, 1.7rem) — gives the CTA the dominant
+    // clamp(1.2rem, 4.6vw, 1.7rem) - gives the CTA the dominant
     // visual weight the operator asked for ("make CTA dominant").
     color: '#062b1b', fontSize: 24, fontWeight: '800', letterSpacing: -0.005,
   },
@@ -800,7 +800,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5, textTransform: 'uppercase',
   },
 
-  // §B.3 Utility row — bottom-portion refresh: bigger frosted-glass tiles
+  // §B.3 Utility row - bottom-portion refresh: bigger frosted-glass tiles
   utilityRow: {
     flexDirection: 'row', alignItems: 'stretch', gap: 8,
     marginTop: 14, width: '100%',
@@ -825,7 +825,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: Colors.bg,
   },
 
-  // §C.0 Pulse stat block — Phase 3 v5 + bottom-portion refresh
+  // §C.0 Pulse stat block - Phase 3 v5 + bottom-portion refresh
   pulseBlock: {
     alignItems: 'center', justifyContent: 'center',
     paddingTop: 28, paddingBottom: 18,
@@ -833,7 +833,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     minHeight: 180,
   },
-  // Bottom-portion refresh — single dominant halo (≈220 px) replacing
+  // Bottom-portion refresh - single dominant halo (≈220 px) replacing
   // the prior dual-ring. Two `pulseRing` instances still render (one
   // animated, one slower) so the breath effect survives, but both
   // are now sized to dominate the centre. PWA parity:
@@ -850,7 +850,7 @@ const styles = StyleSheet.create({
   pulseRingStatic: {
     opacity: 0.45,   // reduced-motion fallback
   },
-  // May 2026 bottom-portion refresh — operator screenshot has a
+  // May 2026 bottom-portion refresh - operator screenshot has a
   // dominant centre number with subtle teal halo + smaller dim
   // label below. Mirrors the PWA's .home-impact-reports-nearby
   // .hi-num-reports-nearby clamp.
@@ -876,7 +876,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.42)',
     textAlign: 'center', marginBottom: 6,
   },
-  // Bottom-portion refresh — bigger tiles matching the operator
+  // Bottom-portion refresh - bigger tiles matching the operator
   // screenshot's premium proportions; 3-col grid via width: 31% + gap.
   channelsGrid: {
     flexDirection: 'row', flexWrap: 'wrap',
@@ -905,7 +905,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.48)',
     textAlign: 'center', marginTop: 2,
   },
-  // v7 (May 2026, operator) — clean solid green dot at top-right of
+  // v7 (May 2026, operator) - clean solid green dot at top-right of
   // .is-live channel tiles (Telegram, IVR). Replaces both:
   //   · the v168.1 glowing-green "Live" text (now hidden via the
   //     ternary in JSX above), and
@@ -939,7 +939,7 @@ const styles = StyleSheet.create({
   },
   queueText: { color: '#fde047', fontSize: 12, fontWeight: '600' },
 
-  // §C.3 Footer — v2 pass (May 2026, operator screenshot). Single
+  // §C.3 Footer - v2 pass (May 2026, operator screenshot). Single
   // horizontal row, links left + pill right, separated by space-
   // between. The earlier values (font 12, dot ·, pill padding 14/6,
   // text alpha 0.78) read as faint vs the reference; v2 bumps to
@@ -969,7 +969,7 @@ const styles = StyleSheet.create({
   footerDot: { color: 'rgba(148, 163, 184, 0.55)', fontSize: 13 },
   footerVersion: { color: 'rgba(255,255,255,0.32)', fontSize: 11 },
 
-  // §C.4 Device-ID — pill sits inline in the footer row now. v2:
+  // §C.4 Device-ID - pill sits inline in the footer row now. v2:
   // roomier padding, slightly stronger bg + border, bigger / bolder
   // text to match the reference screenshot's capsule weight.
   devidWrap: { alignItems: 'center', marginTop: 4 },

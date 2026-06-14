@@ -1,19 +1,19 @@
-"""AI retry queue — Phase K K.6.b.
+"""AI retry queue - Phase K K.6.b.
 
 Pre-K.6.b a transient AI-pipeline failure left the report's
 ``ai_assessment`` NULL forever. The audit (Agent 2, B8) caught this:
-Anthropic 5xx, Whisper OOM, satellite-provider timeouts — none of
+Anthropic 5xx, Whisper OOM, satellite-provider timeouts - none of
 them surface to the operator, none of them get retried.
 
 This module provides:
 
-* ``enqueue(db, *, report_id, kind, file_url, media_type, error)`` —
+* ``enqueue(db, *, report_id, kind, file_url, media_type, error)`` -
   persist a retry-queue row when ``_run_ai_pipeline`` raises.
-* ``_run_one_attempt(db, row)`` — pick a single ``pending`` row,
+* ``_run_one_attempt(db, row)`` - pick a single ``pending`` row,
   flip to ``in_progress``, invoke the matching AI service call,
   and either mark ``complete`` or schedule the next exponential
   backoff.
-* ``_ai_retry_loop()`` — daemon thread, polls every
+* ``_ai_retry_loop()`` - daemon thread, polls every
   ``AI_RETRY_TICK_S`` seconds (default 60).
 
 Exponential schedule (per attempt index, AFTER the failure):
@@ -47,7 +47,7 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-# Backoff schedule — attempt N → minutes to wait before attempt N+1.
+# Backoff schedule - attempt N → minutes to wait before attempt N+1.
 # Index 0 is the wait after the 1st failure, index 4 is after the 5th.
 # After index 4, the row flips to terminal_failed.
 _BACKOFF_MINUTES = [1, 5, 30, 120, 720]  # 1m, 5m, 30m, 2h, 12h
@@ -68,7 +68,7 @@ def _next_attempt_at(attempts_so_far: int) -> Optional[datetime]:
     returns None → caller flips the row to terminal_failed.
     """
     if attempts_so_far <= 0:
-        # Should never happen but defend anyway — schedule for "now"
+        # Should never happen but defend anyway - schedule for "now"
         # so the daemon's next tick picks the row up immediately.
         return datetime.now(timezone.utc)
     if attempts_so_far > _MAX_ATTEMPTS:
@@ -96,7 +96,7 @@ def enqueue(
     time for an already-known-broken Media row (e.g. via the
     assembly recovery sweep).
 
-    Caller is responsible for the surrounding transaction — we
+    Caller is responsible for the surrounding transaction - we
     flush but do NOT commit, so the enqueue can roll back together
     with the rest of the failure-path handler if needed.
     """
@@ -138,7 +138,7 @@ def enqueue(
         db.flush()
         return
 
-    # No existing row — create fresh.
+    # No existing row - create fresh.
     nxt = _next_attempt_at(1)
     row = AiRetryQueueRow(
         report_id=report_id,
@@ -212,8 +212,8 @@ def _run_one_attempt(db: Session) -> int:
 
     # Lock the row we pick up for the duration of this txn so the
     # (very unlikely) case of two daemon threads racing each other
-    # — e.g. during a rolling deploy where two backend instances
-    # overlap — doesn't double-process the same row.
+    # - e.g. during a rolling deploy where two backend instances
+    # overlap - doesn't double-process the same row.
     row = db.query(AiRetryQueueRow).filter(
         AiRetryQueueRow.status == "pending",
         AiRetryQueueRow.next_attempt_at <= now,
@@ -280,7 +280,7 @@ def _run_one_attempt(db: Session) -> int:
 
 
 def _ai_retry_loop() -> None:
-    """Daemon thread — polls the queue every ``_AI_RETRY_TICK_S``
+    """Daemon thread - polls the queue every ``_AI_RETRY_TICK_S``
     seconds. Drains all ready rows on each tick (one row per inner
     iteration to bound transaction scope).
     """
@@ -317,7 +317,7 @@ def _ai_retry_loop() -> None:
 
 
 def reclaim_stuck_in_progress(db: Session, *, older_than_minutes: int = 30) -> int:
-    """Boot-time helper — flip rows stuck in ``in_progress`` for
+    """Boot-time helper - flip rows stuck in ``in_progress`` for
     longer than ``older_than_minutes`` back to ``pending`` so the
     daemon retries them.
 

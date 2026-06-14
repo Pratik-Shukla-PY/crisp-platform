@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Phase F.7 — lang attribute is set dynamically by applyI18n() from
+<!-- Phase F.7 - lang attribute is set dynamically by applyI18n() from
      the operator's localStorage preference / navigator.language. The
      `lang="en"` here is just the cold-load fallback. -->
 <html lang="en">
@@ -11,10 +11,10 @@
          empty in source; deploy pipeline patches with the real DSN
          (public-safe write-only key). -->
     <meta name="crisp-sentry-dsn" content="">
-    <meta name="crisp-release" content="crisp-dashboard@v52">
-    <meta name="description" content="United Nations Crisis Response Intelligence System — hierarchical incident monitoring and strategic command center.">
+    <meta name="crisp-release" content="crisp-dashboard@v53">
+    <meta name="description" content="United Nations Crisis Response Intelligence System - hierarchical incident monitoring and strategic command center.">
     <meta name="theme-color" content="#7c3aed">
-    <!-- May 2026 — favicon. SVG works in modern browsers (Chrome 80+,
+    <!-- May 2026 - favicon. SVG works in modern browsers (Chrome 80+,
          Firefox 90+, Safari 16+); the bare /favicon.ico request from
          older browsers is satisfied by an nginx alias that serves the
          same SVG with image/svg+xml content-type. Apple touch icon
@@ -22,7 +22,7 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="../../mobile-app/src/assets/icon-192.png">
     <link rel="manifest" href="manifest.json">
-    <!-- May 2026 — Outfit + JetBrains Mono self-hosted from
+    <!-- May 2026 - Outfit + JetBrains Mono self-hosted from
          fonts/fonts.css (latin subset). Inter + Noto Sans Arabic /
          Noto Sans SC stay on Google Fonts because (a) Inter / Noto
          self-host work is queued for Sprint 2b, and (b) Noto Sans
@@ -38,9 +38,9 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <link rel="stylesheet" href="fonts/fontawesome/all.min.css">
-    <!-- PhotoSwipe v5 — MIT, vanilla JS, ~37 KB gzipped. Gives the multi-photo
+    <!-- PhotoSwipe v5 - MIT, vanilla JS, ~37 KB gzipped. Gives the multi-photo
          lightbox swipe / pinch-zoom / keyboard nav out of the box. CDN pattern
-         matches the existing Leaflet / Turf approach (no bundler — package.json
+         matches the existing Leaflet / Turf approach (no bundler - package.json
          is empty by design). UMD build because the dashboard loads modules via
          classic <script> tags. -->
     <link rel="stylesheet" href="https://unpkg.com/photoswipe@5.4.4/dist/photoswipe.css">
@@ -53,7 +53,7 @@
     <!-- Top Command Bar -->
     <header class="command-bar glass-panel">
         <div class="brand">
-            <!-- May 2026 — FA satellite-dish replaced with the new
+            <!-- May 2026 - FA satellite-dish replaced with the new
                  ripple-tile brand mark for consistency with the PWA. -->
             <div class="brand-icon" aria-hidden="true">
                 <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CRISP">
@@ -78,7 +78,7 @@
             </div>
             <div class="live-badge" id="cache-freshness-badge"><span class="live-dot"></span>LIVE</div>
 
-            <!-- Phase J.1 (May 2026) — User chip is now a dropdown
+            <!-- Phase J.1 (May 2026) - User chip is now a dropdown
                  menu host. Click → reveals admin-only items
                  (Moderation, Pending Deletions) plus the logout
                  action. Previously these admin
@@ -98,7 +98,7 @@
                     <i class="fa-solid fa-caret-down" style="font-size:9px;opacity:0.65;margin-left:4px;"></i>
                 </button>
                 <div class="user-menu-dropdown" id="user-menu-dropdown" style="display:none;">
-                    <!-- Phase 5.1 — Admin Moderation overlay. Visibility
+                    <!-- Phase 5.1 - Admin Moderation overlay. Visibility
                          gated to ADMIN/SUPER_ADMIN by
                          _maybeShowModerationButton(). The badge counter is
                          a coloured dot to the right of the label. -->
@@ -126,7 +126,7 @@
             </div>
         </div>
 
-        <!-- Phase F.1.b (May 2026) — header chip consolidation.
+        <!-- Phase F.1.b (May 2026) - header chip consolidation.
              Five separate status pills (CRITICAL / PENDING / HELPED /
              CLOSED / TOTAL) collapse into one segmented control with a
              count-bubble per state. ORIG PENDING is hidden from the
@@ -160,7 +160,7 @@
                     <span class="cmd-status-seg-label">TOTAL</span>
                 </button>
             </div>
-            <!-- ORIG PENDING — Phase F.1.b: hidden from header (was a
+            <!-- ORIG PENDING - Phase F.1.b: hidden from header (was a
                  conditional pill that oscillated bar width as it
                  appeared / disappeared at count 0). Element retained
                  in the DOM with a stable id so updateCommandStats
@@ -168,15 +168,15 @@
                  surface it via a per-card chip on incidents that
                  actually have an Original-pending media row. -->
             <div class="stat-pill originals_pending clickable-pill" id="stat-originals-pending" onclick="filterByPill('originals_pending')" title="Reports whose Original-quality (LARGE) image is still uploading" style="display:none !important;" aria-hidden="true"><span id="count-originals-pending">0</span><label>ORIG PENDING</label></div>
-            <div class="stat-pill avg-response" id="stat-avg-response" title="Average wait time of pending incidents"><span id="count-avg-response">—</span><label>AVG WAIT</label></div>
-            <!-- Phase J.1 (May 2026) — ANALYTICS + PREDICT pills moved
+            <div class="stat-pill avg-response" id="stat-avg-response" title="Average wait time of pending incidents"><span id="count-avg-response">-</span><label>AVG WAIT</label></div>
+            <!-- Phase J.1 (May 2026) - ANALYTICS + PREDICT pills moved
                  into the Tools dropdown below to reduce header density.
                  Each still toggles a full-page overlay via the existing
                  toggleAnalytics() / togglePredictions() handlers. -->
         </div>
 
         <div class="command-actions">
-            <!-- Phase F.1.b — time filters collapse from a three-button
+            <!-- Phase F.1.b - time filters collapse from a three-button
                  row into a dropdown. The dropdown's trigger button shows
                  the currently-selected range; the menu items mirror the
                  previous setTimeFilter(N) calls. setTimeFilter (defined
@@ -195,7 +195,7 @@
                 </div>
             </div>
 
-            <!-- Phase J.1 (May 2026) — Tools dropdown.
+            <!-- Phase J.1 (May 2026) - Tools dropdown.
                  Collapses ANALYTICS + PREDICT + Export + Bulk-Select +
                  Language from 5 standalone header buttons into a single
                  dropdown. Each handler is unchanged; we just re-parented
@@ -207,7 +207,7 @@
                  row above). -->
             <button class="icon-btn" id="cmd-export-center"
                     onclick="window.__crispRouter && window.__crispRouter.navigate('/exports')"
-                    title="Export Center — download CSV / GIS / PDF with scope preview">
+                    title="Export Center - download CSV / GIS / PDF with scope preview">
                 <i class="fa-solid fa-download"></i>
                 <span>Export</span>
             </button>
@@ -242,14 +242,14 @@
                         <i class="fa-solid fa-list-check"></i>
                         <span data-i18n="btn_select">Bulk select</span>
                     </button>
-                    <!-- Phase G.6 (May 2026) — Saved views inside Tools -->
+                    <!-- Phase G.6 (May 2026) - Saved views inside Tools -->
                     <button class="tools-menu-item" id="tools-item-views"
                             onclick="toggleSavedViewsMenu();this.closest('.export-dropdown').classList.remove('open')">
                         <i class="fa-regular fa-bookmark"></i>
                         <span data-i18n="btn_views">Saved views</span>
                     </button>
 
-                    <!-- Export submenu — keep CSV/GeoJSON/Shapefile/KML
+                    <!-- Export submenu - keep CSV/GeoJSON/Shapefile/KML
                          under one chevron-flagged label so the menu
                          depth stays single-level for casual use but
                          the full list is one click away. -->
@@ -270,7 +270,7 @@
                     </div>
 
                     <div class="tools-menu-divider"></div>
-                    <!-- Display — language picker nested. Existing
+                    <!-- Display - language picker nested. Existing
                          toggleDashboardLanguageMenu opens the original
                          dash-lang-menu container (still in the DOM,
                          still i18n-driven). We just move the trigger. -->
@@ -302,7 +302,7 @@
                     <div class="notif-list" id="notif-list">
                         <div class="notif-empty">No new incidents</div>
                     </div>
-                    <!-- Jun 2026 — notification deep-links. The bell now lives in
+                    <!-- Jun 2026 - notification deep-links. The bell now lives in
                          the global shell (crisp-shell.js); these shortcuts route
                          straight into the relevant operational queue from any
                          page via the existing #/incidents;queue=<key> router. -->
@@ -317,7 +317,7 @@
         </div>
     </header>
 
-    <!-- Phase G.1 (May 2026) — Stacking multi-filter chips.
+    <!-- Phase G.1 (May 2026) - Stacking multi-filter chips.
          Sits just below the command bar so the existing status segment +
          time dropdown stay the primary filters; chips stack on top of them
          with AND semantics. Each chip toggles its own state; multiple
@@ -364,7 +364,7 @@
             <i class="fa-solid fa-xmark"></i> <span data-i18n="chip_clear_all">Clear filters</span>
         </button>
 
-        <!-- Phase G.6 (May 2026) — Saved view presets. localStorage-
+        <!-- Phase G.6 (May 2026) - Saved view presets. localStorage-
              only (no backend); presets capture the current filter
              chip set, status pill, time filter, view mode, and sort
              mode under an operator-chosen name. -->
@@ -372,7 +372,7 @@
             <button class="cmd-filter-chip cmd-views-toggle"
                     id="cmd-views-toggle"
                     onclick="toggleSavedViewsMenu()"
-                    title="Saved views — capture and recall filter sets">
+                    title="Saved views - capture and recall filter sets">
                 <i class="fa-regular fa-bookmark"></i><span>Views</span>
                 <i class="fa-solid fa-caret-down" style="font-size:9px;opacity:0.6;margin-left:2px;"></i>
             </button>
@@ -459,8 +459,8 @@
                 </div>
             </div>
 
-            <!-- Phase G.4 (May 2026) — Drill-down breakdowns.
-                 Three actionable surfaces — each click takes the
+            <!-- Phase G.4 (May 2026) - Drill-down breakdowns.
+                 Three actionable surfaces - each click takes the
                  operator from the analytics panel back into the
                  triage workflow with the relevant filter applied. -->
             <div class="analytics-grid analytics-grid-drill">
@@ -496,7 +496,7 @@
         <div class="del-panel-footer" id="del-panel-footer"></div>
     </div>
 
-    <!-- Phase 5.1 (May 2026, docs/NEARBY_REPORTS_PIPELINE.md §7+§17) —
+    <!-- Phase 5.1 (May 2026, docs/NEARBY_REPORTS_PIPELINE.md §7+§17) -
          Moderation overlay. Two-tab layout: Triage (acute clusters)
          + Appeals (open device-suspension appeals). Reuses the
          .deletions-panel scaffold so we share
@@ -607,7 +607,7 @@
         <div class="detail-header">
             <button class="close-btn" onclick="closeDetail()"><i class="fa-solid fa-xmark"></i></button>
             <h3 id="detail-title">Incident Detail</h3>
-            <!-- Phase G.3 — Full-report max-modal toggle. Expands the detail
+            <!-- Phase G.3 - Full-report max-modal toggle. Expands the detail
                  panel to cover the feed + map for a distraction-free
                  reading + printing experience. -->
             <button class="dp-fullscreen-btn"
@@ -623,7 +623,7 @@
 </main>
 
 
-<!-- Phase G.5 (May 2026) — Bulk-action floating bar. Appears at the
+<!-- Phase G.5 (May 2026) - Bulk-action floating bar. Appears at the
      bottom of the viewport whenever bulk-select mode is on AND at
      least one card is checked. Sticky so it stays visible while the
      operator scrolls through more cards. -->
@@ -661,27 +661,27 @@
      across the 6 → 7 boundary. 7.x ships ES modules + tree-shaking
      for any future bundler-based build. -->
 <script src="https://unpkg.com/@turf/turf@7.2.0/turf.min.js"></script>
-<!-- PhotoSwipe v5 — UMD bundle exposes `window.PhotoSwipe` and
+<!-- PhotoSwipe v5 - UMD bundle exposes `window.PhotoSwipe` and
      `window.PhotoSwipeLightbox`. Must load BEFORE app.js so openGallery()
      can construct a lightbox on the first click. We load the lightbox
      wrapper *after* the core (its bundle wraps core access through
      `PhotoSwipe`). MIT licensed, project-Apache-2.0-compatible. -->
 <script src="https://unpkg.com/photoswipe@5.4.4/dist/umd/photoswipe.umd.min.js"></script>
 <script src="https://unpkg.com/photoswipe@5.4.4/dist/umd/photoswipe-lightbox.umd.min.js"></script>
-<!-- BlurHash decoder (Phase 1.5) — must load BEFORE app.js so the global
+<!-- BlurHash decoder (Phase 1.5) - must load BEFORE app.js so the global
      `window.BlurHash` is ready when the first `renderFeed()` / `selectReport()`
      runs. Same vendored file as the PWA; see src/blurhash.js header. -->
 <script src="blurhash.js?v=1"></script>
-<!-- Sentry — vendored bundle + init. Loaded first so dashboard JS
+<!-- Sentry - vendored bundle + init. Loaded first so dashboard JS
      errors during boot land in Sentry instead of console-only. -->
 <script src="vendor/sentry.min.js?v=8.30.0"></script>
 <script src="sentry-init.js?v=1"></script>
-<!-- Phase 2.1 (May 2026) — canonical reward-ladder metadata.
+<!-- Phase 2.1 (May 2026) - canonical reward-ladder metadata.
      Generated from shared/tier-config.json via scripts/sync-tier-config.mjs.
      Defines window.CRISP_TIERS{,BY_ID,LEGACY_ALIASES}; must load BEFORE
      app.js so the reporter_tier-badge renderer can read it synchronously. -->
 <script src="tier-config.js?v=1"></script>
-<script src="app.js?v=789"></script>
+<script src="app.js?v=790"></script>
 <script src="predictions.js?v=111"></script>
 <!-- Dynamic Crisis Forms admin panel (geo-scoped Stage 2/3 question packs).
      Self-contained + additive: injects an admin-only "Crisis Forms" item into
@@ -724,7 +724,7 @@
   z-index:9999; gap:10px; align-items:center; box-shadow:0 4px 20px rgba(124,58,237,0.3);
   max-width:520px;">
   <i class="fa-solid fa-wifi" style="color:#f59e0b;font-size:14px"></i>
-  <span id="offline-banner-text">Offline — showing cached data</span>
+  <span id="offline-banner-text">Offline - showing cached data</span>
 </div>
 
 <script>
@@ -743,26 +743,26 @@ if ('serviceWorker' in navigator) {
           }
         });
       });
-      console.log('[CRISP] Service Worker registered — offline mode active');
+      console.log('[CRISP] Service Worker registered - offline mode active');
     }).catch(err => console.warn('[CRISP] SW registration failed:', err));
   });
 }
 
 // ── Offline / online banner ───────────────────────────────────────────────────
 // Apr 2026 fix: ground this in ACTUAL fetch results, not `navigator.onLine`.
-// `navigator.onLine` is notoriously unreliable — it can get stuck at `false`
-// after a transient DHCP renewal or VPN reconnect, leaving the "Offline —
+// `navigator.onLine` is notoriously unreliable - it can get stuck at `false`
+// after a transient DHCP renewal or VPN reconnect, leaving the "Offline -
 // showing cached data" banner visible even when the dashboard is
 // successfully polling the backend. We now expose `window.setDashboardOnline`
 // which is called from `_updateCacheBadge()` in app.js on every poll; real
 // fetch failures light the banner, real successes hide it.
 //
-// Phase F image-reliability (May 2026) — the banner is now gated on
+// Phase F image-reliability (May 2026) - the banner is now gated on
 // `streak >= 3` consecutive failures, not just `ok === false`. A
 // single transient flake (TLS handshake hiccup, DNS retry, brief
 // uplink dropout) used to flicker the banner on/off every 1.2 s
 // during active polling and was operator-trained-noise. Now the
-// banner only appears after 3 back-to-back failures — that's ~4 s in
+// banner only appears after 3 back-to-back failures - that's ~4 s in
 // active-poll mode or ~12 s in normal mode, well past any flicker.
 // On success the streak resets to 0 and the banner hides immediately.
 // The banner text includes the streak count + age-of-last-success so
@@ -787,7 +787,7 @@ function _applyOfflineBanner() {
     const ago = _agoLabel(Date.now() - _dashLastSuccessAt);
     const intervalS = Math.round(_dashPollIntervalMs / 1000);
     offlineBannerTxt.innerHTML =
-      `Offline — last update <strong>${ago}</strong> ago. ` +
+      `Offline - last update <strong>${ago}</strong> ago. ` +
       `<span style="opacity:0.75">Retrying every ${intervalS}s ` +
       `(${_dashFetchFailStreak} consecutive failures).</span>`;
   }

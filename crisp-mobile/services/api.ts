@@ -1,13 +1,13 @@
 /**
- * CRISP API Client — Same endpoints as PWA.
+ * CRISP API Client - Same endpoints as PWA.
  *
  * Backend host resolution (Apr 2026):
- *   1. EXPO_PUBLIC_CRISP_BACKEND env var — hard override (prod builds).
- *   2. Expo Constants.expoConfig.hostUri — auto-detect the Metro host's
+ *   1. EXPO_PUBLIC_CRISP_BACKEND env var - hard override (prod builds).
+ *   2. Expo Constants.expoConfig.hostUri - auto-detect the Metro host's
  *      LAN IP in dev, so `expo start` on a Mac with any DHCP lease
  *      Just Works for testers on Expo Go without editing this file.
  *      Previously we hardcoded an ngrok URL that went stale the moment
- *      the tunnel was torn down — field testers saw "HTTP 404" on
+ *      the tunnel was torn down - field testers saw "HTTP 404" on
  *      POST /reports/meta because the domain no longer pointed anywhere.
  *   3. Final fallback: localhost (only useful on iOS Simulator or an
  *      Android emulator on the same host).
@@ -21,7 +21,7 @@ function _resolveBackendHost(): string {
 
   // Expo injects hostUri like "192.168.1.49:8081" when Metro is running
   // on a LAN IP. Strip the Metro port and swap in the backend's 8000.
-  // `hostUri` can be undefined in a production build — in that case fall
+  // `hostUri` can be undefined in a production build - in that case fall
   // through to the final default.
   const hostUri: string | undefined =
     (Constants as any)?.expoConfig?.hostUri ||
@@ -45,13 +45,13 @@ export function setApiBase(host: string) {
 export function getApiBase() { return API_BASE; }
 
 async function sendJSON(url: string, method: string, body: any, _timeoutMs = 30000): Promise<any> {
-  // No AbortController — React Native's implementation is unreliable and causes
+  // No AbortController - React Native's implementation is unreliable and causes
   // spurious "Aborted" errors. Plain fetch waits for server response naturally.
   const options: any = {
     method,
     headers: { 'Content-Type': 'application/json' },
   };
-  // Phase 1 (Apr 2026 — Optional reporter login). Attach the current
+  // Phase 1 (Apr 2026 - Optional reporter login). Attach the current
   // access token to every JSON call, incl. /reports/meta. Lazy import
   // avoids a circular dep between api.ts + auth.ts (auth calls sendJSON).
   try {
@@ -130,7 +130,7 @@ export async function attachMedia(reportId: string, type: string, dataUrl: strin
   }, 60000);  // 60s timeout for large files
 }
 
-/** DJB2 checksum — MUST match Python backend */
+/** DJB2 checksum - MUST match Python backend */
 export function djb2Checksum(str: string): string {
   let hash = 5381;
   for (let i = 0; i < str.length; i++) {

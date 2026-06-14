@@ -7,26 +7,26 @@ Create Date: 2026-04-22
 UNDP TRL-4 scale claim (up to 500 k reports/crisis, hundreds of crises/yr)
 requires every dashboard + API filter to hit a Postgres index. Pre-this
 migration the `reports` table carried indexes on `client_report_id`,
-`infrastructure_sub_type`, and `building_id` only — which covers the
+`infrastructure_sub_type`, and `building_id` only - which covers the
 identity + dedup paths but NOT the time-range, status, crisis-type, or
 device-id queries that the dashboard + status-since + exports endpoints
 rely on.
 
 Indexes added (all btree, default fillfactor):
 
-    reports.server_created_at              — time-range feed + analytics
-    reports.status                         — dashboard filter pills
-    reports.crisis_type                    — crisis-category analytics
-    reports.severity                       — heatmap + priority sort
-    reports.damage_classification          — export filters
-    reports.device_id                      — my-reports listing
-    reports.reviewer_verdict               — verification / QA queue
-    reports.deletion_requested_at          — purge-worker scan
-    reports(status, server_created_at)     — composite: time-windowed feed
-    reports(building_id, server_created_at) — composite: building history order
-    reports(device_id, server_created_at)   — composite: my-reports order
-    auth_audit_log.created_at              — audit log time-range
-    media.created_at                       — pHash dedup time-window
+    reports.server_created_at              - time-range feed + analytics
+    reports.status                         - dashboard filter pills
+    reports.crisis_type                    - crisis-category analytics
+    reports.severity                       - heatmap + priority sort
+    reports.damage_classification          - export filters
+    reports.device_id                      - my-reports listing
+    reports.reviewer_verdict               - verification / QA queue
+    reports.deletion_requested_at          - purge-worker scan
+    reports(status, server_created_at)     - composite: time-windowed feed
+    reports(building_id, server_created_at) - composite: building history order
+    reports(device_id, server_created_at)   - composite: my-reports order
+    auth_audit_log.created_at              - audit log time-range
+    media.created_at                       - pHash dedup time-window
 
 Verified locally with:
     EXPLAIN ANALYZE SELECT * FROM reports
@@ -34,7 +34,7 @@ Verified locally with:
     ORDER BY server_created_at DESC LIMIT 50;
 → `Index Scan Backward using ix_reports_server_created_at` (was Seq Scan).
 
-Idempotent — every index created with `IF NOT EXISTS`. The downgrade
+Idempotent - every index created with `IF NOT EXISTS`. The downgrade
 drops each individually with `IF EXISTS`.
 """
 from typing import Sequence, Union
@@ -72,7 +72,7 @@ _COMPOSITE = [
 
 
 def upgrade() -> None:
-    # Single-column indexes first — CREATE INDEX IF NOT EXISTS is idempotent
+    # Single-column indexes first - CREATE INDEX IF NOT EXISTS is idempotent
     # even on Postgres (since 9.5). We skip Alembic's DSL because it does
     # NOT emit the `IF NOT EXISTS` clause on index creation.
     for table, column, name in _SINGLE:

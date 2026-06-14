@@ -2,7 +2,7 @@
   "action_tile_audio": "Audio",
   "add_to_homescreen": "+ Ajouter à l'écran d'accueil",
   "aria_add_to_homescreen": "Ajouter CRISP à votre écran d'accueil",
-  "aria_channels_strip": "Autres moyens de signaler — appuyez pour voir tous les canaux",
+  "aria_channels_strip": "Autres moyens de signaler - appuyez pour voir tous les canaux",
   "badge_studio_share_insta": "Instagram",
   "badge_studio_share_li": "LinkedIn",
   "badge_studio_share_linkedin": "LinkedIn",
@@ -35,7 +35,7 @@
   "settings_logout": "Déconnexion",
   "settings_title": "Paramètres",
   "settings_unlink_device": "Dissocier cet appareil",
-  "summary_none": "—",
+  "summary_none": "-",
   "v4_card_infra_label": "Type",
   "v4_card_photo_plural": "photos"
 }

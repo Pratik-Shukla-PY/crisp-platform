@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Phase L (May 2026) — tier-vocabulary regression guard.
+ * Phase L (May 2026) - tier-vocabulary regression guard.
  *
  * After Phase L Batch 1b dropped LOW/HIGH from the backend
  * ResolutionEnum + alembic 0036 dropped them from the Postgres enum,
@@ -15,8 +15,8 @@
  * Run: `node scripts/validate-phase-l-tier-vocab.mjs`
  *
  * Exit codes:
- *   0 — only canonical SMALL/MEDIUM/ORIGINAL strings present
- *   1 — found legacy LOW/HIGH/large/LARGE literal in client code
+ *   0 - only canonical SMALL/MEDIUM/ORIGINAL strings present
+ *   1 - found legacy LOW/HIGH/large/LARGE literal in client code
  */
 
 import fs from 'node:fs';
@@ -28,10 +28,10 @@ const __dirname = path.dirname(__filename);
 const REPO = path.resolve(__dirname, '..');
 
 // Files in scope: PWA bundle, dashboard JS, bot Python, RN client.
-// Backend Python is EXCLUDED — it intentionally has the literals in
+// Backend Python is EXCLUDED - it intentionally has the literals in
 // comments + (where unavoidable) docstrings explaining the rename.
 //
-// May 2026 — added crisp-mobile/ (React Native) after the audit found
+// May 2026 - added crisp-mobile/ (React Native) after the audit found
 // syncEngine.ts + imageVariants.ts still emitting LOW/HIGH to the wire,
 // which the post-Phase-L backend 422s. The validator was scanning every
 // other client but missed RN entirely; that gap is now closed.
@@ -73,13 +73,13 @@ const VIOLATIONS = [
         re: /resolution_tier\s*\)\s*\.toUpperCase\(\)\s*===\s*['"](LOW|HIGH)['"]/g,
         message: "comparison against legacy LOW/HIGH",
     },
-    // m.resolution_tier === 'HIGH' (most common dashboard pattern —
+    // m.resolution_tier === 'HIGH' (most common dashboard pattern -
     // dashboards finding the "largest" tier by name match)
     {
         re: /\.resolution_tier\s*===?\s*['"](LOW|HIGH)['"]/g,
         message: "direct .resolution_tier comparison against legacy LOW/HIGH",
     },
-    // tier === 'large' in JS — the lowercase PWA-internal variant key
+    // tier === 'large' in JS - the lowercase PWA-internal variant key
     {
         re: /tier\s*===?\s*['"]large['"]/g,
         message: "comparison against legacy 'large' variant key",
@@ -94,7 +94,7 @@ const VIOLATIONS = [
         re: /"resolution_tier"\s*:\s*"(LOW|HIGH)"/g,
         message: "Python dict assigning LOW/HIGH to resolution_tier",
     },
-    // TypeScript union-type literal — `'LOW' | 'MEDIUM' | 'HIGH'`.
+    // TypeScript union-type literal - `'LOW' | 'MEDIUM' | 'HIGH'`.
     // Added May 2026 after RN's syncEngine.ts hid the regression inside
     // a Record<...> type annotation that none of the other patterns
     // matched. We require LOW or HIGH to appear next to a `|` so we
@@ -129,7 +129,7 @@ for (const rel of SCAN_PATHS) {
         const trimmed = line.trim();
         if (trimmed.startsWith('//') || trimmed.startsWith('*')
             || trimmed.startsWith('#') || trimmed === '') return;
-        // Strip inline // comments before regex match — a comment at
+        // Strip inline // comments before regex match - a comment at
         // end of line shouldn't trip the validator (false positives
         // came from descriptive comments quoting the legacy strings
         // they were renaming away).
@@ -155,7 +155,7 @@ for (const rel of SCAN_PATHS) {
             const match = re.exec(codeOnly);
             if (match) {
                 console.error(
-                    `\x1b[31m✗\x1b[0m ${rel}:${idx + 1} — ${message}\n` +
+                    `\x1b[31m✗\x1b[0m ${rel}:${idx + 1} - ${message}\n` +
                     `    ${line.trim()}`,
                 );
                 totalViolations++;
@@ -165,9 +165,9 @@ for (const rel of SCAN_PATHS) {
 }
 
 if (totalViolations === 0) {
-    console.log('\x1b[32m✓\x1b[0m PASS — no legacy LOW/HIGH/large/LARGE tier literals in client code.');
+    console.log('\x1b[32m✓\x1b[0m PASS - no legacy LOW/HIGH/large/LARGE tier literals in client code.');
     process.exit(0);
 } else {
-    console.error(`\n\x1b[31mFAIL\x1b[0m — ${totalViolations} legacy tier reference(s). Replace with SMALL/MEDIUM/ORIGINAL.`);
+    console.error(`\n\x1b[31mFAIL\x1b[0m - ${totalViolations} legacy tier reference(s). Replace with SMALL/MEDIUM/ORIGINAL.`);
     process.exit(1);
 }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CRISP — local dev landing</title>
+  <title>CRISP - local dev landing</title>
   <style>
     :root { color-scheme: dark; }
     body {
@@ -41,7 +41,7 @@
   </style>
 </head>
 <body>
-  <h1>CRISP — local dev</h1>
+  <h1>CRISP - local dev</h1>
   <p class="sub">Phone testing landing page. Backend + static server proven reachable.</p>
 
   <a class="tile" href="/mobile-app/src/">
@@ -61,7 +61,7 @@
 
   <script>
     // Hit the backend's /health through its own port. Same-LAN host,
-    // different port — no CORS preflight needed for a GET on a public
+    // different port - no CORS preflight needed for a GET on a public
     // endpoint without custom headers, but the backend's dev CORS
     // regex covers our LAN range either way.
     fetch(`http://${window.location.hostname}:8000/health`, { cache: 'no-store' })

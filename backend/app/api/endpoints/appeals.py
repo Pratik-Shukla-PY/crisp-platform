@@ -26,7 +26,7 @@ Endpoints:
 All endpoints are require_admin gated. Decision events are
 audit-logged in appeal_events with the admin's id.
 
-Webhook integration is out-of-scope for this commit — the schema
+Webhook integration is out-of-scope for this commit - the schema
 supports `webhook_sent` events; the actual outbound delivery is
 left to a Phase-5 background worker.
 """
@@ -193,7 +193,7 @@ def decide_appeal(
     """Decide an open appeal. 'reinstated' clears the device's
     spam_score + spam_signals; 'upheld' / 'banned' leave them
     intact (and per docs §7.5, 'banned' should require 2-admin
-    co-sign — that policy is enforced UI-side in this commit;
+    co-sign - that policy is enforced UI-side in this commit;
     the API accepts the decision either way for the framework
     sketch)."""
     appeal = db.query(Appeal).filter(Appeal.id == appeal_id).first()
@@ -223,9 +223,9 @@ def decide_appeal(
           payload={"from": prior_status, "to": body.decision,
                    "notes": body.notes or ""})
 
-    # Phase 5 (docs §6.4) — outbound webhook to deployment partners.
+    # Phase 5 (docs §6.4) - outbound webhook to deployment partners.
     # CRISP hosts the framework; UNDP / partners integrate via these
-    # webhooks. Best-effort delivery — failure does not block the
+    # webhooks. Best-effort delivery - failure does not block the
     # decision. The `webhook_sent` event is also logged so admins
     # can see what was dispatched.
     try:

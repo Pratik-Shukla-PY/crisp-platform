@@ -1,4 +1,4 @@
-"""geocode_cache — persistent cache for reverse + forward geocoding
+"""geocode_cache - persistent cache for reverse + forward geocoding
 
 Revision ID: 0043_geocode_cache
 Revises: 0042_media_final_face_boxes
@@ -24,7 +24,7 @@ Cache hit semantics:
     AND expires_at > now()
 
 Downgrade drops the table; loses the cache but doesn't break any
-fetch path — geocoder.py falls through to live Mapbox / Nominatim
+fetch path - geocoder.py falls through to live Mapbox / Nominatim
 calls when the table is empty.
 """
 
@@ -59,7 +59,7 @@ def upgrade() -> None:
         ),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
     )
-    # Hot lookup — 4-col composite covers both reverse + forward
+    # Hot lookup - 4-col composite covers both reverse + forward
     # query shapes (forward uses hash(text) in lat_key, 0 in lng_key).
     op.create_index(
         "ix_geocode_cache_lookup",

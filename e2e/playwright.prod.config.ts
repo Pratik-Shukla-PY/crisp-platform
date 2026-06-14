@@ -1,11 +1,11 @@
 /**
- * CRISP — Playwright config for the LIVE PROD smoke suite.
+ * CRISP - Playwright config for the LIVE PROD smoke suite.
  *
  * Different from playwright.config.ts:
- *   • Hits the real prod URL — never localhost.
+ *   • Hits the real prod URL - never localhost.
  *   • Only loads tests under tests/prod/ (read-only audit, never mutates DB).
  *   • Faster timeouts so failures surface in seconds, not after retries.
- *   • Allows 1 retry — DNS or transient network blips shouldn't go red on
+ *   • Allows 1 retry - DNS or transient network blips shouldn't go red on
  *     a single dropped packet, but a real CSP regression is deterministic
  *     and will fail both attempts.
  *
@@ -28,7 +28,7 @@ export default defineConfig({
   ],
   use: {
     headless: true,
-    ignoreHTTPSErrors: false,  // prod has a real cert — fail loud if it's broken
+    ignoreHTTPSErrors: false,  // prod has a real cert - fail loud if it's broken
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'off',
@@ -40,18 +40,18 @@ export default defineConfig({
   // Prod-smoke runs ONLY on mobile-chromium.
   //
   // Earlier this config also shipped a `mobile-safari` project (WebKit
-  // on iPhone-14 viewport) — added in Apr 2026 after the building-select
+  // on iPhone-14 viewport) - added in Apr 2026 after the building-select
   // 0×0-container regression that Chromium silently tolerated but Safari
   // rendered as a blank map. Dropped in May 2026 because the apt-get
   // install of WebKit's system deps (gstreamer, libavformat, libdv,
   // libpocketsphinx, ~100+ multimedia libs) consistently took 6-8 min
-  // on the GitHub `ubuntu-latest` runner — exceeding the prod-smoke
+  // on the GitHub `ubuntu-latest` runner - exceeding the prod-smoke
   // job's 8-min `timeout-minutes` cap and getting cancelled BEFORE
   // any test ran. Net effect: prod-smoke produced no signal on every
   // PROD deploy.
   //
   // The actual smoke tests are engine-agnostic (CSP violations, asset
-  // 404s, console-error capture, fetch-route audit) — none of them
+  // 404s, console-error capture, fetch-route audit) - none of them
   // exercise Safari-specific behaviour. WebKit coverage continues
   // for engine-divergent surfaces via:
   //   · spec 56 cross-browser flag rendering (chromium + firefox +
@@ -63,7 +63,7 @@ export default defineConfig({
   //
   // If a future Safari-only regression is suspected on PROD, run
   // `npx playwright test --config=playwright.prod.config.ts --browser=webkit`
-  // locally — Playwright supports a CLI browser override without a
+  // locally - Playwright supports a CLI browser override without a
   // config project.
   projects: [
     {

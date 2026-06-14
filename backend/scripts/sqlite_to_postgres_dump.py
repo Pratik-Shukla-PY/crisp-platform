@@ -1,7 +1,7 @@
 """One-shot migration: copy the contents of a SQLite crisp_local.db into a
 Postgres `crisp` database.
 
-Apr 2026 — written for the "drop SQLite, go full Postgres" sprint so
+Apr 2026 - written for the "drop SQLite, go full Postgres" sprint so
 developers who accumulated useful test data in `backend/crisp_local.db`
 don't lose it when we delete the SQLite code path.
 
@@ -14,7 +14,7 @@ Usage:
 
 Behaviour:
     * The Postgres target is created by `alembic upgrade head` BEFORE you
-      run this — the script asserts the target schema exists + is empty
+      run this - the script asserts the target schema exists + is empty
       (no reports rows), and refuses to run otherwise.
     * Tables are copied in FK-safe order (devices → reports → media → …).
     * Enum columns copy as strings; both dialects share enum labels
@@ -23,7 +23,7 @@ Behaviour:
       UTC on the way into Postgres's `DateTime(timezone=True)` columns.
     * Batch size 500 per table. Total runtime on an 11 MB SQLite DB with
       ~700 chunks is under 5 seconds on a laptop.
-    * Idempotent on the device_hash uniqueness — re-running against a
+    * Idempotent on the device_hash uniqueness - re-running against a
       partially-populated Postgres will raise on conflict; the assertion
       at the top prevents accidental re-runs.
 
@@ -51,9 +51,9 @@ logger = logging.getLogger("sqlite_to_pg_dump")
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 # Tables that exist in SQLite but shouldn't be copied wholesale:
-#   * alembic_version — Postgres already has the version stamped from
+#   * alembic_version - Postgres already has the version stamped from
 #     `alembic upgrade head`. Don't overwrite.
-#   * sync_logs — ephemeral, can regenerate.
+#   * sync_logs - ephemeral, can regenerate.
 SKIP_TABLES = {"alembic_version", "sync_logs"}
 
 # Preferred copy order for FK safety. We use SQLAlchemy's `sort_tables`
@@ -85,7 +85,7 @@ PREFERRED_ORDER = [
 def _tag_naive_as_utc(value: Any) -> Any:
     """SQLite returns naive datetimes for `DateTime(timezone=True)` columns;
     Postgres rejects them. Tag naives as UTC (matches how the app wrote
-    them — `datetime.now(timezone.utc)` everywhere in the code)."""
+    them - `datetime.now(timezone.utc)` everywhere in the code)."""
     if isinstance(value, datetime) and value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value
@@ -95,11 +95,11 @@ def _copy_table(table_name: str, src: Engine, dst: Engine, batch_size: int = 500
     """Copy all rows from `src.table_name` to `dst.table_name` using
     batched multi-row inserts. Returns the number of rows copied."""
     # Reflect the table from DESTINATION (Postgres) so inserts use the
-    # target's column types — enum casts, tz-aware timestamps, etc.
+    # target's column types - enum casts, tz-aware timestamps, etc.
     dst_meta = MetaData()
     dst_meta.reflect(bind=dst, only=[table_name])
     if table_name not in dst_meta.tables:
-        logger.warning(f"  {table_name}: not in destination — skipping")
+        logger.warning(f"  {table_name}: not in destination - skipping")
         return 0
     target = dst_meta.tables[table_name]
     target_cols = {c.name for c in target.columns}
@@ -160,7 +160,7 @@ def main() -> int:
     dst_inspector = inspect(dst)
     if "reports" not in dst_inspector.get_table_names():
         logger.error(
-            "Target has no `reports` table — run `alembic upgrade head` "
+            "Target has no `reports` table - run `alembic upgrade head` "
             "against the destination Postgres first."
         )
         return 2
@@ -177,7 +177,7 @@ def main() -> int:
             n = conn.execute(text("SELECT COUNT(*) FROM reports")).scalar()
         if n and n > 0:
             logger.error(
-                f"Target already has {n} reports rows — refusing to dump "
+                f"Target already has {n} reports rows - refusing to dump "
                 "(pass --allow-nonempty-target to override). "
                 "Typical fix: `DROP DATABASE crisp; CREATE DATABASE crisp OWNER crisp;` + `alembic upgrade head`."
             )
@@ -190,7 +190,7 @@ def main() -> int:
     src_meta.reflect(bind=src)
     src_tables = set(src_meta.tables.keys()) - SKIP_TABLES
 
-    # Reflect destination too — we only copy tables present on BOTH sides.
+    # Reflect destination too - we only copy tables present on BOTH sides.
     dst_meta = MetaData()
     dst_meta.reflect(bind=dst)
     dst_tables = set(dst_meta.tables.keys())
@@ -216,7 +216,7 @@ def main() -> int:
         try:
             total_rows += _copy_table(t, src, dst)
         except Exception as e:
-            logger.error(f"  {t}: FAILED — {e}")
+            logger.error(f"  {t}: FAILED - {e}")
             raise
 
     logger.info(f"Done. {total_rows} rows copied across {len(ordered)} tables.")

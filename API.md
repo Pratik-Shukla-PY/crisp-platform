@@ -25,7 +25,7 @@ Body: {
 }
 ```
 
-### Create Report (Metadata Only — Progressive Upload Stage 1)
+### Create Report (Metadata Only - Progressive Upload Stage 1)
 ```
 POST /reports/meta
 Content-Type: application/json
@@ -153,7 +153,7 @@ PATCH /reports/{report_id}/dispatch
 PATCH /reports/{report_id}/false-alarm
 ```
 
-### Delete Report (Soft Delete — 24h Grace Period)
+### Delete Report (Soft Delete - 24h Grace Period)
 ```
 DELETE /reports/{report_id}
 ```

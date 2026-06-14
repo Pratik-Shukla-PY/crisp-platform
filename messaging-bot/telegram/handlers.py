@@ -1,9 +1,9 @@
 """
-Telegram Handlers — Zero-friction crisis reporting.
+Telegram Handlers - Zero-friction crisis reporting.
 
 FLOW: Language → Consent → Location → Damage → Infra type → Crisis → Building
       → Debris → Evidence (photo/voice/text) → Done
-      (severity is AUTO-DERIVED from the damage answer — no separate prompt)
+      (severity is AUTO-DERIVED from the damage answer - no separate prompt)
 
 DESIGN PRINCIPLES:
   1. NO EXTRA BUTTONS: Picking a language immediately starts reporting.
@@ -92,7 +92,7 @@ _MAX_PHOTOS = 3
 
 
 def _message_has_capturable(message: dict) -> bool:
-    """True if the message carries something _capture_any_media would keep —
+    """True if the message carries something _capture_any_media would keep -
     used to decide whether to buffer a pre-consent message for replay (Phase 3)."""
     if any(message.get(k) for k in ("photo", "video", "video_note", "voice", "audio", "location")):
         return True
@@ -102,7 +102,7 @@ def _message_has_capturable(message: dict) -> bool:
 
 def _message_is_unsupported_media(message: dict) -> bool:
     """True for media types the bot can't ingest as evidence (sticker /
-    GIF-animation / contact / poll / dice / a file-Document) — so Phase 3 can
+    GIF-animation / contact / poll / dice / a file-Document) - so Phase 3 can
     nudge the reporter instead of silently swallowing what they sent."""
     return any(message.get(k) for k in ("sticker", "animation", "contact", "poll", "dice", "document"))
 
@@ -115,7 +115,7 @@ async def _capture_any_media(session, message: dict):
     """
     captured = False
 
-    # Photo — Phase 4: accept up to _MAX_PHOTOS (Telegram album OR one-by-one).
+    # Photo - Phase 4: accept up to _MAX_PHOTOS (Telegram album OR one-by-one).
     # The FIRST becomes the primary (session.image_data_url); the rest go to
     # session.extra_images and upload as independent ORIGINAL Media rows.
     if message.get("photo"):
@@ -135,12 +135,12 @@ async def _capture_any_media(session, message: dict):
                         _fire_upload(session, upload_extra_images(session))
                 captured = True
         elif file_id and total_photos >= _MAX_PHOTOS:
-            # Cap reached — acknowledge instead of silently dropping the photo.
+            # Cap reached - acknowledge instead of silently dropping the photo.
             await send_text(session.chat_id, t(session.lang, "photo_cap"))
         if message.get("caption"):
             session.text = (session.text + " " + message["caption"]).strip() if session.text else message["caption"]
 
-    # Video — split into audio (priority) + image (thumbnail) + video (deferred)
+    # Video - split into audio (priority) + image (thumbnail) + video (deferred)
     if message.get("video"):
         video = message["video"]
         video_file_id = video.get("file_id")
@@ -199,13 +199,13 @@ async def _capture_any_media(session, message: dict):
                     _fire_upload(session, upload_audio(session))
                 captured = True
 
-    # Location (can update even if already set — user might correct it)
+    # Location (can update even if already set - user might correct it)
     if message.get("location"):
         session.latitude = float(message["location"]["latitude"])
         session.longitude = float(message["location"]["longitude"])
         captured = True
 
-    # Text — always accumulate (never reject text from a person in crisis)
+    # Text - always accumulate (never reject text from a person in crisis)
     text = message.get("text", "").strip()
     if text and not text.startswith("/"):
         sev = SEVERITY_MAP.get(text.lower()) or SEVERITY_MAP.get(text)
@@ -221,7 +221,7 @@ async def _capture_any_media(session, message: dict):
         elif session.state == "STEP_BUILDING_NAME" and not session.infra_name_answered:
             # native-language building name. Cap at
             # 120 chars to match backend `infrastructure_name` column width.
-            # Never overwritten by subsequent messages — once answered, subsequent
+            # Never overwritten by subsequent messages - once answered, subsequent
             # text falls through to the description slot below.
             session.infra_name = text[:120].strip()
             session.infra_name_answered = True
@@ -241,8 +241,8 @@ def _next_missing_step(session) -> str:
     """Flow: Photo → Description → Type → Crisis → Damage → Severity → Location → READY
 
     Photo is INTENTIONALLY soft on Telegram (unlike the PWA + RN apps which
-    hard-require a photo). Text/voice-first users — e.g. reporters on feature
-    phones via SMS/IVR-class channels — must still be able to file a report
+    hard-require a photo). Text/voice-first users - e.g. reporters on feature
+    phones via SMS/IVR-class channels - must still be able to file a report
     even if they can't attach a photo.
     """
     # question sequence reordered to match the
@@ -262,10 +262,10 @@ def _next_missing_step(session) -> str:
     # a prompt rather than a gate. Location now precedes classification so
     # the reporter's working memory of WHERE matches the PWA's stage-where
     # kickoff. Description is asked LAST because most Telegram users
-    # include a caption with their first media — by the time we reach
+    # include a caption with their first media - by the time we reach
     # STEP_DESCRIPTION `session.text` is almost always populated, and we
     # skip to READY.
-    # UX fix — match the PWA/RN 8-stage capture-flow sequence
+    # UX fix - match the PWA/RN 8-stage capture-flow sequence
     # exactly so evaluators comparing channels see the same order:
     #
     #   1 home           ← handled by /start + consent
@@ -273,7 +273,7 @@ def _next_missing_step(session) -> str:
     #   3 infra          → STEP_TYPE
     #   4 crisis + name  → STEP_CRISIS_TYPE, STEP_BUILDING_NAME
     #   5 extras         → STEP_DEBRIS, STEP_SEVERITY  (service + needs
-    #                     skipped on Telegram for brevity — low-friction)
+    #                     skipped on Telegram for brevity - low-friction)
     #   6+7 evidence     → STEP_PHOTO (accepts photo OR voice OR text)
     #   8 submit         → READY
     #
@@ -296,9 +296,9 @@ def _next_missing_step(session) -> str:
     # Phase 0: removed the dead STEP_SEVERITY step. Severity is AUTO-DERIVED
     # from the damage chip in the dmg_ callback (MINIMAL→MINOR / PARTIAL→
     # MODERATE / COMPLETE→SEVERE), so severity_answered is already True by the
-    # time the flow reached here — the prompt was never shown and its chips
+    # time the flow reached here - the prompt was never shown and its chips
     # duplicated the damage chips. The PWA likewise omits a severity question.
-    # Evidence — accepts any of photo, voice, or text. The STEP_PHOTO
+    # Evidence - accepts any of photo, voice, or text. The STEP_PHOTO
     # prompt explicitly invites all three so users aren't forced into
     # a media type they can't produce (feature phones can type; voice-
     # only speakers can record).
@@ -315,7 +315,7 @@ async def _prompt_for_step(session, chat_id: int, step: str):
     can reject button presses from older messages. This is the
     operator-reported "open the bot in two tabs and tap from the stale
     one" defence. Each `send_*` helper returns the Telegram Bot API
-    response; `track_prompt_msg` is a best-effort write — bad responses
+    response; `track_prompt_msg` is a best-effort write - bad responses
     leave `active_prompt_msg_id` alone and the dedupe falls back to the
     existing 2-second-window `is_duplicate_callback`.
     """
@@ -334,7 +334,7 @@ async def _prompt_for_step(session, chat_id: int, step: str):
     elif step == "STEP_SEVERITY":
         result = await send_step_severity(chat_id, lang)
     elif step == "STEP_BUILDING_NAME":
-        # UX fix — if we have GPS, try to offer nearby OSM
+        # UX fix - if we have GPS, try to offer nearby OSM
         # buildings as tap-to-pick chips first. Reporter taps one → done.
         # Timeout/empty-result falls through to the free-text prompt.
         picked = False
@@ -383,7 +383,7 @@ async def handle_update(update: dict):
         session.lang = detected
     text = message.get("text", "").strip()
 
-    # /start always resets — show language picker.
+    # /start always resets - show language picker.
     # also accept an optional payload (`/start <token>`).
     # Telegram delivers t.me/<bot>?start=foo as the message text
     # "/start foo". When the payload is a 32-hex PWA device-hash we
@@ -395,13 +395,13 @@ async def handle_update(update: dict):
         decoded_pwa_hash = _decode_start_token(start_arg)
         clear_session(user_id)
         s = get_or_create_session(user_id, chat_id)
-        # BUGFIX May 2026 (operator-reported) — pre-fix this was an
+        # BUGFIX May 2026 (operator-reported) - pre-fix this was an
         # unconditional `s.lang = detected`, which reverted any
         # previously-picked language back to the Telegram-locale
         # default on every `/start`. The user's pick is persisted to
         # `consent_store.lang` (via `consent_set_lang` from the
         # lang-picker callback below + `consent_grant` at consent
-        # time) — read it back here to restore their choice across
+        # time) - read it back here to restore their choice across
         # session resets.
         s.lang = consent_get_lang(user_id) or detected
         if decoded_pwa_hash:
@@ -410,7 +410,7 @@ async def handle_update(update: dict):
                 "telegram /start linked to PWA device-hash (chat_id=%s)",
                 chat_id,
             )
-        # Phase 1: no forced 9-chip language picker on first contact — language
+        # Phase 1: no forced 9-chip language picker on first contact - language
         # is auto-detected (above) and switchable from the consent card's
         # "Change language" affordance. A returning consented reporter (consent
         # hydrated from the store) jumps straight into the flow.
@@ -424,10 +424,10 @@ async def handle_update(update: dict):
             track_prompt_msg(s, await send_consent_prompt(chat_id, s.lang))
         return
 
-    # /delete — right to erasure (must-have #10). Drop the in-progress report,
+    # /delete - right to erasure (must-have #10). Drop the in-progress report,
     # REVOKE the persisted consent so the reporter must re-consent before
     # filing anything new, then reset the session. (Previously /delete behaved
-    # exactly like /cancel and left the consent row on disk — the consent_store
+    # exactly like /cancel and left the consent row on disk - the consent_store
     # revoke() was documented as wired here but never actually called.)
     # consent_get_lang now returns None (row gone) → fall back to detected.
     if text.startswith("/delete"):
@@ -442,7 +442,7 @@ async def handle_update(update: dict):
         track_prompt_msg(s, await send_welcome(chat_id, s.lang))
         return
 
-    # /cancel — abort the current report but KEEP consent, so cancelling
+    # /cancel - abort the current report but KEEP consent, so cancelling
     # doesn't force the consent card again on the next report.
     if text.startswith("/cancel"):
         if session.report_id:
@@ -456,7 +456,7 @@ async def handle_update(update: dict):
         return
 
     # Phase 1: a first/idle-session message no longer forces the 9-chip
-    # language picker — language is auto-detected above. Route straight to the
+    # language picker - language is auto-detected above. Route straight to the
     # localized consent card (new reporter) or the next missing step (returning
     # reporter, consent hydrated from the store).
     if session.state in ("START", "DONE", "LANG_SELECT"):
@@ -470,7 +470,7 @@ async def handle_update(update: dict):
             track_prompt_msg(session, await send_consent_prompt(chat_id, session.lang))
         return
 
-    # P3.5 — Consent-gate: if waiting on consent (or never consented), any
+    # P3.5 - Consent-gate: if waiting on consent (or never consented), any
     # inbound text/media is ignored and the consent card is re-shown. No
     # side-effect captures, no DB writes.
     # Apr-2026: hydrate from persisted consent store first so a returning
@@ -480,13 +480,13 @@ async def handle_update(update: dict):
     if session.state == "AWAIT_CONSENT" or not session.consented:
         # Phase 3: buffer a cold "X-first" message (photo / location pin / a few
         # words sent before the consent tap) so it's replayed after consent
-        # instead of silently dropped — an impatient reporter never loses input.
+        # instead of silently dropped - an impatient reporter never loses input.
         if _message_has_capturable(message):
             session.pending_message = message
         track_prompt_msg(session, await send_consent_prompt(chat_id, session.lang))
         return
 
-    # ADD_MORE state — user is adding details to an already-submitted report
+    # ADD_MORE state - user is adding details to an already-submitted report
     if session.state == "ADD_MORE" and session.report_id:
         await _capture_any_media(session, message)
         await send_text(chat_id, "✅ " + t(session.lang, "add_more_done") + "\n\n📎 Send more, or tap Done 👇")
@@ -523,12 +523,12 @@ async def handle_update(update: dict):
         if geo:
             session.latitude, session.longitude, session.location_name = geo
             session.geocoding_source = "telegram_forward_geocode"
-            session.geocoding_confidence = 0.3   # low — typed place name
+            session.geocoding_confidence = 0.3   # low - typed place name
             await send_text(chat_id, "📍 " + (session.location_name or t(session.lang, "step_loc_done")))
             if session.report_id:
                 await update_report_location(session)
 
-    # P2.8 — Defer server-side report creation until the session has a minimal
+    # P2.8 - Defer server-side report creation until the session has a minimal
     # viable set of fields (photo OR audio, plus location or explicit text).
     # The previous "aggressive early submit on any data" created partial rows
     # that stranded in the DB with severity='UNKNOWN' when users dropped off
@@ -565,21 +565,21 @@ async def handle_update(update: dict):
     if next_step == "READY":
         await _finalize(session)
     elif session.state != next_step:
-        # Step changed — send the new prompt
+        # Step changed - send the new prompt
         session.state = next_step
         await _prompt_for_step(session, chat_id, next_step)
     else:
-        # Same step — no advance. Phase 3: don't leave the user in silence.
+        # Same step - no advance. Phase 3: don't leave the user in silence.
         if not captured and _message_is_unsupported_media(message):
-            # Sticker / GIF / file-Document / contact — acknowledge instead of
+            # Sticker / GIF / file-Document / contact - acknowledge instead of
             # silently swallowing what looked (to the user) like evidence.
             await send_text(chat_id, t(session.lang, "unsupported_media"))
         elif (text and not text.startswith("/") and session.state in _TAP_ONLY_STEPS):
-            # Stray text typed on a tap-only step — re-send the current prompt
+            # Stray text typed on a tap-only step - re-send the current prompt
             # so the user knows to tap a button (their text is still kept on
             # the description by _capture_any_media above).
             await _prompt_for_step(session, chat_id, session.state)
-        # else: bonus data on a non-tap step (e.g. extra photo) — no re-prompt
+        # else: bonus data on a non-tap step (e.g. extra photo) - no re-prompt
 
 
 async def _handle_callback(callback_query: dict):
@@ -600,10 +600,10 @@ async def _handle_callback(callback_query: dict):
         session.lang = detected
     lang = session.lang
 
-    # BUGFIX May 2026 — stale-message dedupe (operator-reported).
+    # BUGFIX May 2026 - stale-message dedupe (operator-reported).
     #
     # Scenario: user opens the bot in two phone tabs. They pick the
-    # crisis type from tab A — state advances, a new prompt is sent.
+    # crisis type from tab A - state advances, a new prompt is sent.
     # They scroll up in tab B (or come back hours later) and tap the
     # same crisis chip on the OLD inline keyboard. Different cq_id,
     # identical `data`, way outside the 2 s `is_duplicate_callback`
@@ -624,12 +624,12 @@ async def _handle_callback(callback_query: dict):
         except Exception:
             pass
         logger.info(
-            f"telegram callback dropped — stale message {callback_msg_id} "
+            f"telegram callback dropped - stale message {callback_msg_id} "
             f"vs active {session.active_prompt_msg_id} (data={data})"
         )
         return
 
-    # UX fix — multi-tap debounce. Users tap a chip, see nothing
+    # UX fix - multi-tap debounce. Users tap a chip, see nothing
     # for 500-800 ms while the backend roundtrip runs, tap again in
     # frustration. Without this guard the second callback fires the
     # same handler (crisis_type clicked twice → re-sends the next-step
@@ -641,7 +641,7 @@ async def _handle_callback(callback_query: dict):
             pass
         return
 
-    # The callback has been accepted as fresh — clear the inline
+    # The callback has been accepted as fresh - clear the inline
     # keyboard on the *active* prompt so the user can't physically
     # tap the same button again from this message. The next prompt
     # (sent below by `_prompt_for_step`) becomes the new active one.
@@ -651,12 +651,12 @@ async def _handle_callback(callback_query: dict):
     except Exception:
         pass
 
-    # P3.5 — Language selection routes through consent before any data is
+    # P3.5 - Language selection routes through consent before any data is
     # captured. Apr-2026 fix: consent is persisted to SQLite keyed by
     # `user_id`, so a returning reporter skips the consent card entirely.
     # In-memory `session.consented` is mirrored from the store on first
     # lookup so the rest of the flow keeps working unchanged.
-    # Phase 1: explicit "Change language" affordance — shows the 9-chip grid
+    # Phase 1: explicit "Change language" affordance - shows the 9-chip grid
     # on demand (the grid is no longer a forced first step). After a pick the
     # lang_ handler below re-shows the localized consent card if not yet
     # consented, else re-prompts the current step in the new language.
@@ -669,10 +669,10 @@ async def _handle_callback(callback_query: dict):
         new_lang = data.replace("lang_", "")
         session.lang = new_lang
         await answer_callback(cq_id, f"Language: {new_lang.upper()}")
-        # Hydrate from the consent store — asked once, remembered forever.
+        # Hydrate from the consent store - asked once, remembered forever.
         if not session.consented and consent_has(user_id):
             session.consented = True
-        # BUGFIX May 2026 (operator-reported) — persist the user's pick
+        # BUGFIX May 2026 (operator-reported) - persist the user's pick
         # to the consent_store so `/start` (which calls clear_session)
         # can restore it instead of reverting to the Telegram-locale
         # default. UPDATE-only on the store row: only takes effect
@@ -692,7 +692,7 @@ async def _handle_callback(callback_query: dict):
             track_prompt_msg(session, await send_consent_prompt(chat_id, new_lang))
         return
 
-    # User accepted the consent card — proceed to reporting flow.
+    # User accepted the consent card - proceed to reporting flow.
     if data == "consent_accept":
         session.consented = True
         consent_grant(user_id, session.lang)     # persist → never re-ask
@@ -730,19 +730,19 @@ async def _handle_callback(callback_query: dict):
         await _prompt_for_step(session, chat_id, session.state)
         return
 
-    # User declined — wipe session and bid farewell. Nothing captured so
+    # User declined - wipe session and bid farewell. Nothing captured so
     # nothing to delete.
     if data == "consent_decline":
         await answer_callback(cq_id)
         await send_text(
             chat_id,
             "🙏 " + (t(session.lang, "consent_declined")
-                    or "Understood — no data collected. Send /start anytime to try again.")
+                    or "Understood - no data collected. Send /start anytime to try again.")
         )
         clear_session(user_id)
         return
 
-    # Phase 5 — pre-submit review card.
+    # Phase 5 - pre-submit review card.
     # ✅ Send: confirm the review and commit. The idempotent latch in
     # _finalize makes a double-tap a no-op.
     if data == "review_send":
@@ -828,7 +828,7 @@ async def _handle_callback(callback_query: dict):
         if session.report_id:
             await delete_report(session)
         await answer_callback(cq_id)
-        # Preserve the user's pick — see the /start handler in
+        # Preserve the user's pick - see the /start handler in
         # _handle_text for the same restore pattern.
         carried_lang = session.lang or consent_get_lang(user_id) or detected
         clear_session(user_id)
@@ -842,7 +842,7 @@ async def _handle_callback(callback_query: dict):
     if data == "skip_photo":
         session.state = "STEP_DESCRIPTION"
         await answer_callback(cq_id)
-        # BUGFIX May 2026 — track this prompt's message_id on the session
+        # BUGFIX May 2026 - track this prompt's message_id on the session
         # so the stale-message dedupe at the top of _handle_callback
         # doesn't silently DROP the next callback as "stale". Pre-fix,
         # this `send_step_description` was untracked → active_prompt_msg_id
@@ -870,7 +870,7 @@ async def _handle_callback(callback_query: dict):
         await _finalize(session)
         return
 
-    # ── Telegram UX — OSM building pick: `bldg:osm:way:<id>`
+    # ── Telegram UX - OSM building pick: `bldg:osm:way:<id>`
     # (or `bldg:osm:relation:<id>`). Resolves directly to session.building_id
     # + mirrors the OSM name into `infra_name` via update_report_metadata.
     if data.startswith("bldg:osm:"):
@@ -890,14 +890,14 @@ async def _handle_callback(callback_query: dict):
     # User prefers to type the name freehand. Show the free-text prompt.
     if data == "bldg_type":
         await answer_callback(cq_id)
-        # BUGFIX May 2026 — track this prompt's message_id (same reason
+        # BUGFIX May 2026 - track this prompt's message_id (same reason
         # as the skip_photo branch above). Without this, the user's
         # next text reply / button tap on the free-text building prompt
         # would be dropped as stale by is_stale_callback_message.
         track_prompt_msg(session, await send_step_building_name(chat_id, session.lang or detected))
         return
 
-    # ── — skip the native-language building prompt.
+    # ── - skip the native-language building prompt.
     # The reporter chose not to name the building. Mark the slot answered so
     # `_next_missing_step` advances; `infra_name` stays empty.
     if data == "skip_building":
@@ -911,7 +911,7 @@ async def _handle_callback(callback_query: dict):
             await _prompt_for_step(session, chat_id, next_step)
         return
 
-    # ── — debris Yes/No.
+    # ── - debris Yes/No.
     # Tapping either flips `debris_answered=True` and records the value
     # on `debris_needed`; the flow then advances to the next missing step.
     if data in DEBRIS_MAP:
@@ -927,7 +927,7 @@ async def _handle_callback(callback_query: dict):
             await _prompt_for_step(session, chat_id, next_step)
         return
 
-    # — grouped crisis keyboard renders "— GROUP —" separator
+    # - grouped crisis keyboard renders "- GROUP -" separator
     # buttons for visual clarity. They carry a `noop_group_*` callback
     # that silently ACKs the tap so the user doesn't see a spinner.
     if data.startswith("noop_"):
@@ -982,7 +982,7 @@ async def _handle_callback(callback_query: dict):
         return
 
     # ── Damage classification buttons ──
-    # UX parity with PWA — severity is auto-derived from damage:
+    # UX parity with PWA - severity is auto-derived from damage:
     # MINIMAL→MINOR, PARTIAL→MODERATE, COMPLETE→SEVERE. Saves one chip
     # step and matches what the PWA / RN flows do. Reporters can still
     # override on the severity prompt if we ever keep it in the future.
@@ -1010,7 +1010,7 @@ async def _handle_callback(callback_query: dict):
 
 
 def _review_summary(session) -> str:
-    """Phase 5 — build the pre-submit review card body: one line per captured
+    """Phase 5 - build the pre-submit review card body: one line per captured
     field (localized label : the reporter's own pick). Skips empty fields.
     Crisis/type/damage values are the canonical enums the reporter chose
     (readable: EARTHQUAKE / RESIDENTIAL / COMPLETE); localizing the VALUE
@@ -1037,7 +1037,7 @@ def _review_summary(session) -> str:
         else:
             dtxt = t(lang, "debris_na")
         lines.append(f"🚜 *{t(lang, 'review_debris')}:* {dtxt}")
-    # Evidence — count photos (primary + extras) + audio + text flags.
+    # Evidence - count photos (primary + extras) + audio + text flags.
     ev = []
     n_photos = (1 if session.image_data_url else 0) + len(session.extra_images)
     if n_photos:
@@ -1095,16 +1095,16 @@ async def _finalize(session):
     lang = session.lang
     chat_id = session.chat_id
     # Idempotent submit latch (HC80 analogue): once a submit is in flight or
-    # done, never file again — a double-tap of ✅ Send is a no-op.
+    # done, never file again - a double-tap of ✅ Send is a no-op.
     if session.submitted:
         return
-    # Phase 5 — pre-submit review gate. Show the confirm card once and wait for
+    # Phase 5 - pre-submit review gate. Show the confirm card once and wait for
     # ✅ Send; a ✏️ Fix resets `reviewed` so the card re-appears after the edit.
     if not session.reviewed:
         session.state = "REVIEW"
         track_prompt_msg(session, await send_review_card(chat_id, lang, _review_summary(session)))
         return
-    session.submitted = True   # latch BEFORE the await — double-tap safe
+    session.submitted = True   # latch BEFORE the await - double-tap safe
     report_id = await submit_report(session)
     if report_id:
         await send_confirmation(
@@ -1121,5 +1121,5 @@ async def _finalize(session):
         if session.video_data_url:
             _fire_upload(session, upload_video_deferred(session))
     else:
-        session.submitted = False   # submission failed — allow a retry
+        session.submitted = False   # submission failed - allow a retry
         await send_text(chat_id, t(lang, "error"))

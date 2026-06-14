@@ -14,7 +14,7 @@ Design notes:
   * Ranks by centroid distance so closer buildings come first. The
     user is usually inside or adjacent to the damaged structure; the
     top-1 is almost always the right pick.
-  * Deduplicates by name — two OSM ways for a single building (one
+  * Deduplicates by name - two OSM ways for a single building (one
     for each wing) collapse into one chip to save screen space.
   * Returns a list of `{id, name, distance_m}` dicts suitable for
     rendering as inline keyboard buttons. `name` is the best label
@@ -101,7 +101,7 @@ async def nearby_buildings(lat: float, lng: float, limit: int = 5) -> List[Dict[
                 data={"data": query},
                 headers={
                     "Content-Type": "application/x-www-form-urlencoded",
-                    # See _USER_AGENT comment — Overpass 406s the default.
+                    # See _USER_AGENT comment - Overpass 406s the default.
                     "User-Agent": _USER_AGENT,
                     "Accept": _ACCEPT,
                 },

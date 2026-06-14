@@ -1,4 +1,4 @@
-"""media.watermark_applied — server-side geotag burn-in idempotency (HC98)
+"""media.watermark_applied - server-side geotag burn-in idempotency (HC98)
 
 Adds a boolean flag set once the geotag caption + GPS EXIF have been stamped
 into a media's stored bytes, so the PII-blur worker can't double-stamp on retry.

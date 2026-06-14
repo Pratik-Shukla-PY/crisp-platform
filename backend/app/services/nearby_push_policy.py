@@ -1,10 +1,10 @@
 """
-nearby_push_policy — Phase 4 push-notification eligibility rules.
+nearby_push_policy - Phase 4 push-notification eligibility rules.
 
 Docs/NEARBY_REPORTS_PIPELINE.md §8. Single function that, given a
 NearbyGroup, decides whether a push notification should be
 DISPATCHED. The actual SW Push delivery lives in
-`app/services/push.py` — this module is the policy layer between
+`app/services/push.py` - this module is the policy layer between
 the aggregator's signal and the delivery layer.
 
 Hybrid policy (operator decision per docs §8.1):
@@ -18,7 +18,7 @@ Hybrid policy (operator decision per docs §8.1):
     saved-location radius (existing channel).
 
 Frequency caps live in settings.CRISP_PUSH_FREQUENCY_CAP_PER_USER_
-PER_HOUR — enforced by the delivery layer, not here.
+PER_HOUR - enforced by the delivery layer, not here.
 """
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ class PushDecision:
 def evaluate_push_eligibility(group: NearbyGroup) -> PushDecision:
     """Decide whether `group` warrants a push notification.
 
-    Doesn't perform the push — just returns the decision so the
+    Doesn't perform the push - just returns the decision so the
     caller can route it to the appropriate delivery channel.
     """
     if group.is_acute and group.acute_grade == "high":

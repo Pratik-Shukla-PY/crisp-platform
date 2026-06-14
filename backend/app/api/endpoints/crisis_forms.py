@@ -1,7 +1,7 @@
-"""Dynamic Crisis Forms — geo-scoped Stage 2/3 question packs.
+"""Dynamic Crisis Forms - geo-scoped Stage 2/3 question packs.
 
 Public:
-  GET  /api/v1/crisis-forms/active?lat=&lng=        cacheable — which pack (if any)
+  GET  /api/v1/crisis-forms/active?lat=&lng=        cacheable - which pack (if any)
                                                     applies at this point right now
 Admin (require_admin):
   GET/POST/PATCH/DELETE  /api/v1/admin/crisis-forms/events[/{id}]
@@ -13,7 +13,7 @@ Admin (require_admin):
 
 Asymmetric auth mirrors admin.py: clients hit /active without a JWT (cheap,
 cacheable, leaks nothing personal); operators mutate behind require_admin.
-The default report flow is untouched — /active simply returns {active:false}
+The default report flow is untouched - /active simply returns {active:false}
 for any point outside an active, in-window zone, and clients fall back to the
 hardcoded Stage 2/3.
 """
@@ -70,14 +70,14 @@ def resolve_active_event(db: Session, lat: float, lng: float, now: datetime):
     """Return (CrisisEvent, CrisisFormPack, CrisisFormPackVersion) for the
     crisis whose circle contains (lat, lng) right now, or None.
 
-    Single source of truth for "which active crisis applies at this point" —
+    Single source of truth for "which active crisis applies at this point" -
     used both by the public `/active` endpoint (so clients render the right
     Stage 2/3 pack) and by report intake (so the server can derive/verify
     `report.crisis_event_id`). Keeping both callers on the same matcher means a
     client's `/active` answer and the server's intake-time derivation can never
     disagree.
 
-    Matching rule: among `is_active` events, SMALLEST-RADIUS-first — the most
+    Matching rule: among `is_active` events, SMALLEST-RADIUS-first - the most
     specific/precise zone wins when circles overlap (a tighter operation is the
     better home for a point inside both); ties (equal radius) broken by newest
     activation. Skip events with no pack, not yet started, or already ended; the
@@ -136,7 +136,7 @@ def active_crisis_form(
     CrisisEvent whose circle contains (lat,lng); else {active:false}. The most
     specific overlapping zone wins. Clients call this after the Stage-1 location
     fix (and re-call it when the reporter edits the location) and render the pack
-    for Stage 2/3 — or fall back to the default flow when inactive. 60 s cache +
+    for Stage 2/3 - or fall back to the default flow when inactive. 60 s cache +
     ETag (zones change rarely)."""
     now = datetime.now(timezone.utc)
     match = resolve_active_event(db, lat, lng, now)
@@ -165,18 +165,18 @@ def active_crisis_form(
 @operations_router.get("/", response_model=List[OperationSummaryResponse], include_in_schema=False)
 def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)):
     """Every CrisisEvent (operation) + its live report rollup
-    (Critical · New-24h · Total · last activity) in ONE grouped query — no N+1,
-    regardless of operation count (must-have #12) — active operations first.
+    (Critical · New-24h · Total · last activity) in ONE grouped query - no N+1,
+    regardless of operation count (must-have #12) - active operations first.
     Appends a synthetic row (id=None, is_cluster=True) counting
     un-operationalised open-critical reports: the rail's "Launch operation here"
     affordance. Operator-facing (require_viewer); editing stays on the admin
     /admin/crisis-forms/events routes."""
     now = datetime.now(timezone.utc)
     new_cut = now - timedelta(hours=24)
-    prev_cut = now - timedelta(hours=48)   # [48h, 24h) window — trend delta vs new_24h
-    # Report rollup per op — ONE grouped query. The report-only Phase-3 health
+    prev_cut = now - timedelta(hours=48)   # [48h, 24h) window - trend delta vs new_24h
+    # Report rollup per op - ONE grouped query. The report-only Phase-3 health
     # inputs (unattended_critical, sla_breaches, needs_review) fold in as SUM(CASE)
-    # columns; escalation + responders need their own joins (below) — joining them
+    # columns; escalation + responders need their own joins (below) - joining them
     # into this rollup would fan rows out and double-count the SUMs.
     rows = (
         db.query(
@@ -185,7 +185,7 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
             CrisisEvent.center_lat, CrisisEvent.center_lng,
             # P2 card geography/identity/dates (functionally dependent on the PK,
             # so they need no GROUP BY entry under Postgres). form_name comes from
-            # the 1:1 pack outerjoin below — MAX() keeps GROUP BY on the event id.
+            # the 1:1 pack outerjoin below - MAX() keeps GROUP BY on the event id.
             CrisisEvent.radius_km, CrisisEvent.place_name,
             CrisisEvent.started_at, CrisisEvent.ended_at, CrisisEvent.form_pack_id,
             sa_func.max(CrisisFormPack.title).label("form_name"),
@@ -206,7 +206,7 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
                 Report.severity == SeverityEnum.CRITICAL,
                 Report.status.notin_(_OPEN_REPORT_STATUSES_EXCLUDED),
                 Report.help_dispatched_at.is_(None)), 1), else_=0)), 0).label("unattended_critical"),
-            # SLA breaches — mirrors analytics sla_at_risk (per-severity thresholds).
+            # SLA breaches - mirrors analytics sla_at_risk (per-severity thresholds).
             sa_func.coalesce(sa_func.sum(case((and_(
                 Report.status == ReportStatusEnum.PENDING,
                 or_(*[and_(Report.severity == sev, Report.server_created_at < now - timedelta(hours=h))
@@ -221,14 +221,14 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
             Report.crisis_event_id == CrisisEvent.id,
             Report.deletion_requested_at.is_(None),
         ))
-        # 1:1 pack join for the card's form name — does NOT fan out the Report
+        # 1:1 pack join for the card's form name - does NOT fan out the Report
         # SUMs (≤1 pack per event), so the conditional aggregates stay correct.
         .outerjoin(CrisisFormPack, CrisisFormPack.id == CrisisEvent.form_pack_id)
         .group_by(CrisisEvent.id)
         .order_by(CrisisEvent.is_active.desc(), CrisisEvent.created_at.desc())
         .all()
     )
-    # Escalating hotspots per op (Report⨝Building grouped — constant query count).
+    # Escalating hotspots per op (Report⨝Building grouped - constant query count).
     esc_by_op = {
         row[0]: int(row[1] or 0)
         for row in (db.query(Report.crisis_event_id,
@@ -273,7 +273,7 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
             unattended_critical=_unatt, sla_breaches=_sla,
         ))
     # Un-operationalised critical clusters: open-critical reports tied to NO
-    # operation — surfaced as a single CTA row ("Launch operation here").
+    # operation - surfaced as a single CTA row ("Launch operation here").
     orphan_critical = int(
         db.query(sa_func.count(Report.id))
           .filter(
@@ -296,11 +296,11 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
                        summary="Local weather (Open-Meteo) + hazard alerts (GDACS) for an operation")
 async def operation_weather(event_id: str, db: Session = Depends(get_db),
                             _user=Depends(require_viewer)):
-    """Backend-proxied local conditions for the operation's region — current
+    """Backend-proxied local conditions for the operation's region - current
     weather + 3-day forecast (Open-Meteo) and nearby disaster alerts (GDACS),
     cached 45 min. Returns 200 {available:false} (never 5xx) when both providers
     are unreachable so the dashboard never hard-fails. The ONLY data sent upstream
-    is the operation's centre coords + radius — never any report/reporter data."""
+    is the operation's centre coords + radius - never any report/reporter data."""
     ev = db.query(CrisisEvent).filter(CrisisEvent.id == event_id).first()
     if not ev:
         raise HTTPException(status_code=404, detail="Operation not found")
@@ -317,7 +317,7 @@ async def operation_weather(event_id: str, db: Session = Depends(get_db),
 
 # ── Operator: operation-level responders (Phase 3, Option B) ────────────────
 # Reuses the BuildingResponder table with target_type=OPERATION + crisis_event_id
-# (building_id NULL) — no separate Team/Org entity. Same assigned → dispatched →
+# (building_id NULL) - no separate Team/Org entity. Same assigned → dispatched →
 # arrived → cleared lifecycle as building responders; cleared_at IS NULL = active.
 @operations_router.get("/{event_id}/responders", response_model=List[ResponderResponse],
                        summary="List responders assigned to an operation")
@@ -379,7 +379,7 @@ def update_operation_responder(event_id: str, responder_id: str, body: Responder
     return r
 
 
-# ── Operator: auto-claim write-path (Phase 3) — launch / unclaim ────────────
+# ── Operator: auto-claim write-path (Phase 3) - launch / unclaim ────────────
 @operations_router.post("/launch", response_model=OperationLaunchResponse,
                         status_code=status.HTTP_201_CREATED,
                         summary="Launch an operation from the un-operationalised critical cluster")
@@ -440,7 +440,7 @@ def launch_operation(payload: OperationLaunchRequest, db: Session = Depends(get_
             form_pack_id=payload.form_pack_id, created_by=getattr(user, "id", None))
         db.add(target); db.flush()
     ids = [r.id for r in orphans]
-    # Re-check crisis_event_id IS NULL inside the UPDATE WHERE — a concurrent launch
+    # Re-check crisis_event_id IS NULL inside the UPDATE WHERE - a concurrent launch
     # that already claimed a report updates 0 rows for it (no double-claim).
     claimed = (db.query(Report)
                .filter(Report.id.in_(ids), Report.crisis_event_id.is_(None))
@@ -473,7 +473,7 @@ def _slugify(text: str) -> str:
                        summary="List published form templates (analyst-scoped) for the launch wizard")
 def list_form_templates(db: Session = Depends(get_db), _user=Depends(require_analyst)):
     """Published packs the wizard's Step 1 can start from. Analyst-scoped so the
-    admin pack-management routes stay require_admin — returns only each pack's active
+    admin pack-management routes stay require_admin - returns only each pack's active
     published schema, nothing operator-private."""
     packs = (db.query(CrisisFormPack)
              .filter(CrisisFormPack.is_archived == False,            # noqa: E712
@@ -499,7 +499,7 @@ def launch_with_form(payload: OperationLaunchWithFormRequest, db: Session = Depe
     """The wizard's Step-4 publish. Creates pack → published version → LIVE CrisisEvent
     (optionally claiming the orphan-critical cluster) in ONE transaction; any failure
     rolls the whole thing back so nothing half-built ever persists (no-draft-persistence).
-    Each operation gets its own pack — operation-scoped forms never couple to another op."""
+    Each operation gets its own pack - operation-scoped forms never couple to another op."""
     title = (payload.form_title or payload.name or "Operation form").strip()
     # Unique pack key derived from the title (operation forms are pack-scoped per op).
     base = _slugify(title)
@@ -576,7 +576,7 @@ def launch_with_form(payload: OperationLaunchWithFormRequest, db: Session = Depe
                         summary="Undo the most recent cluster claim on an operation")
 def unclaim_operation(event_id: str, db: Session = Depends(get_db),
                       user=Depends(require_analyst)):
-    """Reverse the most recent CLAIMED action on this operation — un-set
+    """Reverse the most recent CLAIMED action on this operation - un-set
     crisis_event_id on exactly the reports that were claimed."""
     last = (db.query(OperationClaimLog)
             .filter(OperationClaimLog.operation_id == event_id,
@@ -611,7 +611,7 @@ def list_events(db: Session = Depends(get_db), _user=Depends(require_admin)):
 def _resolve_place_name(lat, lng, db) -> Optional[str]:
     """Best-effort "City, Country" for an operation centre via the reverse-geocode
     cascade (GeocodeCache → Mapbox → Nominatim). NEVER raises and never fails an
-    admin write — returns None so the card falls back to coordinates. Skipped under
+    admin write - returns None so the card falls back to coordinates. Skipped under
     pytest (the suite makes no external network calls). Called AFTER the event row
     is committed so the geocoder's own cache writes can't disturb the create txn."""
     import os
@@ -636,7 +636,7 @@ def create_event(payload: CrisisEventCreate, db: Session = Depends(get_db), user
             raise HTTPException(status_code=400, detail="form_pack_id does not exist")
     ev = CrisisEvent(**payload.model_dump(), created_by=user.id)
     # Two-state invariant: is_active is a strict function of status (LIVE ⟺ active).
-    # Never trust a client-supplied is_active — derive it (ENDED ⇒ stops matching).
+    # Never trust a client-supplied is_active - derive it (ENDED ⇒ stops matching).
     ev.is_active = (ev.status == "LIVE")
     db.add(ev); db.commit(); db.refresh(ev)
     if not ev.place_name:              # denormalise the centre's place name (best-effort)
@@ -660,7 +660,7 @@ def update_event(event_id: str, payload: CrisisEventUpdate, db: Session = Depend
     for k, v in data.items():
         setattr(ev, k, v)
     # Two-state invariant: when status changes, is_active follows it (LIVE ⟺ active).
-    # This is the "End operation" action — PATCH {status:"ENDED"} flips is_active off
+    # This is the "End operation" action - PATCH {status:"ENDED"} flips is_active off
     # so the op drops out of resolve_active_event and moves to the ENDED group.
     if "status" in data:
         ev.is_active = (ev.status == "LIVE")

@@ -1,4 +1,4 @@
-# Disaster Recovery — Backup, Restore, RTO/RPO
+# Disaster Recovery - Backup, Restore, RTO/RPO
 
 Runbook for backing up PROD, verifying restorability, and recovering
 from data loss. Complements `docs/DEPLOYMENT_RUNBOOK.md` § Rollback
@@ -9,13 +9,13 @@ migration that touches the photo / media / report tables.
 
 ---
 
-## Data classes — what we back up + where
+## Data classes - what we back up + where
 
 | Class | Where | Frequency | Retention | Encryption |
 |---|---|---|---|---|
 | Postgres logical dump | S3 (`s3://crisp-backups/postgres/`) | hourly (cron on EC2) | 7 days hourly + 30 days daily + 12 months monthly | SSE-S3 (AES-256 at rest) |
 | Postgres WAL archives | S3 (`s3://crisp-backups/postgres-wal/`) | continuous (archive_command) | 7 days | SSE-S3 |
-| Media (uploaded photos + audio) | S3 (`s3://crisp-media/`, **primary** storage) | n/a — primary | versioning ON, 90-day lifecycle to glacier | SSE-S3 + IAM bucket policy |
+| Media (uploaded photos + audio) | S3 (`s3://crisp-media/`, **primary** storage) | n/a - primary | versioning ON, 90-day lifecycle to glacier | SSE-S3 + IAM bucket policy |
 | Env files | NOT BACKED UP (regenerated from a 1Password vault) | n/a | n/a | n/a |
 | Git history (source) | GitHub | continuous | indefinite | TLS in transit |
 
@@ -55,7 +55,7 @@ docker exec crisp-db-1 pg_dump -U crisp -F p --no-owner --no-acl crisp \
       --storage-class STANDARD_IA \
       --metadata "git-sha=$(git -C /opt/crisp rev-parse HEAD)"
 
-# Retention pruning — keep last 168 hourly + last 30 daily + last 12 monthly
+# Retention pruning - keep last 168 hourly + last 30 daily + last 12 monthly
 aws s3 ls "s3://crisp-backups/postgres/" \
   | python3 /opt/crisp/scripts/ops/prune-backups.py
 ```
@@ -77,7 +77,7 @@ to any second within the last 7 days is possible.
 
 ---
 
-## Media (S3) — backed up by S3 itself
+## Media (S3) - backed up by S3 itself
 
 The media bucket (`crisp-media`) uses S3 versioning + a lifecycle
 policy. We do NOT separately dump it because:
@@ -85,7 +85,7 @@ policy. We do NOT separately dump it because:
 1. S3 is already 99.999999999% durable across 3 AZs.
 2. Versioning protects against accidental overwrite / delete.
 3. Cross-region replication (CRR) can be enabled for region-failure
-   protection — flagged as a separate Sprint 3D follow-up if the
+   protection - flagged as a separate Sprint 3D follow-up if the
    pilot expands to multi-region.
 
 Lifecycle:
@@ -97,7 +97,7 @@ Lifecycle:
 
 ## Restore procedures
 
-### Procedure A — Full PROD restore (worst-case)
+### Procedure A - Full PROD restore (worst-case)
 
 Use when PROD EC2 + DB are both gone (region outage, ransomware, etc.).
 
@@ -113,10 +113,10 @@ aws s3 cp "s3://crisp-backups/postgres/${LATEST}" - \
 
 # 3. If finer RPO than the hourly dump is needed (e.g. 5-min granularity),
 #    apply WAL replay on top:
-#    (PITR setup is out of scope here — see Postgres docs for the
+#    (PITR setup is out of scope here - see Postgres docs for the
 #    recovery_target_time configuration)
 
-# 4. Run migrations to current head — backups predate the latest
+# 4. Run migrations to current head - backups predate the latest
 #    schema if the dump was taken before the last `alembic upgrade`:
 docker exec crisp-backend-1 alembic upgrade head
 
@@ -130,7 +130,7 @@ print('Reports:', s.query(Report).count())
 "
 ```
 
-### Procedure B — Single-row recovery
+### Procedure B - Single-row recovery
 
 A specific Report or Media row was deleted by mistake. Restore just
 that row from the latest dump WITHOUT touching the rest:
@@ -147,17 +147,17 @@ grep "^COPY public.reports" /tmp/full-dump.sql | \
     grep "<report_uuid>" > /tmp/single-row.sql
 
 # 3. Re-insert into the live DB (the operator must verify the row is
-#    legitimately missing — don't overwrite a deliberate delete).
+#    legitimately missing - don't overwrite a deliberate delete).
 docker exec -i crisp-db-1 psql -U crisp -d crisp < /tmp/single-row.sql
 ```
 
 For Media rows, the same procedure but check the underlying S3 object
-exists at the same `url` field — if it doesn't, the row can't be
+exists at the same `url` field - if it doesn't, the row can't be
 restored to a useful state.
 
 ---
 
-## Verification drill — quarterly
+## Verification drill - quarterly
 
 Operator MUST run the following on the first Monday of every quarter
 + document the result in the operator log. Skipping the drill means
@@ -200,7 +200,7 @@ Before going live at the first pilot location:
       can complete within the 2h RTO.
 
 The backup cron + WAL archiving setup is **not yet implemented**
-(out of scope for Sprint 3D — this is the runbook for when the
+(out of scope for Sprint 3D - this is the runbook for when the
 operator wires it). The current pilot is exposed: a region failure
 loses up to 24h of data. Treat this as the **single biggest
 operational risk** post-Sprint 3D.
@@ -220,9 +220,9 @@ operational risk** post-Sprint 3D.
 
 ## Related references
 
-- `docs/DEPLOYMENT_RUNBOOK.md` § Rollback — code rollback (not data
+- `docs/DEPLOYMENT_RUNBOOK.md` § Rollback - code rollback (not data
   rollback)
-- `docs/MIGRATIONS.md` — schema migration safety + downgrade paths
-- `docs/operations/SLOs.md` — RTO/RPO surface as SLOs in future
-- `docs/breach-procedure.md` — data-leak response (orthogonal: this
+- `docs/MIGRATIONS.md` - schema migration safety + downgrade paths
+- `docs/operations/SLOs.md` - RTO/RPO surface as SLOs in future
+- `docs/breach-procedure.md` - data-leak response (orthogonal: this
   doc covers loss, that covers exfiltration)

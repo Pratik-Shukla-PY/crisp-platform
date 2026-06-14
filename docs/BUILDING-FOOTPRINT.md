@@ -1,4 +1,4 @@
-# UNDP §3.2 — Building-Footprint Selector
+# UNDP §3.2 - Building-Footprint Selector
 
 *Shipped April 2026 for PWA.  RN parity design doc lives below.*
 
@@ -17,7 +17,7 @@ Up until April 2026 CRISP offered only:
     OSM Buildings via Overpass at zoom ≥ 15.
 
 That closed the "can the admin see the buildings" half of the
-requirement but not the "reporter can pick a building" half — a hard
+requirement but not the "reporter can pick a building" half - a hard
 disqualifier in a strict UNDP read.
 
 ## PWA implementation
@@ -35,13 +35,13 @@ File layout:
 ### Flow
 
 1. User reaches stage-review with `state.location` populated.
-2. Taps the collapsed `<details>` — on `toggle` the module fetches
+2. Taps the collapsed `<details>` - on `toggle` the module fetches
    OSM buildings via Overpass API within a 200 m radius.
 3. Each footprint becomes a tappable blue polygon; selection turns red.
 4. Tapping a polygon writes `osm:way:<id>` into `state.buildingId`
    which the submit handler emits as `building_id`.
 5. An IndexedDB (`crisp_buildings_v1 / tiles`) caches the Overpass
-   response keyed to 3-decimal-place lat/lng — subsequent captures in
+   response keyed to 3-decimal-place lat/lng - subsequent captures in
    the same neighbourhood work offline.
 6. If Overpass is unreachable and the cache is cold, the map
    gracefully degrades to the OSM tile layer + location marker, and
@@ -59,11 +59,11 @@ File layout:
 
 `ReportMetaCreate.building_id` is optional. `_auto_assign_building_id`
 (existing) only assigns a new id if the report doesn't already have
-one — so an explicit pick always wins. The dashboard's
+one - so an explicit pick always wins. The dashboard's
 `/reports/building/{building_id}` endpoint groups reports by this id
 for multi-report trajectory views.
 
-## RN parity — design (deferred)
+## RN parity - design (deferred)
 
 React Native parity is **deferred to the next sprint** because
 react-native-maps requires a native build step that isn't viable
@@ -137,5 +137,5 @@ End-to-end (manual):
      building outlines.
   5. Tap one; confirm it turns red + the "Building selected" pill
      appears.
-  6. Submit; check the dashboard — the new report should show under
+  6. Submit; check the dashboard - the new report should show under
      `/reports/building/osm:way:<id>`.

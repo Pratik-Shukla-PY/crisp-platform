@@ -1,7 +1,7 @@
 {
   "add_to_homescreen": "+ 添加到主屏幕",
   "aria_add_to_homescreen": "将 CRISP 添加到主屏幕",
-  "aria_channels_strip": "其他报告方式 — 点击查看所有渠道",
+  "aria_channels_strip": "其他报告方式 - 点击查看所有渠道",
   "badge_studio_share_insta": "Instagram",
   "badge_studio_share_linkedin": "LinkedIn",
   "badge_studio_share_wa": "WhatsApp",
@@ -31,5 +31,5 @@
   "settings_logout": "退出登录",
   "settings_title": "设置",
   "settings_unlink_device": "取消关联此设备",
-  "summary_none": "—"
+  "summary_none": "-"
 }

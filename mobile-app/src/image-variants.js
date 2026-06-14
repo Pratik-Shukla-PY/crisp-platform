@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-//  CRISP — Client-side image variant generator (PWA)
+//  CRISP - Client-side image variant generator (PWA)
 //
 //  For every photo captured by the PWA, produce three JPEG variants on-device:
 //
@@ -31,11 +31,11 @@
     // visually comparable across clients.
     //
     // `passthrough: true` means the tier uses the blurred source blob
-    // untouched — no canvas resize, no JPEG re-encode. ORIGINAL is
+    // untouched - no canvas resize, no JPEG re-encode. ORIGINAL is
     // passthrough so responders get archival-quality bytes; SMALL + MEDIUM
     // are still downscaled for fast progressive delivery.
     //
-    // Phase L (May 2026) — tier vocabulary is SMALL / MEDIUM / ORIGINAL.
+    // Phase L (May 2026) - tier vocabulary is SMALL / MEDIUM / ORIGINAL.
     // Pre-L this was small/medium/large mapped to LOW/MEDIUM/HIGH.
     const TIERS = [
         { name: 'small',    maxDim: 320,  quality: 0.40, tier: 'SMALL' },
@@ -61,14 +61,14 @@
         });
     }
 
-    // Phase L L.2.b (May 2026) — server enforces 5 MB cap on ORIGINAL
+    // Phase L L.2.b (May 2026) - server enforces 5 MB cap on ORIGINAL
     // at /attach + chunked-assembly. Client mirrors the cap so the
     // upload never burns chunks just to be rejected at the end. The
     // ladder runs in order, stops as soon as the blob fits 5 MB:
     //
-    //   1. passthrough — no decode, no re-encode (best fidelity)
-    //   2. quality ladder at full source dimensions — q=0.85, 0.75, 0.65
-    //   3. downscale ladder at q=0.85 — maxDim 4096, 3072, 2048
+    //   1. passthrough - no decode, no re-encode (best fidelity)
+    //   2. quality ladder at full source dimensions - q=0.85, 0.75, 0.65
+    //   3. downscale ladder at q=0.85 - maxDim 4096, 3072, 2048
     //
     // Each call returns { blob, strategy } where `strategy` is one of:
     //   passthrough / quality_q85 / quality_q75 / quality_q65 /
@@ -103,7 +103,7 @@
      * Apply the L.2.b ladder to keep the ORIGINAL tier ≤ 5 MB.
      * Returns { blob, strategy }. Best fidelity wins; downscale is the
      * last resort. If even the hard floor (2048 px q=0.85) exceeds
-     * 5 MB (extremely unusual — would be a 50+ MP capture with
+     * 5 MB (extremely unusual - would be a 50+ MP capture with
      * pathological content), we return that floor anyway and the
      * server-side guard will reject + the operator gets the
      * "original_too_large" abandon_reason chip.
@@ -122,7 +122,7 @@
         // threshold for 5 MP+ captures); the privacy guarantee is the
         // operator-stated requirement.
         //
-        // Step 1 — high-quality re-encode at full source dimensions.
+        // Step 1 - high-quality re-encode at full source dimensions.
         // Common case: phone JPEG already < 5 MB, so this lands in
         // step 1's first try.
         if (sourceBlob.size <= _ORIGINAL_MAX_BYTES) {
@@ -132,7 +132,7 @@
                     return { blob: stripped, strategy: 'exif_strip_q95' };
                 }
                 // If the q=0.95 re-encode actually grew the file past 5 MB
-                // (rare — typically only when the source was an extremely
+                // (rare - typically only when the source was an extremely
                 // small / heavily-compressed JPEG that q=0.95 inflates),
                 // fall through to the quality ladder below.
             } catch (e) {
@@ -141,7 +141,7 @@
             }
         }
 
-        // Step 2 — quality ladder at full source dimensions. JPEG
+        // Step 2 - quality ladder at full source dimensions. JPEG
         // re-encode keeps every pixel; only the compression coefficients
         // change. For 5 MP–25 MP captures, q=0.85 is visually
         // indistinguishable from the source.
@@ -156,7 +156,7 @@
             }
         }
 
-        // Step 3 — downscale ladder at q=0.85. Dimensions drop;
+        // Step 3 - downscale ladder at q=0.85. Dimensions drop;
         // operator-visible quality reduction.
         for (const maxDim of [4096, 3072, 2048]) {
             try {
@@ -164,7 +164,7 @@
                 if (blob.size <= _ORIGINAL_MAX_BYTES) {
                     return { blob, strategy: `downscale_${maxDim}px_q85` };
                 }
-                // Hard floor — return what we have. Server may still
+                // Hard floor - return what we have. Server may still
                 // reject with 413 + operator chip.
                 if (maxDim === 2048) {
                     return { blob, strategy: 'hard_floor_2048px_q85' };
@@ -174,7 +174,7 @@
             }
         }
 
-        // Total failure — fall back to source bytes (server will reject)
+        // Total failure - fall back to source bytes (server will reject)
         return { blob: sourceBlob, strategy: 'passthrough_fallback_over_cap' };
     }
 
@@ -202,16 +202,16 @@
 
     /**
      * Apply the existing client-side PII blur (if PIIBlur is loaded). Apr
-     * 2026 — returns the full result object from blurFaces:
+     * 2026 - returns the full result object from blurFaces:
      *   { blob, blurred, facesDetected, skipped, error? }
      *
      * Call-sites consume `.blurred` to decide whether to set
      * `client_blur_applied: true` on the upload. A `skipped: true`
-     * result MUST NOT claim client blur — the server has to run its own
+     * result MUST NOT claim client blur - the server has to run its own
      * pass as the safety net for any PII in the image.
      *
      * If PIIBlur isn't loaded at all (SW cache miss, CDN blocked), we
-     * return `{ blob, blurred: false }` — same safety-net contract.
+     * return `{ blob, blurred: false }` - same safety-net contract.
      */
     async function _maybeBlur(blob) {
         if (typeof window.PIIBlur === 'undefined') {
@@ -245,24 +245,24 @@
      *    less. BlazeFace inference cost is now 1/3 of before.
      *
      * On any per-tier failure we fall back to the source blob for that
-     * tier — we NEVER return fewer than three tiers because the sync engine
+     * tier - we NEVER return fewer than three tiers because the sync engine
      * expects all three keys and the partial-delivery guarantee relies on
      * the SMALL tier always existing.
      */
     async function generate(srcBlob) {
         if (!srcBlob) throw new Error('ImageVariants.generate: srcBlob is null');
 
-        // Step 1 — blur ONCE on the original bitmap. : we also
+        // Step 1 - blur ONCE on the original bitmap. : we also
         // capture the truthful `blurred` flag here so every variant of
         // this capture reports accurate `client_blur_applied` to the
         // server. If BlazeFace failed, the raw pixels go up AND the
-        // flag is false — server runs its own blur pass instead of
+        // flag is false - server runs its own blur pass instead of
         // skipping on the client's (previously hardcoded) promise.
         const blurResult = await _maybeBlur(srcBlob);
         const blurredSrc = blurResult.blob;
         const clientBlurApplied = Boolean(blurResult.blurred);
 
-        // Step 2 — decode the blurred (or original) source for resize.
+        // Step 2 - decode the blurred (or original) source for resize.
         let bitmap;
         try {
             bitmap = await _decode(blurredSrc);
@@ -272,7 +272,7 @@
             return { small: fallback, medium: fallback, original: fallback, clientBlurApplied };
         }
 
-        // Step 3 — render each tier.
+        // Step 3 - render each tier.
         //
         // SMALL + MEDIUM go through the canvas resize+toBlob path for
         // fast progressive delivery.
@@ -320,15 +320,15 @@
             }
         }
 
-        // Step 4 — blurhash placeholder (Phase 1 progressive-upload stack).
+        // Step 4 - blurhash placeholder (Phase 1 progressive-upload stack).
         // Encode a ~28-char DCT from a 32x32 working canvas. The dashboard
         // renders this as the first visual feedback BEFORE any media chunk
-        // uploads — closes the time-to-first-visual gap from ~2 s (first
+        // uploads - closes the time-to-first-visual gap from ~2 s (first
         // SMALL chunk) to ~200 ms (meta POST RTT). Costs ~10–20 ms of
         // main-thread time; already inside the _runWhenIdle deferral, so
         // the perceived-latency impact is zero.
         //
-        // Best-effort — a failure here never breaks the upload path. The
+        // Best-effort - a failure here never breaks the upload path. The
         // variant pipeline outputs are already valid; `blurhash` is an
         // ADDITIONAL payload, not a replacement for anything.
         let blurhash = null;
@@ -348,7 +348,7 @@
         if (typeof bitmap.close === 'function') try { bitmap.close(); } catch (_) {}
 
         console.log(
-            `[ImageVariants] sizes — small=${(out.small.bytes / 1024).toFixed(1)} KB` +
+            `[ImageVariants] sizes - small=${(out.small.bytes / 1024).toFixed(1)} KB` +
             `, medium=${(out.medium.bytes / 1024).toFixed(1)} KB` +
             `, original=${(out.original.bytes / 1024).toFixed(1)} KB` +
             `; clientBlurApplied=${clientBlurApplied} (faces=${blurResult.facesDetected}${blurResult.skipped ? ', SKIPPED: ' + blurResult.error : ''})` +
@@ -360,7 +360,7 @@
 
     // Tier → backend ResolutionEnum mapping. Kept in one place so callers
     // don't hard-code the translation.
-    // Phase L (May 2026) — canonical SMALL/MEDIUM/ORIGINAL on both sides.
+    // Phase L (May 2026) - canonical SMALL/MEDIUM/ORIGINAL on both sides.
     const TIER_TO_RESOLUTION = { small: 'SMALL', medium: 'MEDIUM', original: 'ORIGINAL' };
 
     window.ImageVariants = { generate, TIER_TO_RESOLUTION };

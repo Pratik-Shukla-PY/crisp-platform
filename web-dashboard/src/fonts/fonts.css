@@ -1,24 +1,24 @@
-/* CRISP self-hosted fonts — May 2026.
+/* CRISP self-hosted fonts - May 2026.
  *
  * Outfit 400/500/600/700/800/900 + JetBrains Mono 400/600/800. Latin
  * subset only (U+0000-00FF + symbol punctuation). Two reasons:
  *
- *  1. LCP perf — login.html's gradient <h1> is the LCP element. By
+ *  1. LCP perf - login.html's gradient <h1> is the LCP element. By
  *     self-hosting + preloading outfit-900.woff2 we skip Google Fonts'
  *     CSS-then-font two-round-trip critical chain.
  *
- *  2. Privacy / determinism — no third-party request leaks the
+ *  2. Privacy / determinism - no third-party request leaks the
  *     viewer's IP or referrer to fonts.googleapis.com on every page
  *     load. Asset hashes are stable across deploys (we control them).
  *
  * Weight roster matches the dashboard's actual font-weight CSS usage
  * (audited May 2026). Avoid relying on the browser's font-weight-
- * matching algorithm for missing weights — that algorithm's spec
+ * matching algorithm for missing weights - that algorithm's spec
  * picks 900 for a missing 700 lookup (ascending preference for
  * weights ≥ 500), which rendered tabs comically heavy in testing.
  *
  * font-display: swap so a system fallback paints immediately and the
- * real face swaps in once loaded — eliminates FOIT, LCP-safe.
+ * real face swaps in once loaded - eliminates FOIT, LCP-safe.
  *
  * Source: Google Fonts CSS API (Outfit v15, JetBrains Mono v18),
  * downloaded via the curl + awk pipeline in fonts/README (latin

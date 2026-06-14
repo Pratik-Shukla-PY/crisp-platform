@@ -2,25 +2,25 @@
 
 Revision ID: 0044_media_perf
 Revises: 0043_geocode_cache
-Create Date: 2026-05-28 (Sprint 3B, May 2026 — DB index audit)
+Create Date: 2026-05-28 (Sprint 3B, May 2026 - DB index audit)
 
 DB index audit during Sprint 3B (post-HC91) identified three gaps in
 the `media` table indexing that show up under load:
 
-  1. `media.report_id` — declared as a Foreign Key but Postgres does
+  1. `media.report_id` - declared as a Foreign Key but Postgres does
      NOT auto-create indexes for FK columns (only the parent's primary
      key). Every report-detail load + every dashboard variant lookup
      scans `media` linearly to find rows for a given report. At pilot
      scale (< 10k reports total) the planner sometimes prefers seq scan
      and it's fine. At 500k+ rows it becomes a hot path with O(N) cost.
 
-  2. `media.assembly_status` — used in every sweep tick (Actions ⓪/①/
+  2. `media.assembly_status` - used in every sweep tick (Actions ⓪/①/
      ②/③ all filter on this) AND in the public reports listing's
      "received_media" counter (joined Media subquery filters by
      assembly_status='complete'). Currently a seq scan.
 
   3. Composite partial `(assembly_status, updated_at, created_at)
-     WHERE abandoned_at IS NULL` — covers the WHERE clauses of all
+     WHERE abandoned_at IS NULL` - covers the WHERE clauses of all
      four sweep actions in a single index lookup. Partial because
      abandoned rows aren't candidates for any sweep action, so we
      can keep this index narrow.
@@ -55,20 +55,20 @@ def _bootstrap_concurrent_safe() -> None:
 def upgrade() -> None:
     _bootstrap_concurrent_safe()
 
-    # 1. media.report_id — single column.
+    # 1. media.report_id - single column.
     op.execute(
         'CREATE INDEX CONCURRENTLY IF NOT EXISTS '
         '"ix_media_report_id" ON "media" ("report_id")'
     )
 
-    # 2. media.assembly_status — single column. Useful for ad-hoc
+    # 2. media.assembly_status - single column. Useful for ad-hoc
     #    operator queries + the public listing's join filter.
     op.execute(
         'CREATE INDEX CONCURRENTLY IF NOT EXISTS '
         '"ix_media_assembly_status" ON "media" ("assembly_status")'
     )
 
-    # 3. Composite partial for the sweep — `abandoned_at IS NULL` is
+    # 3. Composite partial for the sweep - `abandoned_at IS NULL` is
     #    the discriminator (already-abandoned rows are never re-touched
     #    by Actions ①/②/③/⓪), and `(assembly_status, updated_at,
     #    created_at)` covers the column-ordering for every WHERE clause

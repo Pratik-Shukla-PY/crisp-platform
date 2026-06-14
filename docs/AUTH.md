@@ -1,4 +1,4 @@
-# Optional Reporter Login — Operator Runbook
+# Optional Reporter Login - Operator Runbook
 
 **Status:** Shipped April 2026. Phase 1 of the "Optional Login + Anonymous Reporting" initiative.
 
@@ -40,12 +40,12 @@ AuthStore (singleton)              /auth/otp/request    {destination, channel, p
 ### Data model
 
 - `users.phone_number` (E.164, unique, nullable)
-- `users.email` (now nullable — phone-only reporters)
+- `users.email` (now nullable - phone-only reporters)
 - `users.phone_verified`, `users.primary_auth_channel`
 - `otp_records.destination` + `otp_records.channel` (EMAIL | PHONE)
 - `reports.user_id` (nullable FK → users, ON DELETE SET NULL)
 - `reports.is_anonymous` (Postgres generated column = `user_id IS NULL`)
-- `user_device_link(user_id, device_hash)` — join table, CASCADE on user delete
+- `user_device_link(user_id, device_hash)` - join table, CASCADE on user delete
 
 See migration `backend/migrations/versions/0010_optional_reporter_login.py`.
 
@@ -58,9 +58,9 @@ See migration `backend/migrations/versions/0010_optional_reporter_login.py`.
 | Var | Required | Default | Purpose |
 |---|---|---|---|
 | `SMS_PROVIDER` | no | `stub` | `stub` logs codes to stdout; `twilio` sends real SMS |
-| `TWILIO_ACCOUNT_SID` | if `SMS_PROVIDER=twilio` | — | |
-| `TWILIO_AUTH_TOKEN` | if `SMS_PROVIDER=twilio` | — | |
-| `TWILIO_FROM` | if `SMS_PROVIDER=twilio` | — | E.164 sender number |
+| `TWILIO_ACCOUNT_SID` | if `SMS_PROVIDER=twilio` | - | |
+| `TWILIO_AUTH_TOKEN` | if `SMS_PROVIDER=twilio` | - | |
+| `TWILIO_FROM` | if `SMS_PROVIDER=twilio` | - | E.164 sender number |
 
 Existing email OTP env vars from the dashboard flow (SMTP) stay unchanged.
 
@@ -70,17 +70,17 @@ Existing email OTP env vars from the dashboard flow (SMTP) stay unchanged.
 DATABASE_URL='postgresql+psycopg2://…/crisp' alembic upgrade head
 ```
 
-The `0010_optional_reporter_login` revision is idempotent — safe to re-run.
+The `0010_optional_reporter_login` revision is idempotent - safe to re-run.
 
 ---
 
 ## Operator Workflows
 
-### Dashboard — identify a reporter
+### Dashboard - identify a reporter
 
 Every report card shows one of:
-- 🟩 **"User abc12345"** — identified reporter (masked). ANALYST can see this.
-- (no badge) — anonymous. The "Anonymous" filter pill surfaces these.
+- 🟩 **"User abc12345"** - identified reporter (masked). ANALYST can see this.
+- (no badge) - anonymous. The "Anonymous" filter pill surfaces these.
 
 Click the badge → `openReporterProfile(user_id)` in the console; admin-only → 403 for ANALYST → infoToast "Only administrators can see reporter PII".
 
@@ -91,13 +91,13 @@ GET /auth/users/{user_id}
 → { id, email, phone_number, role, last_login_at, ... }
 ```
 
-### GDPR — reporter hits "Delete my data"
+### GDPR - reporter hits "Delete my data"
 
 - Client: `POST /auth/me/delete-account`.
 - Server: sets `gdpr_deletion_requested_at`, schedules cascade on a 24 h grace.
 - On cascade:
   - `user_device_link(user_id)` rows CASCADE-delete.
-  - `reports WHERE user_id=me` → `user_id = NULL` (ON DELETE SET NULL) — **reports stay visible to the crisis-response team; only the PII linkage is severed.** (User spec answer 3.)
+  - `reports WHERE user_id=me` → `user_id = NULL` (ON DELETE SET NULL) - **reports stay visible to the crisis-response team; only the PII linkage is severed.** (User spec answer 3.)
 - The user row is then deleted.
 
 ### Logout side-effects
@@ -151,7 +151,7 @@ uvicorn app.main:app --reload
 # Login from PWA:
 #  1. Tap "Login / Sign up" on home
 #  2. Pick Phone or Email, enter destination, tap "Send code"
-#  3. Check the backend log — stub prints "[SMS stub] → +91…: CRISP: Your code is 123456"
+#  3. Check the backend log - stub prints "[SMS stub] → +91…: CRISP: Your code is 123456"
 #  4. Enter the code, tap Verify. Done.
 ```
 
@@ -159,5 +159,5 @@ uvicorn app.main:app --reload
 
 ## E2E
 
-- `e2e/tests/pwa/25-optional-login.spec.ts` — 8 Playwright cases: AuthStore surface, skip path, channel picker, country-code default, Settings reachable, logout clears state.
+- `e2e/tests/pwa/25-optional-login.spec.ts` - 8 Playwright cases: AuthStore surface, skip path, channel picker, country-code default, Settings reachable, logout clears state.
 - Full regression: `pytest backend/tests/` (expect new test modules for `/auth/otp` channel + `/auth/link-device` in the next sprint).

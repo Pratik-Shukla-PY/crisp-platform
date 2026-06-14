@@ -62,7 +62,7 @@ class InfraTypeEnum(str, enum.Enum):
     COMMUNITY = "COMMUNITY"
     PUBLIC_SPACES = "PUBLIC_SPACES"
     OTHER = "OTHER"
-    # Legacy fine-grained chips — kept for backward compatibility with
+    # Legacy fine-grained chips - kept for backward compatibility with
     # historical rows. The taxonomy hook rewrites new writes to the UNDP
     # super-type above.
     ROAD = "ROAD"
@@ -79,7 +79,7 @@ class DamageClassEnum(str, enum.Enum):
     Spec labels: "Minimal/No damage", "Partially damaged",
     "Completely damaged".
 
-    CRISP originally stored the first tier as "NO_DAMAGE" — which judges
+    CRISP originally stored the first tier as "NO_DAMAGE" - which judges
     reading raw export CSVs would flag as a spec deviation. April 2026:
     the canonical value is `MINIMAL`. `NO_DAMAGE` remains in the enum as
     a *deprecated alias* so legacy clients + historical DB rows continue
@@ -88,7 +88,7 @@ class DamageClassEnum(str, enum.Enum):
     export layer calls `app.core.taxonomy.normalise_damage` on every
     read so every byte shipped to a judge uses the UNDP label."""
     MINIMAL = "MINIMAL"
-    NO_DAMAGE = "NO_DAMAGE"    # legacy alias — normalised to MINIMAL on write
+    NO_DAMAGE = "NO_DAMAGE"    # legacy alias - normalised to MINIMAL on write
     PARTIAL = "PARTIAL"
     COMPLETE = "COMPLETE"
 
@@ -106,7 +106,7 @@ class CrisisTypeEnum(str, enum.Enum):
 
     OTHER is the always-available catch-all.
 
-    HURRICANE remains as a legacy alias for CYCLONE — UNDP wording is
+    HURRICANE remains as a legacy alias for CYCLONE - UNDP wording is
     'Hurricane/Cyclone' (single category). The application + Pydantic
     layers normalise HURRICANE -> CYCLONE on every new write
     (`_normalize_crisis_type` in api/endpoints/reports.py + the
@@ -160,14 +160,14 @@ class ServiceStatusEnum(str, enum.Enum):
     compact 3-level scale. We keep the original three values so
     pre-April-2026 rows continue to validate, and add the extra
     Appendix-1 levels so new captures can express them. Dashboard +
-    export ``service_status`` JSON carries whatever the client sent —
+    export ``service_status`` JSON carries whatever the client sent -
     the enum is a validation surface, not a storage type."""
     # Original compact levels (used on nearly every legacy row)
     OPERATIONAL = "OPERATIONAL"
     DISRUPTED = "DISRUPTED"
     DESTROYED = "DESTROYED"
     UNKNOWN = "UNKNOWN"
-    # UNDP Appendix-1 expansions (electricity) — finer-grained outage taxonomy
+    # UNDP Appendix-1 expansions (electricity) - finer-grained outage taxonomy
     INTERMITTENT = "INTERMITTENT"         # power cuts every few hours
     LOAD_SHEDDING = "LOAD_SHEDDING"       # scheduled rolling blackout
     BLACKOUT = "BLACKOUT"                 # total loss
@@ -181,13 +181,13 @@ class MediaTypeEnum(str, enum.Enum):
     AUDIO = "AUDIO"
 
 class ResolutionEnum(str, enum.Enum):
-    """Photo-variant resolution tier (Phase L taxonomy — May 2026).
+    """Photo-variant resolution tier (Phase L taxonomy - May 2026).
 
     Three canonical values, no aliases:
 
-        SMALL    — preview-quality (~50 KB), always required
-        MEDIUM   — ~720p (~250 KB)
-        ORIGINAL — raw camera bytes if ≤ 5 MB, else best-effort
+        SMALL    - preview-quality (~50 KB), always required
+        MEDIUM   - ~720p (~250 KB)
+        ORIGINAL - raw camera bytes if ≤ 5 MB, else best-effort
                    re-encoded via the L.2.b quality/downscale ladder
 
     Pre-Phase-L vocabulary (LOW/HIGH) was backfilled to SMALL/ORIGINAL
@@ -215,7 +215,7 @@ class ReportStatusEnum(str, enum.Enum):
 
 
 class ReviewerVerdictEnum(str, enum.Enum):
-    """Phase 5 (Apr 2026) — reviewer's explicit verdict, distinct from the AI
+    """Phase 5 (Apr 2026) - reviewer's explicit verdict, distinct from the AI
     status workflow. `NOT_REVIEWED` is the default for fresh reports; analysts
     move them to `ACCEPTED` or `REJECTED`. Stored separately from `status` so
     the admin-acceptance data survives downstream status changes."""
@@ -229,7 +229,7 @@ class ClusterStatusEnum(str, enum.Enum):
     FALSE_ALARM = "FALSE_ALARM"
 
 
-# Phase H.1.b (May 2026) — Building Intelligence operational states.
+# Phase H.1.b (May 2026) - Building Intelligence operational states.
 #
 # 7-state machine (allowed transitions documented in the plan):
 #   ACTIVE  → MONITORED → RESPONDING → RESOLVED
@@ -250,7 +250,7 @@ class BuildingStateEnum(str, enum.Enum):
     FALSE_ALARM = "FALSE_ALARM"
 
 
-# Phase H.1.b — building-id provenance (mirrors migration 0028's enum).
+# Phase H.1.b - building-id provenance (mirrors migration 0028's enum).
 class BuildingIdSourceEnum(str, enum.Enum):
     OSM       = "OSM"        # PWA reporter tapped an OSM footprint
     PROXIMITY = "PROXIMITY"  # Backend proximity-clustered fallback
@@ -264,10 +264,10 @@ class Device(Base):
     platform = Column(String(50))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Phase 3 (May 2026, docs §6.1 + §6.2) — trust-score signals.
+    # Phase 3 (May 2026, docs §6.1 + §6.2) - trust-score signals.
     # spam_score: accumulator (synchronous bumps from hot abuse
     # signals + Phase-5 async batch worker). 0.0 = clean.
-    # reports_count: total reports seen — cached integer maintained
+    # reports_count: total reports seen - cached integer maintained
     # synchronously on every report insert.
     # spam_signals: jsonb array of detected signal-type strings
     # ("gps_spoof" / "impossible_movement" / "rate_burst" / ...);
@@ -277,7 +277,7 @@ class Device(Base):
     # `server_default` matches migration 0021_device_trust_columns so a
     # `Base.metadata.create_all()` (used by the migration test
     # fixtures) emits the same NOT-NULL column with a default the DB
-    # itself enforces — raw INSERTs that omit `spam_signals` get the
+    # itself enforces - raw INSERTs that omit `spam_signals` get the
     # empty-array default instead of a NotNullViolation. Without this,
     # the model-driven `create_all` diverges from the alembic-driven
     # `upgrade head` and any test that bypasses the SA ORM trips up.
@@ -286,9 +286,9 @@ class Device(Base):
         server_default=text("'[]'::jsonb"),
     )
 
-    # Phase 5.1 (May 2026, docs §6.2) — device telemetry summary for
+    # Phase 5.1 (May 2026, docs §6.2) - device telemetry summary for
     # real emulator fingerprinting. Posted by PWA / RN on app boot via
-    # POST /api/v1/devices/telemetry. Nullable — devices that predate
+    # POST /api/v1/devices/telemetry. Nullable - devices that predate
     # the capture (or refuse it for any reason) get a NULL summary and
     # only the cheap UA-substring check applies. Stored as a SUMMARY
     # only (no raw sensor streams) so this is not PII / fingerprinting
@@ -307,7 +307,7 @@ class Report(Base):
     # authenticated reporter. NULL = anonymous (legacy + skip-login path).
     # `ON DELETE SET NULL` is the key guarantee from the user spec: when
     # a reporter hits "Delete my account", their linked reports revert to
-    # anonymous — the crisis-response value of each report is preserved
+    # anonymous - the crisis-response value of each report is preserved
     # while the PII linkage is severed.
     user_id = Column(
         String(36),
@@ -315,13 +315,13 @@ class Report(Base):
         nullable=True,
         index=True,
     )
-    # K.2.e (May 2026, Phase K) — surfaces "I had a Bearer token but
+    # K.2.e (May 2026, Phase K) - surfaces "I had a Bearer token but
     # it was expired" so the dashboard chip (K.5.a) can render
     # "🔓 Attribution lost: token expired". Distinct from `user_id IS
     # NULL` which covers both genuine anonymous AND lost-attribution.
     # The reporter retains the ability to retroactively re-link via a
     # future "claim this report" admin endpoint (out of scope this
-    # batch — flag only).
+    # batch - flag only).
     submitted_as_anonymous_due_to_expired_token = Column(
         Boolean, default=False, server_default=text("false"), nullable=False
     )
@@ -351,7 +351,7 @@ class Report(Base):
     deletion_requested_at = Column(DateTime(timezone=True), nullable=True)
     deletion_grace_minutes = Column(Integer, nullable=True, default=1440)  # 24h default, 30min for mobile
     lives_impacted = Column(Integer, nullable=True)  # How many lives saved/impacted by this report
-    # May 2026 — idempotency stamp for the tier-credit bump
+    # May 2026 - idempotency stamp for the tier-credit bump
     # (`_mark_report_verified_for_credibility`). Set on the FIRST
     # transition out of PENDING; the bump function short-circuits
     # on subsequent calls so parallel dispatch/resolve requests
@@ -375,13 +375,13 @@ class Report(Base):
     # manual mapping" on the dashboard so an operator can resolve the
     # free-text entry to a real OSM footprint later. Pre-v3 clients never
     # set this column → NULL, which the dashboard treats as "unknown"
-    # (neither green ✓ nor the red "needs mapping" badge — see
+    # (neither green ✓ nor the red "needs mapping" badge - see
     # ReportResponse.needs_manual_mapping).
     infrastructure_name_from_osm = Column(Boolean, nullable=True)
     debris_clearing_needed = Column(Boolean, nullable=True)     # Does this location need debris clearing?
     service_status = Column(JSON, nullable=True)                # {"electricity":"DISRUPTED","water":"OPERATIONAL",...}
     building_id = Column(String(36), nullable=True, index=True) # Links multiple reports about same structure
-    # UNDP must-have #8 (Phase F.5.c, May 2026) — building versioning.
+    # UNDP must-have #8 (Phase F.5.c, May 2026) - building versioning.
     # Reports about the same building stack up; ordinal counts entries in
     # chronological order (1-indexed, NULL for rows without a building_id),
     # building_is_latest flags the most-recent row in each partition.
@@ -389,11 +389,11 @@ class Report(Base):
     # insert/update by the `_apply_building_versioning` SQLAlchemy hook
     # below. The dashboard renders a "Version N of M · Latest" chip from
     # these two fields. See migration 0027_building_versioning + audit
-    # plan /Users/pks/.claude/plans/swirling-forging-raccoon.md F.5.c.
+    # the design plan F.5.c.
     building_version_ordinal = Column(Integer, nullable=True)
     building_is_latest = Column(Boolean, default=False, nullable=False, server_default="false")
     # Progressive-upload placeholder. Compact blurhash
-    # of the main photo — decoded on the dashboard to render a fuzzy colour
+    # of the main photo - decoded on the dashboard to render a fuzzy colour
     # impression the instant the meta POST lands, BEFORE any media chunk
     # arrives. See app/schemas/report.py::ReportMetaCreate.blurhash for the
     # design doc. Typical length: 28–32 chars (4x3 DCT). Cap at 96 lets us
@@ -405,7 +405,7 @@ class Report(Base):
     #   reviewed_at       → timestamp of the verdict decision
     #   action_taken      → free-text note (rejection reason OR response action)
     #   help_dispatched_at/help_arrived_at → responder timestamps
-    # `response_time_seconds` is NOT stored — it's computed at read time as
+    # `response_time_seconds` is NOT stored - it's computed at read time as
     # `(help_arrived_at or help_dispatched_at) - reviewed_at` to avoid
     # two-source-of-truth drift.
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
@@ -414,7 +414,7 @@ class Report(Base):
     help_dispatched_at = Column(DateTime(timezone=True), nullable=True)
     help_arrived_at = Column(DateTime(timezone=True), nullable=True)
 
-    # ── Dynamic Crisis Forms (geo-scoped Stage 2/3 packs) — ADDITIVE, all nullable.
+    # ── Dynamic Crisis Forms (geo-scoped Stage 2/3 packs) - ADDITIVE, all nullable.
     # Default/legacy reports + every report captured OUTSIDE an active crisis zone
     # leave these NULL → the standard flat-enum schema is used (zero behaviour change;
     # preserves multi-channel parity, must-have #1). Populated only when a report was
@@ -431,7 +431,7 @@ class Report(Base):
     ai_analysis = relationship("AIAnalysis",  back_populates="report", uselist=False, cascade="all, delete-orphan")
     verification = relationship("SatelliteVerification", back_populates="report", uselist=False, cascade="all, delete-orphan")
 
-    # UI v2.1 — performance indexes for 500k-scale crisis queries.
+    # UI v2.1 - performance indexes for 500k-scale crisis queries.
     # Mirror migration 0008. Names match exactly so `alembic upgrade` from
     # an empty DB and `Base.metadata.create_all` from pytest's conftest
     # both produce the same physical index names on Postgres.
@@ -444,14 +444,14 @@ class Report(Base):
         Index("ix_reports_device_id",             "device_id"),
         Index("ix_reports_reviewer_verdict",      "reviewer_verdict"),
         Index("ix_reports_deletion_requested_at", "deletion_requested_at"),
-        # F.5.c (May 2026) — UNDP must-have #8. Frequent dashboard query
+        # F.5.c (May 2026) - UNDP must-have #8. Frequent dashboard query
         # "give me the latest version of this building" benefits from
         # this composite. See migration 0027_building_versioning.
         Index("ix_reports_building_latest",        "building_id", "building_is_latest"),
         Index("ix_reports_status_created",        "status",      "server_created_at"),
         Index("ix_reports_building_created",      "building_id", "server_created_at"),
         Index("ix_reports_device_created",        "device_id",   "server_created_at"),
-        # Operations Phase 2 — operation-scoped queries always constrain
+        # Operations Phase 2 - operation-scoped queries always constrain
         # crisis_event_id together with status (worklist + active/closed
         # rollups) or severity (per-op critical counts + worst-first sort).
         # Mirrors migration 0048_crisis_event_indexes.
@@ -461,7 +461,7 @@ class Report(Base):
 
 
 class DeletionAuditLog(Base):
-    """Audit trail for deleted reports — preserves anonymized metadata for accountability."""
+    """Audit trail for deleted reports - preserves anonymized metadata for accountability."""
     __tablename__ = "deletion_audit_log"
     id = Column(String(36), primary_key=True, default=gen_uuid)
     report_id = Column(String(36), nullable=False, index=True)
@@ -495,7 +495,7 @@ class Location(Base):
     geocoding_source = Column(String(32), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Phase 5.1 (May 2026, docs §9.4) — H3 hexagonal cell index for
+    # Phase 5.1 (May 2026, docs §9.4) - H3 hexagonal cell index for
     # the optional CRISP_NEARBY_H3_MODE aggregator path. Resolution 9
     # (~175 m hex edge length, ~110k m² area) is the docs-recommended
     # default for 500k+-reports-per-crisis scale. Nullable: NULL means
@@ -506,7 +506,7 @@ class Location(Base):
 
     report = relationship("Report", back_populates="location")
 
-    # May 2026 (0018) — composite index on (latitude, longitude) so the
+    # May 2026 (0018) - composite index on (latitude, longitude) so the
     # /api/v1/reports/nearby bbox pre-filter is an indexed range scan
     # instead of a full Location table scan. Mirrored in migration
     # 0018_locations_lat_lng_index so `Base.metadata.create_all()`
@@ -539,12 +539,12 @@ class Media(Base):
     received_chunks = Column(Integer, default=0, nullable=False)
     completion_pct = Column(Float, default=0.0, nullable=False)
     assembly_status = Column(String(20), default='pending', nullable=False)  # pending|partial|complete
-    # Phase C.1 (May 2026) — whole-asset djb2 checksum the PWA computes
+    # Phase C.1 (May 2026) - whole-asset djb2 checksum the PWA computes
     # ONCE over the full original bytes before chunking, sent on chunk 0.
     # After assembly the backend re-computes djb2 over the concatenated
     # file and compares; mismatch flips assembly_status='failed' and
     # bumps `media_asset_integrity_fail_total`. NULL for legacy rows /
-    # clients that don't send the field — the check is skipped, preserving
+    # clients that don't send the field - the check is skipped, preserving
     # backward compatibility. djb2 hex is 8 chars; 16 is generous headroom.
     full_asset_checksum = Column(String(16), nullable=True)
     # : clients that have already run their local PII blur (PWA
@@ -557,7 +557,7 @@ class Media(Base):
     # The PWA's pii-blur worker emits the box set it used at capture
     # time; ships them via X-Client-Face-Boxes header on chunk uploads.
     # The server's blur worker (_run_server_pii_blur) reads this and
-    # computes UNION with its own MediaPipe pass — privacy ratchets
+    # computes UNION with its own MediaPipe pass - privacy ratchets
     # forward only. NULL for non-PWA channels and legacy uploads;
     # the server falls back to MediaPipe-only detection in that case.
     client_face_boxes_normalized = Column(JSON, nullable=True)
@@ -567,9 +567,9 @@ class Media(Base):
     # to an internal-only storage prefix (`pre_blur/`). If MEDIUM /
     # ORIGINAL of the same photo_group_id later detects additional
     # PII, the worker can fetch the SMALL tier's pre-blur bytes and
-    # re-blur with the union — without losing the original detail.
+    # re-blur with the union - without losing the original detail.
     # NULL when pii_blur_status='complete_clean' (no PII detected,
-    # public bytes ARE the original — no extra retention needed).
+    # public bytes ARE the original - no extra retention needed).
     # Also NULL after sweep Action ⑤ purges the entry.
     pre_blur_internal_key = Column(String(255), nullable=True)
     # B-F: TIMESTAMP after which sweep Action ⑤ purges the
@@ -580,41 +580,41 @@ class Media(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
     # server-side PII blur outcome. Legacy rows are NULL.
-    # Canonical values (May 2026, Batch B-A — alembic 0037):
-    #   pending                  — assembly completed; blur submitted
+    # Canonical values (May 2026, Batch B-A - alembic 0037):
+    #   pending                  - assembly completed; blur submitted
     #                              to _ai_executor but not yet
     #                              finished. URL is gated (425).
-    #   complete_clean           — blur ran, NO PII detected. Bytes
+    #   complete_clean           - blur ran, NO PII detected. Bytes
     #                              left untouched (B-B conditional
     #                              save). Dashboard renders NO chip.
-    #   complete_with_redactions — blur ran, PII detected + blurred.
+    #   complete_with_redactions - blur ran, PII detected + blurred.
     #                              Bytes overwritten. Dashboard
     #                              renders a green "Auto-redacted"
     #                              chip.
-    #   failed                   — blur attempted but raised an
+    #   failed                   - blur attempted but raised an
     #                              exception, OR backends were
     #                              unavailable (formerly 'skipped').
-    #                              Bytes may be unblurred — operator
+    #                              Bytes may be unblurred - operator
     #                              must manually verify. Dashboard
     #                              renders a red "Redaction failed"
     #                              chip.
-    #   not_needed               — media type doesn't go through blur
+    #   not_needed               - media type doesn't go through blur
     #                              (audio rows; chunked-assembly path
     #                              stamps this at /attach time).
     #                              Dashboard renders no chip.
     #
     # Legacy values (pre-0037, may persist in test fixtures or
     # rolled-back DBs):
-    #   complete    — superseded by complete_with_redactions /
+    #   complete    - superseded by complete_with_redactions /
     #                 complete_clean. 0037 maps complete →
     #                 complete_with_redactions (conservative).
-    #   skipped     — superseded by 'failed'. 0037 maps skipped →
+    #   skipped     - superseded by 'failed'. 0037 maps skipped →
     #                 failed.
     #
-    # Column widened to String(32) by 0037 (was String(16) — too
+    # Column widened to String(32) by 0037 (was String(16) - too
     # narrow for 'complete_with_redactions' = 26 chars).
     pii_blur_status = Column(String(32), nullable=True, index=True)
-    # UI v2.1 — perceptual hash (pHash) of the assembled image
+    # UI v2.1 - perceptual hash (pHash) of the assembled image
     # for redundancy detection (UNDP nice-to-have #3: "spot duplicates
     # with same time-stamp of submission, or over-reporting"). Computed
     # once post-assembly in `_ai_executor`, stored as a 16-char hex
@@ -622,13 +622,13 @@ class Media(Base):
     # rows + legacy photos uploaded pre-feature. Indexed so the
     # "find near-duplicates in same building within 24h" query is fast.
     photo_phash = Column(String(16), nullable=True, index=True)
-    # HC98 — server-side geotag burn-in idempotency. Set True once the geotag
+    # HC98 - server-side geotag burn-in idempotency. Set True once the geotag
     # caption + GPS EXIF have been stamped into this media's stored bytes
     # (MEDIUM/ORIGINAL image tiers only; SMALL + audio skipped). Gates the blur
     # worker so a retry can't double-stamp. False for pre-feature + skipped rows.
     watermark_applied = Column(Boolean, nullable=False, server_default=text("false"), default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    # P1.1 — auto-updating timestamp used by the assembly-lock stale-escape:
+    # P1.1 - auto-updating timestamp used by the assembly-lock stale-escape:
     # if assembly_status='assembling' AND updated_at > 5 min ago, the previous
     # worker is assumed dead (crash / reload) and the lock can be reclaimed.
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -645,7 +645,7 @@ class Media(Base):
     abandoned_at = Column(DateTime(timezone=True), nullable=True)
     abandon_reason = Column(String(40), nullable=True)
 
-    # R1 (May 2026) — stamped by the assembly worker when an
+    # R1 (May 2026) - stamped by the assembly worker when an
     # abandoned-but-resumed upload completes successfully. NULL means
     # either (a) never abandoned, or (b) abandoned and not yet recovered.
     # Dashboard chip predicate uses (abandon_reason AND recovered_at IS NULL)
@@ -655,11 +655,11 @@ class Media(Base):
     # recovery fact. See migrations/versions/0040_media_recovered_at_recovery.py.
     recovered_at = Column(DateTime(timezone=True), nullable=True)
 
-    # R2.a (May 2026) — epoch / generation counter for the upload session.
+    # R2.a (May 2026) - epoch / generation counter for the upload session.
     # Clients echo this on every chunk POST (X-Upload-Generation header on
     # chunk-bin, upload_generation field on the JSON chunk payload). Server
     # rejects mismatches with 409 Conflict. On soft-abandon revival the
-    # server bumps this by 1 — any pre-revival in-flight chunk replay (a
+    # server bumps this by 1 - any pre-revival in-flight chunk replay (a
     # zombie tab, a stale service-worker fetch, a delayed retry) now sees
     # a stale generation and 409s harmlessly instead of racing against the
     # new session's chunks. Default 1; legacy clients that don't send the
@@ -667,7 +667,7 @@ class Media(Base):
     # value, preserving back-compat. See migration 0041.
     upload_generation = Column(Integer, nullable=False, server_default="1", default=1)
 
-    # L3 (May 2026) — post-gate accepted BlazeFace box list in normalized
+    # L3 (May 2026) - post-gate accepted BlazeFace box list in normalized
     # [0,1] coordinates. Persisted by the assembly worker after L1+L2+L4
     # gates pass and blur is applied. Used by the cross-tier consistency
     # reconciler to spot resolution-dependent false positives (boxes that
@@ -678,18 +678,18 @@ class Media(Base):
     report = relationship("Report", back_populates="media")
     chunks = relationship("MediaChunk", back_populates="media", cascade="all, delete-orphan")
 
-    # UI v2.1 — pHash dedup endpoint windows by `created_at` for
+    # UI v2.1 - pHash dedup endpoint windows by `created_at` for
     # the last 24 h. Mirrors migration 0008.
-    # 0032 — `ix_media_abandoned_at` lives in the migration only (date-range
+    # 0032 - `ix_media_abandoned_at` lives in the migration only (date-range
     # probe by the periodic sweep); not declared here because the index isn't
     # used by SQLAlchemy queries directly.
-    # 0044 (Sprint 3B, May 2026) — three perf indexes added by the post-HC91
+    # 0044 (Sprint 3B, May 2026) - three perf indexes added by the post-HC91
     # DB index audit:
-    #   ix_media_report_id           — FK column wasn't auto-indexed by Postgres
-    #   ix_media_assembly_status     — every sweep tick + listing join filter
-    #   ix_media_active_sweep        — composite partial covering all 4 sweep
+    #   ix_media_report_id           - FK column wasn't auto-indexed by Postgres
+    #   ix_media_assembly_status     - every sweep tick + listing join filter
+    #   ix_media_active_sweep        - composite partial covering all 4 sweep
     #                                  WHERE clauses (excludes abandoned rows).
-    #                                  Declared here without the WHERE clause —
+    #                                  Declared here without the WHERE clause -
     #                                  SQLAlchemy autogen won't synthesize partial
     #                                  indices, the migration carries the real
     #                                  filter. Keep this comment in sync with
@@ -705,12 +705,12 @@ class Media(Base):
 class MediaChunk(Base):
     """Individual ~1KB packet of a media file (PRD §3.3). Assembled into full file when complete.
 
-    April 2026 — binary-chunk transport (Option A, `/reports/{id}/media/chunk-bin`).
+    April 2026 - binary-chunk transport (Option A, `/reports/{id}/media/chunk-bin`).
     A chunk row now stores its payload in ONE of two columns:
 
-      * ``data_b64``     — legacy base64 text transport
+      * ``data_b64``     - legacy base64 text transport
                            (clients hitting the old `/media/chunk` endpoint).
-      * ``data_binary``  — raw bytes (multipart/form-data clients hitting
+      * ``data_binary``  - raw bytes (multipart/form-data clients hitting
                            the new `/media/chunk-bin` endpoint).
 
     The assembly path reads whichever column is populated per row and
@@ -718,7 +718,7 @@ class MediaChunk(Base):
     constraint: exactly one of the two columns must be non-NULL.
 
     Every existing row has ``data_b64`` populated and ``data_binary`` NULL,
-    so no data migration is required — the constraint is satisfied on all
+    so no data migration is required - the constraint is satisfied on all
     legacy rows automatically.
     """
     __tablename__ = "media_chunks"
@@ -756,7 +756,7 @@ class AIAnalysis(Base):
     damage_score = Column(Float)
     ai_severity = Column(Enum(SeverityEnum))
     transcription = Column(String)        # Raw Whisper transcription (may be rough)
-    ai_summary = Column(String)           # Claude AI-cleaned English interpretation
+    ai_summary = Column(String)           # AI-cleaned English interpretation
     detected_labels = Column(JSON, default=list)
     processing_time_ms = Column(Integer)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -895,7 +895,7 @@ class CrisisFormPack(Base):
 class CrisisFormPackVersion(Base):
     """An immutable published (or editable draft) version of a CrisisFormPack.
     `schema_json` holds the full sections→fields contract the per-channel renderers
-    (PWA / RN / Telegram) consume — field types reuse the modules.py set plus the
+    (PWA / RN / Telegram) consume - field types reuse the modules.py set plus the
     CRISP special types; field ids equal the backend column names where a field
     maps to a first-class Report column (classifier-state invariant)."""
     __tablename__ = "crisis_form_pack_versions"
@@ -926,7 +926,7 @@ class CrisisEvent(Base):
     center_lat = Column(Float, nullable=False)
     center_lng = Column(Float, nullable=False)
     radius_km = Column(Float, nullable=False, default=30.0)
-    # Denormalised "City, Country" for the operation card — resolved best-effort
+    # Denormalised "City, Country" for the operation card - resolved best-effort
     # via reverse-geocode + GeocodeCache at create/launch/center-edit (0051). NULL
     # = unresolved → the card falls back to coordinates.
     place_name = Column(String(200), nullable=True)
@@ -950,8 +950,8 @@ class CrisisEvent(Base):
 #     "all human-made crises" without duplicating the mapping client-side
 #
 # Using a SQLAlchemy `before_insert` + `before_update` listener centralises
-# this so every write path — the meta endpoint, the admin reclassify
-# endpoint, the AI auto-assessment path — goes through the same logic.
+# this so every write path - the meta endpoint, the admin reclassify
+# endpoint, the AI auto-assessment path - goes through the same logic.
 #
 # The helpers live in app.core.taxonomy so the rule is testable and reusable.
 _UNDP_SUPER_TYPES = {
@@ -965,7 +965,7 @@ def _apply_taxonomy(_mapper, _conn, target: "Report") -> None:  # type: ignore[n
         from app.core.taxonomy import (
             normalise_damage, categorise_crisis, ui_chip_to_undp,
         )
-        # Damage classification — normalise legacy strings.
+        # Damage classification - normalise legacy strings.
         if target.damage_classification:
             norm = normalise_damage(target.damage_classification)
             if norm and norm != target.damage_classification:
@@ -984,7 +984,7 @@ def _apply_taxonomy(_mapper, _conn, target: "Report") -> None:  # type: ignore[n
             raw_str = getattr(raw, "value", raw)
             raw_str = str(raw_str).upper() if raw_str is not None else None
             if raw_str and raw_str not in _UNDP_SUPER_TYPES:
-                # Legacy chip — remap. Preserve original in sub_type if
+                # Legacy chip - remap. Preserve original in sub_type if
                 # not already set (don't overwrite an explicit client value).
                 undp = ui_chip_to_undp(raw_str)
                 if undp:
@@ -993,10 +993,10 @@ def _apply_taxonomy(_mapper, _conn, target: "Report") -> None:  # type: ignore[n
                     try:
                         target.infrastructure_type = InfraTypeEnum(undp)
                     except ValueError:
-                        # UNDP value somehow missing from the enum — leave the raw.
+                        # UNDP value somehow missing from the enum - leave the raw.
                         pass
     except Exception:
-        # Never fail a write because of taxonomy normalisation — a judge
+        # Never fail a write because of taxonomy normalisation - a judge
         # filing a report during a live crisis would not thank us for an
         # HTTP 500 because one of the lookup tables missed a key.
         pass
@@ -1006,7 +1006,7 @@ event.listen(Report, "before_insert", _apply_taxonomy)
 event.listen(Report, "before_update", _apply_taxonomy)
 
 
-# Phase F.5.c (May 2026) — UNDP must-have #8 building versioning hook.
+# Phase F.5.c (May 2026) - UNDP must-have #8 building versioning hook.
 #
 # Fires on INSERT only. For a row with a non-NULL building_id:
 #   1. Find the count of existing reports for that building_id.
@@ -1017,7 +1017,7 @@ event.listen(Report, "before_update", _apply_taxonomy)
 #      the partial index `ix_reports_building_latest` is built for
 #      exactly this query shape).
 #
-# We deliberately DON'T re-run this on UPDATE — once an ordinal is
+# We deliberately DON'T re-run this on UPDATE - once an ordinal is
 # stamped it stays put across edits. If a report's building_id is
 # CHANGED post-insert (rare; analyst-driven via a re-link action),
 # the dashboard's "Version 3 of 7" chip becomes stale until the next
@@ -1027,14 +1027,14 @@ event.listen(Report, "before_update", _apply_taxonomy)
 #
 # Defensive: never fail an INSERT because of this hook. If the
 # partition query throws (e.g. the connection drops mid-write), the
-# new row simply lands with ordinal=NULL + is_latest=False — the
+# new row simply lands with ordinal=NULL + is_latest=False - the
 # next successful insert restamps the partition.
 def _apply_building_versioning(_mapper, connection, target: "Report") -> None:  # type: ignore[name-defined]
     try:
         if not getattr(target, "building_id", None):
             return
         from sqlalchemy import text as _text
-        # K.1.c (May 2026, Phase K) — partition-scoped advisory lock.
+        # K.1.c (May 2026, Phase K) - partition-scoped advisory lock.
         # Pre-fix the SELECT COUNT() + UPDATE was a check-then-act race:
         # two concurrent INSERTs for the same building_id could both
         # read `existing=N`, both compute `ordinal=N+1`, both mark
@@ -1070,7 +1070,7 @@ def _apply_building_versioning(_mapper, connection, target: "Report") -> None:  
                 {"bid": target.building_id},
             )
     except Exception:
-        # Never fail the write — defensive default leaves ordinal=NULL,
+        # Never fail the write - defensive default leaves ordinal=NULL,
         # is_latest=False which is the same shape as a row without a
         # building_id. Subsequent inserts will restamp the partition.
         pass
@@ -1080,23 +1080,23 @@ event.listen(Report, "before_insert", _apply_building_versioning)
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Phase H.1.b (May 2026) — Building intelligence entity + lifecycle hook.
+# Phase H.1.b (May 2026) - Building intelligence entity + lifecycle hook.
 #
 # Companion to F.5.c's building_version_ordinal / _is_latest columns
 # (those live on Report). This block elevates the building itself to
 # a first-class entity with cached roll-ups, an operational state, and
 # 5 intelligence scores. See migration 0028 for the schema; see the
-# Phase H plan in /Users/pks/.claude/plans/swirling-forging-raccoon.md
+# Phase H plan in the design plan
 # for the design rationale.
 #
 # Two write paths land here:
 #
-#   1. `_apply_building_link` — after_insert / after_update hook on
+#   1. `_apply_building_link` - after_insert / after_update hook on
 #      Report. Ensures a Building row exists for the report's
 #      building_id, then re-derives the cached roll-ups + scores from
-#      the full partition. Defensive — never raises.
+#      the full partition. Defensive - never raises.
 #
-#   2. `_compute_building_scores` — pure-Python score helpers exported
+#   2. `_compute_building_scores` - pure-Python score helpers exported
 #      so the initial-sweep script + the H.1.c list endpoint can call
 #      them directly without re-running the hook.
 #
@@ -1135,7 +1135,7 @@ class Building(Base):
     osm_addr_full = Column(String(400), nullable=True)
 
     # Footprint cache (PostGIS column added by migration 0028 when
-    # available; not exposed as a column attribute here — endpoints
+    # available; not exposed as a column attribute here - endpoints
     # query via raw SQL for PostGIS-specific operations).
     footprint_geojson = Column(JSON, nullable=True)
     centroid_lat = Column(Float, nullable=True)
@@ -1148,7 +1148,7 @@ class Building(Base):
                    server_default="ACTIVE", index=True)
 
     # Cached 5-score intelligence model. NULL until the hook fires
-    # at least once for this building. Dashboard renders "—" when NULL.
+    # at least once for this building. Dashboard renders "-" when NULL.
     severity_score = Column(Float, nullable=True, index=True)
     confidence_score = Column(Float, nullable=True)
     activity_score = Column(Float, nullable=True)
@@ -1187,7 +1187,7 @@ class Building(Base):
     # Soft archive (set when all constituent reports are deleted in grace)
     archived_at = Column(DateTime(timezone=True), nullable=True)
 
-    # Relationship back to constituent reports — many reports per
+    # Relationship back to constituent reports - many reports per
     # building. Use lazy="dynamic" so we can filter/count without
     # pulling the whole partition into memory.
     reports = relationship(
@@ -1198,7 +1198,7 @@ class Building(Base):
     )
 
 
-# ─── Severity / damage ranking — same as the dashboard's mental model ──
+# ─── Severity / damage ranking - same as the dashboard's mental model ──
 _SEVERITY_RANK = {
     "CRITICAL": 5, "SEVERE": 4, "MODERATE": 3, "MINOR": 2, "UNKNOWN": 1,
 }
@@ -1213,7 +1213,7 @@ def _compute_building_scores(connection, building_id: str) -> dict:
     SET clause. Pure SQL aggregation where possible; falls back to
     Python for the time-decayed activity_score.
 
-    Score formulas (see plan H — Intelligence scoring model):
+    Score formulas (see plan H - Intelligence scoring model):
 
       severity_score (0-100) =
           (max_severity_rank / 5) × 60
@@ -1245,7 +1245,7 @@ def _compute_building_scores(connection, building_id: str) -> dict:
     import math
     from datetime import datetime, timezone as _tz
 
-    # Step 1 — pull the cheap aggregates in one SQL pass.
+    # Step 1 - pull the cheap aggregates in one SQL pass.
     rows = connection.execute(text("""
         SELECT
             COUNT(*)                                                AS rep_count,
@@ -1278,7 +1278,7 @@ def _compute_building_scores(connection, building_id: str) -> dict:
     sev_rank = rows[5] or 0
     dmg_rank = rows[6] or 0
 
-    # Step 2 — satellite verification mean (separate query because the
+    # Step 2 - satellite verification mean (separate query because the
     # JOIN to satellite_verifications adds noise on the main aggregate).
     # Postgres `AVG()` returns Decimal; force to float here to avoid
     # mixing types in the score arithmetic below (Decimal × float =
@@ -1309,7 +1309,7 @@ def _compute_building_scores(connection, building_id: str) -> dict:
         + min(sources, 5) * 4.0
     )
 
-    # activity_score — exponential decay. Pull report timestamps
+    # activity_score - exponential decay. Pull report timestamps
     # (count is bounded by partition size; typically <50 rows).
     # `EXTRACT(EPOCH ...)/3600.0` returns Decimal in Postgres → cast
     # to float at the boundary for the math.exp call.
@@ -1338,7 +1338,7 @@ def _compute_building_scores(connection, building_id: str) -> dict:
         + 0.25 * confidence_score
         + 0.20 * escalation_risk
         + 0.05 * activity_score
-        # 0.10 × estimated_people_affected term defaults to 0 here —
+        # 0.10 × estimated_people_affected term defaults to 0 here -
         # population estimate isn't on Report today; H.6 AI summary
         # will populate it.
     )
@@ -1355,7 +1355,7 @@ def _compute_building_scores(connection, building_id: str) -> dict:
 def _refresh_building_rollups(connection, building_id: str) -> None:
     """Single-query UPDATE that re-derives ALL cached roll-up columns
     on the buildings row from current reports. Cheap (one SQL round-
-    trip). Score columns NOT touched here — `_compute_building_scores`
+    trip). Score columns NOT touched here - `_compute_building_scores`
     is called separately + writes them in a second UPDATE.
     """
     from sqlalchemy import text
@@ -1420,7 +1420,7 @@ def _ensure_building_exists(connection, building_id: str, osm_name: str | None =
     `osm_name` is optional metadata the PWA already has from the
     Overpass tags it rendered the footprint from; threading it through
     on first insert means the dashboard shows the building name from
-    the very first report instead of `—` until the H.6 AI summary
+    the very first report instead of `-` until the H.6 AI summary
     backfills it.
     """
     from sqlalchemy import text
@@ -1462,7 +1462,7 @@ def _apply_building_link(_mapper, connection, target: "Report") -> None:  # type
     """SQLAlchemy `after_insert` / `after_update` hook on Report.
 
     Keeps the buildings table's cached roll-ups + scores current
-    after every Report write. Defensive — never re-raises. The
+    after every Report write. Defensive - never re-raises. The
     Report write is already committed (after_insert/update), so a
     failure here just leaves the building cache slightly stale; a
     subsequent write or the hourly background sweep restamps it.
@@ -1496,7 +1496,7 @@ def _apply_building_link(_mapper, connection, target: "Report") -> None:  # type
                 "prio": scores["humanitarian_priority"],
             })
     except Exception as e:
-        # Never propagate — the Report write succeeded and the
+        # Never propagate - the Report write succeeded and the
         # Building cache will catch up on the next write or sweep.
         import logging
         logging.warning(
@@ -1512,7 +1512,7 @@ event.listen(Report, "after_insert", _apply_building_link)
 event.listen(Report, "after_update", _apply_building_link)
 
 
-# Phase H.2 (May 2026) — Building audit trail.
+# Phase H.2 (May 2026) - Building audit trail.
 #
 # Append-only log of state transitions + operator actions on a
 # Building entity. Created by alembic 0029. Indexed
@@ -1571,7 +1571,7 @@ class BuildingEvent(Base):
 
 
 # Allowed BuildingState transitions (state machine). Applied at the
-# H.2 state-transition endpoint level — the database does not enforce
+# H.2 state-transition endpoint level - the database does not enforce
 # this, only the application layer. Operators can always force a
 # transition via SUPER_ADMIN role if the machine gets stuck (escape
 # hatch documented in the endpoint).
@@ -1594,9 +1594,9 @@ def is_valid_building_state_transition(from_state: str, to_state: str) -> bool:
     return to_state in allowed
 
 
-# Phase H.3 (May 2026) — responder coordination + operator watch list.
+# Phase H.3 (May 2026) - responder coordination + operator watch list.
 #
-# `building_responders` — one row per responder assigned to the
+# `building_responders` - one row per responder assigned to the
 # building. Lifecycle: assigned → dispatched → arrived → cleared.
 # Surfaces in the Building Intelligence Console's Responders panel.
 class BuildingResponder(Base):
@@ -1610,7 +1610,7 @@ class BuildingResponder(Base):
     __tablename__ = "building_responders"
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
-    # Phase 3 (Option B) — a responder targets EITHER a building (default;
+    # Phase 3 (Option B) - a responder targets EITHER a building (default;
     # building_id set, target_type=BUILDING) OR an operation (crisis_event_id
     # set, building_id NULL, target_type=OPERATION). building_id is therefore
     # nullable now. No separate Team/Org entity: org_type is a bounded,
@@ -1649,7 +1649,7 @@ class BuildingResponder(Base):
     notes = Column(Text, nullable=True)
 
 
-# Phase 3 — append-only audit of "Claim (with undo)" cluster actions on an
+# Phase 3 - append-only audit of "Claim (with undo)" cluster actions on an
 # operation. Each CLAIMED row snapshots exactly which report ids were bulk-claimed
 # (crisis_event_id set) so the action is reversible (UNCLAIMED un-sets them).
 class OperationClaimLog(Base):
@@ -1670,7 +1670,7 @@ class OperationClaimLog(Base):
     happened_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
-# Phase H.3 — per-operator building watch list.
+# Phase H.3 - per-operator building watch list.
 #
 # Each operator can "watch" a building to get prioritised in their
 # personal queue + (future) push notifications on score changes.
@@ -1702,7 +1702,7 @@ class BuildingMonitor(Base):
     note = Column(Text, nullable=True)
 
 
-# ── Phase H.4 — Operator notes thread ──────────────────────────────────
+# ── Phase H.4 - Operator notes thread ──────────────────────────────────
 class BuildingNote(Base):
     """Free-text operator note on a Building.
 
@@ -1750,10 +1750,10 @@ class BuildingNote(Base):
     deleted_at = Column(DateTime(timezone=True), nullable=True)
 
 
-# ── Phase 5.1 (May 2026, docs §9.4) — H3 cell auto-population ────────
+# ── Phase 5.1 (May 2026, docs §9.4) - H3 cell auto-population ────────
 # When a Location row is inserted or its lat/lng changes, derive the H3
 # cell index. Single listener covers all three Location-create sites in
-# reports.py + any future sites — no per-site wiring required.
+# reports.py + any future sites - no per-site wiring required.
 #
 # Best-effort: import + computation failures are silently swallowed so
 # a missing h3 wheel or NaN coords can never block a real submission.
@@ -1778,13 +1778,13 @@ event.listen(Location, "before_insert", _populate_h3_idx)
 event.listen(Location, "before_update", _populate_h3_idx)
 
 
-# ── Phase 5.1 (May 2026, docs §9.5) — Materialised hot-region snapshots ─
+# ── Phase 5.1 (May 2026, docs §9.5) - Materialised hot-region snapshots ─
 # Per-region pre-aggregated /nearby responses for 1 M+-report regions
 # under active disaster. The aggregator runs once per region per refresh
 # interval; every /nearby poll that falls inside an enabled region
 # returns the cached snapshot instead of re-aggregating live.
 #
-# Not a PostgreSQL materialised view — a regular table with a JSONB
+# Not a PostgreSQL materialised view - a regular table with a JSONB
 # blob keyed by region. Lighter than MV + survives multi-worker /
 # multi-instance / process-restart without rebuild drama.
 
@@ -1815,14 +1815,14 @@ class NearbyHotRegion(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
-# ── P3.1 — Media file cleanup on DB delete ────────────────────────────────────
+# ── P3.1 - Media file cleanup on DB delete ────────────────────────────────────
 # When a Media row is deleted (either directly or via cascade from a Report
 # hard-delete), remove the corresponding disk files in `uploads/`. Without
 # this hook, GDPR "right to be forgotten" requests leaked data via orphan
 # assembled files + partial previews + thumbnails.
 #
 # Scope: only removes files matching our own `{media_id}_*` pattern, never
-# follows absolute paths or user-supplied strings — so a corrupted `url`
+# follows absolute paths or user-supplied strings - so a corrupted `url`
 # column cannot weaponise this into an arbitrary-file-delete primitive.
 @event.listens_for(Media, "after_delete")
 def _remove_media_files_on_delete(mapper, connection, target: "Media") -> None:  # type: ignore[name-defined]
@@ -1858,7 +1858,7 @@ def _remove_media_files_on_delete(mapper, connection, target: "Media") -> None: 
 class PushSubscription(Base):
     """Web Push subscription endpoint tied to a reporter identity.
 
-    Apr 2026 — UNDP scalability story. Each row holds the
+    Apr 2026 - UNDP scalability story. Each row holds the
     browser-issued PushSubscription (endpoint URL + p256dh ECDH
     public key + auth secret) plus the reporter identity it belongs
     to. When a Report's status changes, the dispatch / resolve
@@ -1881,13 +1881,13 @@ class PushSubscription(Base):
     Failure tracking is light-touch: `failure_count` increments on
     transient 5xx, `last_failure_at` records the timestamp. Hard
     failures (404 / 410 from provider) trigger immediate row
-    deletion in the service module — no need to remember anything
+    deletion in the service module - no need to remember anything
     about a subscription that no longer exists.
     """
     __tablename__ = "push_subscriptions"
     id = Column(String(36), primary_key=True, default=gen_uuid)
     device_hash = Column(String(255), nullable=True, index=True)
-    # No FK on device_hash — Devices is keyed on its own UUID, and the
+    # No FK on device_hash - Devices is keyed on its own UUID, and the
     # client-side device_hash isn't always materialised there at sub
     # time (some flows skip device-row creation until first report).
     user_id = Column(
@@ -1914,21 +1914,21 @@ class PushSubscription(Base):
 
 
 class NearbyGroupEvent(Base):
-    """Nearby Reports Pipeline — lifecycle audit trail.
+    """Nearby Reports Pipeline - lifecycle audit trail.
 
     Phase 2 (May 2026, docs §3.7 + §13). One row per transition for a
     nearby aggregation group: promote / downgrade / merge / split /
     resolve / fading. Group ids are SYNTHETIC (g_building_<bid> /
-    g_block_<gh>_<crisis> / g_area_<gh>_<crisis>) so there is no FK —
+    g_block_<gh>_<crisis> / g_area_<gh>_<crisis>) so there is no FK -
     groups are ephemeral aggregations, not DB rows. The synthetic id
     is stable across polls as long as the membership doesn't change,
     which is exactly what the transition detector needs.
 
     Indexed for two access patterns:
-      ① "all events for group X newest-first" — composite
+      ① "all events for group X newest-first" - composite
          (group_id, occurred_at DESC), used by the public
          "Cluster history" timeline.
-      ② "all events in the last N minutes" — single column
+      ② "all events in the last N minutes" - single column
          occurred_at, used by §13's observability metrics
          (cluster lifetime histogram, promotion-rate counter).
     """
@@ -1943,7 +1943,7 @@ class NearbyGroupEvent(Base):
     to_tier = Column(String(16), nullable=True)
     from_count = Column(Integer, nullable=True)
     to_count = Column(Integer, nullable=True)
-    # JSONB for ad-hoc diff data — kept jsonb so we can query inside
+    # JSONB for ad-hoc diff data - kept jsonb so we can query inside
     # later (e.g. "groups whose acute_grade flipped HIGH→LOW").
     payload = Column(JSON, default=dict, nullable=False)
     occurred_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
@@ -1961,10 +1961,10 @@ class Appeal(Base):
     Opened when a device's spam_score / spam_signals cause its
     contributions to be suppressed. Admins decide: reinstated
     (zero spam_score) / upheld (keep suppression) / banned
-    (permanent — requires 2-admin co-sign per docs §7.5).
+    (permanent - requires 2-admin co-sign per docs §7.5).
 
     UNDP and other deployment partners integrate via outbound
-    webhooks emitted on status changes — they DON'T own the
+    webhooks emitted on status changes - they DON'T own the
     underlying tables. Framework stays reusable across deployments.
     """
     __tablename__ = "appeals"
@@ -2014,7 +2014,7 @@ class AppealEvent(Base):
 
 
 class AiRetryQueueRow(Base):
-    """Phase K K.6.b — persistent retry queue for AI pipeline tasks.
+    """Phase K K.6.b - persistent retry queue for AI pipeline tasks.
 
     Pre-K.6.b a transient AI failure (Anthropic 5xx, Whisper OOM,
     satellite-provider timeout) left the report's ``ai_assessment``
@@ -2031,15 +2031,15 @@ class AiRetryQueueRow(Base):
     failed" once that state is reached.
 
     Status vocabulary (bounded):
-        pending          — waiting for next retry (next_attempt_at <= now)
-        in_progress      — daemon picked this row up + is running it now
-        complete         — AI call succeeded; row stays for audit
-        terminal_failed  — 5 attempts exhausted; manual op only
+        pending          - waiting for next retry (next_attempt_at <= now)
+        in_progress      - daemon picked this row up + is running it now
+        complete         - AI call succeeded; row stays for audit
+        terminal_failed  - 5 attempts exhausted; manual op only
 
     Kind vocabulary (bounded):
-        transcription    — re-run audio → text via Whisper
-        image_analysis   — re-run image → labels via Claude vision
-        truth_scoring    — re-run satellite + truth_scorer fan-out
+        transcription    - re-run audio → text via Whisper
+        image_analysis   - re-run image → labels via Claude vision
+        truth_scoring    - re-run satellite + truth_scorer fan-out
     """
     __tablename__ = "ai_retry_queue"
 
@@ -2078,7 +2078,7 @@ class AiRetryQueueRow(Base):
 
 
 class GeocodeCache(Base):
-    """HC55 (May 2026) — persistent cache for geocoder results.
+    """HC55 (May 2026) - persistent cache for geocoder results.
 
     Both reverse (lat/lng → place name) and forward (text → lat/lng)
     geocodes are cached here, keyed by direction + rounded coords +
@@ -2115,7 +2115,7 @@ class GeocodeCache(Base):
     # computed at response time and never persisted.
     source = Column(String(32), nullable=False)
     confidence = Column(String(16), nullable=True)
-    # Forward direction only — coords resolved by the original lookup.
+    # Forward direction only - coords resolved by the original lookup.
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     created_at = Column(DateTime(timezone=True),

@@ -21,7 +21,7 @@ This migration adds the column + an index. Indexed because the
 admin dashboard's "verified-this-week" leaderboard query (queued
 post-submission per docs/UNDP-MODULES.md) will filter on it.
 
-Idempotent — uses the inspector guard pattern from 0013 / 0015 /
+Idempotent - uses the inspector guard pattern from 0013 / 0015 /
 0017 / 0018.
 """
 from alembic import op

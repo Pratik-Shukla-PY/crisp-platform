@@ -1,5 +1,5 @@
 /**
- * NearbyReports — RN component for the "Verified Reports Nearby"
+ * NearbyReports - RN component for the "Verified Reports Nearby"
  * home-stage intelligence module (May 2026).
  *
  * Mirror of mobile-app/src/nearby.js + the .home-nearby-intel CSS
@@ -10,7 +10,7 @@
  *   ✓ Online → live fetch; offline → fresh cache OR hide
  *   ✓ k-anonymity-aware (groups < 3 reports never reach client)
  *   ✓ No PII rendered (server projection)
- *   ✓ Bottom-sheet detail tap dispatch — Phase 2 wires the modal
+ *   ✓ Bottom-sheet detail tap dispatch - Phase 2 wires the modal
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import {
@@ -34,7 +34,7 @@ const _t = (key: string, fb: string): string => {
 
 export interface NearbyReportsProps {
   /** Caller's last-known location. NEVER trigger a prompt from this
-   *  component — the home-stage rule. App.tsx already has cached GPS
+   *  component - the home-stage rule. App.tsx already has cached GPS
    *  from the v4 capture stage. */
   lat: number | null;
   lng: number | null;
@@ -44,7 +44,7 @@ export interface NearbyReportsProps {
    *  AND cache fresh (< 5 min). */
   online: boolean;
 
-  /** Optional callback when a row is tapped — Phase 2 opens a bottom-
+  /** Optional callback when a row is tapped - Phase 2 opens a bottom-
    *  sheet modal with detail. Phase 1: no-op or external nav. */
   onRowPress?: (group: NearbyGroup) => void;
 }
@@ -54,9 +54,9 @@ export default function NearbyReports(props: NearbyReportsProps) {
   const [payload, setPayload] = useState<NearbyResponse | null>(null);
   const [cacheAgeMs, setCacheAgeMs] = useState<number | null>(null);
   const [expanded, setExpanded] = useState(false);
-  // Phase 2 — bottom-sheet detail modal
+  // Phase 2 - bottom-sheet detail modal
   const [selectedGroup, setSelectedGroup] = useState<NearbyGroup | null>(null);
-  // v8 — list sheet (slides up on aggregate number tap)
+  // v8 - list sheet (slides up on aggregate number tap)
   const [listOpen, setListOpen] = useState(false);
 
   // Load (or re-load) on mount + when connectivity or coords change.
@@ -80,7 +80,7 @@ export default function NearbyReports(props: NearbyReportsProps) {
     if (props.onRowPress) {
       try { props.onRowPress(g); } catch { /* ignore */ }
     }
-    // Phase 2 — open bottom-sheet detail modal with this group.
+    // Phase 2 - open bottom-sheet detail modal with this group.
     setSelectedGroup(g);
   }, [props.onRowPress]);
 
@@ -113,7 +113,7 @@ export default function NearbyReports(props: NearbyReportsProps) {
           <EmptyState />
         </View>
       ) : (
-        // v8 — single aggregate number block; tap → list modal
+        // v8 - single aggregate number block; tap → list modal
         <Pressable
           style={styles.numberBlock}
           onPress={() => setListOpen(true)}
@@ -140,7 +140,7 @@ export default function NearbyReports(props: NearbyReportsProps) {
         </Text>
       )}
 
-      {/* v8 — list bottom-sheet (slides up on tap) */}
+      {/* v8 - list bottom-sheet (slides up on tap) */}
       <ListSheet
         groups={listOpen ? groups : []}
         visible={listOpen}
@@ -148,7 +148,7 @@ export default function NearbyReports(props: NearbyReportsProps) {
         onRowPress={(g) => { setListOpen(false); handleRowPress(g); }}
       />
 
-      {/* Detail bottom-sheet — opens when a row is tapped in the list */}
+      {/* Detail bottom-sheet - opens when a row is tapped in the list */}
       <DetailSheet
         group={selectedGroup}
         onClose={() => setSelectedGroup(null)}
@@ -357,7 +357,7 @@ function DetailSheet({ group, onClose }: {
           <Pressable
             style={sheetStyles.cta}
             onPress={() => {
-              // Soft pre-fill — RN equivalent of the PWA prefill.
+              // Soft pre-fill - RN equivalent of the PWA prefill.
               // Stored as a custom event payload; App.tsx can wire
               // the v4 capture flow to honour it in a follow-up.
               onClose();
@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  // v8.2 (May 2026, operator) — aggregate number block with NO card
+  // v8.2 (May 2026, operator) - aggregate number block with NO card
   // framing. Background + border removed; number / halo / label sit
   // free on the home stage. overflow:hidden + borderRadius retained
   // only so a future ripple animation can clip cleanly to the click
@@ -694,7 +694,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.48)', fontSize: 12, fontWeight: '500',
   },
 
-  // Caption — "Last seen X min ago"
+  // Caption - "Last seen X min ago"
   caption: {
     color: 'rgba(255, 255, 255, 0.38)',
     fontSize: 10.5, fontWeight: '500',

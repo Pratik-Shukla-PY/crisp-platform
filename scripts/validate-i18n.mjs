@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 /**
- * i18n validation — run before committing a translation update.
+ * i18n validation - run before committing a translation update.
  *
  *   * Every JSON file parses.
  *   * Every non-EN locale has exactly the same key set as en.json
  *     (minus the `__meta__` block).
  *   * Every `{n}`-style template variable in the EN value is preserved
- *     in the translated value — catches translators who dropped the
+ *     in the translated value - catches translators who dropped the
  *     placeholder and silently broke pluralised time-ago strings.
  *   * Emoji prefixes (the first character, if an emoji) are preserved.
  *
  * Usage:
  *   node scripts/validate-i18n.mjs
  *
- * Exit code 0 on success, 1 on any validation failure — wire into CI.
+ * Exit code 0 on success, 1 on any validation failure - wire into CI.
  */
 import { readFile, readdir } from "node:fs/promises";
 import { join, dirname } from "node:path";
@@ -34,7 +34,7 @@ function ok(msg)   { console.log(`${GREEN}✓${RESET} ${msg}`); }
 
 const files = (await readdir(I18N_DIR)).filter((f) => f.endsWith(".json")).sort();
 if (!files.includes("en.json")) {
-    fail("en.json is missing — en is the canonical source of truth, cannot validate without it.");
+    fail("en.json is missing - en is the canonical source of truth, cannot validate without it.");
     process.exit(1);
 }
 
@@ -86,7 +86,7 @@ for (const f of files) {
     const stub = isStub(f, parsed[f]);
     if (missing.length) {
         if (stub) {
-            warn(`${f}: ${missing.length} key(s) missing — stub locale, runtime falls back to English (acceptable)`);
+            warn(`${f}: ${missing.length} key(s) missing - stub locale, runtime falls back to English (acceptable)`);
         } else {
             fail(`${f}: ${missing.length} missing key(s) vs en.json`);
             missing.slice(0, 20).forEach((k) => console.error(`    - ${k}`));
@@ -94,7 +94,7 @@ for (const f of files) {
         }
     }
     if (extra.length) {
-        warn(`${f}: ${extra.length} extra key(s) not in en.json (kept — may be deprecated aliases)`);
+        warn(`${f}: ${extra.length} extra key(s) not in en.json (kept - may be deprecated aliases)`);
         extra.slice(0, 10).forEach((k) => console.warn(`    + ${k}`));
     }
     if (!missing.length) ok(`${locale}: all ${keys.size} EN keys present`);
@@ -154,7 +154,7 @@ const references = new Set();
 const I18N_REFS = [
     // data-i18n="key"  / data-i18n-aria-label="key" / data-i18n-title="key" / data-i18n-placeholder="key"
     /data-i18n(?:-[a-z-]+)?=["']([a-zA-Z0-9_]+)["']/g,
-    // t("key")  / _t("key")  /  t('key')   — JS-only
+    // t("key")  / _t("key")  /  t('key')   - JS-only
     /\bt\(["']([a-zA-Z0-9_]+)["']/g,
     /\b_t\(["']([a-zA-Z0-9_]+)["']/g,
 ];
@@ -197,7 +197,7 @@ if (orphans.length > 0) {
 
 console.log("");
 if (problems) {
-    console.error(`${RED}FAIL${RESET} — ${problems} validation problem(s).`);
+    console.error(`${RED}FAIL${RESET} - ${problems} validation problem(s).`);
     process.exit(1);
 }
-console.log(`${GREEN}PASS${RESET} — all locale files valid.`);
+console.log(`${GREEN}PASS${RESET} - all locale files valid.`);

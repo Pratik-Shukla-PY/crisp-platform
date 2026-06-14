@@ -1,5 +1,5 @@
 """
-WhatsApp Bot Reply Templates — Multilingual guided prompts (6 UN languages + local).
+WhatsApp Bot Reply Templates - Multilingual guided prompts (6 UN languages + local).
 Uses WhatsApp Cloud API. Language detected from phone country prefix.
 """
 import os
@@ -15,7 +15,7 @@ TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "")
 # ── Multilingual strings (6 UN + Hindi, Portuguese, Swahili) ────────────────
 _STRINGS = {
     "en": {
-        "welcome": "🆘 *CRISP — Crisis Report Bot*\n\nReport damage in 3 steps:\n📍 Share location\n📸 Send photo\n✅ Done!\n\n💡 Or just send a photo with a caption.\n\nReply LANG to change language.\n🔒 _Faces auto-blurred for privacy_",
+        "welcome": "🆘 *CRISP - Crisis Report Bot*\n\nReport damage in 3 steps:\n📍 Share location\n📸 Send photo\n✅ Done!\n\n💡 Or just send a photo with a caption.\n\nReply LANG to change language.\n🔒 _Faces auto-blurred for privacy_",
         "sev_prompt": "How severe is the damage?",
         "type_prompt": "What type of infrastructure is affected?",
         "loc_request": "📍 Share your location so rescue teams can find it.\n\nTap 📎 → Location → Send Current Location.",
@@ -27,7 +27,7 @@ _STRINGS = {
         "lang_menu": "🌐 Choose your language:\n\n1. English\n2. 中文\n3. Русский\n4. Espanol\n5. Francais\n6. العربية\n7. हिन्दी\n\nReply with the number.",
     },
     "zh": {
-        "welcome": "🆘 *CRISP — 危机报告*\n\n3步报告损失:\n📍 分享位置\n📸 发送照片\n✅ 完成!\n\n回复 LANG 更改语言\n🔒 _面部自动模糊_",
+        "welcome": "🆘 *CRISP - 危机报告*\n\n3步报告损失:\n📍 分享位置\n📸 发送照片\n✅ 完成!\n\n回复 LANG 更改语言\n🔒 _面部自动模糊_",
         "sev_prompt": "损坏严重程度?",
         "type_prompt": "哪种基础设施受损?",
         "loc_request": "📍 分享位置帮助救援队。\n\n点击 📎 → 位置 → 发送当前位置。",
@@ -39,7 +39,7 @@ _STRINGS = {
         "lang_menu": "🌐 选择语言:\n\n1. English\n2. 中文\n3. Русский\n4. Espanol\n5. Francais\n6. العربية\n7. हिन्दी\n\n回复数字。",
     },
     "ru": {
-        "welcome": "🆘 *CRISP — Экстренный отчет*\n\n3 шага:\n📍 Местоположение\n📸 Фото\n✅ Готово!\n\nОтветьте LANG для смены языка\n🔒 _Лица размываются автоматически_",
+        "welcome": "🆘 *CRISP - Экстренный отчет*\n\n3 шага:\n📍 Местоположение\n📸 Фото\n✅ Готово!\n\nОтветьте LANG для смены языка\n🔒 _Лица размываются автоматически_",
         "sev_prompt": "Насколько серьезно повреждение?",
         "type_prompt": "Какая инфраструктура повреждена?",
         "loc_request": "📍 Поделитесь местоположением.\n\n📎 → Геолокация → Отправить.",
@@ -51,7 +51,7 @@ _STRINGS = {
         "lang_menu": "🌐 Выберите язык:\n\n1. English\n2. 中文\n3. Русский\n4. Espanol\n5. Francais\n6. العربية\n7. हिन्दी\n\nОтветьте цифрой.",
     },
     "es": {
-        "welcome": "🆘 *CRISP — Reporte de Crisis*\n\n3 pasos:\n📍 Ubicacion\n📸 Foto\n✅ Listo!\n\nResponde LANG para cambiar idioma\n🔒 _Rostros se difuminan automaticamente_",
+        "welcome": "🆘 *CRISP - Reporte de Crisis*\n\n3 pasos:\n📍 Ubicacion\n📸 Foto\n✅ Listo!\n\nResponde LANG para cambiar idioma\n🔒 _Rostros se difuminan automaticamente_",
         "sev_prompt": "¿Que tan grave es el dano?",
         "type_prompt": "¿Que infraestructura esta afectada?",
         "loc_request": "📍 Comparte tu ubicacion.\n\n📎 → Ubicacion → Enviar ubicacion actual.",
@@ -63,7 +63,7 @@ _STRINGS = {
         "lang_menu": "🌐 Elige idioma:\n\n1. English\n2. 中文\n3. Русский\n4. Espanol\n5. Francais\n6. العربية\n7. हिन्दी\n\nResponde con el numero.",
     },
     "fr": {
-        "welcome": "🆘 *CRISP — Rapport de Crise*\n\n3 etapes:\n📍 Position\n📸 Photo\n✅ Fini!\n\nRepondez LANG pour changer de langue\n🔒 _Visages floutes automatiquement_",
+        "welcome": "🆘 *CRISP - Rapport de Crise*\n\n3 etapes:\n📍 Position\n📸 Photo\n✅ Fini!\n\nRepondez LANG pour changer de langue\n🔒 _Visages floutes automatiquement_",
         "sev_prompt": "Quelle est la gravite?",
         "type_prompt": "Quel type d'infrastructure est touche?",
         "loc_request": "📍 Partagez votre position.\n\n📎 → Position → Envoyer la position.",
@@ -75,7 +75,7 @@ _STRINGS = {
         "lang_menu": "🌐 Choisissez la langue:\n\n1. English\n2. 中文\n3. Русский\n4. Espanol\n5. Francais\n6. العربية\n7. हिन्दी\n\nRepondez avec le numero.",
     },
     "ar": {
-        "welcome": "🆘 *CRISP — تقرير الأزمات*\n\n3 خطوات:\n📍 الموقع\n📸 صورة\n✅ تم!\n\nأرسل LANG لتغيير اللغة\n🔒 _يتم تشويش الوجوه تلقائياً_",
+        "welcome": "🆘 *CRISP - تقرير الأزمات*\n\n3 خطوات:\n📍 الموقع\n📸 صورة\n✅ تم!\n\nأرسل LANG لتغيير اللغة\n🔒 _يتم تشويش الوجوه تلقائياً_",
         "sev_prompt": "ما مدى خطورة الضرر؟",
         "type_prompt": "ما نوع البنية التحتية المتضررة؟",
         "loc_request": "📍 شارك موقعك.\n\n📎 ← الموقع ← إرسال الموقع الحالي.",
@@ -87,7 +87,7 @@ _STRINGS = {
         "lang_menu": "🌐 اختر اللغة:\n\n1. English\n2. 中文\n3. Русский\n4. Espanol\n5. Francais\n6. العربية\n7. हिन्दी\n\nأرسل الرقم.",
     },
     "hi": {
-        "welcome": "🆘 *CRISP — आपातकालीन रिपोर्ट*\n\n3 आसान कदम:\n📍 स्थान भेजें\n📸 फोटो भेजें\n✅ हो गया!\n\nLANG भेजें भाषा बदलने के लिए\n🔒 _चेहरे स्वचालित रूप से धुंधले होंगे_",
+        "welcome": "🆘 *CRISP - आपातकालीन रिपोर्ट*\n\n3 आसान कदम:\n📍 स्थान भेजें\n📸 फोटो भेजें\n✅ हो गया!\n\nLANG भेजें भाषा बदलने के लिए\n🔒 _चेहरे स्वचालित रूप से धुंधले होंगे_",
         "sev_prompt": "नुकसान कितना गंभीर है?",
         "type_prompt": "किस प्रकार का ढांचा प्रभावित है?",
         "loc_request": "📍 अपना स्थान भेजें।\n\n📎 → स्थान → वर्तमान स्थान भेजें।",

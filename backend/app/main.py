@@ -1,5 +1,5 @@
 """
-CRISP Backend — FastAPI application entry point.
+CRISP Backend - FastAPI application entry point.
 
 Mounts all API routes, webhook endpoints (Telegram, WhatsApp, SMS, IVR),
 static file serving, CORS middleware, and background workers.
@@ -25,12 +25,12 @@ _env_path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
 load_dotenv(dotenv_path=_env_path, override=True)
 
 
-# ── Phase 24 — fail-fast env validation ───────────────────────────────
+# ── Phase 24 - fail-fast env validation ───────────────────────────────
 #
 # Phase 23 deployed a backend with `MEDIA_BACKEND=s3` but with the
 # `AWS_REGION` line accidentally missing from `.env.production` (an
 # operator's hand-edit dropped it). The container started healthy
-# and the docker-compose healthcheck stayed green — `boto3` only
+# and the docker-compose healthcheck stayed green - `boto3` only
 # raised when the first media request hit it, hours later, after the
 # bad state had reached user traffic.
 #
@@ -72,7 +72,7 @@ def _validate_required_env() -> None:
         sys.exit(1)
 
 
-# Skip validation in the pytest suite — tests use a minimal env that
+# Skip validation in the pytest suite - tests use a minimal env that
 # legitimately omits some of these (e.g. local-storage MEDIA_BACKEND).
 # Pytest sets PYTEST_CURRENT_TEST in the env; we use that as the
 # signal. Production / docker-compose never sets it.
@@ -85,7 +85,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from app.api.router import api_router
 
-# P3.7 / P3.8 — structured logging + optional Sentry. Configured early so
+# P3.7 / P3.8 - structured logging + optional Sentry. Configured early so
 # anything imported after this uses the JSON/console renderer.
 from app.core.observability import (
     configure_structlog,
@@ -102,7 +102,7 @@ if _sentry_enabled:
 
 
 # ── Security: Admin API Key ──────────────────────────────────────────────────
-# P1.8 — In production we FAIL STARTUP if CRISP_ADMIN_KEY is missing. A
+# P1.8 - In production we FAIL STARTUP if CRISP_ADMIN_KEY is missing. A
 # previous "no key = dev mode (all allowed)" fallback meant a deployment with
 # a forgotten env var quietly exposed every admin endpoint to the world.
 # Dev mode must be opted into with APP_ENV=dev so an accidental prod deploy
@@ -136,7 +136,7 @@ if not ADMIN_KEY:
             "or set APP_ENV=dev for local development."
         )
     logging.getLogger(__name__).warning(
-        "CRISP_ADMIN_KEY not set and APP_ENV=%s — admin endpoints will reject "
+        "CRISP_ADMIN_KEY not set and APP_ENV=%s - admin endpoints will reject "
         "all requests. Set the env var to re-enable them.", APP_ENV
     )
 
@@ -159,11 +159,11 @@ def verify_admin_key(request: Request):
 
 
 # ── Security: Rate Limiter ───────────────────────────────────────────────────
-# Phase 1.8 (May 2026) — distributed rate-limit. When ``REDIS_URL`` is
+# Phase 1.8 (May 2026) - distributed rate-limit. When ``REDIS_URL`` is
 # set, the counter is backed by atomic Redis INCR + EXPIRE so every
 # uvicorn worker / backend instance shares the same view. When unset
 # (dev, CI, first-deploy), the in-memory dict in
-# ``app.services.rate_limit._inmemory_buckets`` is the fallback — same
+# ``app.services.rate_limit._inmemory_buckets`` is the fallback - same
 # semantics as the pre-Phase-1.8 module-local ``_rate_limits``.
 #
 # ``_rate_limits`` here is kept as a LIVE ALIAS for the service-module
@@ -199,7 +199,7 @@ import app.models.prediction  # Prediction zone + result tables
 # SQLite-era zero-install shortcut that raced with Alembic on Postgres
 # (create_all → CREATE TABLE; alembic upgrade then hits "relation already
 # exists"). The `_migrate_schema()` column-adder hot-patcher is also
-# gone — its `ALTER TABLE ADD COLUMN … DEFAULT 0` syntax was SQLite-only
+# gone - its `ALTER TABLE ADD COLUMN … DEFAULT 0` syntax was SQLite-only
 # (Postgres needs `DEFAULT FALSE` on BOOLEAN, `TIMESTAMP` not `DATETIME`,
 # etc.), and Alembic covers every column it used to hot-patch. See
 # ``docs/MIGRATIONS.md`` + ``scripts/dev-setup.sh``.
@@ -216,7 +216,7 @@ def _assert_alembic_head() -> None:
             )).first()
         except Exception:
             raise RuntimeError(
-                "Database has no `alembic_version` table — run "
+                "Database has no `alembic_version` table - run "
                 "`alembic upgrade head` before starting uvicorn. "
                 "CRISP is Postgres-only as of Apr 2026."
             )
@@ -260,16 +260,16 @@ except RuntimeError as _err:
     if APP_ENV == "production":
         raise
     logging.getLogger(__name__).warning(
-        "Schema check: %s (APP_ENV=%s — booting anyway; in prod this is fatal)",
+        "Schema check: %s (APP_ENV=%s - booting anyway; in prod this is fatal)",
         _err, APP_ENV,
     )
 
-# May 2026 — FastAPI lifespan handler. Replaces the deprecated
+# May 2026 - FastAPI lifespan handler. Replaces the deprecated
 # @app.on_event("startup") decorator (warning was firing on every test
 # run + would have failed outright on FastAPI 1.x). Both startup AND
 # shutdown branches live in one async context manager:
 #   yield ⇒ everything before is startup, everything after is shutdown.
-# Today the shutdown branch is empty — the purge worker + Telegram poll
+# Today the shutdown branch is empty - the purge worker + Telegram poll
 # task are daemon threads / asyncio tasks that exit with the process.
 # Adding a shutdown step (e.g. graceful Telegram poll cancellation)
 # would slot in after the `yield`.
@@ -278,7 +278,7 @@ async def lifespan(app: "FastAPI"):  # forward-ref string is fine at module scop
     await _run_startup_tasks()
     yield
     # (no shutdown work today; add cleanup here if/when threads need
-    # graceful join — currently they're daemons and exit with the process)
+    # graceful join - currently they're daemons and exit with the process)
 
 
 app = FastAPI(
@@ -289,17 +289,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — P2.7: tighter rules in production.
+# CORS - P2.7: tighter rules in production.
 #
 # In dev we accept localhost + every RFC 1918 private LAN address so a
 # tester on the same Wi-Fi (e.g. http://192.168.1.49:8080) can hit the
 # backend from the dashboard without the preflight failing. Previously
-# only literal "localhost:*" was whitelisted — a tester opening the
+# only literal "localhost:*" was whitelisted - a tester opening the
 # dashboard at the LAN IP got a silent CORS preflight 400 and the
 # login button just "didn't do anything" in the browser. Fixed 2026-04-21.
 #
 # In production we require CORS_ORIGINS to be explicitly set to the real
-# dashboard domain — a missing env var would previously have silently
+# dashboard domain - a missing env var would previously have silently
 # allowed the dev defaults, giving a same-LAN attacker on the host a free
 # authenticated-request channel thanks to `allow_credentials=True`.
 _default_dev_origins = "http://localhost:8080,http://localhost:8000,http://localhost:3000"
@@ -314,20 +314,20 @@ if not _cors_env:
         )
     _cors_env = _default_dev_origins
     logging.getLogger(__name__).warning(
-        "CORS_ORIGINS not set and APP_ENV=%s — defaulting to localhost "
+        "CORS_ORIGINS not set and APP_ENV=%s - defaulting to localhost "
         "+ RFC 1918 LAN regex. Production MUST set CORS_ORIGINS.",
         APP_ENV,
     )
 # In dev mode, ALSO whitelist any RFC 1918 private LAN IP with a regex
 # alongside whatever explicit origins were set. DHCP leases change on a
 # whim (Mac wakes up and gets a new IP), which would otherwise require
-# manually rotating .env every morning — observed 2026-04-21 when a
+# manually rotating .env every morning - observed 2026-04-21 when a
 # tester hit CORS 400 at http://192.168.1.49:8080 because .env was
 # frozen on http://192.168.1.38:8080. Regex is intentionally strict:
 # only http://, only RFC 1918 ranges (10.x / 172.16-31.x / 192.168.x)
 # plus localhost / 127.0.0.1. Production MUST set APP_ENV=production;
 # in that case this branch never runs and only the explicit
-# CORS_ORIGINS list applies — same-LAN attackers can't sneak in.
+# CORS_ORIGINS list applies - same-LAN attackers can't sneak in.
 if APP_ENV != "production":
     _cors_regex = (
         r"^http://("
@@ -351,14 +351,14 @@ app.add_middleware(
     allow_origin_regex=_cors_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    # May 2026 — must include conditional-GET request headers
+    # May 2026 - must include conditional-GET request headers
     # (If-None-Match, If-Match) so the dashboard's ETag-based polling
     # preflight doesn't 400. Without these, the browser preflight for
     # /api/v1/reports/?since=... fails CORS, the actual GET is blocked,
     # and the dashboard surfaces "Failed to fetch" / shows zero
     # reports even though the backend is healthy.
     #
-    # May 2026 (HC82, HAR-driven nearby regression) — `X-Caller-Device-Hash`
+    # May 2026 (HC82, HAR-driven nearby regression) - `X-Caller-Device-Hash`
     # MUST be in this list. The PWA home + success-stage nearby fetches
     # (`nearby.js _fetchNearby`, `app.js _bootSuccessNearby`) send this
     # custom header so the backend can exclude the caller's own reports
@@ -374,12 +374,12 @@ app.add_middleware(
         "If-None-Match", "If-Match",
         "X-Caller-Device-Hash",
     ],
-    # May 2026 (HAR-driven dashboard regression) — `X-Server-Time` + `ETag`
+    # May 2026 (HAR-driven dashboard regression) - `X-Server-Time` + `ETag`
     # MUST be in this list. The reports list endpoint returns both, and the
     # dashboard's delta poller reads them via `res.headers.get(...)` to
     # advance `_lastServerTime` (cursor) and `_lastReportsEtag` (304 path).
     # If they're not exposed to JS via CORS, the browser hides them from
-    # the fetch response — even though the server sets them — and the
+    # the fetch response - even though the server sets them - and the
     # dashboard falls back to a full-refresh on EVERY poll. Combined with
     # the dashboard's full-refresh notification-suppression flag, that
     # silently drops every operator notification on cross-origin
@@ -392,7 +392,7 @@ app.add_middleware(
         "X-Offset",
         "X-Server-Time",
         "ETag",
-        # Jun 2026 (export audit) — fetch->blob downloads read the server's
+        # Jun 2026 (export audit) - fetch->blob downloads read the server's
         # filename from Content-Disposition; it is NOT CORS-safelisted, so
         # cross-origin dev (8080 -> 8000) silently fell back to generic
         # client-side filenames without this.
@@ -400,14 +400,14 @@ app.add_middleware(
     ],
 )
 
-# P3.7 — Prometheus + structured-logging request middleware. Counts every
+# P3.7 - Prometheus + structured-logging request middleware. Counts every
 # HTTP request, records latency, and stamps a request_id onto structlog so
 # every log line inside a handler carries it. Skips when the /metrics scrape
 # itself is happening (avoid recursive counters).
 app.add_middleware(PrometheusRequestMiddleware)
 
 
-# P3.6 — Security headers middleware.
+# P3.6 - Security headers middleware.
 #  - HSTS tells browsers to refuse HTTP for this origin for 2 years + includeSubDomains.
 #    Only emitted when APP_ENV=production (localhost dev would be bricked otherwise).
 #  - X-Content-Type-Options: nosniff stops MIME-confusion attacks on the
@@ -428,7 +428,7 @@ async def _security_headers(request: Request, call_next):
     return resp
 
 
-# Global exception handler — never leak stack traces to clients
+# Global exception handler - never leak stack traces to clients
 @app.exception_handler(Exception)
 async def _global_error_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled error: {type(exc).__name__}: {exc}", exc_info=True)
@@ -469,7 +469,7 @@ except ImportError as e:
 
 app.mount("/static", StaticFiles(directory="uploads"), name="static")
 
-# P2.10 — Canonical enum source-of-truth endpoint. Clients (PWA, RN, Telegram
+# P2.10 - Canonical enum source-of-truth endpoint. Clients (PWA, RN, Telegram
 # bot, SMS parser) should pull this at startup and reconcile their hard-coded
 # lists against it. Prevents the drift we saw in the audit (Telegram accepted
 # crisis types the backend didn't know about, SMS parser defaulted to OTHER
@@ -490,7 +490,7 @@ def get_enums():
     }
 
 
-# P3.7 — Prometheus scrape target. No auth at /metrics itself; in production
+# P3.7 - Prometheus scrape target. No auth at /metrics itself; in production
 # this endpoint should be reachable only from the VPC's monitoring subnet or
 # fronted by a token-aware sidecar. For now we rely on network-level scoping.
 @app.get("/metrics", tags=["system"])
@@ -500,7 +500,7 @@ def prometheus_metrics():
 
 @app.get("/health", tags=["system"])
 def health_check():
-    # P2.14 — free-space check on the uploads volume. Returns 200 with
+    # P2.14 - free-space check on the uploads volume. Returns 200 with
     # `status: degraded` if < 200 MB free, or 503 if < 50 MB free, so
     # orchestrators / load balancers can pull the instance out of rotation
     # before chunked uploads start silently failing with OSError on write.
@@ -518,10 +518,10 @@ def health_check():
     if free_mb is not None and free_mb < 50:
         disk_status = "critical"
         http_status = 503
-        status_str = "CRISP Core Backend Degraded — disk space critical"
+        status_str = "CRISP Core Backend Degraded - disk space critical"
     elif free_mb is not None and free_mb < 200:
         disk_status = "low"
-        status_str = "CRISP Core Backend Online — disk space low"
+        status_str = "CRISP Core Backend Online - disk space low"
 
     body = {
         "status": status_str,
@@ -536,10 +536,10 @@ def health_check():
 
 @app.get("/api/v1/health", tags=["system"])
 def health_check_api_v1():
-    # May 21 2026 — mirror of /health under the /api/v1/ prefix that
+    # May 21 2026 - mirror of /health under the /api/v1/ prefix that
     # nginx proxies in PROD. The root /health route exists for use by
     # k8s-style orchestrators that can be pointed at any path, but
-    # nginx in PROD only proxies /api/v1/* to the backend — so the PWA
+    # nginx in PROD only proxies /api/v1/* to the backend - so the PWA
     # (running at the page origin) cannot reach the root /health route.
     # Mirroring the same response under /api/v1/health lets the PWA
     # version-pill code resolve the backend version without needing an
@@ -549,7 +549,7 @@ def health_check_api_v1():
 
 @app.get("/api/v1/health/db", tags=["system"])
 def db_health_check():
-    """Apr 2026 — explicit DB-connectivity probe.
+    """Apr 2026 - explicit DB-connectivity probe.
 
     The basic `/health` endpoint doesn't touch the database; an RDS
     outage + a still-booting uvicorn would look healthy to k8s. This
@@ -565,7 +565,7 @@ def db_health_check():
         200  { "status": "degraded",  "driver": "postgresql", "revision": "0004_bin",
                 "message": "DB reachable but schema behind head" }
 
-    Public — no auth gate — same policy as `/health` and `/health/pii`.
+    Public - no auth gate - same policy as `/health` and `/health/pii`.
     """
     from fastapi.responses import JSONResponse
     from sqlalchemy import text
@@ -574,7 +574,7 @@ def db_health_check():
     driver = engine.url.drivername if engine else "unknown"
     start = time.perf_counter()
 
-    # Step 1 — basic connectivity. A failure here is a real outage (DB
+    # Step 1 - basic connectivity. A failure here is a real outage (DB
     # down, credentials wrong, network partition): return 503.
     try:
         with engine.connect() as conn:
@@ -589,8 +589,8 @@ def db_health_check():
             },
         )
 
-    # Step 2 — alembic stamp. A DB with no `alembic_version` table is
-    # not "down" — it's "reachable but unstamped." Common in test
+    # Step 2 - alembic stamp. A DB with no `alembic_version` table is
+    # not "down" - it's "reachable but unstamped." Common in test
     # fixtures that use `Base.metadata.create_all`. Return 200 with
     # status=degraded + revision=None so orchestrators don't tear down
     # a working pod just because Alembic hasn't been invoked.
@@ -604,7 +604,7 @@ def db_health_check():
     latency_ms = round((time.perf_counter() - start) * 1000, 2)
 
     # Compare against the head revision the same way `_assert_alembic_head`
-    # does at boot — scan migrations/versions/ for the revision nobody
+    # does at boot - scan migrations/versions/ for the revision nobody
     # references as down_revision.
     try:
         import os as _os, re as _re
@@ -633,7 +633,7 @@ def db_health_check():
     if rev is None:
         # DB reachable but no alembic_version row. Common in test
         # fixtures that use create_all without stamping. Not an outage
-        # — return 200 degraded + explicit message.
+        # - return 200 degraded + explicit message.
         status = "degraded"
         message = "DB reachable but alembic_version missing (schema not stamped)"
     elif head and rev != head:
@@ -654,20 +654,20 @@ def db_health_check():
 
 @app.get("/api/v1/health/pii", tags=["system"])
 def pii_health_check():
-    """Apr 2026 — expose PII-blur backend health so operators can see
+    """Apr 2026 - expose PII-blur backend health so operators can see
     whether a deployment is missing model files or Python packages that
     would silently degrade the server-side PII pass. Returns 200 when
     healthy or degraded, 503 when both backends are unavailable (in
     which case the server-side blur is a no-op and every client that
     sends `client_blur_applied: false` will produce a report with
-    `pii_blur_status='skipped'` — the dashboard will flag those rows).
+    `pii_blur_status='skipped'` - the dashboard will flag those rows).
 
     Never 404s. Never auth-gated (public health, mirrors `/health`).
     """
     try:
         from app.services.pii_blur import pii_health_snapshot
     except Exception as e:
-        # Import itself failed — the module can't even load. Treat as
+        # Import itself failed - the module can't even load. Treat as
         # fully unavailable; operators need to see this loudly.
         return JSONResponse(status_code=503, content={
             "overall": "unavailable",
@@ -688,7 +688,7 @@ import threading
 def _purge_loop():
     """Run every 15 minutes: enforce the retention policy (mark reports past
     their retention window for deletion), then hard-delete everything past its
-    grace period — both retention-marked rows (grace=0, purged same tick) and
+    grace period - both retention-marked rows (grace=0, purged same tick) and
     user-requested soft-deletes past their 24-hour grace."""
     from app.db.session import SessionLocal
     from app.api.endpoints.reports import _purge_expired_deletions, _enforce_retention_policy
@@ -710,30 +710,30 @@ def _purge_loop():
 # operator confirmed in the F.1/F.2/F.3 plan; overridable via env when a
 # crisis-room operator wants a tighter or looser window without redeploying.
 #
-#   _ASSEMBLE_SWEEP_INTERVAL_S — how often the sweep daemon ticks.
+#   _ASSEMBLE_SWEEP_INTERVAL_S - how often the sweep daemon ticks.
 #                                Default 5 min (matches PWA's max chunk-
 #                                retry backoff + a safety margin).
-#   _ABANDON_STALE_MIN         — `pending` rows older than this with
+#   _ABANDON_STALE_MIN         - `pending` rows older than this with
 #                                 incomplete chunks are flipped to `failed`
 #                                 with reason='chunks_never_arrived'.
 #                                 Default 30 min (an offline PWA queue
 #                                 typically drains within minutes of
 #                                 reconnect; 30 min is a generous floor).
-#   _ASSEMBLE_DEADLINE_MIN     — `assembling` rows older than this with
+#   _ASSEMBLE_DEADLINE_MIN     - `assembling` rows older than this with
 #                                 chunks NOT yet all arrived are flipped
 #                                 to `failed` with reason='assembly_worker_lost'.
 #                                 The legitimate-assembly path is fast
 #                                 (<10 s); past 30 min the worker is dead.
 #
 # Action ① of the sweep (REVIVE chunks-fully-arrived stuck rows) is
-# resubmitted to the assembly pool — it doesn't use the abandon path.
+# resubmitted to the assembly pool - it doesn't use the abandon path.
 # Action ②/③ are terminal flips and set both abandon_reason +
 # abandoned_at so the dashboard can surface "Original lost (network
 # timeout)" instead of perpetual "uploading…".
 _ASSEMBLE_SWEEP_INTERVAL_S = int(os.getenv("CRISP_ASSEMBLE_SWEEP_INTERVAL_S", "300"))
 _ABANDON_STALE_MIN         = int(os.getenv("CRISP_ABANDON_STALE_MIN",         "30"))
 _ASSEMBLE_DEADLINE_MIN     = int(os.getenv("CRISP_ASSEMBLE_DEADLINE_MIN",     "30"))
-# HC91 (Sprint 2B, May 2026) — wedged-assembler deadline. Action ① keeps
+# HC91 (Sprint 2B, May 2026) - wedged-assembler deadline. Action ① keeps
 # reviving chunks-complete rows every sweep tick; if the assembly worker
 # permanently fails on the same row (corrupt input, PII-blur hang on a
 # pathological image, S3 outage on this specific media_id), the revive
@@ -743,7 +743,7 @@ _ASSEMBLE_DEADLINE_MIN     = int(os.getenv("CRISP_ASSEMBLE_DEADLINE_MIN",     "3
 # _ASSEMBLE_SWEEP_INTERVAL_S = 300 s, giving the worker a full hour of
 # retry budget before we give up.
 _ASSEMBLER_WEDGED_MIN      = int(os.getenv("CRISP_ASSEMBLER_WEDGED_MIN",      "60"))
-# May 2026 — companion to the PWA's "SMALL gates the photo stage" fix
+# May 2026 - companion to the PWA's "SMALL gates the photo stage" fix
 # (mobile-app/src/app.js:8956). On SLOW / VERY_SLOW networks the PWA
 # deliberately defers MEDIUM/HIGH variants; only the LOW (SMALL) variant
 # lands. The Report row's `received_media` (e.g. 2) stays < `expected_media`
@@ -751,24 +751,24 @@ _ASSEMBLER_WEDGED_MIN      = int(os.getenv("CRISP_ASSEMBLER_WEDGED_MIN",      "6
 # PWA "My Reports" both label it as in-queue. Action ④ in the sweep
 # auto-promotes to SYNCED when every photo_group_id has at least one
 # complete variant AND no Media row has been updated within this idle
-# window — giving an in-flight MEDIUM/HIGH upload a chance to land
+# window - giving an in-flight MEDIUM/HIGH upload a chance to land
 # before we flip the status.
 _PARTIAL_PROMOTE_IDLE_S    = int(os.getenv("CRISP_PARTIAL_PROMOTE_IDLE_S",    "60"))
-# R2.b (May 2026) — hard-delete deadline for abandoned-not-recovered
+# R2.b (May 2026) - hard-delete deadline for abandoned-not-recovered
 # rows. After this many days past abandoned_at (and still
 # recovered_at IS NULL), Action ⑥ deletes the Media row + its
 # chunks + its storage object. Default 30 days gives operators a
 # four-week recovery window before the storage is reclaimed. Set
 # to 0 to disable hard-delete entirely (the daemon will skip
-# Action ⑥ — useful for forensic environments where ALL abandons
+# Action ⑥ - useful for forensic environments where ALL abandons
 # must be retained).
 _HARD_ABANDON_DAYS         = int(os.getenv("CRISP_HARD_ABANDON_DAYS",         "30"))
-# R3.b (May 2026) — disk-orphan GC interval. Action ⑦ walks the storage
+# R3.b (May 2026) - disk-orphan GC interval. Action ⑦ walks the storage
 # backend (uploads/ + pre_blur/) and deletes objects older than
 # CRISP_HARD_ABANDON_DAYS that aren't referenced by any live Media.url.
 # This handles assembled-file orphans (the SQL cascade only handles
 # MediaChunk rows; assembled disk files were leaking pre-R3.b). Default
-# 1 h — long enough to keep the storage scan cost down at 500k-row
+# 1 h - long enough to keep the storage scan cost down at 500k-row
 # scale, short enough to bound disk growth between sweeps. Set to 0 to
 # disable.
 _DISK_ORPHAN_GC_INTERVAL_S = int(os.getenv("CRISP_DISK_ORPHAN_GC_INTERVAL_S", "3600"))
@@ -779,7 +779,7 @@ _last_disk_orphan_gc_ts: float = 0.0
 
 
 def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
-    """One pass of assembly recovery — invoked on boot AND every
+    """One pass of assembly recovery - invoked on boot AND every
     _ASSEMBLE_SWEEP_INTERVAL_S seconds by `_assembly_recovery_loop`.
 
     Four actions, ordered so ABANDON-WEDGED runs FIRST (so a row past
@@ -788,7 +788,7 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
     that would have been resubmittable on this tick), THEN the two
     classic ABANDON paths:
 
-      ⓪ HC91 (May 2026) — ABANDON wedged-assembler rows.
+      ⓪ HC91 (May 2026) - ABANDON wedged-assembler rows.
          Rows in 'assembling' or 'pending' AND chunks COMPLETE AND
          created_at > _ASSEMBLER_WEDGED_MIN ago → flip to 'failed'
          with abandon_reason='assembler_wedged'. Closes the loop where
@@ -809,7 +809,7 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
          all arrived → flip to 'failed' with abandon_reason=
          'assembly_worker_lost'. (Pure 'assembling' for that long with
          incomplete chunks means a worker started but never reaped its
-         own status — usually a hang inside PII blur or S3 multipart.
+         own status - usually a hang inside PII blur or S3 multipart.
          Action ① only fires when chunks-complete, so these rows would
          loop forever in 'assembling' otherwise.)
 
@@ -841,11 +841,11 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
         wedged_deadline  = now_utc - timedelta(minutes=_ASSEMBLER_WEDGED_MIN)
 
         # ── ⓪ ABANDON wedged-assembler-with-complete-chunks ───────────
-        # HC91 (Sprint 2B, May 2026) — closes the silent burnup loop where
+        # HC91 (Sprint 2B, May 2026) - closes the silent burnup loop where
         # Action ① keeps reviving a chunks-complete row but the assembly
         # worker keeps failing on the same data (corrupt input, PII-blur
         # hang, S3 outage on this media_id). The created_at filter is the
-        # wedge-age signal — updated_at gets bumped by Action ① on every
+        # wedge-age signal - updated_at gets bumped by Action ① on every
         # revival, so it's NOT a useful signal here; created_at reflects
         # how long the row has been in the system without successfully
         # completing.
@@ -892,7 +892,7 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
             Media.updated_at < stale_2min,
             Media.chunk_count > 0,
             Media.received_chunks >= Media.chunk_count,
-            # Don't revive rows that the sweep has already abandoned —
+            # Don't revive rows that the sweep has already abandoned -
             # they need an explicit operator reclaim via the F3 endpoint.
             Media.abandoned_at.is_(None),
         ).all()
@@ -987,7 +987,7 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
         # drains. But the BACKEND keeps `sync_status=PARTIAL` forever
         # because `received_media (e.g. 2)` never reaches
         # `expected_media (e.g. 3)`. The dashboard + PWA both surface
-        # PARTIAL as "in queue" — operator confusion, reports look stuck.
+        # PARTIAL as "in queue" - operator confusion, reports look stuck.
         #
         # Promotion rule: for any Report.sync_status==PARTIAL, group its
         # Media rows by photo_group_id (NULL → solo). If EVERY group has
@@ -1002,7 +1002,7 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
         #
         # Conservative by design: this is a one-way PROMOTION (never
         # demotes a SYNCED back to PARTIAL), so a race with the
-        # /attach endpoint is harmless — both paths converge on SYNCED.
+        # /attach endpoint is harmless - both paths converge on SYNCED.
         idle_cutoff = now_utc - timedelta(seconds=_PARTIAL_PROMOTE_IDLE_S)
         partial_candidates = (
             _db.query(Report)
@@ -1017,13 +1017,13 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
                 .all()
             )
             if not media_rows:
-                # No media landed at all — different bug pattern
+                # No media landed at all - different bug pattern
                 # (chunks_never_arrived already handled at media-row
                 # scope by action ③). Don't auto-promote here; let
                 # the operator decide.
                 continue
             # Idle-window gate: if ANY media row has been touched within
-            # the idle window, an upload may still be in flight — wait
+            # the idle window, an upload may still be in flight - wait
             # for the next sweep tick.
             most_recent_activity = max(
                 (m.updated_at for m in media_rows if m.updated_at is not None),
@@ -1044,7 +1044,7 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
                 mtype = m.type.value if hasattr(m.type, "value") else m.type
                 groups[(gid, mtype)].append(m)
             if not groups:
-                # All media rows abandoned — different operator scenario.
+                # All media rows abandoned - different operator scenario.
                 continue
             all_good = all(
                 any(m.assembly_status == "complete" for m in variants)
@@ -1067,13 +1067,13 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
                 + ", ".join(rid[:8] for rid in promoted_ids[:8])
                 + (f" … +{len(promoted_ids) - 8} more" if len(promoted_ids) > 8 else "")
             )
-        # ── Action ⑤ — purge expired pre-blur internal store entries.
+        # ── Action ⑤ - purge expired pre-blur internal store entries.
         #
         # B-F (May 2026): the retroactive upgrade path needs a snapshot
         # of the assembled-but-pre-blur bytes for up to 24 h, so a
         # late-arriving higher tier can re-blur a lower tier with the
         # detected union. After the 24 h retention window, those bytes
-        # are no longer useful — drop them to bound storage.
+        # are no longer useful - drop them to bound storage.
         #
         # Query is indexed (ix_media_pre_blur_retained_until) so the
         # scan is cheap even as media grows.
@@ -1115,12 +1115,12 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
                 _purge_db.close()
         except Exception as _action5_e:
             # Defensive: a sweep crash MUST NOT kill the daemon. Any
-            # error here is logged + ignored — the next tick retries.
+            # error here is logged + ignored - the next tick retries.
             log.warning(
                 f"Assembly recovery [{tag}] Action ⑤ failed: {_action5_e}"
             )
 
-        # ── Action ⑥ — hard-delete abandoned-not-recovered rows past
+        # ── Action ⑥ - hard-delete abandoned-not-recovered rows past
         #    the retention window (R2.b, May 2026).
         #
         # Soft-abandons live in the DB indefinitely so a returning
@@ -1140,9 +1140,9 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
         # doesn't block the daemon's other actions.
         #
         # Recovered rows (recovered_at IS NOT NULL) are NEVER deleted
-        # — they're successful uploads that happened to have been
+        # - they're successful uploads that happened to have been
         # abandoned mid-flight. Hard-abandon rows (checksum_mismatch /
-        # original_too_large) are deleted on the same schedule —
+        # original_too_large) are deleted on the same schedule -
         # their bytes are irrecoverable; the operator's reclaim path
         # is the F3 button, not chunk replay.
         try:
@@ -1198,7 +1198,7 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
                 f"Assembly recovery [{tag}] Action ⑥ failed: {_action6_e}"
             )
 
-        # ── Action ⑦ — disk-orphan reconciliation (R3.b, May 2026) ───
+        # ── Action ⑦ - disk-orphan reconciliation (R3.b, May 2026) ───
         #
         # The SQL cascade (Media → MediaChunk) handles chunk-row cleanup,
         # and Action ⑥ deletes the assembled storage object via
@@ -1295,7 +1295,7 @@ def _run_assembly_recovery_sweep(*, boot: bool = False) -> None:
 
 
 def _assembly_recovery_loop():
-    """Daemon thread — invokes `_run_assembly_recovery_sweep` every
+    """Daemon thread - invokes `_run_assembly_recovery_sweep` every
     `_ASSEMBLE_SWEEP_INTERVAL_S` seconds.
 
     Boot ordering note: the lifespan handler synchronously calls the
@@ -1336,11 +1336,11 @@ def _run_pii_blur_recovery_sweep(*, boot: bool = False) -> None:
     """One pass of PII-blur gate recovery. Two bounded actions, keyed on
     `updated_at` age (no schema change):
 
-      ① GIVE UP — rows pending + assembled past `_PII_BLUR_WEDGED_MIN` flip to
+      ① GIVE UP - rows pending + assembled past `_PII_BLUR_WEDGED_MIN` flip to
          terminal 'failed'. This LIFTS the 425 (dashboard shows the red
          "Redaction failed" chip instead of "Checking PII" forever) and bounds
          re-driving of a pathologically-failing row.
-      ② RE-DRIVE — rows pending + assembled + has-url, stale between
+      ② RE-DRIVE - rows pending + assembled + has-url, stale between
          `_PII_BLUR_STALE_MIN` and `_PII_BLUR_WEDGED_MIN`, get re-submitted to
          _ai_executor. _run_server_pii_blur ALWAYS blurs server-side, so the
          re-drive is PII-safe; on success it writes a terminal status (clearing
@@ -1362,17 +1362,17 @@ def _run_pii_blur_recovery_sweep(*, boot: bool = False) -> None:
     _db = SessionLocal()
     try:
         # ─────────────────────────────────────────────────────────────
-        # PII-SAFETY GUARD (UNDP must-have #7 — never expose a raw face).
+        # PII-SAFETY GUARD (UNDP must-have #7 - never expose a raw face).
         #
         # The /media/{id}/file gate (reports.py) returns 425 ONLY while
-        # pii_blur_status='pending'; EVERY other status — including
-        # 'failed' — falls through to a 302 that serves media.url. And
+        # pii_blur_status='pending'; EVERY other status - including
+        # 'failed' - falls through to a 302 that serves media.url. And
         # _run_server_pii_blur writes 'failed' in two cases where the
         # stored bytes are still UNBLURRED (backends-unavailable / raised).
         #
         # So lifting the gate is only safe when the bytes are already
         # face-redacted, i.e. client_blur_applied=true (the PWA's
-        # BlazeFace pass blurred faces BEFORE upload — must-have #7). For
+        # BlazeFace pass blurred faces BEFORE upload - must-have #7). For
         # client_blur_applied=false rows (Telegram/WhatsApp/SMS, where the
         # server blur is the ONLY protection), flipping pending→'failed'
         # or risking a re-drive→'failed' would expose a raw face. We
@@ -1410,7 +1410,7 @@ def _run_pii_blur_recovery_sweep(*, boot: bool = False) -> None:
         ).all()
         for m in to_redrive:
             # Derive the storage filename from the url tail (works for
-            # /static/<f> and s3://<f> alike — same pattern as the AI pipeline).
+            # /static/<f> and s3://<f> alike - same pattern as the AI pipeline).
             fn = m.url.rsplit("/", 1)[-1].split("://", 1)[-1].rsplit("/", 1)[-1]
             _ai_executor.submit(_run_server_pii_blur, m.id, m.url, fn)
         if to_redrive:
@@ -1419,7 +1419,7 @@ def _run_pii_blur_recovery_sweep(*, boot: bool = False) -> None:
                 f"client-blurred pending row(s) (>{_PII_BLUR_STALE_MIN}m)"
             )
 
-        # ③ VISIBILITY — count the NON-client-blurred rows we deliberately
+        # ③ VISIBILITY - count the NON-client-blurred rows we deliberately
         #    leave gated. We never auto-lift these (would risk exposing a
         #    raw face); the operator can re-drive them under supervision via
         #    scripts/drain_stuck_pii_blur.py --include-unblurred.
@@ -1432,7 +1432,7 @@ def _run_pii_blur_recovery_sweep(*, boot: bool = False) -> None:
         if held:
             log.warning(
                 f"PII-blur recovery [{tag}]: {held} NON-client-blurred row(s) "
-                f"held at 425 (>{_PII_BLUR_WEDGED_MIN}m) — NOT force-failed to "
+                f"held at 425 (>{_PII_BLUR_WEDGED_MIN}m) - NOT force-failed to "
                 f"avoid exposing raw faces. Re-drive via drain_stuck_pii_blur.py "
                 f"--include-unblurred if the source is trusted."
             )
@@ -1462,11 +1462,11 @@ async def _run_startup_tasks():
         logging.getLogger(__name__).info("Deletion purge worker started (runs every 15 min)")
 
     # Phase F image-reliability (May 2026). Two-stage recovery:
-    #   ① boot-time sweep — runs synchronously RIGHT NOW so we don't
+    #   ① boot-time sweep - runs synchronously RIGHT NOW so we don't
     #      ship traffic to a backend with stale 'assembling' rows from
     #      the previous instance's crash. Same logic as the periodic
     #      sweep below.
-    #   ② periodic daemon — every _ASSEMBLE_SWEEP_INTERVAL_S (5 min)
+    #   ② periodic daemon - every _ASSEMBLE_SWEEP_INTERVAL_S (5 min)
     #      thereafter, finds rows the PWA never finished delivering
     #      and flips them to 'failed' with abandon_reason so the
     #      dashboard renders "Original lost" instead of perpetual
@@ -1480,7 +1480,7 @@ async def _run_startup_tasks():
             )
         # OOM hotfix (May 2026): on boot, immediately recover any blur rows the
         # previous (possibly OOM-killed) instance left stranded at
-        # pii_blur_status='pending' — so a restart self-heals the 425/"Checking
+        # pii_blur_status='pending' - so a restart self-heals the 425/"Checking
         # PII" backlog instead of leaving it stuck forever.
         try:
             _run_pii_blur_recovery_sweep(boot=True)
@@ -1496,12 +1496,12 @@ async def _run_startup_tasks():
             f"assemble_deadline={_ASSEMBLE_DEADLINE_MIN}m)"
         )
 
-    # Phase K K.6.b — AI retry queue daemon. Picks up
+    # Phase K K.6.b - AI retry queue daemon. Picks up
     # `ai_retry_queue` rows whose `next_attempt_at <= NOW()` and
     # re-runs the failed Whisper / Claude vision / truth_scoring
     # call with exponential backoff (1m / 5m / 30m / 2h / 12h).
     # Pre-K.6.b a transient AI failure left the report's AI fields
-    # NULL forever — no automated retry. The boot-time reclaim
+    # NULL forever - no automated retry. The boot-time reclaim
     # sweeps rows stuck in 'in_progress' from a crashed previous
     # instance so they're picked up by the next periodic tick.
     if not in_pytest:
@@ -1529,12 +1529,12 @@ async def _run_startup_tasks():
                 f"AI retry daemon failed to start: {e}"
             )
 
-    # Auto-start Telegram long-polling — PRODUCTION ONLY.
+    # Auto-start Telegram long-polling - PRODUCTION ONLY.
     #
     # A Telegram bot allows exactly ONE active getUpdates long-poll per token.
     # This boot hook used to start polling whenever TELEGRAM_BOT_TOKEN was set,
     # regardless of environment. Because local/dev .env files carry the SAME
-    # prod bot token, every dev backend boot stole the prod poll slot — Telegram
+    # prod bot token, every dev backend boot stole the prod poll slot - Telegram
     # answered prod's getUpdates with 409 Conflict, silently taking the live
     # Telegram channel down (no messages → no reports) until the dev process
     # stopped. It also deleteWebhook'd the shared bot on every dev boot.
@@ -1562,7 +1562,7 @@ async def _run_startup_tasks():
     elif telegram_token:
         logging.getLogger(__name__).warning(
             "Telegram polling NOT started (APP_ENV=%s, CRISP_TELEGRAM_POLLING=%r): a "
-            "non-production backend must never poll the shared bot token — it would "
+            "non-production backend must never poll the shared bot token - it would "
             "steal the prod poll slot (409 Conflict). Use a separate test bot locally.",
             APP_ENV, _poll_flag or "unset",
         )

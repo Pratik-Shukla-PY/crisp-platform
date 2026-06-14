@@ -1,13 +1,13 @@
 """Migrate existing local media files to S3 + rewrite media.url rows.
 
-Apr 2026 — UNDP scaling: Phase 1 of the S3 + CloudFront migration.
+Apr 2026 - UNDP scaling: Phase 1 of the S3 + CloudFront migration.
 This script is run ONCE per environment after `MEDIA_BACKEND=s3` is
 flipped on. It walks the local UPLOAD_DIR, uploads each file to the
 configured S3 bucket, and rewrites the corresponding `media.url` row
 (and `satellite_verifications.satellite_image_url*`) so the dashboard
 keeps showing existing media without 404s.
 
-Idempotent — re-running is safe. Each object is checked via S3 HEAD
+Idempotent - re-running is safe. Each object is checked via S3 HEAD
 before upload; existing keys are skipped (assumed already-migrated)
 and the DB row is still rewritten if it points at a /static/ path.
 
@@ -169,7 +169,7 @@ def main(dry_run: bool, limit: Optional[int]) -> int:
         # audio) still pointed at the old /static/ path even though
         # Pass 1 already uploaded the file to S3. The dashboard's
         # MediaResponse._resolve_url field_serializer
-        # then signed an /static/-pass-through URL — works only while
+        # then signed an /static/-pass-through URL - works only while
         # the local UPLOAD_DIR still has the file. Once we GC the
         # local mirror, those rows would 404.
         legacy_thumb_rows = (
@@ -187,7 +187,7 @@ def main(dry_run: bool, limit: Optional[int]) -> int:
             new_t = f"s3://{fname_t}"
             # Defensive: only rewrite when the key actually exists in S3
             # (Pass 1 uploads everything in UPLOAD_DIR, so this should
-            # always be true — but a row might reference a name that
+            # always be true - but a row might reference a name that
             # was deleted from disk before migration ran). Without the
             # head_object check we'd happily rewrite a row to point at
             # a 404, breaking the partial-preview render path.
@@ -201,13 +201,13 @@ def main(dry_run: bool, limit: Optional[int]) -> int:
                 else:
                     logger.warning(
                         f"  [{m.id[:8]}.thumbnail_url] head_object error "
-                        f"for {fname_t}: {e} — skipping rewrite to be safe"
+                        f"for {fname_t}: {e} - skipping rewrite to be safe"
                     )
                     exists_in_s3 = False
 
             if not exists_in_s3:
                 logger.warning(
-                    f"  [{m.id[:8]}.thumbnail_url] {old_t} not in S3 — leaving as-is"
+                    f"  [{m.id[:8]}.thumbnail_url] {old_t} not in S3 - leaving as-is"
                 )
                 continue
 
@@ -236,7 +236,7 @@ def main(dry_run: bool, limit: Optional[int]) -> int:
                         setattr(v, attr, new)
                         logger.info(f"  [{v.id[:8]}.{attr}] rewrote {old} → {new}")
 
-            # The satellite_images_json field — JSON list with `url` per entry.
+            # The satellite_images_json field - JSON list with `url` per entry.
             if v.satellite_images_json:
                 import json as _json
                 try:

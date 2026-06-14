@@ -1,5 +1,5 @@
 /**
- * CRISP — lightweight telemetry logger (P3.4).
+ * CRISP - lightweight telemetry logger (P3.4).
  *
  * Replaces the many silent `catch { }` blocks scattered across the RN app.
  * Each caller passes a short context string so we know *where* the swallowed

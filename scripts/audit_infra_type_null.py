@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CRISP — Phase F.3.c (May 2026) audit: legacy NULL / OTHER infrastructure_type
+CRISP - Phase F.3.c (May 2026) audit: legacy NULL / OTHER infrastructure_type
 counts.
 
 Read-only diagnostic. Quantifies the operator-reported "everything is
@@ -26,7 +26,7 @@ What it prints:
 
 If most of the OTHER rows are chat-channel + recent (< 7d), the F.3.a
 fix (chat extractor stopped silent-coercing OTHER, shipped in commit
-2fcb761) already drives that number toward zero for new submissions —
+2fcb761) already drives that number toward zero for new submissions -
 so a backfill probably isn't worth the risk.
 
 If most OTHER rows are old PWA submissions (legacy ROAD chip migrations
@@ -86,7 +86,7 @@ def main() -> int:
         """)).scalar() or 0
 
         _hr()
-        print("CRISP — infrastructure_type audit (Phase F.3.c)")
+        print("CRISP - infrastructure_type audit (Phase F.3.c)")
         _hr()
         print(f"Total reports in DB                      : {total:>8}")
         print(f"Visible (post-soft-delete-gate)          : {visible_total:>8}")
@@ -151,21 +151,21 @@ def main() -> int:
         _hr()
         print("Recommendation:")
         if total == 0:
-            print("  (no data) — no action needed.")
+            print("  (no data) - no action needed.")
         elif other_count == 0 and null_count == 0:
             print("  Clean. infrastructure_type is populated on every row.")
         elif other_count / max(total, 1) > 0.3:
-            print(f"  HIGH NOISE — {other_count} of {total} rows tagged OTHER.")
+            print(f"  HIGH NOISE - {other_count} of {total} rows tagged OTHER.")
             print("  Recommended action:")
             print("    1. Ship F.3.b (infrastructure_type_source enum)")
             print("       so the dashboard can distinguish AI-inferred OTHER")
             print("       from user-selected OTHER.")
             print("    2. Then optionally re-run the AI extractor against")
             print("       the chat-channel rows (TELEGRAM/WHATSAPP/SMS/IVR")
-            print("       above) — they're the source most likely to have")
+            print("       above) - they're the source most likely to have")
             print("       silent-coerced to OTHER before commit 2fcb761.")
         else:
-            print(f"  Modest noise — {other_count} OTHER rows ({_pct(other_count, total)}).")
+            print(f"  Modest noise - {other_count} OTHER rows ({_pct(other_count, total)}).")
             print("  Recommended action:")
             print("    1. Ship F.3.b for distinguishing source going forward.")
             print("    2. Leave existing rows tagged OTHER; surface a")

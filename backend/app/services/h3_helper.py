@@ -1,16 +1,16 @@
 """
 H3 hexagonal hierarchical spatial index helper.
 
-Phase 5.1 (May 2026, docs/NEARBY_REPORTS_PIPELINE.md §9.4) — geospatial
+Phase 5.1 (May 2026, docs/NEARBY_REPORTS_PIPELINE.md §9.4) - geospatial
 scaling roadmap step G3.
 
 Two responsibilities:
 
-  1. `compute_cell(lat, lng)` — derive the H3 cell index for a point.
+  1. `compute_cell(lat, lng)` - derive the H3 cell index for a point.
      Called from the report-creation path so `Location.h3_idx` is
      populated on insert.
 
-  2. `cells_within_radius(lat, lng, radius_km)` — return the set of
+  2. `cells_within_radius(lat, lng, radius_km)` - return the set of
      H3 cells covering a circle around the caller's location. Fed
      into the /nearby query as `WHERE h3_idx IN (...)` when the
      `CRISP_NEARBY_H3_MODE=1` env flag is set.
@@ -30,7 +30,7 @@ RESOLUTION CHOICE:
     res 10 ≈ 66 m edge, 4× denser
     res 8 ≈ 461 m edge, 4× sparser
   Phase 5.1 picks res 9 because the existing block-level cluster
-  bucket is geohash7 (~150 m) — H3 res 9 is approximately the same
+  bucket is geohash7 (~150 m) - H3 res 9 is approximately the same
   granularity, so a future "use H3 cells for clustering, not bbox
   for distance" upgrade in nearby_aggregator.py can swap geohash7
   for H3 res 9 without changing tier triggers.
@@ -55,7 +55,7 @@ except Exception:                                     # pragma: no cover
     _h3 = None
     _H3_AVAILABLE = False
     log.info(
-        "[h3_helper] python h3 wheel not installed — H3 mode will be a "
+        "[h3_helper] python h3 wheel not installed - H3 mode will be a "
         "no-op. Install h3>=4.0.0 to enable CRISP_NEARBY_H3_MODE."
     )
 
@@ -64,7 +64,7 @@ _DEFAULT_RESOLUTION = int(os.environ.get("CRISP_H3_RESOLUTION", "9"))
 
 # H3 res-9 edge length is ~174 m; res-8 is ~461 m. Worst case 1-ring
 # (k=1) covers the centre cell + 6 neighbours. For a 5 km query at
-# res 9, ring size k ≈ ceil(5000 / 174) ≈ 29 — that's ~30² hexes = 900
+# res 9, ring size k ≈ ceil(5000 / 174) ≈ 29 - that's ~30² hexes = 900
 # cells. We cap radius-derived k at 60 (≈ 10 km at res 9) so we never
 # build an unbounded cell list. Queries larger than that should drop
 # back to bbox.

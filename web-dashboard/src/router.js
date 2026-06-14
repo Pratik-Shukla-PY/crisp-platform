@@ -1,7 +1,7 @@
-/* router.js — CRISP dashboard navigation hub (mandatory Control Center root).
+/* router.js - CRISP dashboard navigation hub (mandatory Control Center root).
  *
  * The dashboard is the operator's whole platform; after login the user lands on
- * the Control Center (`#/`) — NOT the incident feed — and every workflow opens
+ * the Control Center (`#/`) - NOT the incident feed - and every workflow opens
  * from there. This is a thin hash router over the existing monolith:
  *
  *   #/            → Control Center root (cc-home overlay, the 4-card hub)
@@ -13,7 +13,7 @@
  * Design notes:
  *  - The route is the FIRST `;`-segment that starts with `/`. All existing hash
  *    state (`building=…`, `chips=…`, transient `full-report`) lives in the other
- *    `;`-segments and is preserved untouched — `parseHash` finds the route
+ *    `;`-segments and is preserved untouched - `parseHash` finds the route
  *    positionally, so the chip/building writers (which already preserve "other"
  *    segments) keep working without edits.
  *  - A routeless hash change (e.g. the full-report modal pushing `#full-report`)
@@ -76,7 +76,7 @@
     if (routeSeg === '/home') routeSeg = '/';
     // Positional param: `/operations/<id>` resolves to the base route
     // `/operations` (for role-gating + dispatch) with the id captured in
-    // params. Only /operations gets positional parsing — every other route is
+    // params. Only /operations gets positional parsing - every other route is
     // unchanged, so the chip/building/queue state-segment writers keep working.
     const params = {};
     let baseSeg = routeSeg;
@@ -116,7 +116,7 @@
     if (location.hash !== next) location.hash = next;   // → hashchange → dispatch → restore
     else dispatch();                                     // same hash → re-dispatch (re-open)
   }
-  // Set ?incident=<id> on the CURRENT route WITHOUT re-dispatching — used when the
+  // Set ?incident=<id> on the CURRENT route WITHOUT re-dispatching - used when the
   // operator is already in the right context (e.g. clicking a worklist row inside
   // the operation they're viewing), so opening a detail doesn't tear down +
   // re-fetch the whole view. pushState adds a history entry so Back still closes
@@ -142,7 +142,7 @@
     try { window.__ccCrisis && window.__ccCrisis.closeOverlay && window.__ccCrisis.closeOverlay(); } catch (_e) {}
     try { window.__ccExports && window.__ccExports.closeOverlay && window.__ccExports.closeOverlay(); } catch (_e) {}
     // Tearing down the operations overlay also resets the app's operation
-    // scope (_activeCrisisEventId) to global — so any non-/operations route
+    // scope (_activeCrisisEventId) to global - so any non-/operations route
     // dispatched after this never inherits a stale crisis_event_id filter.
     try { window.__ccOperations && window.__ccOperations.closeOverlay && window.__ccOperations.closeOverlay(); } catch (_e) {}
   }

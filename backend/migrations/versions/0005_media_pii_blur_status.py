@@ -9,7 +9,7 @@ missing MediaPipe / easyocr backends can't silently pass unblurred
 images to the dashboard. Values documented on the SQLAlchemy column in
 `app.models.report.Media.pii_blur_status`.
 
-Idempotent — same pattern as prior revisions (0002/0003/0004). Safe to
+Idempotent - same pattern as prior revisions (0002/0003/0004). Safe to
 rerun on databases that already have the column.
 """
 from typing import Sequence, Union
@@ -51,7 +51,7 @@ def upgrade() -> None:
     #     → 'complete' IF the server's async blur worker had already
     #       fired-and-forgotten a successful run; we can't tell from the
     #       DB alone. Mark 'unknown' is worse than 'skipped' for privacy
-    #       posture — dashboard should warn on this legacy cohort until
+    #       posture - dashboard should warn on this legacy cohort until
     #       operator reviews.
     # Keep this migration conservative: do NOT backfill 'complete' on old
     # rows. Leave them NULL and let the dashboard treat NULL as "legacy,

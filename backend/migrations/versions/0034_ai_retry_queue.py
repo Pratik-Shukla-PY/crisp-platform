@@ -1,4 +1,4 @@
-"""ai_retry_queue — Phase K K.6.b
+"""ai_retry_queue - Phase K K.6.b
 
 Revision ID: 0034_ai_retry_queue
 Revises: 0033_report_anon_expired
@@ -7,7 +7,7 @@ Create Date: 2026-05-20
 Adds a persistent retry queue for AI pipeline tasks (transcription,
 image analysis, truth scoring). Pre-K.6.b a transient failure
 (Anthropic 5xx, Whisper OOM, satellite provider timeout) left the
-report's `ai_assessment` NULL forever — no automatic retry. K.6.b
+report's `ai_assessment` NULL forever - no automatic retry. K.6.b
 adds:
 
   - `ai_retry_queue` table with the retry state machine
@@ -19,10 +19,10 @@ adds:
     migration just establishes the schema).
 
 Status enum:
-  - pending         — waiting for next retry (next_attempt_at <= now)
-  - in_progress     — daemon picked this row up + is running it now
-  - complete        — AI call succeeded; row stays for audit history
-  - terminal_failed — 5 attempts exhausted; manual operator action only
+  - pending         - waiting for next retry (next_attempt_at <= now)
+  - in_progress     - daemon picked this row up + is running it now
+  - complete        - AI call succeeded; row stays for audit history
+  - terminal_failed - 5 attempts exhausted; manual operator action only
 """
 from alembic import op
 import sqlalchemy as sa

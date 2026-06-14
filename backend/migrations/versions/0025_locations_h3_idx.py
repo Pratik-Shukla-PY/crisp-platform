@@ -1,13 +1,13 @@
-"""locations.h3_idx + index — H3 hexagonal indexing scaffold
+"""locations.h3_idx + index - H3 hexagonal indexing scaffold
 
 Revision ID: 0025_locations_h3_idx
 Revises: 0024_device_telemetry_summary
 Create Date: 2026-05-16
 
-Phase 5.1 (docs/NEARBY_REPORTS_PIPELINE.md §9.4) — geospatial scaling
+Phase 5.1 (docs/NEARBY_REPORTS_PIPELINE.md §9.4) - geospatial scaling
 roadmap step G3. Adds:
 
-  • `locations.h3_idx VARCHAR(16)` — nullable. Stores the H3 resolution-9
+  • `locations.h3_idx VARCHAR(16)` - nullable. Stores the H3 resolution-9
     cell index (~175 m hex edge, ~110k m² area) for the row's
     latitude / longitude. Populated app-side at report creation; rows
     that predate the backfill stay NULL.
@@ -18,7 +18,7 @@ roadmap step G3. Adds:
 
 The aggregator only consumes this column when CRISP_NEARBY_H3_MODE=1
 AND the h3 Python wheel is installed. The default path stays bbox +
-ST_DWithin (Phase G1 / G2) — H3 is the next-tier-up perf knob the
+ST_DWithin (Phase G1 / G2) - H3 is the next-tier-up perf knob the
 operator flips when /nearby p95 > 500 ms with PostGIS in play
 (§9.6 trigger table).
 
@@ -38,7 +38,7 @@ BACKFILL:
       python -m app.scripts.backfill_locations_h3 [--batch=10000]
   (separate followup) to populate them. The /nearby H3 path
   transparently falls back to ST_DWithin / bbox for any candidate row
-  whose h3_idx is NULL — so a partial backfill is safe; you just don't
+  whose h3_idx is NULL - so a partial backfill is safe; you just don't
   get the H3 perf win for the un-backfilled rows.
 """
 from alembic import op

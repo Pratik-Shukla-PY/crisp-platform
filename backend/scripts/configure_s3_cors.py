@@ -21,7 +21,7 @@ Usage (locally with aws creds OR on EC2 with IAM instance profile):
     python scripts/configure_s3_cors.py                  # dry-run
     python scripts/configure_s3_cors.py --confirm        # apply
 
-Idempotent — boto3 PutBucketCors REPLACES the rule set, so re-running
+Idempotent - boto3 PutBucketCors REPLACES the rule set, so re-running
 just resets the canonical config. To add a new origin, edit
 ALLOWED_ORIGINS below and re-run.
 """
@@ -37,7 +37,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("configure_s3_cors")
 
 # Origins we serve the dashboard from. Add new prod / staging hosts
-# here as they come online — bucket CORS is a deny-by-default config,
+# here as they come online - bucket CORS is a deny-by-default config,
 # so a missing origin manifests as audio scrubbing being broken in
 # that environment only.
 ALLOWED_ORIGINS = [
@@ -56,7 +56,7 @@ CORS_RULES = {
             "AllowedOrigins": ALLOWED_ORIGINS,
             # `*` is safe here because the bucket is private + every
             # request needs a valid presigned URL (signed query params).
-            # The header allowlist matters for preflight — we let the
+            # The header allowlist matters for preflight - we let the
             # browser send Range, If-Range, etc.
             "AllowedHeaders": ["*"],
             "ExposeHeaders": [
@@ -113,7 +113,7 @@ def main(dry_run: bool) -> int:
     logger.info(json.dumps(CORS_RULES["CORSRules"], indent=2))
 
     if dry_run:
-        logger.info("Dry run — pass --confirm to apply.")
+        logger.info("Dry run - pass --confirm to apply.")
         return 0
 
     s3.put_bucket_cors(Bucket=bucket, CORSConfiguration=CORS_RULES)

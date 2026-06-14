@@ -1,10 +1,10 @@
 /**
- * DynamicModuleRenderer — RN mirror of the PWA's _renderCrisisPackView
+ * DynamicModuleRenderer - RN mirror of the PWA's _renderCrisisPackView
  * (mobile-app/src/v4-flow.js). Renders a geo-scoped crisis pack's extra
  * Stage-2/3 questions (the fields the hardcoded classify chips don't capture)
  * for the 'crisispack' classify sub-step. Field labels localize via
  * cp_<fieldkey>; select options via cpopt_<fieldkey>_<VALUE>; yes/no via
- * v4_yes/v4_no — all present in the 22 RN locales (RNV4-P0). Answers are written
+ * v4_yes/v4_no - all present in the 22 RN locales (RNV4-P0). Answers are written
  * back through onSetAnswer(key, value); the parent (App.tsx) holds
  * crisisStockAnswers, which feeds form_data at submit (RNV4-P2).
  *

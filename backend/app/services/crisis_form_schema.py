@@ -1,4 +1,4 @@
-"""Dynamic Crisis Forms — schema contract + validation (pure, stdlib-only).
+"""Dynamic Crisis Forms - schema contract + validation (pure, stdlib-only).
 
 This module is the single source of truth for the crisis-pack `schema_json`
 wire format that the dashboard builder produces and the per-channel renderers
@@ -14,7 +14,7 @@ schema_json shape (sections → fields):
 {
   "schema_version": 1,
   "key": "wildfire-default",
-  "title": "Forest Fire — rapid assessment",
+  "title": "Forest Fire - rapid assessment",
   "sections": [
     {"id": "classify", "stage": 2, "title": "...", "fields": [ <field>, ... ]},
     {"id": "review",   "stage": 3, "title": "...", "fields": [ <field>, ... ]}
@@ -38,7 +38,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
-# Field types — the 6 modules.py base types ∪ the 5 CRISP special types.
+# Field types - the 6 modules.py base types ∪ the 5 CRISP special types.
 BASE_FIELD_TYPES = {"single_select", "multi_select", "short_text", "long_text", "integer", "yes_no"}
 SPECIAL_FIELD_TYPES = {"photo", "audio", "location", "building", "severity"}
 ALL_FIELD_TYPES = BASE_FIELD_TYPES | SPECIAL_FIELD_TYPES
@@ -158,7 +158,7 @@ def validate_submission(schema: dict, payload: dict, channel: str
       • form_data   → validated answers for the report's `form_data` JSON column
       • first_class → values for canonical Report columns (via `maps_to`)
       • errors      → list (empty = accept)
-    Fields not offered on `channel` are skipped (NOT errored) — this is the
+    Fields not offered on `channel` are skipped (NOT errored) - this is the
     multi-channel parity mechanism (must-have #1): a chat channel omitting an
     App-only field is never 422'd.
     """
@@ -214,7 +214,7 @@ def validate_submission(schema: dict, payload: dict, channel: str
                     errors.append(f"'{key}' must be a subset of the allowed options"); continue
                 val = list(raw)
             # special types (photo/audio/location/building/severity): presence/shape
-            # only — bytes flow through the existing media + location pipelines.
+            # only - bytes flow through the existing media + location pipelines.
         except (ValueError, TypeError):
             errors.append(f"'{key}' is malformed for type {ftype}")
             continue

@@ -1,4 +1,4 @@
-"""Dynamic Crisis Forms — request/response schemas (Pydantic v2)."""
+"""Dynamic Crisis Forms - request/response schemas (Pydantic v2)."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -69,7 +69,7 @@ class OperationSummaryResponse(BaseModel):
     is_active: bool = False
     center_lat: Optional[float] = None
     center_lng: Optional[float] = None
-    # P2 card fields — geography + identity + dates (all on CrisisEvent; were
+    # P2 card fields - geography + identity + dates (all on CrisisEvent; were
     # omitted from the rollup payload). radius_km drives the SVG mini-map ring;
     # place_name is the denormalised "City, Country"; form_name is the active
     # pack's title (outerjoin); started_at/ended_at are the operation window.
@@ -81,12 +81,12 @@ class OperationSummaryResponse(BaseModel):
     form_name: Optional[str] = None
     critical: int = 0
     new_24h: int = 0
-    new_prev_24h: int = 0                        # [48h,24h) window — for the card's trend arrow
+    new_prev_24h: int = 0                        # [48h,24h) window - for the card's trend arrow
     total: int = 0
     verified: int = 0                           # all-time verified reports in this op
     last_activity: Optional[datetime] = None
     is_cluster: bool = False
-    # Phase 3 — backend-authoritative health (replaces the client-side stand-in).
+    # Phase 3 - backend-authoritative health (replaces the client-side stand-in).
     health: str = "GREEN"                       # RED | AMBER | GREEN
     health_reason: Optional[str] = None         # short "why" for the hover
     responders_active: int = 0                  # live responders attached to this op
@@ -114,7 +114,7 @@ class OperationLaunchResponse(BaseModel):
 
 class OperationLaunchWithFormRequest(BaseModel):
     """Atomic "Start New Operation" publish (redesign v2 wizard, Step 4). Creates a
-    crisis-form pack + a published version + a LIVE CrisisEvent in ONE transaction —
+    crisis-form pack + a published version + a LIVE CrisisEvent in ONE transaction -
     nothing persists unless the whole thing succeeds (the no-draft-persistence rule).
     The server fills schema_json['key'/'title'] from the pack it creates, so the
     wizard only has to supply the sections + a human title."""

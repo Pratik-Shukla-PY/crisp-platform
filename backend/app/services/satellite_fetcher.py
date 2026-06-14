@@ -1,32 +1,32 @@
 """
 Satellite image fetcher for CRISP truth verification.
 
-Apr 2026 — refactored to a multi-provider open-source chain. The previous
+Apr 2026 - refactored to a multi-provider open-source chain. The previous
 Sentinel Hub OAuth dependency (paid wrapper around free public data) has
 been retired. The same Sentinel-2 imagery is available directly from
 multiple free sources; we iterate through them in priority order until
 one returns successfully:
 
   1. AWS Open Data Sentinel-2 + Element84 STAC API
-       — no auth, no quota, no expiry. Same satellite/imagery as Sentinel
+       - no auth, no quota, no expiry. Same satellite/imagery as Sentinel
          Hub, just without the paid wrapper. Primary choice.
 
   2. Microsoft Planetary Computer STAC API
-       — free, no auth required for STAC search and rendered_preview
+       - free, no auth required for STAC search and rendered_preview
          asset access. Better SLA than Element84; serves as redundancy.
 
   3. ESA Copernicus Data Space (CDSE) STAC
-       — direct from the data source. STAC search is unauthenticated;
+       - direct from the data source. STAC search is unauthenticated;
          we consume the QUICKLOOK asset which doesn't require OAuth.
 
   4. Mapbox Static API (existing fallback)
-       — rendered satellite-style tile (Maxar imagery). No
+       - rendered satellite-style tile (Maxar imagery). No
          date-specificity but always available when MAPBOX_TOKEN is set.
          Used as last resort or when all Sentinel-2 sources are
          cloud-covered / unreachable.
 
 Each provider gracefully no-ops when its dependencies aren't reachable.
-The chain works with ZERO credentials — AWS Sentinel-2 needs none.
+The chain works with ZERO credentials - AWS Sentinel-2 needs none.
 Adding the others improves coverage and resilience but is optional.
 
 Return shape (preserved from the previous implementation so the dashboard
@@ -68,7 +68,7 @@ _CDSE_STAC = "https://catalogue.dataspace.copernicus.eu/stac/v1/search"
 
 def _bbox(lat: float, lon: float, delta: float = 0.005) -> list:
     """Tiny bbox around the point. ~500 m at the equator, smaller toward
-    the poles — fine for picking up a single tile that contains the
+    the poles - fine for picking up a single tile that contains the
     incident location. Wider boxes return more candidate scenes but
     slow the STAC query."""
     return [lon - delta, lat - delta, lon + delta, lat + delta]
@@ -121,7 +121,7 @@ async def _aws_sentinel2(lat: float, lon: float, report_dt: datetime) -> Optiona
 
     The STAC item's `thumbnail` asset is a pre-rendered ~250×250 JPEG
     showing the scene's true-colour RGB at the small bbox we asked
-    about — exactly what the dashboard renders. No auth required.
+    about - exactly what the dashboard renders. No auth required.
     """
     from_str, to_str = _date_range(report_dt)
     body = {
@@ -220,7 +220,7 @@ async def _mpc_sentinel2(lat: float, lon: float, report_dt: datetime) -> Optiona
 
     props = chosen.get("properties", {}) or {}
     assets = chosen.get("assets", {}) or {}
-    # Try `rendered_preview` (best — pre-rendered RGB PNG), then `preview`,
+    # Try `rendered_preview` (best - pre-rendered RGB PNG), then `preview`,
     # then `thumbnail` as last resort.
     preview_url = (
         (assets.get("rendered_preview") or {}).get("href")
@@ -286,7 +286,7 @@ async def _cdse_sentinel2(lat: float, lon: float, report_dt: datetime) -> Option
                 if r.status_code == 404:
                     # Endpoint may have moved; not worth shouting about.
                     logger.info(
-                        f"CDSE STAC 404 for collection={collection_name} — endpoint may have moved"
+                        f"CDSE STAC 404 for collection={collection_name} - endpoint may have moved"
                     )
                     return None
                 if r.status_code != 200:
@@ -347,7 +347,7 @@ async def _cdse_sentinel2(lat: float, lon: float, report_dt: datetime) -> Option
 # ── Provider 4: Mapbox Static API (rendered fallback) ──────────────────────
 
 async def _mapbox_satellite(lat: float, lon: float, report_dt: datetime) -> Optional[dict]:
-    """Mapbox satellite-v9 static tile — Maxar imagery.
+    """Mapbox satellite-v9 static tile - Maxar imagery.
 
     No date specificity (always shows the latest mosaic), but useful as
     a guaranteed fallback when Sentinel-2 sources are unreachable or
@@ -356,7 +356,7 @@ async def _mapbox_satellite(lat: float, lon: float, report_dt: datetime) -> Opti
     """
     token = os.getenv("MAPBOX_TOKEN", "")
     if not token:
-        logger.info("MAPBOX_TOKEN not set — Mapbox fallback skipped")
+        logger.info("MAPBOX_TOKEN not set - Mapbox fallback skipped")
         return None
     url = (
         f"https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/"
@@ -396,7 +396,7 @@ _PROVIDERS: list[tuple[str, Callable[[float, float, datetime], Awaitable[Optiona
 class SatelliteFetcher:
     """Fetch satellite imagery for a lat/lon point from all available providers.
 
-    Apr 2026 second pass — refactored from a fallback CHAIN to a parallel
+    Apr 2026 second pass - refactored from a fallback CHAIN to a parallel
     FAN-OUT. All providers are queried simultaneously via asyncio.gather;
     every successful result is returned as part of an `images` list so
     the dashboard can render a side-by-side comparison view.
@@ -404,15 +404,15 @@ class SatelliteFetcher:
     Why fan-out for this use case:
       * UNDP demo benefits from visual proof of multi-source redundancy.
       * 3 of the 4 Sentinel-2 mirrors return ~identical imagery, but
-        seeing all 3 confirms "they all agree" — a stronger truth signal
+        seeing all 3 confirms "they all agree" - a stronger truth signal
         for the analyst than "we trust this one source."
-      * Mapbox shows different imagery (Maxar high-res) — genuinely
+      * Mapbox shows different imagery (Maxar high-res) - genuinely
         complementary to the Sentinel-2 trio, not redundant.
       * Latency cost is bounded: gather waits for the slowest provider,
         which in practice is ~2 s vs ~500 ms for chain. Acceptable for
         a click-driven verify action.
       * Cost cost is one additional API call to each provider per verify
-        — well within all four free tiers.
+        - well within all four free tiers.
 
     Return shape (superset of the chain version, backward compatible):
 
@@ -435,7 +435,7 @@ class SatelliteFetcher:
         }
 
     The "primary" (top-level fields) is the first non-Mapbox provider
-    that returned successfully — typically AWS Sentinel-2. AI scoring
+    that returned successfully - typically AWS Sentinel-2. AI scoring
     in the verify endpoint uses the primary; the dashboard renders all
     images in a 2×2 grid.
     """
@@ -453,7 +453,7 @@ class SatelliteFetcher:
 
         # Fan out to all providers in parallel. asyncio.gather with
         # return_exceptions=True ensures one provider raising can't
-        # cancel the others — we collect every outcome separately.
+        # cancel the others - we collect every outcome separately.
         import asyncio
         results = await asyncio.gather(
             *[fn(lat, lon, report_dt) for _, fn in _PROVIDERS],
@@ -490,7 +490,7 @@ class SatelliteFetcher:
         # render the 2×2 grid.
         result_dict["images"] = [r for _n, r in ordered]
 
-        # LEGACY: `alt` field — first Mapbox result if any. Kept so older
+        # LEGACY: `alt` field - first Mapbox result if any. Kept so older
         # frontend code that reads response.alt still works.
         for n, r in ordered:
             if n == "Mapbox Satellite":

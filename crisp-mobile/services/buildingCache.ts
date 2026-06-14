@@ -1,19 +1,19 @@
 /**
- * buildingCache — RN parity for PWA's `building-select.js::preCacheNearest`.
+ * buildingCache - RN parity for PWA's `building-select.js::preCacheNearest`.
  *
- * Phase B2 (Apr 2026 UI v3) — warm an AsyncStorage cache with the 10 nearest
+ * Phase B2 (Apr 2026 UI v3) - warm an AsyncStorage cache with the 10 nearest
  * building footprints the first time GPS resolves. An offline-only capture
  * immediately after opening the app (tunnel, crisis-zone cell drop) can
  * then show nearby buildings for autocomplete / display even without a
  * live Overpass call inside the WebView picker.
  *
  * Design notes:
- *   - Cache key is a rounded (lat, lng) pair at 3 decimal places — ~111 m
+ *   - Cache key is a rounded (lat, lng) pair at 3 decimal places - ~111 m
  *     grid at the equator, so a single key covers the fetch radius.
  *   - TTL is 24 h (match PWA). After expiry the entry is still returned on
  *     network-failure (better-than-nothing fallback); a fresh network hit
  *     overwrites it.
- *   - We DO NOT wire this into the WebView picker yet — that would require
+ *   - We DO NOT wire this into the WebView picker yet - that would require
  *     pre-seeding the WebView's localStorage via `injectedJavaScriptBefore`,
  *     which is a bigger surgery. For now the picker re-fetches; this
  *     cache is consumed by the free-text fallback autocomplete + the
@@ -80,7 +80,7 @@ async function _readCache(key: string): Promise<OverpassElement[] | null> {
     const raw = await AsyncStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { ts: number; elems: OverpassElement[] };
-    // Expired? Still return — the consumer treats stale hits as a fallback.
+    // Expired? Still return - the consumer treats stale hits as a fallback.
     return Array.isArray(parsed?.elems) ? parsed.elems : null;
   } catch {
     return null;
@@ -91,7 +91,7 @@ async function _writeCache(key: string, elems: OverpassElement[]): Promise<void>
   try {
     await AsyncStorage.setItem(key, JSON.stringify({ ts: Date.now(), elems }));
   } catch {
-    // best-effort — never block the UI on cache-write failure
+    // best-effort - never block the UI on cache-write failure
   }
 }
 
@@ -130,7 +130,7 @@ async function _fetchBuildings(lat: number, lng: number, opts: { allowNetwork?: 
 /**
  * Return the N nearest building footprints to (lat, lng), reading from the
  * local AsyncStorage cache first and falling through to Overpass on miss.
- * Safe to call on every GPS-ready event — the cache key bucketing is
+ * Safe to call on every GPS-ready event - the cache key bucketing is
  * coarse enough to dedupe within a normal walking radius.
  */
 export async function preCacheNearest(
@@ -176,7 +176,7 @@ export async function preCacheNearest(
 /**
  * Clear every cached Overpass entry. Called from the deletion / GDPR-purge
  * code-path so a user who wipes their data doesn't leave buildings in
- * AsyncStorage. Cheap + idempotent — a blanket `removeItem` for every key
+ * AsyncStorage. Cheap + idempotent - a blanket `removeItem` for every key
  * matching the CRISP prefix.
  */
 export async function clearAllBuildingCache(): Promise<void> {

@@ -1,4 +1,4 @@
-"""building_version_ordinal + building_is_latest — UNDP must-have #8
+"""building_version_ordinal + building_is_latest - UNDP must-have #8
 
 Revision ID: 0027_building_versioning
 Revises: 0026_nearby_hot_regions
@@ -6,16 +6,16 @@ Create Date: 2026-05-18
 
 Phase F.5.c (Dashboard-audit batch, May 2026).
 
-`CLAUDE.md` declares UNDP must-have #8 as a never-regress invariant:
+`the project invariants` declares UNDP must-have #8 as a never-regress invariant:
 
-  > 8. Building versioning — multiple reports for same building_id
+  > 8. Building versioning - multiple reports for same building_id
   >    bias to latest COMPLETE; older versions kept for audit
   >    (building_version_ordinal, building_is_latest).
 
 Reality at audit time: the `reports` table carried `building_id` (FK
 to the OSM way id) but had no version ordinal or "is latest" flag.
 The dashboard reconstructed "latest version" by sorting reports per
-building on the fly — which means under high concurrency two analysts
+building on the fly - which means under high concurrency two analysts
 could pick different "latest" versions, and the operator-facing chip
 "Version 3 of 7 · Latest" had no canonical column to read from.
 
@@ -24,7 +24,7 @@ This migration:
   1. Adds the two columns:
        - `building_version_ordinal` INTEGER, nullable (NULL for rows
          without a building_id, which is the dominant case in the
-         current corpus — only PWA reports that tapped an OSM
+         current corpus - only PWA reports that tapped an OSM
          footprint carry a building_id).
        - `building_is_latest` BOOLEAN, default false, server_default
          'false', NOT NULL. We default to false so the backfill below
@@ -57,7 +57,7 @@ Risk:
   - The backfill is a single transactional UPDATE wrapped in
     op.execute(); on a 500k-report DB it should complete in <10 s.
     For larger corpuses (millions), the batched-update pattern from
-    migration 0024 should be templated in — not needed here yet.
+    migration 0024 should be templated in - not needed here yet.
   - Composite index on (building_id, building_is_latest) is < 1MB
     per million rows; safe.
 """
@@ -91,13 +91,13 @@ def upgrade() -> None:
         ),
     )
 
-    # 2. Composite index — the typical query is
+    # 2. Composite index - the typical query is
     #      SELECT * FROM reports WHERE building_id = ? AND building_is_latest;
     #    so the index leads with building_id (the high-selectivity
     #    column) and tails with the boolean. Partial index on
     #    is_latest=true would be smaller still but harder to use
     #    when the dashboard also wants the full version list
-    #    (Version 3 of 7) — the regular composite covers both queries.
+    #    (Version 3 of 7) - the regular composite covers both queries.
     op.create_index(
         "ix_reports_building_latest",
         "reports",
@@ -105,7 +105,7 @@ def upgrade() -> None:
         unique=False,
     )
 
-    # 3. Backfill — single transactional UPDATE using ROW_NUMBER over
+    # 3. Backfill - single transactional UPDATE using ROW_NUMBER over
     #    each building_id partition, ordered by server_created_at then
     #    id (deterministic tie-breaker when two reports share an
     #    identical timestamp). Two passes:

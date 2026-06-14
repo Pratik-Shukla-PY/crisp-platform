@@ -1,5 +1,5 @@
 """
-Telegram Bot Reply Templates — Multilingual, step-by-step guided flow.
+Telegram Bot Reply Templates - Multilingual, step-by-step guided flow.
 Designed for uneducated users: big emojis, minimal text, one action per message.
 Auto-detects language from Telegram user locale.
 """
@@ -14,7 +14,7 @@ API_BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 # ── Multilingual strings (emoji-first, minimal text) ──────────────────────────
 # Key: language code (from Telegram user locale)
-# Each message uses large emojis as primary communication — text is secondary
+# Each message uses large emojis as primary communication - text is secondary
 
 _STRINGS = {
     "en": {
@@ -25,7 +25,7 @@ _STRINGS = {
         "step_loc": "📍 *Where are you?*\n\n👇 Press the button to send your location",
         "step_loc_btn": "📍 Send My Location",
         "step_loc_done": "✅ Got it!",
-        "loc_updated_reresolved": "📍 Location updated — your report has been re-matched to the response operation for the new location.",
+        "loc_updated_reresolved": "📍 Location updated - your report has been re-matched to the response operation for the new location.",
         "step_photo": "📸 *Show us the damage*\n\n📸 Take a *photo* and send it\n🎤 Or send a *voice message*\n⌨️ Or *write* what happened\n\n🔒 _Faces are blurred before responders see them_",
         "step_voice": "🎙 *Tell us what happened*\n\n🎤 Hold and talk\nor ⌨️ Write it",
         "step_text": "📝 *Anything else to add?*\n\nWrite more or press Send 👇",
@@ -60,10 +60,10 @@ _STRINGS = {
         "step_loc_num": "📍 *Where is this?*\n\n👇 Press the button to send location",
         "photo_ack": "✅ Got your photo!",
         "desc_ack": "✅ Got it!",
-        "photo_cap": "📸 I've got 3 photos already — that's the most I can attach. Send the clearest ones first.",
-        "unsupported_media": "📸 I can take a *photo*, a *voice message*, or *text*. Please send one of those — files, stickers and GIFs aren't picked up.",
+        "photo_cap": "📸 I've got 3 photos already - that's the most I can attach. Send the clearest ones first.",
+        "unsupported_media": "📸 I can take a *photo*, a *voice message*, or *text*. Please send one of those - files, stickers and GIFs aren't picked up.",
         # Phase 5: pre-submit review card. Field labels (the values shown beside
-        # them are the reporter's own picks). English-only for now — localized
+        # them are the reporter's own picks). English-only for now - localized
         # in the i18n cleanup pass; t() falls back to en meanwhile.
         "review_title":     "📋 *Please check your report*",
         "review_intro":     "Tap *Send* if this looks right, or *Fix* to change something.",
@@ -74,7 +74,7 @@ _STRINGS = {
         "review_location":  "Location",
         "review_debris":    "Debris clearing",
         "review_evidence":  "Attached",
-        "review_none":      "—",
+        "review_none":      "-",
         "review_send":      "✅ Send report",
         "review_fix":       "✏️ Fix something",
         "review_fix_title": "✏️ *What would you like to change?*",
@@ -86,7 +86,7 @@ _STRINGS = {
         # Reporter types the name (e.g. "Koramangala High School", "مدرسة الأمل")
         # in their own language. The dashboard tags these rows as "needs
         # manual mapping" so an operator can resolve to an OSM footprint.
-        "step_building": "🏛 *Name the building?*\n\nType the building name in your own language — or skip.",
+        "step_building": "🏛 *Name the building?*\n\nType the building name in your own language - or skip.",
         "step_building_skip": "⏭ Skip",
         "step_building_ack": "✅ Got the name!",
         # debris Yes/No step.
@@ -94,10 +94,10 @@ _STRINGS = {
         "debris_yes":      "✅ Yes",
         "debris_no":       "❌ No",
         "debris_na":       "➖ Not sure",
-        # UX fix — OSM building suggestions after location drop.
+        # UX fix - OSM building suggestions after location drop.
         "bldg_which":      "🏛 *Which building?* Tap one, or type the name.",
         "bldg_type_instead": "Type name instead",
-        # UX fix — simplified consent prompt (used when the
+        # UX fix - simplified consent prompt (used when the
         # locale pack hasn't shipped a translation yet; see _tf() in
         # send_consent_prompt for the fallback resolver).
         "consent_title":   "🛡 Your privacy matters",
@@ -107,7 +107,7 @@ _STRINGS = {
                             "Continue?"),
         "consent_yes":     "✅ I agree",
         "consent_no":      "❌ No, cancel",
-        "consent_declined": "Understood — no data collected. Send /start anytime to try again.",
+        "consent_declined": "Understood - no data collected. Send /start anytime to try again.",
         "btn_change_lang":  "🌐 Change language",
         # v3 crisis-group headers + UNDP super-type labels + missing crisis keys.
         "crisis_group_natural":       "Natural",
@@ -132,10 +132,10 @@ _STRINGS = {
         "welcome_2": "बताएं क्या टूटा है।\nहम मदद भेजेंगे।\n\n👇 नीचे बटन दबाएं",
         "welcome_btn": "🚨 मुझे मदद चाहिए",
         "lang_select": "🌐 *अपनी भाषा चुनें:*",
-        "step_loc": "📍 *आप कहां हैं?*\n\n👇 बटन दबाएं — अपनी जगह भेजें",
+        "step_loc": "📍 *आप कहां हैं?*\n\n👇 बटन दबाएं - अपनी जगह भेजें",
         "step_loc_btn": "📍 मेरी जगह भेजें",
         "step_loc_done": "✅ मिल गई!",
-        "loc_updated_reresolved": "📍 स्थान अपडेट हो गया — आपकी रिपोर्ट को नए स्थान के अनुसार सही राहत अभियान से जोड़ दिया गया है।",
+        "loc_updated_reresolved": "📍 स्थान अपडेट हो गया - आपकी रिपोर्ट को नए स्थान के अनुसार सही राहत अभियान से जोड़ दिया गया है।",
         "step_type": "🏗 क्या टूटा है?",
         "step_sev": "⚠️ कितना बुरा?",
         "step_photo": "📸 *नुकसान दिखाएं*\n\n📸 *फोटो* खींचकर भेजें\n🎤 या *बोलकर बताएं*\n⌨️ या *लिखें*\n\n🔒 _ज़िम्मेदारों के देखने से पहले चेहरे धुंधले किए जाते हैं_",
@@ -171,7 +171,7 @@ _STRINGS = {
         "photo_ack": "✅ फोटो मिल गई!",
         "desc_ack": "✅ मिल गया!",
         "step_loc_text_hint": "या जगह का नाम लिखें",
-        "step_building": "🏛 *इमारत का नाम?*\n\nइमारत का नाम अपनी भाषा में लिखें — या छोड़ें।",
+        "step_building": "🏛 *इमारत का नाम?*\n\nइमारत का नाम अपनी भाषा में लिखें - या छोड़ें।",
         "step_building_skip": "⏭ छोड़ें",
         "step_building_ack": "✅ नाम मिल गया!",
         "step_debris": "🚜 *मलबा हटाना है?*",
@@ -186,7 +186,7 @@ _STRINGS = {
         "step_loc": "📍 *¿Dónde estás?*\n\n👇 Toca el botón para enviar tu ubicación",
         "step_loc_btn": "📍 Enviar Mi Ubicación",
         "step_loc_done": "✅ ¡Listo!",
-        "loc_updated_reresolved": "📍 Ubicación actualizada — tu reporte se vinculó a la operación de respuesta del nuevo lugar.",
+        "loc_updated_reresolved": "📍 Ubicación actualizada - tu reporte se vinculó a la operación de respuesta del nuevo lugar.",
         "step_type": "🏗 ¿Qué se rompió?",
         "step_sev": "⚠️ ¿Qué tan malo?",
         "step_photo": "📸 *Muéstranos el daño*\n\n📸 Toma una *foto* y envíala\n🎤 O envía un *mensaje de voz*\n⌨️ O *escribe* qué pasó\n\n🔒 _Las caras se difuminan antes de que los rescatistas las vean_",
@@ -222,7 +222,7 @@ _STRINGS = {
         "photo_ack": "✅ ¡Recibimos tu foto!",
         "desc_ack": "✅ ¡Listo!",
         "step_loc_text_hint": "O escribe el nombre del lugar",
-        "step_building": "🏛 *¿Nombre del edificio?*\n\nEscribe el nombre del edificio en tu idioma — o salta.",
+        "step_building": "🏛 *¿Nombre del edificio?*\n\nEscribe el nombre del edificio en tu idioma - o salta.",
         "step_building_skip": "⏭ Saltar",
         "step_building_ack": "✅ ¡Nombre recibido!",
         "step_debris": "🚜 *¿Hay que retirar escombros?*",
@@ -230,7 +230,7 @@ _STRINGS = {
         "debris_no":   "❌ No",
         "photo_cap": "📸 Ya tengo 3 fotos, el máximo. Envía primero las más claras.",
         "debris_na": "➖ No estoy seguro",
-        "unsupported_media": "📸 Puedo recibir una *foto*, un *mensaje de voz* o *texto*. Envía uno de esos — los archivos, stickers y GIF no se reciben.",
+        "unsupported_media": "📸 Puedo recibir una *foto*, un *mensaje de voz* o *texto*. Envía uno de esos - los archivos, stickers y GIF no se reciben.",
         "review_title": "📋 *Revisa tu reporte*",
         "review_intro": "Toca *Enviar* si está bien, o *Corregir* para cambiar algo.",
         "review_crisis": "Crisis",
@@ -240,7 +240,7 @@ _STRINGS = {
         "review_location": "Ubicación",
         "review_debris": "Remoción de escombros",
         "review_evidence": "Adjunto",
-        "review_none": "—",
+        "review_none": "-",
         "review_send": "✅ Enviar reporte",
         "review_fix": "✏️ Corregir algo",
         "review_fix_title": "✏️ *¿Qué quieres cambiar?*",
@@ -250,7 +250,7 @@ _STRINGS = {
         "consent_body": ("CRISP solo recopila:\n• 📍 Ubicación\n• 📸 Fotos (caras difuminadas antes de que los rescatistas las vean)\n• 🎤 Audio / texto\n\nSe comparte solo con equipos de emergencia. Escribe /delete para borrar tus datos.\n\n¿Continuar?"),
         "consent_yes": "✅ Acepto",
         "consent_no": "❌ No, cancelar",
-        "consent_declined": "Entendido — no se recopilaron datos. Envía /start para volver a intentar.",
+        "consent_declined": "Entendido - no se recopilaron datos. Envía /start para volver a intentar.",
     },
     "fr": {
         "welcome_1": "🆘 *AU SECOURS ! Signaler un Dégât*",
@@ -260,7 +260,7 @@ _STRINGS = {
         "step_loc": "📍 *Où êtes-vous ?*\n\n👇 Appuyez pour envoyer votre position",
         "step_loc_btn": "📍 Envoyer Ma Position",
         "step_loc_done": "✅ Reçu !",
-        "loc_updated_reresolved": "📍 Emplacement mis à jour — votre signalement a été rattaché à l'opération d'intervention du nouvel emplacement.",
+        "loc_updated_reresolved": "📍 Emplacement mis à jour - votre signalement a été rattaché à l'opération d'intervention du nouvel emplacement.",
         "step_type": "🏗 Qu'est-ce qui est cassé ?",
         "step_sev": "⚠️ C'est grave ?",
         "step_photo": "📸 *Montrez-nous le dégât*\n\n📸 Prenez une *photo* et envoyez\n🎤 Ou envoyez un *message vocal*\n⌨️ Ou *écrivez*\n\n🔒 _Les visages sont floutés avant que les secours les voient_",
@@ -296,7 +296,7 @@ _STRINGS = {
         "photo_ack": "✅ Photo reçue !",
         "desc_ack": "✅ Reçu !",
         "step_loc_text_hint": "Ou tapez le nom du lieu",
-        "step_building": "🏛 *Nom du bâtiment ?*\n\nTapez le nom du bâtiment dans votre langue — ou passez.",
+        "step_building": "🏛 *Nom du bâtiment ?*\n\nTapez le nom du bâtiment dans votre langue - ou passez.",
         "step_building_skip": "⏭ Passer",
         "step_building_ack": "✅ Nom reçu !",
         "step_debris": "🚜 *Faut-il déblayer les décombres ?*",
@@ -304,7 +304,7 @@ _STRINGS = {
         "debris_no":   "❌ Non",
         "photo_cap": "📸 J'ai déjà 3 photos, c'est le maximum. Envoie d'abord les plus nettes.",
         "debris_na": "➖ Pas sûr",
-        "unsupported_media": "📸 Je peux recevoir une *photo*, un *message vocal* ou du *texte*. Envoie l'un de ces formats — les fichiers, stickers et GIF ne sont pas pris en compte.",
+        "unsupported_media": "📸 Je peux recevoir une *photo*, un *message vocal* ou du *texte*. Envoie l'un de ces formats - les fichiers, stickers et GIF ne sont pas pris en compte.",
         "review_title": "📋 *Vérifie ton signalement*",
         "review_intro": "Touche *Envoyer* si tout est correct, ou *Corriger* pour changer quelque chose.",
         "review_crisis": "Crise",
@@ -314,7 +314,7 @@ _STRINGS = {
         "review_location": "Position",
         "review_debris": "Déblaiement",
         "review_evidence": "Joint",
-        "review_none": "—",
+        "review_none": "-",
         "review_send": "✅ Envoyer le signalement",
         "review_fix": "✏️ Corriger quelque chose",
         "review_fix_title": "✏️ *Que veux-tu changer ?*",
@@ -324,7 +324,7 @@ _STRINGS = {
         "consent_body": ("CRISP ne recueille que :\n• 📍 Position\n• 📸 Photos (visages floutés avant que les secours les voient)\n• 🎤 Audio / texte\n\nPartagé uniquement avec les secours. Tapez /delete pour supprimer vos données.\n\nContinuer ?"),
         "consent_yes": "✅ J'accepte",
         "consent_no": "❌ Non, annuler",
-        "consent_declined": "Compris — aucune donnée collectée. Envoyez /start pour réessayer.",
+        "consent_declined": "Compris - aucune donnée collectée. Envoyez /start pour réessayer.",
     },
     "ar": {
         "welcome_1": "🆘 *نجدة! بلّغ عن ضرر*",
@@ -334,7 +334,7 @@ _STRINGS = {
         "step_loc": "📍 *وين أنت؟*\n\n👇 اضغط الزر لترسل مكانك",
         "step_loc_btn": "📍 أرسل مكاني",
         "step_loc_done": "✅ وصل!",
-        "loc_updated_reresolved": "📍 تم تحديث الموقع — تم ربط بلاغك بعملية الاستجابة المناسبة للموقع الجديد.",
+        "loc_updated_reresolved": "📍 تم تحديث الموقع - تم ربط بلاغك بعملية الاستجابة المناسبة للموقع الجديد.",
         "step_type": "🏗 شو انكسر؟",
         "step_sev": "⚠️ قديش سيء؟",
         "step_photo": "📸 *ورّينا الضرر*\n\n📸 صوّر *صورة* وابعثها\n🎤 أو ابعث *رسالة صوتية*\n⌨️ أو *اكتب* شو صار\n\n🔒 _تُطمَس الوجوه قبل أن يراها المستجيبون_",
@@ -370,7 +370,7 @@ _STRINGS = {
         "photo_ack": "✅ وصلت الصورة!",
         "desc_ack": "✅ وصل!",
         "step_loc_text_hint": "أو اكتب اسم المكان",
-        "step_building": "🏛 *اسم المبنى؟*\n\nاكتب اسم المبنى بلغتك — أو تخطّى.",
+        "step_building": "🏛 *اسم المبنى؟*\n\nاكتب اسم المبنى بلغتك - أو تخطّى.",
         "step_building_skip": "⏭ تخطّى",
         "step_building_ack": "✅ تم استلام الاسم!",
         "step_debris": "🚜 *هل يلزم إزالة الأنقاض؟*",
@@ -378,7 +378,7 @@ _STRINGS = {
         "debris_no":   "❌ لا",
         "photo_cap": "📸 لديّ 3 صور بالفعل، وهذا الحد الأقصى. أرسل الأوضح أولاً.",
         "debris_na": "➖ لست متأكداً",
-        "unsupported_media": "📸 يمكنني استقبال *صورة* أو *رسالة صوتية* أو *نص*. أرسل واحداً منها — الملفات والملصقات وصور GIF لا تُستقبَل.",
+        "unsupported_media": "📸 يمكنني استقبال *صورة* أو *رسالة صوتية* أو *نص*. أرسل واحداً منها - الملفات والملصقات وصور GIF لا تُستقبَل.",
         "review_title": "📋 *راجِع بلاغك*",
         "review_intro": "اضغط *إرسال* إذا كان كل شيء صحيحاً، أو *تعديل* لتغيير شيء ما.",
         "review_crisis": "الأزمة",
@@ -388,7 +388,7 @@ _STRINGS = {
         "review_location": "الموقع",
         "review_debris": "إزالة الأنقاض",
         "review_evidence": "المرفقات",
-        "review_none": "—",
+        "review_none": "-",
         "review_send": "✅ إرسال البلاغ",
         "review_fix": "✏️ تعديل شيء ما",
         "review_fix_title": "✏️ *ماذا تريد أن تغيّر؟*",
@@ -398,7 +398,7 @@ _STRINGS = {
         "consent_body": ("يجمع CRISP فقط:\n• 📍 الموقع\n• 📸 صور (تُطمَس الوجوه قبل أن يراها المستجيبون)\n• 🎤 صوت / نص\n\nتُشارَك مع فرق الطوارئ فقط. اكتب /delete لحذف بياناتك.\n\nهل تريد المتابعة؟"),
         "consent_yes": "✅ أوافق",
         "consent_no": "❌ لا، إلغاء",
-        "consent_declined": "تمام — لم تُجمَع أي بيانات. أرسل /start للمحاولة مرة أخرى.",
+        "consent_declined": "تمام - لم تُجمَع أي بيانات. أرسل /start للمحاولة مرة أخرى.",
     },
     "pt": {
         "welcome_1": "🆘 *SOCORRO! Relatar Dano*",
@@ -408,7 +408,7 @@ _STRINGS = {
         "step_loc": "📍 *Onde você está?*\n\n👇 Aperte para enviar sua localização",
         "step_loc_btn": "📍 Enviar Minha Localização",
         "step_loc_done": "✅ Recebido!",
-        "loc_updated_reresolved": "📍 Localização atualizada — o seu relato foi vinculado à operação de resposta do novo local.",
+        "loc_updated_reresolved": "📍 Localização atualizada - o seu relato foi vinculado à operação de resposta do novo local.",
         "step_type": "🏗 O que quebrou?",
         "step_sev": "⚠️ Quão ruim?",
         "step_photo": "📸 *Mostre o estrago*\n\n📸 Tire uma *foto* e mande\n🎤 Ou mande *áudio*\n⌨️ Ou *escreva*\n\n🔒 _Os rostos são desfocados antes de a equipe vê-los_",
@@ -444,7 +444,7 @@ _STRINGS = {
         "photo_ack": "✅ Foto recebida!",
         "desc_ack": "✅ Recebido!",
         "step_loc_text_hint": "Ou escreva o nome do lugar",
-        "step_building": "🏛 *Nome do edifício?*\n\nEscreva o nome do edifício em sua língua — ou pule.",
+        "step_building": "🏛 *Nome do edifício?*\n\nEscreva o nome do edifício em sua língua - ou pule.",
         "step_building_skip": "⏭ Pular",
         "step_building_ack": "✅ Nome recebido!",
         "step_debris": "🚜 *Precisa remover escombros?*",
@@ -459,7 +459,7 @@ _STRINGS = {
         "step_loc": "📍 *Uko wapi?*\n\n👇 Bonyeza kutuma eneo lako",
         "step_loc_btn": "📍 Tuma Eneo Langu",
         "step_loc_done": "✅ Tumepata!",
-        "loc_updated_reresolved": "📍 Mahali pamesasishwa — ripoti yako imeunganishwa na operesheni ya kukabiliana ya eneo jipya.",
+        "loc_updated_reresolved": "📍 Mahali pamesasishwa - ripoti yako imeunganishwa na operesheni ya kukabiliana ya eneo jipya.",
         "step_type": "🏗 Nini kimevunjika?",
         "step_sev": "⚠️ Ni mbaya kiasi gani?",
         "step_photo": "📸 *Tuonyeshe uharibifu*\n\n📸 Piga *picha* na utume\n🎤 Au tuma *ujumbe wa sauti*\n⌨️ Au *andika* kilichotokea\n\n🔒 _Nyuso hutiwa ukungu kabla ya waokoaji kuziona_",
@@ -495,7 +495,7 @@ _STRINGS = {
         "photo_ack": "✅ Picha imepokelewa!",
         "desc_ack": "✅ Imepokelewa!",
         "step_loc_text_hint": "Au andika jina la mahali",
-        "step_building": "🏛 *Jina la jengo?*\n\nAndika jina la jengo kwa lugha yako — au ruka.",
+        "step_building": "🏛 *Jina la jengo?*\n\nAndika jina la jengo kwa lugha yako - au ruka.",
         "step_building_skip": "⏭ Ruka",
         "step_building_ack": "✅ Jina limepokelewa!",
         "step_debris": "🚜 *Kusafisha uchafu?*",
@@ -510,7 +510,7 @@ _STRINGS = {
         "step_loc": "📍 *你在哪里?*\n\n👇 点按钮发送你的位置",
         "step_loc_btn": "📍 发送我的位置",
         "step_loc_done": "✅ 收到了!",
-        "loc_updated_reresolved": "📍 位置已更新——您的报告已重新匹配到新位置对应的响应行动。",
+        "loc_updated_reresolved": "📍 位置已更新--您的报告已重新匹配到新位置对应的响应行动。",
         "step_type": "🏗 什么坏了?",
         "step_sev": "⚠️ 多严重?",
         "step_photo": "📸 *给我们看看*\n\n📸 拍一张*照片*发过来\n🎤 或者发*语音*\n⌨️ 或者*打字*告诉我们\n\n🔒 _救援人员看到前，人脸会先模糊处理_",
@@ -546,7 +546,7 @@ _STRINGS = {
         "photo_ack": "✅ 照片收到了!",
         "desc_ack": "✅ 收到!",
         "step_loc_text_hint": "或者打字写地名",
-        "step_building": "🏛 *建筑物名称？*\n\n用您的语言输入建筑物名称 — 或跳过。",
+        "step_building": "🏛 *建筑物名称？*\n\n用您的语言输入建筑物名称 - 或跳过。",
         "step_building_skip": "⏭ 跳过",
         "step_building_ack": "✅ 收到名称！",
         "step_debris": "🚜 *需要清理瓦砾吗？*",
@@ -554,7 +554,7 @@ _STRINGS = {
         "debris_no":   "❌ 否",
         "photo_cap": "📸 我已经有 3 张照片了，这是上限。请先发送最清晰的。",
         "debris_na": "➖ 不确定",
-        "unsupported_media": "📸 我可以接收*照片*、*语音*或*文字*。请发送其中一种 — 文件、贴纸和 GIF 无法识别。",
+        "unsupported_media": "📸 我可以接收*照片*、*语音*或*文字*。请发送其中一种 - 文件、贴纸和 GIF 无法识别。",
         "review_title": "📋 *请检查你的报告*",
         "review_intro": "如果无误请点击 *发送*，或点击 *修改* 来更改。",
         "review_crisis": "灾害",
@@ -564,7 +564,7 @@ _STRINGS = {
         "review_location": "位置",
         "review_debris": "清理瓦砾",
         "review_evidence": "附件",
-        "review_none": "—",
+        "review_none": "-",
         "review_send": "✅ 发送报告",
         "review_fix": "✏️ 修改内容",
         "review_fix_title": "✏️ *你想更改什么？*",
@@ -574,7 +574,7 @@ _STRINGS = {
         "consent_body": ("CRISP 只收集：\n• 📍 位置\n• 📸 照片（救援人员看到前，人脸会先模糊处理）\n• 🎤 语音 / 文字\n\n仅与救援人员共享。随时输入 /delete 删除你的数据。\n\n继续？"),
         "consent_yes": "✅ 我同意",
         "consent_no": "❌ 不，取消",
-        "consent_declined": "好的 — 未收集任何数据。随时输入 /start 重试。",
+        "consent_declined": "好的 - 未收集任何数据。随时输入 /start 重试。",
     },
     "ru": {
         "welcome_1": "🆘 *ПОМОГИТЕ! Сообщить о повреждении*",
@@ -584,7 +584,7 @@ _STRINGS = {
         "step_loc": "📍 *Где вы?*\n\n👇 Нажмите кнопку чтобы отправить место",
         "step_loc_btn": "📍 Отправить Моё Место",
         "step_loc_done": "✅ Получили!",
-        "loc_updated_reresolved": "📍 Местоположение обновлено — ваше сообщение привязано к операции реагирования для нового места.",
+        "loc_updated_reresolved": "📍 Местоположение обновлено - ваше сообщение привязано к операции реагирования для нового места.",
         "step_type": "🏗 Что сломалось?",
         "step_sev": "⚠️ Насколько плохо?",
         "step_photo": "📸 *Покажите повреждение*\n\n📸 Сделайте *фото* и отправьте\n🎤 Или пришлите *голосовое*\n⌨️ Или *напишите*\n\n🔒 _Лица размываются до того, как их увидят спасатели_",
@@ -620,15 +620,15 @@ _STRINGS = {
         "photo_ack": "✅ Фото получено!",
         "desc_ack": "✅ Получили!",
         "step_loc_text_hint": "Или напишите название места",
-        "step_building": "🏛 *Название здания?*\n\nНапишите название здания на своём языке — или пропустите.",
+        "step_building": "🏛 *Название здания?*\n\nНапишите название здания на своём языке - или пропустите.",
         "step_building_skip": "⏭ Пропустить",
         "step_building_ack": "✅ Название получено!",
         "step_debris": "🚜 *Нужна ли уборка завалов?*",
         "debris_yes":  "✅ Да",
         "debris_no":   "❌ Нет",
-        "photo_cap": "📸 У меня уже 3 фото — это максимум. Отправьте сначала самые чёткие.",
+        "photo_cap": "📸 У меня уже 3 фото - это максимум. Отправьте сначала самые чёткие.",
         "debris_na": "➖ Не уверен",
-        "unsupported_media": "📸 Я принимаю *фото*, *голосовое сообщение* или *текст*. Отправьте что-то из этого — файлы, стикеры и GIF не распознаются.",
+        "unsupported_media": "📸 Я принимаю *фото*, *голосовое сообщение* или *текст*. Отправьте что-то из этого - файлы, стикеры и GIF не распознаются.",
         "review_title": "📋 *Проверьте ваше сообщение*",
         "review_intro": "Нажмите *Отправить*, если всё верно, или *Исправить*, чтобы изменить.",
         "review_crisis": "Бедствие",
@@ -638,7 +638,7 @@ _STRINGS = {
         "review_location": "Местоположение",
         "review_debris": "Расчистка завалов",
         "review_evidence": "Вложения",
-        "review_none": "—",
+        "review_none": "-",
         "review_send": "✅ Отправить",
         "review_fix": "✏️ Исправить",
         "review_fix_title": "✏️ *Что вы хотите изменить?*",
@@ -648,7 +648,7 @@ _STRINGS = {
         "consent_body": ("CRISP собирает только:\n• 📍 Местоположение\n• 📸 Фото (лица размываются до того, как их увидят спасатели)\n• 🎤 Аудио / текст\n\nПередаётся только спасателям. Напишите /delete, чтобы удалить данные.\n\nПродолжить?"),
         "consent_yes": "✅ Согласен",
         "consent_no": "❌ Нет, отмена",
-        "consent_declined": "Понятно — данные не собраны. Напишите /start, чтобы попробовать снова.",
+        "consent_declined": "Понятно - данные не собраны. Напишите /start, чтобы попробовать снова.",
     },
 }
 
@@ -690,11 +690,11 @@ def detect_lang(user: dict) -> str:
 async def _send(method: str, data: dict):
     """Post to the Telegram Bot API with a graceful parse-error retry.
 
-    Telegram's legacy `Markdown` parser is infamously brittle — it trips
+    Telegram's legacy `Markdown` parser is infamously brittle - it trips
     on any `*`/`_`/`` ` ``/`[` character that looks like the start of an
     entity even when the markup is well-balanced (e.g. `(foo)` next to
     `*bold*` or a trailing `/command`). Historically this used to
-    silently drop the message on the user — they'd tap a button and
+    silently drop the message on the user - they'd tap a button and
     get nothing back, looking like "the bot hangs after language
     select". On any `400 Bad Request: can't parse entities`
     we re-POST the same payload with `parse_mode` stripped so the user
@@ -715,7 +715,7 @@ async def _send(method: str, data: dict):
             if r.status_code == 400 and "can't parse entities" in (r.text or "").lower() and data.get("parse_mode"):
                 logger.warning(
                     f"TG parse-entity error on {method} "
-                    f"(parse_mode={data.get('parse_mode')}) — retrying as plain text. "
+                    f"(parse_mode={data.get('parse_mode')}) - retrying as plain text. "
                     f"Original error: {r.text[:200]}"
                 )
                 safe = {k: v for k, v in data.items() if k != "parse_mode"}
@@ -748,7 +748,7 @@ async def edit_reply_markup_clear(chat_id: int, message_id: int):
     Called once a callback handler has accepted a button press, so a
     user who scrolls back to the old message can't tap the same button
     twice (e.g. open the bot in two phone-tabs, pick crisis type once,
-    pick again from the stale tab — the second press would re-fire the
+    pick again from the stale tab - the second press would re-fire the
     handler). Telegram's `editMessageReplyMarkup` with an empty markup
     removes the inline keyboard entirely; the message body stays so
     the conversation transcript is intact.
@@ -762,7 +762,7 @@ async def edit_reply_markup_clear(chat_id: int, message_id: int):
             "reply_markup": {"inline_keyboard": []},
         })
     except Exception as e:
-        # Best-effort — a 400 here just means the message is older than
+        # Best-effort - a 400 here just means the message is older than
         # 48 h (Telegram's edit window) or already had its markup
         # cleared. Either way the bot continues; the dedupe in the
         # callback handler is the second line of defence.
@@ -801,7 +801,7 @@ async def send_welcome(chat_id: int, lang: str):
 
 async def send_step_location(chat_id: int, lang: str):
     # Phase 2: the forward geocoder now exists (session_manager.forward_geocode),
-    # so the typed-place-name hint is honest again — typing a place name resolves
+    # so the typed-place-name hint is honest again - typing a place name resolves
     # to coordinates for desktop / GPS-denied reporters.
     return await _send("sendMessage", {
         "chat_id": chat_id,
@@ -816,7 +816,7 @@ async def send_step_location(chat_id: int, lang: str):
 
 
 async def send_step_photo(chat_id: int, lang: str):
-    """Ask for evidence — photo, voice, or text. Any one is enough."""
+    """Ask for evidence - photo, voice, or text. Any one is enough."""
     return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_photo"),
@@ -843,20 +843,20 @@ async def send_step_photo_first(chat_id: int, lang: str):
         "parse_mode": "Markdown",
         "reply_markup": {
             "inline_keyboard": [
-                [{"text": "⌨️ Skip — write instead", "callback_data": "skip_photo"}],
+                [{"text": "⌨️ Skip - write instead", "callback_data": "skip_photo"}],
             ],
         },
     })
 
 
-# P3.5 — Consent prompt shown right after language selection. Blocks all data
+# P3.5 - Consent prompt shown right after language selection. Blocks all data
 # capture until the user explicitly taps "I agree". Mirrors the PWA and RN
 # consent card so Telegram users get the same privacy disclosures (location,
 # photo, audio, retention) before any data is collected.
 async def send_consent_prompt(chat_id: int, lang: str):
     # the `t(lang, key) or "default"` pattern that used to live
     # here silently failed, because `t()` returns the raw key as a STRING
-    # when a translation is missing — always truthy → fallback never fires.
+    # when a translation is missing - always truthy → fallback never fires.
     # That's why the bot was showing literal `consent_title` / `consent_body`
     # /  `consent_yes` / `consent_no` on-screen. Switched to `_tf(…)` below
     # which uses `getattr` / dict `.get()` and returns None on miss so the
@@ -888,12 +888,12 @@ async def send_consent_prompt(chat_id: int, lang: str):
     # parser rejects this body with "Can't find end of the entity
     # starting at byte offset 24" because the fallback text mixes `*`
     # (bold markers), `(...)` (URL-like groups), `/delete` (command
-    # slash), and emoji — the combination triggers an entity-nesting
+    # slash), and emoji - the combination triggers an entity-nesting
     # bug in the legacy parser that's intermittent across Telegram
     # clients. Plain text reads fine thanks to the emoji headers and
     # eliminates the 400 that was stalling the flow right after
     # language select. If rich formatting is needed later, switch to
-    # `parse_mode=HTML` with `<b>...</b>` — HTML's parser is saner.
+    # `parse_mode=HTML` with `<b>...</b>` - HTML's parser is saner.
     return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": f"{title}\n\n{body}",
@@ -985,15 +985,15 @@ async def send_step_crisis_type(chat_id: int, lang: str):
         "chat_id": chat_id,
         "text": body,
         "parse_mode": "Markdown",
-        # UNDP-canonical crisis chips only (CLAUDE.md must-have #5).
-        # LANDSLIDE + PANDEMIC removed in May 2026 — the backend's
+        # UNDP-canonical crisis chips only (the project invariants must-have #5).
+        # LANDSLIDE + PANDEMIC removed in May 2026 - the backend's
         # `_enforce_undp_taxonomy` rejects them with 422, so surfacing
         # them as tap targets was a guaranteed submission failure. The
         # back-compat aliases in `CRISIS_MAP` still map any stale-chat
         # taps to OTHER so older history doesn't error.
         "reply_markup": {
-            # Phase 0: removed the two tappable "— GROUP —" separator rows
-            # (noop_group_* callbacks) — they looked like buttons and fired a
+            # Phase 0: removed the two tappable "- GROUP -" separator rows
+            # (noop_group_* callbacks) - they looked like buttons and fired a
             # spinner+noop on tap. Group names now live in the body text above.
             "inline_keyboard": [
                 # Natural
@@ -1031,7 +1031,7 @@ async def send_step_damage_class(chat_id: int, lang: str):
 
 
 async def send_step_voice(chat_id: int, lang: str):
-    """Ask for voice note OR text — one is required."""
+    """Ask for voice note OR text - one is required."""
     return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_voice"),
@@ -1045,7 +1045,7 @@ async def send_step_voice(chat_id: int, lang: str):
 
 
 async def send_step_text(chat_id: int, lang: str):
-    """Ask for optional text description after audio — or skip to submit."""
+    """Ask for optional text description after audio - or skip to submit."""
     return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_text"),
@@ -1063,10 +1063,10 @@ async def send_building_suggestions(chat_id: int, lang: str, buildings: list) ->
     """Offer the top-5 OSM-nearby buildings as tap-to-pick inline buttons.
 
     `buildings` is the list returned by `building_lookup.nearby_buildings`
-    — `[{id, name, distance_m}, ...]`. Renders one button per building
+    - `[{id, name, distance_m}, ...]`. Renders one button per building
     ("Name · 42 m") plus a "Type a name instead" fallback and a Skip.
     When `buildings` is empty the caller should route to the legacy
-    free-text `send_step_building_name` directly — this function assumes
+    free-text `send_step_building_name` directly - this function assumes
     there's at least one suggestion to show.
     """
     rows: list[list[dict]] = []
@@ -1096,7 +1096,7 @@ async def send_step_debris(chat_id: int, lang: str):
     Sits between CRISIS+BUILDING and SEVERITY/DESCRIPTION so the
     reporter answers the Appendix-1 "needs debris clearing?" question
     while the scene is fresh in their mind. Two inline buttons; no
-    skip — both options are answers, so the flow always advances."""
+    skip - both options are answers, so the flow always advances."""
     return await _send("sendMessage", {
         "chat_id": chat_id,
         "text": t(lang, "step_debris"),
@@ -1124,7 +1124,7 @@ async def send_step_building_name(chat_id: int, lang: str):
     `infrastructure_name_from_osm=False`, and the dashboard flags these rows
     for manual OSM mapping by an operator.
 
-    Optional — the reporter can skip. Ships with a "Skip" inline button
+    Optional - the reporter can skip. Ships with a "Skip" inline button
     for single-tap bypass + the usual Cancel escape hatch.
     """
     return await _send("sendMessage", {
@@ -1145,7 +1145,7 @@ async def send_confirmation(chat_id: int, lang: str, report_id: str,
                             lat: float = None, lng: float = None,
                             location_name: str = None,
                             has_photo: bool = False, has_audio: bool = False):
-    loc_str = location_name or (f"{lat:.4f}, {lng:.4f}" if lat and lng else "—")
+    loc_str = location_name or (f"{lat:.4f}, {lng:.4f}" if lat and lng else "-")
 
     # Message 1: Confirmation summary
     msg = (
@@ -1159,7 +1159,7 @@ async def send_confirmation(chat_id: int, lang: str, report_id: str,
         f"━━━━━━━━━━━━━━━━━━━\n"
         f"{t(lang, 'done_2')}"
     )
-    # Message 1 — confirmation summary. No inline keyboard, so we
+    # Message 1 - confirmation summary. No inline keyboard, so we
     # don't need its message_id for the stale-callback guard.
     await _send("sendMessage", {
         "chat_id": chat_id,
@@ -1168,9 +1168,9 @@ async def send_confirmation(chat_id: int, lang: str, report_id: str,
         "reply_markup": {"remove_keyboard": True},
     })
 
-    # Message 2 — post-submit options. This one IS the prompt with the
+    # Message 2 - post-submit options. This one IS the prompt with the
     # inline keyboard, so `return` it so `track_prompt_msg` can record
-    # its message_id (May 2026 fix — was an unreached `return` statement
+    # its message_id (May 2026 fix - was an unreached `return` statement
     # below the early one above, an obvious bug introduced when the
     # sed pass to add `return` to every send_* matched both calls).
     return await _send("sendMessage", {
@@ -1202,7 +1202,7 @@ async def send_add_more_prompt(chat_id: int, lang: str):
 
 
 async def send_review_card(chat_id: int, lang: str, body: str):
-    """Phase 5 — the ONE pre-submit confirm card. `body` is the field summary
+    """Phase 5 - the ONE pre-submit confirm card. `body` is the field summary
     built by handlers._review_summary (so the localized field labels + the
     reporter's own picks stay in one place). Two buttons: ✅ Send (commits) and
     ✏️ Fix (opens the field-edit menu). Mirrors the PWA's final review stage."""
@@ -1221,10 +1221,10 @@ async def send_review_card(chat_id: int, lang: str, body: str):
 
 
 async def send_review_fix_menu(chat_id: int, lang: str):
-    """Phase 5 — the ✏️ Fix menu: one button per correctable field. Tapping
+    """Phase 5 - the ✏️ Fix menu: one button per correctable field. Tapping
     re-opens that field's existing prompt (handlers clears the field's answered
     flag + resets the review gate so the card re-appears after the change).
-    Evidence isn't listed — the reporter can add a photo/voice/text at any time
+    Evidence isn't listed - the reporter can add a photo/voice/text at any time
     just by sending it."""
     return await _send("sendMessage", {
         "chat_id": chat_id,

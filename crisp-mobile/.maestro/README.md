@@ -1,7 +1,7 @@
-# Maestro flow scaffolding (Phase 4 — RN parity)
+# Maestro flow scaffolding (Phase 4 - RN parity)
 
 Maestro is a UI-test framework for native mobile that doesn't need
-Detox's heavy native build setup — it works against an installed Expo
+Detox's heavy native build setup - it works against an installed Expo
 Go app or a built APK. Phase 4 of the Lighthouse QA pipeline scaffolds
 Maestro YAMLs here so a follow-up commit can wire them into CI when
 the native build infrastructure is ready.
@@ -58,4 +58,4 @@ The acceptable variance:
 - Channel buttons + section labels + impact metrics + primary CTA
   must match in label + position + relative size.
 
-Inconsistencies become bug reports — file under "PWA-RN parity" label.
+Inconsistencies become bug reports - file under "PWA-RN parity" label.

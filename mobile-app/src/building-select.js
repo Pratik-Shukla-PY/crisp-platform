@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-//  CRISP — Building-footprint selector (PWA, April 2026)
+//  CRISP - Building-footprint selector (PWA, April 2026)
 //
 //  UNDP RAPIDA Problem Statement: "Buildings of interest shall be selected by
 //  users via ... buildings shall be made available for users to pick from a
@@ -11,14 +11,14 @@
 //    * Centres on state.location.
 //    * Queries OSM via Overpass for buildings in a ~200 m radius.
 //    * Renders each footprint as a tappable polygon.
-//    * On tap, stores the OSM way id into `state.buildingId` — the
+//    * On tap, stores the OSM way id into `state.buildingId` - the
 //      submit handler in app.js already emits `building_id` on
 //      POST /reports.
 //
 //  Offline behaviour: the Overpass response is cached in IndexedDB keyed
 //  by a rounded lat/lng pair so repeat captures in the same neighbourhood
 //  work without network. Failed fetches leave the map with just the
-//  location pin (graceful degradation — the user falls through to the
+//  location pin (graceful degradation - the user falls through to the
 //  existing GPS-only flow).
 //
 //  Exposed as a global `BuildingSelect` so app.js (non-module vanilla JS)
@@ -39,11 +39,11 @@
     let _overlay = null;
     let _selectedLayer = null;
     let _initInFlight = false;
-    // BUGFIX May 2026 — track the lat/lng we last fetched buildings for.
+    // BUGFIX May 2026 - track the lat/lng we last fetched buildings for.
     // When the reporter changes the report's location (e.g. picks a place
     // 700 km away via the Step-3 inline location editor), `ensureMap` is
     // re-called with new coords. The old fast-path early-returned after
-    // `setView` — buildings stayed cached for the *original* GPS bbox and
+    // `setView` - buildings stayed cached for the *original* GPS bbox and
     // the user saw terrain with zero tappable polygons (UNDP must-have #6
     // regression). Tracking the last fetch lets us detect "user moved
     // beyond the current buildings tile" and re-fetch.
@@ -97,7 +97,7 @@
                 tx.onerror = () => reject(tx.error);
             });
         } catch (_) {
-            // best-effort — never block the UI on cache-write failure
+            // best-effort - never block the UI on cache-write failure
         }
     }
 
@@ -138,7 +138,7 @@
         if (Array.isArray(elem.geometry) && elem.geometry.length >= 3) {
             return elem.geometry.map((p) => [p.lat, p.lon]);
         }
-        // Relations may have members[].geometry — aggregate the first
+        // Relations may have members[].geometry - aggregate the first
         // outer ring we find. Not all are well-formed but this is
         // sufficient for the common case of multipolygon buildings.
         if (Array.isArray(elem.members)) {
@@ -190,7 +190,7 @@
             // Auto-fill `infrastructure_name` with the OSM name so the
             // dashboard renders "City Hospital" next to the indigo
             // Building-history pill. Only overwrite if the user hasn't
-            // manually typed something — respects user intent. Tag with
+            // manually typed something - respects user intent. Tag with
             // a flag so `_clearSelection` below only clears what WE set.
             if (osmName && !(window.state.infraName && window.state.infraName.trim())) {
                 window.state.infraName = osmName;
@@ -205,13 +205,13 @@
         const pill = document.getElementById('building-selected-pill');
         if (pill) {
             pill.style.display = 'flex';
-            // UI v2.1 — show the OSM name inside the pill so
+            // UI v2.1 - show the OSM name inside the pill so
             // the reporter gets immediate confirmation of WHAT they
             // just picked, not just "Building selected" generically.
             const nameSlot = pill.querySelector('.building-selected-name');
             if (nameSlot) nameSlot.textContent = osmName || `#${element.id}`;
         }
-        // M2 polish — broadcast selection so external listeners
+        // M2 polish - broadcast selection so external listeners
         // (e.g. the fullscreen-picker bottom sheet in app.js) can react
         // without poking into BuildingSelect's internals. The detail
         // payload carries everything an external view needs to render
@@ -227,7 +227,7 @@
                     tags,
                 },
             }));
-        } catch (_) { /* CustomEvent unsupported on very old browsers — skip */ }
+        } catch (_) { /* CustomEvent unsupported on very old browsers - skip */ }
         console.log('[BuildingSelect] selected', composite, osmName || '(no name tag)', tags);
     }
 
@@ -243,7 +243,7 @@
             window.state.buildingOsmElement = null;
             // Only clear infraName if WE auto-filled it. If the user
             // typed it manually (infraNameFromOsm is absent / false),
-            // keep their value — they might reselect a nearby building.
+            // keep their value - they might reselect a nearby building.
             if (window.state.infraNameFromOsm) {
                 window.state.infraName = '';
                 window.state.infraNameFromOsm = false;
@@ -253,7 +253,7 @@
         }
         const pill = document.getElementById('building-selected-pill');
         if (pill) pill.style.display = 'none';
-        // M2 polish — companion event to crisp:building-selected so the
+        // M2 polish - companion event to crisp:building-selected so the
         // fullscreen picker's bottom sheet can revert to the empty-prompt
         // state (or stay closed if no selection had been made).
         try {
@@ -300,7 +300,7 @@
         if (typeof L !== 'undefined') return Promise.resolve();
         if (_leafletPromise) return _leafletPromise;
         _leafletPromise = (async () => {
-            // CSS first — Leaflet's JS reads computed styles for tile sizing.
+            // CSS first - Leaflet's JS reads computed styles for tile sizing.
             _injectStylesheet(LEAFLET_CSS, 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=');
             await _injectScript(LEAFLET_JS, 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=');
             if (typeof L === 'undefined') {
@@ -310,7 +310,7 @@
         return _leafletPromise;
     }
 
-    /** Public entry point — init the map (idempotent). Callers pass the
+    /** Public entry point - init the map (idempotent). Callers pass the
      * current lat/lng so we don't depend on any particular state shape. */
     /**
      * Repaint the building-polygon overlay for the given lat/lng. Clears
@@ -348,7 +348,7 @@
                 `near (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
             );
         } else {
-            console.log('[BuildingSelect] no building data — map-only fallback');
+            console.log('[BuildingSelect] no building data - map-only fallback');
         }
         _lastFetchLat = lat;
         _lastFetchLng = lng;
@@ -367,23 +367,23 @@
         if (!container || typeof L === 'undefined') return;
         if (!(Number.isFinite(lat) && Number.isFinite(lng))) return;
         if (_map || _initInFlight) {
-            // Already initialised — recentre + optionally re-fetch buildings.
+            // Already initialised - recentre + optionally re-fetch buildings.
             //
-            // BUGFIX May 2026 — UNDP must-have #6 regression.
+            // BUGFIX May 2026 - UNDP must-have #6 regression.
             //
             // Pre-fix: this branch only called `_map.setView` and returned.
             // The basemap tiles updated (Leaflet fetches them automatically)
             // but the building-polygon overlay still held the polygons from
             // the original lat/lng. A reporter who manually changed the
             // report's location to a city 700 km away saw the new terrain
-            // with ZERO tappable buildings — UNDP must-have #6 silently
+            // with ZERO tappable buildings - UNDP must-have #6 silently
             // dropped, forcing them onto the free-text fallback.
             //
             // Post-fix: if the new coords are >~50 m from the last fetch we
             // re-run `_paintBuildings`. Within 50 m we treat it as GPS
             // jitter and skip the Overpass round-trip.
             if (_map) {
-                // BUGFIX May 2026 — fullscreen-picker partial render.
+                // BUGFIX May 2026 - fullscreen-picker partial render.
                 //
                 // The picker's `openOverlay` (app.js:10347) re-parents
                 // `#building-map` from the inline ~300×300 mount into the
@@ -413,7 +413,7 @@
                 // Second-chance invalidateSize on the next tick.
                 // Mirrors the dance in `_tryInitMap` (line ~518): iOS
                 // Safari sometimes settles the new container's layout
-                // AFTER our first call — the chained call fires after
+                // AFTER our first call - the chained call fires after
                 // Safari has painted at least once, picking up the final
                 // dimensions and forcing a tile re-fetch for any region
                 // we missed on the first pass.
@@ -464,7 +464,7 @@
             }).setView([lat, lng], 18);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
-                // Explicit subdomains — Leaflet's default `'abc'` works
+                // Explicit subdomains - Leaflet's default `'abc'` works
                 // in Chrome but iOS Safari occasionally fails DNS
                 // prefetch on the rotated subdomain pattern. Listing
                 // them as an array forces the parsed form.
@@ -482,11 +482,11 @@
 
             _overlay = L.layerGroup().addTo(_map);
 
-            // HC71 (May 2026) — keep Leaflet in sync with container
+            // HC71 (May 2026) - keep Leaflet in sync with container
             // resizes. HC69 made the map flex-grow inside the review
             // body; the container size keeps changing as the flex
             // layout settles AND when the user enters/leaves the
-            // review stage. Leaflet caches `_map._size` at init —
+            // review stage. Leaflet caches `_map._size` at init -
             // without a `ResizeObserver` re-trigger, polygons and
             // tiles render against stale dimensions, leaving the
             // expanded portion blank (the "building tags not loading"
@@ -560,7 +560,7 @@
                 // After init (or on a subsequent show), kick Leaflet into
                 // re-measuring its container. This is the canonical
                 // Safari/iOS workaround for "map shows but tiles are
-                // blank / clipped". Cheap — single ms — and idempotent.
+                // blank / clipped". Cheap - single ms - and idempotent.
                 if (!_map) return;
                 try { _map.invalidateSize({ animate: false }); } catch (_) {}
 
@@ -571,7 +571,7 @@
                 // first invalidateSize might still see a half-painted
                 // state. The second one fires after Safari has painted at
                 // least once, which forces tile prefetch + repaint of
-                // the polygon overlay. Idempotent — Leaflet skips work
+                // the polygon overlay. Idempotent - Leaflet skips work
                 // when dimensions haven't changed.
                 setTimeout(() => {
                     if (!_map) return;
@@ -593,13 +593,13 @@
         }));
     }
 
-    // UI v2.1 — wire up the flat <section>. The box is always
+    // UI v2.1 - wire up the flat <section>. The box is always
     // present in the DOM; the map initialises the first time the user
     // lands on v2-page-3 WITH a GPS fix. Previous design hung the
     // toggle off the <details> `toggle` event; after the flatten we
     // listen for custom `review-page-changed` and `stage-entered`
     // events + re-try on GPS-ready. Legacy v1 (collapsible) path still
-    // works — `<details>` would have fired `toggle`; the flat tag does
+    // works - `<details>` would have fired `toggle`; the flat tag does
     // not, but the explicit page-3 hook below handles both branches.
     function _wire() {
         const box = document.getElementById('building-select-box');
@@ -617,7 +617,7 @@
         // (location-agnostic in DOM), so the same call path works
         // wherever the box has been re-parented.
         //
-        // May 2026 — `stage-crisis` + `stage-review` listeners removed
+        // May 2026 - `stage-crisis` + `stage-review` listeners removed
         // alongside the V3 capture-flow consolidation. The DOM blocks
         // are gone; the events never fire.
         document.addEventListener('stage-entered', (e) => {
@@ -627,11 +627,11 @@
             }
         });
         // Trigger 3: GPS-ready (the capture flow dispatches this when
-        // the Geolocation API resolves). Safe to call unconditionally —
+        // the Geolocation API resolves). Safe to call unconditionally -
         // `_tryInitMap` re-checks every precondition.
         document.addEventListener('gps-ready', _tryInitMap);
 
-        // Trigger 4 (May 2026, UNDP must-have #6 follow-up) — the reporter
+        // Trigger 4 (May 2026, UNDP must-have #6 follow-up) - the reporter
         // changed the report's location to a place far from their GPS fix.
         // The dispatcher (v4-flow.js's `_saveLocEdit`) carries the new
         // lat/lng on `event.detail`. We pass those straight through to
@@ -649,7 +649,7 @@
             }
         });
 
-        // Legacy safety net — if someone flips the feature flag back
+        // Legacy safety net - if someone flips the feature flag back
         // to v1, `<section>` becomes `<details>` again after a reload
         // and this listener is still the right thing.
         if (typeof box.addEventListener === 'function' && box.tagName === 'DETAILS') {
@@ -661,13 +661,13 @@
         const clearBtn = document.getElementById('btn-building-clear');
         if (clearBtn) clearBtn.addEventListener('click', _clearSelection);
 
-        // Trigger 5 (May 2026, operator-reported) — "Add Another Report"
+        // Trigger 5 (May 2026, operator-reported) - "Add Another Report"
         // didn't clear the previous selection. `_clearCaptureState` in
         // app.js zeroes `state.buildingId` but leaves three things in a
         // stale state that BuildingSelect owns:
-        //   · `_selectedLayer` — the highlighted Leaflet polygon
-        //   · `state.buildingOsmElement` — the OSM element snapshot
-        //   · `#building-selected-pill` DOM — the green "Building
+        //   · `_selectedLayer` - the highlighted Leaflet polygon
+        //   · `state.buildingOsmElement` - the OSM element snapshot
+        //   · `#building-selected-pill` DOM - the green "Building
         //     selected: <name>" badge stays visible
         // The user's repro: tap Add Another → start a new report → the
         // pill from the previous report is still visible AND the
@@ -686,18 +686,18 @@
         _wire();
     }
 
-    // ── — building pre-cache ────────────────────
+    // ── - building pre-cache ────────────────────
     // Proactively warm the IndexedDB cache with the buildings nearest to
     // the user's current GPS position so an offline capture immediately
     // after opening the app (tunnel, crisis-zone cell-tower drop) still
     // paints the footprint overlay from cache. The same `_fetchBuildings`
-    // pathway as the live map initialiser — just called without a map
+    // pathway as the live map initialiser - just called without a map
     // context. Idempotent per-cache-key: the first hit seeds IndexedDB and
     // every subsequent call within the tile radius is a no-op.
     //
     // `count=10` shapes the returned slice by picking the 10 polygons with
     // the smallest centroid distance from (lat, lng). The cache itself
-    // always stores every polygon within RADIUS_METERS — the slicing is
+    // always stores every polygon within RADIUS_METERS - the slicing is
     // purely for callers that want a quick "nearest buildings" list (e.g.
     // the free-text fallback's autocomplete).
     function _centroid(elem) {
@@ -730,7 +730,7 @@
         }
         scored.sort((a, b) => a.d - b.d);
         const slice = scored.slice(0, count);
-        // Reduce to the shape the free-text fallback wants — id + name
+        // Reduce to the shape the free-text fallback wants - id + name
         // (see _commitSelection for the name-resolution rules).
         return slice.map(({ el, d, centroid }) => {
             const tags = el.tags || {};

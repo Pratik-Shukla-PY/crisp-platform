@@ -1,4 +1,4 @@
-"""building_responders + building_monitors — Phase H.3 coordination
+"""building_responders + building_monitors - Phase H.3 coordination
 
 Revision ID: 0030_building_responders
 Revises: 0029_building_events
@@ -19,7 +19,7 @@ Phase H.3. Two new tables for operator coordination on a building:
     user can have at most one active watch per building.
 
 Both tables emit BuildingEvent rows on each lifecycle action (via the
-endpoint layer in H.3.c — alembic only creates the structure).
+endpoint layer in H.3.c - alembic only creates the structure).
 """
 from alembic import op
 import sqlalchemy as sa

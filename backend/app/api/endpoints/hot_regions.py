@@ -21,7 +21,7 @@ Endpoints (all require_admin):
 
   POST   /api/v1/admin/nearby/hot-regions/{name}/refresh
          Force an immediate refresh of one region's snapshot. The
-         actual /nearby aggregation runs synchronously — fine for an
+         actual /nearby aggregation runs synchronously - fine for an
          admin button click. The scheduled per-interval refresh is
          left to the operator's job runner (cron / Celery beat /
          docker-compose timer).
@@ -163,7 +163,7 @@ def update_hot_region(
     data = body.model_dump(exclude_unset=True)
     for k, v in data.items():
         setattr(region, k, v)
-    # Any geometry change invalidates the snapshot — drop it so the
+    # Any geometry change invalidates the snapshot - drop it so the
     # next read goes live until refresh.
     if any(k in data for k in ("centre_lat", "centre_lng", "radius_km")):
         region.snapshot_json = None
@@ -199,7 +199,7 @@ def refresh_hot_region(
 ):
     """Force an immediate aggregator run + snapshot rewrite. Uses the
     region's centre + radius as the /nearby parameters. Synchronous
-    — fine for the admin "Refresh now" button; per-interval refresh
+    - fine for the admin "Refresh now" button; per-interval refresh
     is the operator's job runner's responsibility."""
     region = (
         db.query(NearbyHotRegion)

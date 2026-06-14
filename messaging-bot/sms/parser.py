@@ -1,5 +1,5 @@
 """
-SMS Text Parser — Extracts incident type, severity, and location from raw SMS text.
+SMS Text Parser - Extracts incident type, severity, and location from raw SMS text.
 Uses keyword matching (MVP) with NLP-ready structure for future upgrade.
 """
 import re
@@ -40,11 +40,11 @@ _DAMAGE_KEYWORDS = {
     "NO_DAMAGE": ["safe", "intact", "undamaged", "fine", "ok", "standing"],
 }
 
-# Debris-clearing keywords — UNDP core question "Is there debris that requires
+# Debris-clearing keywords - UNDP core question "Is there debris that requires
 # clearing on or near the infrastructure site?". A POSITIVE signal sets
 # debris_clearing_needed=True. There is no reliable NEGATIVE signal in free
 # SMS text (absence of the word != "no debris"), so a no-match yields None
-# (unknown) rather than False — the never-invent-a-value invariant the rest of
+# (unknown) rather than False - the never-invent-a-value invariant the rest of
 # the parser follows for damage_classification.
 _DEBRIS_KEYWORDS = [
     "debris", "rubble", "wreckage", "blocked", "blocking", "blockage",
@@ -93,7 +93,7 @@ def parse_sms(text: str) -> dict:
     elif any(k in lower for k in _SEVERITY_MED):
         severity = "MODERATE"
 
-    # 3. Extract location — look for "in/at/near" + place name patterns
+    # 3. Extract location - look for "in/at/near" + place name patterns
     location_text = ""
     loc_patterns = [
         r'(?:in|at|near|from|around)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',  # "near Sector 7"

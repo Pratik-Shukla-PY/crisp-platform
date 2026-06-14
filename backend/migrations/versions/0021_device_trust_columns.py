@@ -4,7 +4,7 @@ Revision ID: 0021_device_trust_columns
 Revises: 0020_nearby_group_events
 Create Date: 2026-05-16
 
-Nearby Reports Pipeline — Phase 3 (docs/NEARBY_REPORTS_PIPELINE.md
+Nearby Reports Pipeline - Phase 3 (docs/NEARBY_REPORTS_PIPELINE.md
 §6.1) introduces trust-weighted device contribution. Replaces the
 blanket per-device cap of 1 with a weighted model where verified
 responders count 3.0, account-linked civilians 1.5, trusted
@@ -13,23 +13,23 @@ suspicious devices 0.0 (dropped).
 
 This migration adds:
 
-  • devices.spam_score (float, default 0)        — accumulator
+  • devices.spam_score (float, default 0)        - accumulator
     incremented by sync hot signals (GPS spoof, impossible
     movement, rate burst) and the Phase-5 async batch worker
     (emulator fingerprint, narrative similarity).
-  • devices.reports_count (int, default 0)       — total reports
+  • devices.reports_count (int, default 0)       - total reports
     seen from this device. Maintained synchronously on every
     report POST.
-  • devices.spam_signals (jsonb, default '[]')   — list of detected
+  • devices.spam_signals (jsonb, default '[]')   - list of detected
     signal types per device, audit-readable: ["gps_spoof",
     "rate_burst", ...]. Used by §7's admin triage UI.
 
 Indexed: composite (spam_score, reports_count) for the trust-tier
-lookup used inside `aggregate_nearby` — wants to filter by
+lookup used inside `aggregate_nearby` - wants to filter by
 spam_score == 0 AND reports_count >= 5 to find the "trusted
 anonymous" tier without a table scan.
 
-Idempotent — inspector guard pattern from 0013/0015/0017/0018/0019/0020.
+Idempotent - inspector guard pattern from 0013/0015/0017/0018/0019/0020.
 """
 from alembic import op
 import sqlalchemy as sa

@@ -1,5 +1,5 @@
 /**
- * CRISP PWA — Device Telemetry Capture (Phase 5.1)
+ * CRISP PWA - Device Telemetry Capture (Phase 5.1)
  * ────────────────────────────────────────────────
  * Companion to backend commit 79ffc56 + docs/NEARBY_REPORTS_PIPELINE.md §6.2.
  *
@@ -22,18 +22,18 @@
  *   - Runs ~1.2s after DOMContentLoaded so it doesn't compete with the
  *     critical-path home-render work.
  *   - On iOS Safari 13+, DeviceMotion requires explicit user permission.
- *     We do NOT prompt for it — if no events arrive, accel_active stays
+ *     We do NOT prompt for it - if no events arrive, accel_active stays
  *     null (inconclusive), and the backend's compound-score detector
  *     does not penalise unknown signals.
  *
- * This is a standalone module — not part of app.js — so a future
+ * This is a standalone module - not part of app.js - so a future
  * privacy-conscious deployment can disable telemetry entirely by
  * removing one <script> tag from index.html.
  */
 (function () {
     'use strict';
 
-    // HC27 (May 2026, HAR root-cause fix) — was the bare relative
+    // HC27 (May 2026, HAR root-cause fix) - was the bare relative
     // '/api/v1/devices/telemetry' which the browser anchored to the
     // current origin. In dev this hit the Python static server on
     // :8080 and 404'd; in PROD the same-origin nginx proxy made it
@@ -83,7 +83,7 @@
     function _probeAccel() {
         // Sample DeviceMotion for ~600 ms; if values VARY between
         // samples, the device is being handled by a real user (or sitting
-        // on a vibrating surface — close enough). Emulators report
+        // on a vibrating surface - close enough). Emulators report
         // either no DeviceMotion events at all or static values.
         return new Promise(function (resolve) {
             if (typeof window.DeviceMotionEvent === 'undefined') {
@@ -151,7 +151,7 @@
 
         // Battery API: Chrome / Firefox on Android + desktop; never on
         // iOS Safari (intentionally removed in iOS 17 for privacy). So
-        // battery_present=false on an iOS device is EXPECTED — the
+        // battery_present=false on an iOS device is EXPECTED - the
         // backend detector only fires on this signal combined with at
         // least one other (e.g. claimed-mobile-UA + no-accel-active).
         if (typeof navigator.getBattery === 'function') {
@@ -173,10 +173,10 @@
         summary.accel_active = await _probeAccel();
         summary.collected_at = new Date().toISOString();
 
-        // AUDIT 2026-05-23 — i18n startup telemetry. Frontend-only (no
+        // AUDIT 2026-05-23 - i18n startup telemetry. Frontend-only (no
         // backend schema change); dropped into the existing `summary`
         // payload which the backend stores as-is. Fields are bounded +
-        // contain no PII. Never blocks captureNow if missing — uses
+        // contain no PII. Never blocks captureNow if missing - uses
         // optional-chaining + safe defaults.
         try {
             var im = (typeof window !== 'undefined' && window.__crispI18nMetrics) || {};
@@ -188,7 +188,7 @@
                 startup_ms: (typeof im.duration === 'number') ? Math.round(im.duration) : null,
                 fallback_fired: (typeof im.fallbackFired === 'number') ? im.fallbackFired : null,
                 error: im.error || null,                 // short message if walker crashed
-                // Pack version (sha256 prefix of source JSON) — lets the
+                // Pack version (sha256 prefix of source JSON) - lets the
                 // backend correlate sessions to specific builds.
                 pack_version: (function () {
                     try {
@@ -229,7 +229,7 @@
     async function captureNow() {
         var deviceHash = _deviceHash();
         if (!deviceHash) {
-            // Boot ordering — app.js's device-id generator might not
+            // Boot ordering - app.js's device-id generator might not
             // have run yet. Defer and retry once. If still missing,
             // give up; we'll try again next session.
             await new Promise(function (r) { setTimeout(r, 1500); });
@@ -240,14 +240,14 @@
         try {
             summary = await _collectSummary();
         } catch (e) {
-            // Capture failure — silently abandon this round.
+            // Capture failure - silently abandon this round.
             return;
         }
         try {
-            // HC27 — resolve the absolute backend URL via window.API_BASE.
-            // Bail if API_BASE isn't set yet (boot timing) — the next
+            // HC27 - resolve the absolute backend URL via window.API_BASE.
+            // Bail if API_BASE isn't set yet (boot timing) - the next
             // session's BOOT_DELAY_MS tick will retry; no need to risk
-            // hitting the static server. Auth header NOT sent — the
+            // hitting the static server. Auth header NOT sent - the
             // endpoint is intentionally auth-free.
             var url = _endpoint();
             if (!url) return;

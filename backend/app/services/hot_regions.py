@@ -1,11 +1,11 @@
 """
 Hot-region snapshot service.
 
-Phase 5.1 (May 2026, docs/NEARBY_REPORTS_PIPELINE.md §9.5) — step G4
+Phase 5.1 (May 2026, docs/NEARBY_REPORTS_PIPELINE.md §9.5) - step G4
 of the geospatial scaling roadmap. Provides the read + refresh helpers
 used by:
 
-  - The /nearby endpoint   — `lookup_fresh_snapshot(lat, lng, db)`
+  - The /nearby endpoint   - `lookup_fresh_snapshot(lat, lng, db)`
   - The admin CRUD + refresh endpoints in api/endpoints/hot_regions.py
 
 The actual aggregator call (`aggregate_nearby` + the surrounding query)
@@ -16,7 +16,7 @@ OPT-IN GATE:
 
   Operators flip `CRISP_NEARBY_HOT_REGIONS=1` to consume snapshots on
   the /nearby read path. The admin CRUD endpoints are gated by
-  `require_admin` regardless — the table itself stays writable so
+  `require_admin` regardless - the table itself stays writable so
   operators can pre-populate regions before they flip the flag.
 """
 from __future__ import annotations
@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 
 def is_hot_regions_enabled() -> bool:
     """True iff the operator opted into the snapshot read path. The
-    admin surface stays usable even when this is off — operators can
+    admin surface stays usable even when this is off - operators can
     seed regions before flipping the flag."""
     return os.environ.get("CRISP_NEARBY_HOT_REGIONS", "").strip() in ("1", "true", "yes")
 
@@ -74,7 +74,7 @@ def is_snapshot_fresh(region: NearbyHotRegion) -> bool:
     if region.refreshed_at is None or region.snapshot_json is None:
         return False
     # `refreshed_at` may be naive in some DB drivers depending on the
-    # timezone handling — coerce to UTC so subtraction never raises.
+    # timezone handling - coerce to UTC so subtraction never raises.
     refreshed = region.refreshed_at
     if refreshed.tzinfo is None:
         refreshed = refreshed.replace(tzinfo=timezone.utc)

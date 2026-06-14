@@ -1,10 +1,10 @@
 """
-CRISP Multi-Layer Geocoder — Converts text location descriptions to lat/lng.
+CRISP Multi-Layer Geocoder - Converts text location descriptions to lat/lng.
 
 Used by: IVR webhook, SMS webhook, AI extractor.
 
 Multi-layer approach (tries each until success):
-  Layer 1: Claude AI fixes mangled transcription → correct place name
+  Layer 1: AI fixes mangled transcription → correct place name
            e.g. "bath deep balia" → "Bansdih, Ballia, Uttar Pradesh"
   Layer 2: Mapbox Geocoding API (best fuzzy matching for Indian locations)
   Layer 3: Nominatim fallback (free, no API key, OSM-based)
@@ -28,12 +28,12 @@ logger = logging.getLogger(__name__)
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-# HC55 (May 2026) — worker-shared rate limiters.
+# HC55 (May 2026) - worker-shared rate limiters.
 #
 # Nominatim's usage policy caps third-party apps at ≤ 1 req/s globally.
 # Without a worker-shared token bucket, each FastAPI coroutine in this
 # worker would happily fire its own RPS budget and earn the whole
-# deployment a 429 ban — exactly what the operator's 2026-05-24 HAR
+# deployment a 429 ban - exactly what the operator's 2026-05-24 HAR
 # captured. `AsyncLimiter(1, 1)` blocks the second concurrent call until
 # the per-second budget refreshes. Multi-worker safety still relies on
 # the Redis bucket in app/utils/rate_limit.py, but the hot path through
@@ -41,7 +41,7 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 _NOMINATIM_LIMITER = AsyncLimiter(max_rate=1, time_period=1)
 
 # Mapbox geocoding API allows 600 req/min (~10 RPS) on the free tier.
-# The limiter is mostly defensive — runaway code paths (e.g. an infinite
+# The limiter is mostly defensive - runaway code paths (e.g. an infinite
 # retry loop) get clamped at the policy limit rather than burning the
 # operator's free-tier budget in seconds.
 _MAPBOX_LIMITER = AsyncLimiter(max_rate=600, time_period=60)
@@ -79,7 +79,7 @@ async def _ai_extract_location(text: str) -> str:
         return ""
 
     try:
-        # System prompt is static — cached across all geocoding calls (90% token savings)
+        # System prompt is static - cached across all geocoding calls (90% token savings)
         system_prompt = """You are a geographic location extractor for CRISP crisis platform. You fix mangled Whisper transcriptions of Indian place names.
 
 Examples of Whisper mangling:
@@ -119,7 +119,7 @@ Rules: Return ONLY the corrected place name (city/village, district, state). If 
 
 
 async def _geocode_mapbox(query: str, country_hint: str = "IN", language: str = "en") -> dict:
-    """Geocode using Mapbox — excellent fuzzy matching for Indian locations.
+    """Geocode using Mapbox - excellent fuzzy matching for Indian locations.
 
     The `language` parameter (UNDP §3.1f.5) accepts a 2-letter ISO 639-1
     code. Passing the requester's locale ensures `place_name` and the
@@ -132,7 +132,7 @@ async def _geocode_mapbox(query: str, country_hint: str = "IN", language: str = 
 
     try:
         country_code = {"India": "IN", "india": "IN"}.get(country_hint, country_hint or "IN")
-        # HC55 — defensive rate-limit (see _MAPBOX_LIMITER comment at top
+        # HC55 - defensive rate-limit (see _MAPBOX_LIMITER comment at top
         # of file). Mapbox's free tier is 600 req/min; we run a single
         # token bucket so a runaway loop can't blow it.
         async with _MAPBOX_LIMITER, httpx.AsyncClient(timeout=10) as c:
@@ -189,7 +189,7 @@ async def _geocode_nominatim(query: str, country_hint: str = "India", language: 
     """
     search_query = f"{query}, {country_hint}" if country_hint else query
     try:
-        # HC55 — the policy-mandated ≤ 1 RPS gate. Every Nominatim hit
+        # HC55 - the policy-mandated ≤ 1 RPS gate. Every Nominatim hit
         # in this module (forward + reverse) blocks on _NOMINATIM_LIMITER
         # so the operator's 2026-05-24 429 cascade can't repeat.
         async with _NOMINATIM_LIMITER, httpx.AsyncClient(timeout=10) as c:
@@ -259,7 +259,7 @@ async def geocode_text(location_text: str, country_hint: str = "India", language
     Geocode a text location description to lat/lng using multi-layer approach:
 
     1. Clean text → try Mapbox (fuzzy match)
-    2. If fail → Claude AI fixes place name → try Mapbox
+    2. If fail → AI fixes place name → try Mapbox
     3. If fail → try Nominatim with AI-fixed name
     4. If fail → try Nominatim with cleaned text
 
@@ -287,7 +287,7 @@ async def geocode_text(location_text: str, country_hint: str = "India", language
 
     best = None  # Track best result so far
 
-    # ── Layer 1: Claude AI fixes the place name FIRST ────────────────────────
+    # ── Layer 1: AI fixes the place name FIRST ────────────────────────
     # This is critical for voice transcriptions where Whisper mangles names
     ai_place = await _ai_extract_location(location_text)
     if ai_place:
@@ -295,7 +295,7 @@ async def geocode_text(location_text: str, country_hint: str = "India", language
         result = await _geocode_mapbox(ai_place, language=language)
         if result.get("latitude"):
             if result.get("confidence") in ("high", "medium"):
-                return result  # High confidence — use it
+                return result  # High confidence - use it
             best = result
 
         # Try AI-fixed name on Nominatim
@@ -338,7 +338,7 @@ async def geocode_text(location_text: str, country_hint: str = "India", language
     return empty
 
 
-# ── HC55 (May 2026) — Reverse geocoding (coords → place name) ────────────────
+# ── HC55 (May 2026) - Reverse geocoding (coords → place name) ────────────────
 #
 # Replaces the 3 inline browser → Nominatim calls in mobile-app/src/app.js
 # (lines 3305, 5386, 5598) that the operator's 2026-05-24 HAR caught
@@ -347,7 +347,7 @@ async def geocode_text(location_text: str, country_hint: str = "India", language
 # below, which fans through cache → Mapbox → rate-limited Nominatim →
 # coords-only fallback.
 
-# Coord rounding precision. 4 decimal places ≈ 11 m on the equator — finer
+# Coord rounding precision. 4 decimal places ≈ 11 m on the equator - finer
 # than Nominatim's neighbourhood resolution, so two reporters in the same
 # city block hit the same cache row.
 _COORD_PRECISION = 4
@@ -377,7 +377,7 @@ async def _geocode_mapbox_reverse(lat: float, lng: float, language: str = "en") 
     """Mapbox reverse-geocode tier. Returns the place name closest to
     the given coords, or {} on failure.
 
-    Mapbox expects ``{lng},{lat}`` in the URL path (NOT {lat},{lng} —
+    Mapbox expects ``{lng},{lat}`` in the URL path (NOT {lat},{lng} -
     that's a common bug). The `language` query param honours
     UNDP §3.1f.5 so AR/ZH users get native-script place names.
     """
@@ -422,7 +422,7 @@ async def _geocode_mapbox_reverse(lat: float, lng: float, language: str = "en") 
                         "longitude": lng,
                     }
             elif r.status_code == 429:
-                logger.warning("Mapbox reverse 429 — falling through to Nominatim")
+                logger.warning("Mapbox reverse 429 - falling through to Nominatim")
     except Exception as exc:
         logger.warning(f"Mapbox reverse-geocode error: {exc}")
     return {}
@@ -476,7 +476,7 @@ async def _geocode_nominatim_reverse(lat: float, lng: float, language: str = "en
                     }
             elif r.status_code == 429:
                 logger.warning(
-                    "Nominatim reverse 429 — rate-limit shouldn't fire under "
+                    "Nominatim reverse 429 - rate-limit shouldn't fire under "
                     "_NOMINATIM_LIMITER, investigate if recurring"
                 )
     except Exception as exc:
@@ -485,7 +485,7 @@ async def _geocode_nominatim_reverse(lat: float, lng: float, language: str = "en
 
 
 def _coords_fallback(lat: float, lng: float) -> dict:
-    """Last-resort response shape — used when both Mapbox and Nominatim
+    """Last-resort response shape - used when both Mapbox and Nominatim
     return empty. The PWA's client-side renderer keeps showing raw
     coordinates rather than blanking the location pill, so the response
     contract stays uniform.
@@ -503,7 +503,7 @@ def _cache_lookup(db, *, direction: str, lat_key: float, lng_key: float,
                   language: str) -> dict | None:
     """Return a cached geocode dict, or None if no live row exists.
 
-    Lazy eviction — only rows whose expires_at is still in the future
+    Lazy eviction - only rows whose expires_at is still in the future
     are returned. The hourly sweep (separate follow-up) reclaims old
     rows in bulk.
     """
@@ -535,7 +535,7 @@ def _cache_write(db, *, direction: str, lat_key: float, lng_key: float,
                  language: str, payload: dict) -> None:
     """Persist a geocode result. Idempotent: if a row already exists
     (race between two coroutines for the same coord), the second writer
-    wins — same payload, just a fresher expires_at.
+    wins - same payload, just a fresher expires_at.
     """
     from app.models.report import GeocodeCache  # local import
     if payload.get("source") in ("fallback", "cache"):
@@ -574,7 +574,7 @@ def _cache_write(db, *, direction: str, lat_key: float, lng_key: float,
     try:
         db.commit()
     except Exception as exc:
-        # Cache failures are non-blocking — the live response still
+        # Cache failures are non-blocking - the live response still
         # ships. Roll back so the surrounding request transaction
         # isn't poisoned by a unique-constraint race.
         logger.warning(f"Geocode cache write failed: {exc}")
@@ -590,10 +590,10 @@ async def reverse_geocode_coords(
       1. Postgres cache (when ``db`` provided)
       2. Mapbox reverse-geocode
       3. Nominatim reverse-geocode (rate-limited to 1 RPS)
-      4. ``_coords_fallback`` — raw "lat°, lng°" string
+      4. ``_coords_fallback`` - raw "lat°, lng°" string
 
     Always returns a non-empty dict so the caller can paint *something*
-    on the location pill — the operator's pre-HC55 experience of seeing
+    on the location pill - the operator's pre-HC55 experience of seeing
     raw lat/lng was actually the implicit fallback from a null return.
     Now the contract is explicit.
     """

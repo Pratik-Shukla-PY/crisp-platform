@@ -12,7 +12,7 @@ or "Public Spaces / Recreation Infrastructure" 500'd on insert with:
 
 Cause: migration 0003_infra_super_types widens the Postgres enum by
 iterating CHIP_TO_UNDP.values(). That set is {RESIDENTIAL, COMMUNITY,
-TRANSPORT_COMMUNICATION, UTILITY} — the targets of legacy chip remaps.
+TRANSPORT_COMMUNICATION, UTILITY} - the targets of legacy chip remaps.
 COMMERCIAL and PUBLIC_SPACES had no legacy chips pointing to them, so
 they were never added to the Postgres ENUM TYPE, even though the
 backend's Python InfraTypeEnum lists them as valid values.
@@ -24,7 +24,7 @@ UNDP RAPIDA Appendix-1 mandates seven super-types + OTHER:
 Without this migration, two of those eight buckets are unsubmittable
 in prod even though the dropdown shows them.
 
-This migration adds the two missing values. Idempotent — `IF NOT
+This migration adds the two missing values. Idempotent - `IF NOT
 EXISTS` is a no-op when the values already exist.
 
 `ALTER TYPE … ADD VALUE` must run OUTSIDE a transaction in Postgres,
@@ -57,7 +57,7 @@ def downgrade() -> None:
     # Postgres doesn't support DROP VALUE on an enum type. The clean
     # downgrade would be: rename the enum, create a new one without
     # these values, ALTER TABLE … TYPE …, drop the old enum. That's a
-    # full table rewrite under a lock — disproportionate for an
+    # full table rewrite under a lock - disproportionate for an
     # additive migration. Documented intentionally as no-op; rows
     # using these values would block the downgrade anyway.
     pass

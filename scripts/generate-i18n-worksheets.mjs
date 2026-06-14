@@ -6,12 +6,12 @@
 // translator (UNDP partner, native-speaker reviewer) can fill in.
 //
 // Columns:
-//   key                    — i18n lookup key (e.g. "v4_record_voice_fallback")
-//   english                — canonical English value from en.json
-//   current_translation    — what's currently in {lang}.json (may be EN placeholder)
-//   suggested_translation  — blank; the translator's deliverable
-//   context_notes          — auto-populated hint about where this string appears
-//   status                 — translator marks "approved" when their suggestion is ready
+//   key                    - i18n lookup key (e.g. "v4_record_voice_fallback")
+//   english                - canonical English value from en.json
+//   current_translation    - what's currently in {lang}.json (may be EN placeholder)
+//   suggested_translation  - blank; the translator's deliverable
+//   context_notes          - auto-populated hint about where this string appears
+//   status                 - translator marks "approved" when their suggestion is ready
 //                            for import. Anything else (blank, "review", "skip") is ignored
 //                            by import-i18n-worksheet.mjs.
 //
@@ -37,7 +37,7 @@ const DRY_RUN = process.argv.includes('--dry-run');
 // translator sees this in the CSV to disambiguate (e.g. "Submit" as a
 // button label vs. "Submit" as a screen-reader announcement).
 const CONTEXT_RULES = [
-    // Exact-match — highest priority
+    // Exact-match - highest priority
     {
         exact: {
             'consent_title':        'Privacy consent dialog headline. Bold sentence-case.',
@@ -70,7 +70,7 @@ const CONTEXT_RULES = [
             'v4_step_progress':     'Progress label across capture flow. Use {current} / {total} placeholders.',
         }
     },
-    // Prefix-match — applied if no exact rule matches
+    // Prefix-match - applied if no exact rule matches
     {
         prefix: {
             'consent_':       'Privacy consent dialog. Plain language; UNDP-rubric required item.',
@@ -178,4 +178,4 @@ for (const s of summary) {
 }
 console.log('─'.repeat(48));
 console.log(`Output: ${OUT_DIR}`);
-if (DRY_RUN) console.log('(Dry run — no files written.)');
+if (DRY_RUN) console.log('(Dry run - no files written.)');

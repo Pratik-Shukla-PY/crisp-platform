@@ -1,7 +1,7 @@
 {
   "add_to_homescreen": "+ Добавить на главный экран",
   "aria_add_to_homescreen": "Добавить CRISP на главный экран",
-  "aria_channels_strip": "Другие способы сообщить — нажмите, чтобы увидеть все каналы",
+  "aria_channels_strip": "Другие способы сообщить - нажмите, чтобы увидеть все каналы",
   "badge_studio_share_insta": "Instagram",
   "badge_studio_share_li": "LinkedIn",
   "badge_studio_share_linkedin": "LinkedIn",
@@ -33,6 +33,6 @@
   "settings_logout": "Выйти",
   "settings_title": "Настройки",
   "settings_unlink_device": "Отвязать это устройство",
-  "summary_none": "—",
+  "summary_none": "-",
   "undp_lvl_ok": "OK"
 }

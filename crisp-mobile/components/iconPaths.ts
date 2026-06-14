@@ -1,5 +1,5 @@
 /**
- * CRISP icon path dictionary — RN counterpart of the PWA's
+ * CRISP icon path dictionary - RN counterpart of the PWA's
  * `mobile-app/src/components/icon-pack.js`. Same keys, same 24x24 viewBox;
  * values are raw `d=…` path strings (+ `|` delimiter for multi-path glyphs)
  * so react-native-svg can render them via <Path d={...}/> without any
@@ -8,7 +8,7 @@
  * Encoding choice: each entry is either a single `d` attribute OR multiple
  * `d` attributes joined with `|`. IconTile.tsx splits on `|` and emits one
  * <Path> per segment. A handful of glyphs in icon-pack.js use <polyline>,
- * <polygon>, <rect>, <circle>, or <line> — we lossily convert those to the
+ * <polygon>, <rect>, <circle>, or <line> - we lossily convert those to the
  * equivalent `d` path syntax below so everything can go through <Path>:
  *
  *   polyline points="20 6 9 17 4 12"     →  M20 6 L9 17 L4 12
@@ -25,7 +25,7 @@
  * design rationale (Lucide MIT + color-coded per-category).
  */
 
-// Helper literals — keeps path definitions readable.
+// Helper literals - keeps path definitions readable.
 // Full-circle stroked ring (cx=12, cy=12, r=10).
 const RING = 'M2,12 a10,10 0 1 0 20,0 a10,10 0 1 0 -20,0';
 // Filled dot at (12,12,r=3).
@@ -97,7 +97,7 @@ export const ICON_PATHS: Record<string, string> = {
 };
 
 /**
- * Deterministic lookup helper — always returns a valid entry, falling
+ * Deterministic lookup helper - always returns a valid entry, falling
  * through to OTHER if the key is unknown. Matches the PWA's iconFor().
  */
 export function pathFor(key: string): string {

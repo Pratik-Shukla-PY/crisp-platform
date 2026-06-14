@@ -2,7 +2,7 @@
 
 UNDP brief (must-have §1b): "analytics regarding collected information".
 Competitors in this space (Ushahidi, KoBoToolbox) ship either raw list
-endpoints or bespoke BI integrations — neither is demo-friendly in a
+endpoints or bespoke BI integrations - neither is demo-friendly in a
 2-minute pitch video. We ship two precomputed endpoints that a
 dashboard can call once per page load:
 
@@ -19,14 +19,14 @@ dashboard can call once per page load:
         24 buckets regardless of data sparsity (zero-fills).
 
 Design choices:
-    * SQL aggregation (not materialised views) — avoids a migration
+    * SQL aggregation (not materialised views) - avoids a migration
       + handles backfill. Postgres indexes added in migration 0008
       (`ix_reports_server_created_at`, `ix_reports_crisis_type`,
       `ix_reports_status_created`) make both queries sub-50ms on
       500k rows.
     * Soft-deleted reports (`deletion_requested_at IS NOT NULL`) are
       excluded so analytics match what the dashboard actually shows.
-    * Read-only + unauthenticated — evaluator visits /docs and tests
+    * Read-only + unauthenticated - evaluator visits /docs and tests
       without a token. If this becomes sensitive (e.g. government
       partners want it gated), wrap with `require_analyst` later.
 """
@@ -101,7 +101,7 @@ def crisis_top10(
 ):
     """Clusters reports by rounded lat/lng within the lookback window.
 
-    Clustering granularity is tunable — 0.05° is the default
+    Clustering granularity is tunable - 0.05° is the default
     (~5 km at equator), which matches "damage cluster" resolution
     the dashboard tile uses. Each returned row carries the centroid,
     the top crisis_type + damage_classification by count inside the
@@ -111,7 +111,7 @@ def crisis_top10(
     cutoff = datetime.now(timezone.utc) - timedelta(hours=max(1, lookback_hours))
 
     # Round lat/lng to the cluster bucket. Pure Postgres (no PostGIS
-    # dependency) — fine for the scale UNDP is asking for (500k rows).
+    # dependency) - fine for the scale UNDP is asking for (500k rows).
     # A later version can swap to PostGIS ST_SnapToGrid if we need
     # sub-km resolution at hundreds-of-thousands scale.
     step = cluster_degrees
@@ -179,7 +179,7 @@ def crisis_top10(
         top_crisis = max(crisis_counts, key=crisis_counts.get) if crisis_counts else None
         top_damage = max(damage_counts, key=damage_counts.get) if damage_counts else None
 
-        # Cheap label — pick the first non-empty user-entered name we
+        # Cheap label - pick the first non-empty user-entered name we
         # find in the cluster. Keeps queries bounded (no full-text
         # scan) and avoids an expensive reverse-geocode round-trip.
         name_row = (
@@ -247,7 +247,7 @@ def damage_rate_24h(db: Session = Depends(get_db)):
         if dbk is None:
             continue
         aware = dbk if dbk.tzinfo else dbk.replace(tzinfo=timezone.utc)
-        # Normalise to UTC-iso — the trunc'd datetime has minute=second=us=0.
+        # Normalise to UTC-iso - the trunc'd datetime has minute=second=us=0.
         iso_key = aware.astimezone(timezone.utc).replace(
             minute=0, second=0, microsecond=0
         ).isoformat()
@@ -276,14 +276,14 @@ def damage_rate_24h(db: Session = Depends(get_db)):
 #
 # One round-trip of indexed aggregates powering the landing's KPIs,
 # distributions, timings, impact proxies, and trend deltas. Every value is
-# a LIVE aggregate over non-soft-deleted reports (+ Building rollups) —
+# a LIVE aggregate over non-soft-deleted reports (+ Building rollups) -
 # nothing is stored or hardcoded. Built for the 500k-row scale target:
 # pure COUNT/AVG/GROUP BY over indexed columns (status, severity,
 # crisis_type, server_created_at, reviewer_verdict).
 #
 # Honest scope: this surfaces ONLY metrics with real backing. Population,
 # households, displaced persons, and country breakdowns are intentionally
-# absent — CRISP has no census/displacement data and no country column
+# absent - CRISP has no census/displacement data and no country column
 # (see web-dashboard/docs/crisis-intelligence-dashboard-spec.md §4).
 
 _CLOSED_STATUSES = [
@@ -305,13 +305,13 @@ _DISRUPTED_SERVICE_VALUES = [
 _ESCALATING_RISK_THRESHOLD = 70.0
 # Interim SLA policy (hardcoded per-severity response targets, hours): a PENDING
 # report older than its severity target is "at risk". No stored policy table yet
-# (see spec §4-C) — these defaults are computed server-side over ALL reports.
+# (see spec §4-C) - these defaults are computed server-side over ALL reports.
 _SLA_THRESHOLD_HOURS = {
     SeverityEnum.CRITICAL: 1, SeverityEnum.SEVERE: 4,
     SeverityEnum.MODERATE: 12, SeverityEnum.MINOR: 24, SeverityEnum.UNKNOWN: 12,
 }
 
-# Operation health (Phase 3) — backend-authoritative RED / AMBER / GREEN, replacing
+# Operation health (Phase 3) - backend-authoritative RED / AMBER / GREEN, replacing
 # the Phase-2 client-side stand-in. AMBER thresholds:
 _REVIEW_BACKLOG_THRESHOLD = 20      # an op's review backlog above this → AMBER
 _NO_ACTIVITY_HOURS = 2              # no new report in an op for this long → AMBER
@@ -325,7 +325,7 @@ def _compute_operation_health(*, now, sla_breaches, unattended_critical, escalat
     AMBER = an escalating hotspot in the op, OR review backlog > threshold, OR no
             activity for > _NO_ACTIVITY_HOURS.
     GREEN = none of the above.
-    Returns (health, reason) — reason is the short human "why" shown on hover.
+    Returns (health, reason) - reason is the short human "why" shown on hover.
     """
     if unattended_critical or sla_breaches:
         why = []
@@ -438,12 +438,12 @@ def operational_summary(
     now = datetime.now(timezone.utc)
     # Defensive: when called PROGRAMMATICALLY (e.g. the export-analytics-summary /
     # sitrep endpoints via _summary_payload) an omitted crisis_event_id arrives as
-    # the FastAPI `Query(None)` DEFAULT object, not None — which is truthy and would
+    # the FastAPI `Query(None)` DEFAULT object, not None - which is truthy and would
     # reach the SQL filter ("can't adapt type Query"). Coerce anything that isn't a
     # real string id back to None (global) so that path and a stray query arg are safe.
     if not isinstance(crisis_event_id, str):
         crisis_event_id = None
-    # crisis_event_id MUST be part of the cache key — otherwise one operation's
+    # crisis_event_id MUST be part of the cache key - otherwise one operation's
     # counts would be served for another (or for the global view).
     cache_key = (window_hours, stale_hours, crisis_event_id or "_global_")
     hit = _summary_cache.get(cache_key)
@@ -545,7 +545,7 @@ def operational_summary(
         avg_response_seconds=float(avg_resp) if avg_resp is not None else None,
     )
 
-    # ── impact (real proxies only — see spec §4 for what is intentionally absent) ──
+    # ── impact (real proxies only - see spec §4 for what is intentionally absent) ──
     lives = (db.query(func.coalesce(func.sum(Report.lives_impacted), 0))
                .filter(*_scope, *active).scalar()) or 0
     service_disruptions: Optional[int] = None
@@ -555,13 +555,13 @@ def operational_summary(
             or_(*[func.json_extract_path_text(Report.service_status, k).in_(_DISRUPTED_SERVICE_VALUES)
                   for k in ("electricity", "water", "health", "telecom")]),
         )
-    except Exception:  # noqa: BLE001 — JSON dialect quirk must never 500 the dashboard
+    except Exception:  # noqa: BLE001 - JSON dialect quirk must never 500 the dashboard
         service_disruptions = None
 
     responders_active = 0
     escalating = 0
     try:
-        # Operation-scoped when crisis_event_id is set — otherwise these two
+        # Operation-scoped when crisis_event_id is set - otherwise these two
         # building/responder queries would leak GLOBAL counts into a per-op
         # summary (responders not tied to the op, hotspots anywhere). Phase 3 fix.
         _resp_q = db.query(func.count(BuildingResponder.id)).filter(
@@ -579,7 +579,7 @@ def operational_summary(
             _hot_q = _hot_q.filter(Building.id.in_(_op_bldgs))
         hotspot_ids = [row[0] for row in _hot_q.all()]
         escalating = len(hotspot_ids)
-        # underlying open reports on those hotspots — the secondary "N reports"
+        # underlying open reports on those hotspots - the secondary "N reports"
         # number so the landing card's count matches its click destination.
         counts.escalating_reports = (
             _count(*active, Report.building_id.in_(hotspot_ids)) if hotspot_ids else 0

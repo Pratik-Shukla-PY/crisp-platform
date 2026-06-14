@@ -1,4 +1,4 @@
-"""report_anon_due_expired_token — Phase K K.2.e
+"""report_anon_due_expired_token - Phase K K.2.e
 
 Revision ID: 0033_report_anon_due_expired_token
 Revises: 0032_media_abandoned
@@ -6,7 +6,7 @@ Create Date: 2026-05-20
 
 Adds one boolean column on `reports`:
 
-  * submitted_as_anonymous_due_to_expired_token — TRUE when the
+  * submitted_as_anonymous_due_to_expired_token - TRUE when the
     client presented a Bearer token but it had expired beyond the
     auth-grace window. The report is still accepted (anonymous
     submission is a UNDP must-have #9 invariant) but the flag

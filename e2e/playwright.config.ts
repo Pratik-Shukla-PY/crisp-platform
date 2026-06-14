@@ -1,11 +1,11 @@
 /**
- * CRISP — End-to-end Playwright config.
+ * CRISP - End-to-end Playwright config.
  *
  * Two projects target the two browser-facing surfaces:
  *   · pwa        → Field reporter app (mobile-app/src)
  *   · dashboard  → QRT Ops dashboard (web-dashboard/src)
  *
- * Tests hit a REAL running stack — backend on :8000, static server on :8080.
+ * Tests hit a REAL running stack - backend on :8000, static server on :8080.
  * Start it with `bash start.sh` from the repo root before running.
  *
  * Tag `@smoke` on the handful of "is the app alive at all" checks so
@@ -18,7 +18,7 @@ import { defineConfig, devices } from '@playwright/test';
 // remote staging box without editing the file. CI sets CRISP_BASE_URL_* to
 // the ephemeral preview URLs.
 // baseURL must be a directory (trailing slash) so goto('index.html') resolves
-// cleanly. Pointing it at the full .html file breaks goto('/') — that URL
+// cleanly. Pointing it at the full .html file breaks goto('/') - that URL
 // would resolve to `http://localhost:8080/` which is the static server's
 // directory listing, not the app.
 const PWA_BASE = process.env.CRISP_BASE_URL_PWA ||
@@ -35,18 +35,18 @@ export default defineConfig({
   // the runtime is still fine (<3 min full suite).
   fullyParallel: false,
   workers: 1,
-  // Fail fast in CI — no flaky-retry paper-over. Locally we allow 1 retry
+  // Fail fast in CI - no flaky-retry paper-over. Locally we allow 1 retry
   // for genuinely transient failures (e.g. slow PII blur on first capture).
   retries: process.env.CI ? 0 : 1,
   reporter: [
     ['list'],
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
   ],
-  timeout: 60_000,        // generous — some capture flows include JPEG blur
+  timeout: 60_000,        // generous - some capture flows include JPEG blur
   expect: { timeout: 10_000 },
 
   use: {
-    // Mobile viewport by default — both surfaces are designed phone-first.
+    // Mobile viewport by default - both surfaces are designed phone-first.
     ...devices['Pixel 7'],
     headless: true,
     ignoreHTTPSErrors: true,
@@ -78,7 +78,7 @@ export default defineConfig({
     // regressions (e.g. a data:image/svg+xml URL parser quirk).
     //
     // Only `tests/pwa/56-flag-rendering-cross-browser.spec.ts`
-    // matches by default — full PWA suite stays on Chromium for
+    // matches by default - full PWA suite stays on Chromium for
     // runtime budget reasons.
     {
       name: 'pwa-firefox',

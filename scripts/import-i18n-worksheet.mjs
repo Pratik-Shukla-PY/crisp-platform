@@ -5,7 +5,7 @@
 // `suggested_translation` column from a filled
 // `mobile-app/i18n-worksheets/{lang}.csv`, but ONLY for rows whose
 // `status` column equals "approved" (case-insensitive). Other rows
-// are skipped — translators can leave rows in `review` / blank /
+// are skipped - translators can leave rows in `review` / blank /
 // `skip` and re-run import after another review pass.
 //
 // After import, run `node scripts/build-locale-skeletons.mjs` to

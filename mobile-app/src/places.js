@@ -1,8 +1,8 @@
 // ── CRISP Offline Places Database ─────────────────────────────────────────────
-// Bundled city data for instant offline autocomplete — no network needed.
+// Bundled city data for instant offline autocomplete - no network needed.
 // Format: [name, region, country, lat, lng]
 // ~700 cities: all capitals + crisis-region coverage + major cities globally.
-// Cached by service worker — works on first load, forever after.
+// Cached by service worker - works on first load, forever after.
 
 const CRISP_CITIES = [
 // ── Africa ────────────────────────────────────────────────────────────────────
@@ -392,7 +392,7 @@ const CRISP_CITIES = [
 ["Melekeok","Ngerchelong","Palau",7.5006,134.6242],
 ];
 
-// ── PlaceSearch — instant offline-first location autocomplete ─────────────────
+// ── PlaceSearch - instant offline-first location autocomplete ─────────────────
 class PlaceSearch {
     constructor() {
         this._cache = {};       // query → [{name,region,country,lat,lng}]
@@ -463,7 +463,7 @@ class PlaceSearch {
         );
     }
 
-    // Score a place against the query — higher = more relevant
+    // Score a place against the query - higher = more relevant
     _scorePlace(place, ql) {
         const nl = place.name.toLowerCase();
         if (nl === ql) return 10;                             // exact name match
@@ -494,7 +494,7 @@ class PlaceSearch {
         return candidates.slice(0, 5);
     }
 
-    // Background Nominatim search — caches results, calls callback when done
+    // Background Nominatim search - caches results, calls callback when done
     async searchRemote(query, callback) {
         try {
             const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=8&addressdetails=1`;
@@ -512,11 +512,11 @@ class PlaceSearch {
                 callback(places);
             }
         } catch (_) {
-            // Offline or timeout — silent fail, local results already showing
+            // Offline or timeout - silent fail, local results already showing
         }
     }
 
-    // Pre-fetch places near device GPS — called once when location is known
+    // Pre-fetch places near device GPS - called once when location is known
     async prefetchNearby(lat, lng) {
         // Check if already pre-fetched for this area
         try {
@@ -564,7 +564,7 @@ class PlaceSearch {
     }
 }
 
-// Global singleton — also exposed on `window` so test harnesses
+// Global singleton - also exposed on `window` so test harnesses
 // (Playwright's page.evaluate) and devtools can reach it. The
 // script-scoped `const` alone isn't a property of the global
 // object (classic-script lexical binding); v4-flow.js's

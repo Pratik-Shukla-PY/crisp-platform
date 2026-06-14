@@ -1,5 +1,5 @@
 // ╭──────────────────────────────────────────────────────────────────╮
-// │ AUTO-GENERATED — DO NOT EDIT BY HAND                            │
+// │ AUTO-GENERATED - DO NOT EDIT BY HAND                            │
 // │ Source: shared/tier-config.json                                  │
 // │ Regenerate with: node scripts/sync-tier-config.mjs               │
 // │ CI verifies with: node scripts/sync-tier-config.mjs --check      │
@@ -19,7 +19,7 @@
             "start": "#80EE98",
             "end": "#46DFB1"
         },
-        "criterion": "Default — no submissions yet"
+        "criterion": "Default - no submissions yet"
     },
     {
         "id": "T2_SIGNAL",
@@ -32,7 +32,7 @@
             "start": "#46DFB1",
             "end": "#09D1C7"
         },
-        "criterion": "≥1 report submitted (any status) — one-time participation badge"
+        "criterion": "≥1 report submitted (any status) - one-time participation badge"
     },
     {
         "id": "T3_CHANGEMAKER",
@@ -45,7 +45,7 @@
             "start": "#09D1C7",
             "end": "#15919B"
         },
-        "criterion": "≥1 report dispatched (RESPONDING or RESOLVED) — analyst action required"
+        "criterion": "≥1 report dispatched (RESPONDING or RESOLVED) - analyst action required"
     },
     {
         "id": "T4_LIFEKEEPER",
@@ -58,12 +58,12 @@
             "start": "#fcd34d",
             "end": "#f59e0b"
         },
-        "criterion": "sum(lives_impacted) ≥ 1 across the device's reports — downstream impact required"
+        "criterion": "sum(lives_impacted) ≥ 1 across the device's reports - downstream impact required"
     }
 ];
     const TIERS_BY_ID = TIERS.reduce((acc, t) => { acc[t.id] = t; return acc; }, {});
     const LEGACY_ALIASES = {
-    "$comment": "Pre-V4 badge_level values mapped to the V4 ladder. Used by clients that fetch /profile from a backend mid-rollout where the device row still carries the legacy value. NEVER surfaces as the dashboard's reporter_tier (the Phase 1.6 join filters to V4 ids only — see _attach_reporter_tier).",
+    "$comment": "Pre-V4 badge_level values mapped to the V4 ladder. Used by clients that fetch /profile from a backend mid-rollout where the device row still carries the legacy value. NEVER surfaces as the dashboard's reporter_tier (the Phase 1.6 join filters to V4 ids only - see _attach_reporter_tier).",
     "NEWCOMER": "T1_SCOUT",
     "HELPER": "T2_SIGNAL",
     "CONTRIBUTOR": "T3_CHANGEMAKER",

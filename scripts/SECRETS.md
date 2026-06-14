@@ -1,4 +1,4 @@
-# Secret Management — CRISP Backend
+# Secret Management - CRISP Backend
 
 This document covers the two server-side secrets that the backend refuses to
 boot without in production (Sprint 1 / P1.2 + P1.8):
@@ -10,9 +10,9 @@ boot without in production (Sprint 1 / P1.2 + P1.8):
 
 The backend also reads `APP_ENV`:
 
-- `APP_ENV=production` (default) — both secrets are **required**. Missing or
+- `APP_ENV=production` (default) - both secrets are **required**. Missing or
   weak values abort the boot.
-- `APP_ENV=dev` — missing values generate an ephemeral dev secret and log a
+- `APP_ENV=dev` - missing values generate an ephemeral dev secret and log a
   loud warning. Tokens invalidate on every restart.
 
 ---
@@ -41,7 +41,7 @@ After restart:
 2. Store the new values in AWS Secrets Manager alongside the current ones
    (e.g. `crisp/jwt-secret-next`).
 3. Roll out a backend version that accepts **both** current and next secrets
-   when verifying tokens (current implementation only accepts one — extending
+   when verifying tokens (current implementation only accepts one - extending
    this is a Phase 3 task, track in GitHub as `phase3/jwt-key-rollover`).
 4. Once all instances are on the dual-accept build, promote `-next` to the
    primary slot. Wait for max token TTL (30 min access + 30 days refresh) or
@@ -52,11 +52,11 @@ After restart:
 
 ## Where secrets actually live
 
-- **Repo:** `backend/.env` (gitignored — verified with `git ls-files | grep .env`
+- **Repo:** `backend/.env` (gitignored - verified with `git ls-files | grep .env`
   returning only `.env.example`).
-- **Example template:** `backend/.env.example` — tracked in git, does NOT
+- **Example template:** `backend/.env.example` - tracked in git, does NOT
   contain real values. Every new env var must be added here.
-- **Production (when we move to AWS — Sprint 5):** AWS Secrets Manager,
+- **Production (when we move to AWS - Sprint 5):** AWS Secrets Manager,
   injected into the task definition as env vars. No secrets in AMI, user-data,
   or container image layers.
 
@@ -91,7 +91,7 @@ curl -sX POST http://localhost:8000/api/v1/auth/login \
 
 ## Related files
 
-- `scripts/rotate_secrets.sh` — generator / in-place rotator.
-- `backend/app/core/security.py` — JWT config, fail-fast check.
-- `backend/app/main.py` — admin-key config, fail-fast check.
-- `backend/.env.example` — template showing all required env vars.
+- `scripts/rotate_secrets.sh` - generator / in-place rotator.
+- `backend/app/core/security.py` - JWT config, fail-fast check.
+- `backend/app/main.py` - admin-key config, fail-fast check.
+- `backend/.env.example` - template showing all required env vars.

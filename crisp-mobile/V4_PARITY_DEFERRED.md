@@ -1,4 +1,4 @@
-# RN companion — UI v4 parity, deferred
+# RN companion - UI v4 parity, deferred
 
 **Status:** the React-Native companion is one major version behind the
 PWA. PWA is on **UI v4** (3-page flow, Path B native camera, AI
@@ -16,7 +16,7 @@ The RN companion's `App.tsx` is a 3,900-line monolith. A safe v4 port
 needs to land these in order:
 
 1. **Add `UI_V4_ENABLED` flag** alongside the existing `UI_V3_ENABLED`
-   (currently only commented, not implemented in code) — pattern
+   (currently only commented, not implemented in code) - pattern
    identical to PWA's `localStorage['crisp_ui_v4']`.
 
 2. **Extend the `Screen` type** (line 117 of `App.tsx`):
@@ -35,18 +35,18 @@ needs to land these in order:
    ```
 
 3. **Add three new screen components** (each ~150 LoC):
-   - `V4LandingScreen` — uses `Linking.openURL()` for `tel:`/`sms:`/
+   - `V4LandingScreen` - uses `Linking.openURL()` for `tel:`/`sms:`/
      `https://t.me/`/`https://wa.me/` deep links. App Store / Play
      Store buttons. AsyncStorage flag for "seen."
-   - `V4CaptureScreen` — `ImagePicker.launchCameraAsync({ allowsEditing: false })`
+   - `V4CaptureScreen` - `ImagePicker.launchCameraAsync({ allowsEditing: false })`
      replaces the in-app `Camera` component. The PII-blur pipeline
      already runs on the captured URI via the existing `piiBlur.ts`
      service.
-   - `V4ClassifyScreen` — three sections, three `FlatList`-based
+   - `V4ClassifyScreen` - three sections, three `FlatList`-based
      horizontal carousels with snap-to-interval and 9 / 8 / 3 slides.
      Bandwidth-gated `fetch` to `/api/v1/reports/classify-suggest`
      for AI pre-fill (same endpoint the PWA uses).
-   - `V4ReviewScreen` — summary card with 4 tap-edit rows; voice
+   - `V4ReviewScreen` - summary card with 4 tap-edit rows; voice
      drawer collapsed by default; UNDP details expanded by default;
      `Send to UNDP` button delegates to existing `submitReport()`.
 
@@ -67,7 +67,7 @@ needs to land these in order:
 ## Estimated effort
 
 ~3 working days for a careful refactor. The risky bit is integrating
-v4 alongside v3 alongside legacy — three concurrent flows in one file.
+v4 alongside v3 alongside legacy - three concurrent flows in one file.
 A worktree is recommended for the RN port specifically.
 
 ## Why we're not doing it now
@@ -86,12 +86,12 @@ A worktree is recommended for the RN port specifically.
 This commit (Commit D of the v4 series):
 
 - Adds the `UI_V4_ENABLED` AsyncStorage flag check (no behavior
-  change yet — flag reads true but no v4 screens exist).
+  change yet - flag reads true but no v4 screens exist).
 - Adds the `v4_landing | v4_capture | v4_classify | v4_review`
   values to the `Screen` type.
 - Documents the parity gap here in `V4_PARITY_DEFERRED.md`.
 
-The actual screen implementations are the follow-up — tracked as
+The actual screen implementations are the follow-up - tracked as
 work-in-progress in this file.
 
 ## Operator runbook for the eventual port
@@ -105,7 +105,7 @@ cd crisp-mobile && npx expo start
 
 Work the screens one at a time, in the order listed in §3 above.
 Each screen is independently shippable behind the `UI_V4_ENABLED`
-flag — the v3 + legacy flow remains the default until every screen
+flag - the v3 + legacy flow remains the default until every screen
 exists.
 
 When ready to publish, flip the landing card's `CHANNELS.ios_app_url`

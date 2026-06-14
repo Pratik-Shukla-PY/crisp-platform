@@ -1,5 +1,5 @@
 """
-Prediction Engine — Multi-signal intelligence gathering + Claude-powered risk forecasting.
+Prediction Engine - Multi-signal intelligence gathering + Claude-powered risk forecasting.
 Gathers: historical CRISP data, weather forecasts, seismic activity, geospatial risk, conflict signals.
 """
 import os
@@ -91,7 +91,7 @@ def gather_historical(lat: float, lng: float, radius_km: float, db: Session) -> 
 async def gather_weather(lat: float, lng: float) -> dict:
     """Fetch 5-day weather forecast from OpenWeatherMap."""
     if not OPENWEATHER_KEY:
-        logger.warning("[Prediction] No OPENWEATHER_API_KEY — using mock weather data")
+        logger.warning("[Prediction] No OPENWEATHER_API_KEY - using mock weather data")
         return {"next_24h": {"rain_mm": 0, "wind_kmh": 10, "temp_c": 28, "humidity": 65, "description": "Clear sky"},
                 "next_72h": {"rain_mm": 5, "wind_kmh": 15}, "next_7d": {"rain_mm": 15},
                 "alerts": [], "anomaly": None, "source": "mock"}
@@ -264,10 +264,10 @@ async def run_prediction(zone_name: str, lat: float, lng: float, radius_km: floa
 Your predictions directly inform pre-positioning of rescue teams and resources. ACCURACY AND CALIBRATION ARE CRITICAL.
 
 SCORING FRAMEWORK:
-- 0-20: LOW risk — normal conditions, no action needed
-- 21-50: MEDIUM risk — elevated signals, monitor closely
-- 51-75: HIGH risk — significant threat indicators, prepare response
-- 76-100: CRITICAL risk — imminent crisis likely, pre-deploy resources
+- 0-20: LOW risk - normal conditions, no action needed
+- 21-50: MEDIUM risk - elevated signals, monitor closely
+- 51-75: HIGH risk - significant threat indicators, prepare response
+- 76-100: CRITICAL risk - imminent crisis likely, pre-deploy resources
 
 CALIBRATION RULES:
 - Weather alone (even severe) without historical precedent = max 60
@@ -277,7 +277,7 @@ CALIBRATION RULES:
 - Missing data reduces confidence, not risk score
 - Consider seasonal patterns and geographic context
 
-RESPONSE FORMAT — Return ONLY valid JSON:
+RESPONSE FORMAT - Return ONLY valid JSON:
 {
   "risk_score": 0-100,
   "risk_level": "LOW|MEDIUM|HIGH|CRITICAL",
@@ -302,7 +302,7 @@ RESPONSE FORMAT — Return ONLY valid JSON:
     w7d = weather.get("next_7d", {})
 
     dossier = f"""═══ PREDICTION INTELLIGENCE BRIEFING ═══
-Zone: {zone_name} ({lat}, {lng}) — {country or 'Unknown'}, {region or 'Unknown'}
+Zone: {zone_name} ({lat}, {lng}) - {country or 'Unknown'}, {region or 'Unknown'}
 Analysis period: Next {time_window_hours} hours
 
 ── SIGNAL 1: HISTORICAL CRISP DATA ──
@@ -338,15 +338,15 @@ Intensity: {conflict['conflict_intensity']} | Trend: {conflict['trending']}
 Generate prediction with full signal breakdown and specific contributing factors."""
 
     if not ANTHROPIC_KEY:
-        logger.warning("[Prediction] No ANTHROPIC_API_KEY — returning mock prediction")
+        logger.warning("[Prediction] No ANTHROPIC_API_KEY - returning mock prediction")
         return {
             "risk_score": 35, "risk_level": "MEDIUM", "predicted_crisis_type": "FLOOD",
             "time_window_hours": time_window_hours, "confidence_score": 40,
-            "headline": f"Moderate flood risk in {zone_name} — monitoring recommended",
+            "headline": f"Moderate flood risk in {zone_name} - monitoring recommended",
             "contributing_factors": ["Historical flood reports in area", "Seasonal rainfall pattern"],
             "signal_breakdown": {"historical_weight": 40, "weather_weight": 30, "seismic_weight": 5, "geospatial_weight": 20, "conflict_weight": 5},
             "recommended_action": "Monitor weather updates and maintain readiness",
-            "reasoning": "Mock prediction — configure ANTHROPIC_API_KEY for real analysis",
+            "reasoning": "Mock prediction - configure ANTHROPIC_API_KEY for real analysis",
             "weather_data": weather, "historical_summary": historical,
             "seismic_data": seismic, "geospatial_data": geospatial, "conflict_data": conflict,
         }

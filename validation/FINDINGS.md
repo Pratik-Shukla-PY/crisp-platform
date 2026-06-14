@@ -1,4 +1,4 @@
-# CRISP End-to-End Delivery Validation — Comprehensive Findings
+# CRISP End-to-End Delivery Validation - Comprehensive Findings
 
 **Date**: 2026-05-21
 **Surface**: localhost (PWA :8080, Backend :8000, Postgres :5432)
@@ -18,15 +18,15 @@
 | # | Class | Title | Status | Where fixed |
 |---|---|---|---|---|
 | **1** | **Real product bug** | PWA pre-emptive defer on VERY_SLOW networks doesn't notify backend → dashboard chip ambiguous | ✅ **FIXED** | `mobile-app/src/app.js` + `backend/app/api/endpoints/reports.py` (commit `102d910`) |
-| **2** | Docs drift | `CLAUDE.md` says `InfrastructureTypeEnum` has `EDUCATIONAL`/`HEALTHCARE`; actual is `SCHOOL`/`HOSPITAL` | ✅ **FIXED** | `CLAUDE.md` |
+| **2** | Docs drift | `the project invariants` says `InfrastructureTypeEnum` has `EDUCATIONAL`/`HEALTHCARE`; actual is `SCHOOL`/`HOSPITAL` | ✅ **FIXED** | `the project invariants` |
 | **3** | Design-as-intended | Server-side PII blur runs async post-assembly; `pii_blur_status='pending'` briefly | ⚪ No fix needed | Documented |
-| **4** | **Real privacy bug** | ORIGINAL tier "passthrough" preserved source EXIF including GPS — variants in storage leaked capture-point lat/lng | ✅ **FIXED** | `mobile-app/src/image-variants.js:111+` (commit `102d910`) |
+| **4** | **Real privacy bug** | ORIGINAL tier "passthrough" preserved source EXIF including GPS - variants in storage leaked capture-point lat/lng | ✅ **FIXED** | `mobile-app/src/image-variants.js:111+` (commit `102d910`) |
 | **5** | Test-infra bug | Harness boolean parser expected `'t'`/`'f'` but psql `::text` returns `'true'`/`'false'` | ✅ **FIXED** | `_validation-harness.ts` |
 | **6** | Test-infra bug | Scenario 05 used wrong enum (`EDUCATIONAL`) + wrong column (`device_hash` on `reports`) | ✅ **FIXED** | `99-validation-05-double-submit.spec.ts` |
 | **7** | Test-infra bug | Scenario 07's actual-restart approach was fragile (`bash -c '...' & disown` + venv path issues); test hung 35+ min | ✅ **FIXED** | Rewrote `99-validation-07-backend-restart.spec.ts` to simulate outage via route-blocking |
-| **8** | Test-infra bug | Scenario 11 referenced `browserName` inside `page.evaluate` — wrong context | ✅ **FIXED** | `99-validation-11-cross-browser.spec.ts` |
+| **8** | Test-infra bug | Scenario 11 referenced `browserName` inside `page.evaluate` - wrong context | ✅ **FIXED** | `99-validation-11-cross-browser.spec.ts` |
 | **9** | Test-infra bug | pHash comparison didn't apply EXIF orientation → portrait/landscape iPhone captures registered as "totally different" | ✅ **FIXED** | `99-validation-01-online-happy.spec.ts` uses `PIL.ImageOps.exif_transpose` |
-| **10** | Limit (not deploy-blocker) | Original soak design (50 captures back-to-back without gating) SIGABRT'd at ~25 — Chromium worker memory limit. Each capture holds ~3 MB×3 tiers in memory while waiting for 2 KBPS uploads to drain. 50 × ~10 MB = ~500 MB in-flight. Real users don't capture 50 reports in one browser session; revised soak (10 reports gated on SMALL completion) sustains the load and passes 10/10. | ✅ **TEST FIXED** + documented capacity | `99-validation-13-soak-50-reports.spec.ts` redesigned |
+| **10** | Limit (not deploy-blocker) | Original soak design (50 captures back-to-back without gating) SIGABRT'd at ~25 - Chromium worker memory limit. Each capture holds ~3 MB×3 tiers in memory while waiting for 2 KBPS uploads to drain. 50 × ~10 MB = ~500 MB in-flight. Real users don't capture 50 reports in one browser session; revised soak (10 reports gated on SMALL completion) sustains the load and passes 10/10. | ✅ **TEST FIXED** + documented capacity | `99-validation-13-soak-50-reports.spec.ts` redesigned |
 
 ---
 
@@ -45,11 +45,11 @@
 | 09 | Combined disaster: 2 KBPS + Wi-Fi flap × 3 over 4 min | PWA Chromium + CDP | ~5 min | ✅ PASS, SMALL survives, MEDIUM/ORIGINAL marked deferred correctly |
 | 10 | 30 % packet-loss on chunk-bin | PWA Chromium + route handler | ~4 min | ✅ PASS, retries succeed, no duplicate Media rows |
 | 11 | Cross-browser smoke (Chromium + Firefox + WebKit) | All 3 PWA engines | ~70 s | ✅ **3/3 PASS** |
-| 13 | Soak test — 10 reports gated at 2 KBPS over ~19 min | PWA Chromium | 19 min | ✅ **10/10 PASS, 100% success rate, 3 tiers each** |
+| 13 | Soak test - 10 reports gated at 2 KBPS over ~19 min | PWA Chromium | 19 min | ✅ **10/10 PASS, 100% success rate, 3 tiers each** |
 
 ---
 
-## Detail: Finding 1 — Pre-emptive defer chip gap
+## Detail: Finding 1 - Pre-emptive defer chip gap
 
 ### Problem
 
@@ -71,7 +71,7 @@ The K.5.a chip infrastructure (`web-dashboard/src/app.js:2284`) already supports
 
 2. **Backend** (`reports.py` `MarkDeferredRequest`): schema accepts optional `media_ids_by_group_and_tier`. Placeholder Media row is created with that exact id.
 
-3. **Backend** (`reports.py` chunk-bin endpoint): detects rows in `failed/bandwidth_tier_deferred` state. When the PWA later retries (network improved), REVIVES the existing row — clears abandon state, resets chunk counters, bumps the parent Report's `expected_media`.
+3. **Backend** (`reports.py` chunk-bin endpoint): detects rows in `failed/bandwidth_tier_deferred` state. When the PWA later retries (network improved), REVIVES the existing row - clears abandon state, resets chunk counters, bumps the parent Report's `expected_media`.
 
 ### Proof
 
@@ -92,11 +92,11 @@ Dashboard now correctly renders the "Original (slow network)" amber chip.
 
 ---
 
-## Detail: Finding 4 — ORIGINAL EXIF GPS leak
+## Detail: Finding 4 - ORIGINAL EXIF GPS leak
 
 ### Problem
 
-The ORIGINAL tier's "passthrough" strategy at `image-variants.js:111-115` returned the source blob unchanged when ≤ 5 MB. The source blob is the iPhone HEIC → JPEG conversion (via `_ingestFileAsPhoto`) which preserves the full EXIF chain — including `GPSLatitude` and `GPSLongitude` from the capture point.
+The ORIGINAL tier's "passthrough" strategy at `image-variants.js:111-115` returned the source blob unchanged when ≤ 5 MB. The source blob is the iPhone HEIC → JPEG conversion (via `_ingestFileAsPhoto`) which preserves the full EXIF chain - including `GPSLatitude` and `GPSLongitude` from the capture point.
 
 Result: every ORIGINAL variant in S3/local storage carried the original GPS coordinates in EXIF.
 
@@ -133,23 +133,23 @@ After fix, scenario 01's `04b_exif_phash.json` shows `hasGps: false` on all 3 ti
 
 These were bugs in MY test harness, not the product. Documented because operator asked for honest accounting.
 
-### Bug 5 — Harness boolean parser
+### Bug 5 - Harness boolean parser
 
 `_validation-harness.ts` expected `'t'`/`'f'` but psql's `::text` cast on boolean returns `'true'`/`'false'`. Initially gave false alarms about `client_blur_applied: null`. Fixed; values now correctly parse as JS booleans.
 
-### Bug 6 — Scenario 05 wrong enum + column
+### Bug 6 - Scenario 05 wrong enum + column
 
 Used `EDUCATIONAL` (wrong) instead of `SCHOOL` (correct). Used `reports.device_hash` (column doesn't exist) instead of joining `devices` table. Fixed.
 
-### Bug 7 — Scenario 07 actual-restart fragility
+### Bug 7 - Scenario 07 actual-restart fragility
 
 Original design tried to `lsof -ti:8000 | kill` then `bash -c 'cd ... && uvicorn ...' & disown`. The shell escape + venv activation was unreliable. Hung 35+ minutes when the restart didn't work. Rewrote to simulate outage via `page.route()` returning 502s for a 30 s window. Same PWA semantics (502s during outage, success after), deterministic timing.
 
-### Bug 8 — Scenario 11 `browserName` scope
+### Bug 8 - Scenario 11 `browserName` scope
 
 Referenced `browserName` (a Playwright fixture, Node-side) inside a `page.evaluate(...)` callback (browser-side). The browser context has no such variable → `ReferenceError`. Fixed by passing `browserName` as a parameter.
 
-### Bug 9 — pHash without EXIF orientation
+### Bug 9 - pHash without EXIF orientation
 
 iPhone captures store the image in raw landscape pixels with `EXIF Orientation=6` instructing viewers to rotate 90° CW. The variant pipeline applies the rotation during `createImageBitmap → canvas` (so variants are stored in DISPLAY orientation, no EXIF). When the test compared pHash of source (no orientation applied) vs variant (rotated), the bits looked unrelated → distance 30 (essentially random). Fixed by applying `PIL.ImageOps.exif_transpose()` on both source and variant before hashing.
 
@@ -208,7 +208,7 @@ Each fixture directory contains the raw evidence (IDB snapshots, Postgres truth,
 - Three e2e test cleanups
 - This validation batch with both real fixes (Findings 1, 4) + 12 scenarios
 
-**Still uncommitted to `origin/main`** — pending operator review of this report.
+**Still uncommitted to `origin/main`** - pending operator review of this report.
 
 ## Final: Soak test result
 
@@ -219,7 +219,7 @@ report ended with 3 complete tiers**:
   · Second report: 34 s submit→SMALL (probe cache hit)
   · Reports 3-10: ~123 s each (steady state)
 
-The original unrealistic pattern (50 ungated submits) SIGABRT'd — see
+The original unrealistic pattern (50 ungated submits) SIGABRT'd - see
 Finding 10 above. Real-world users don't capture 50 reports in one
 browser session; the gated pattern is the relevant proxy for
 "sustained disaster network operation".

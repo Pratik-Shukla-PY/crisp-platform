@@ -57,7 +57,7 @@ test.describe('PWA — LARGE-tier defer + resume', () => {
         //   MEDIUM     → SMALL + MEDIUM + LARGE all transmit
         //   SLOW       → SMALL + MEDIUM transmit; LARGE deferred
         //   VERY_SLOW  → SMALL transmits; MEDIUM + LARGE deferred
-        // If this matrix drifts away from the README/plan/CLAUDE.md,
+        // If this matrix drifts away from the README/plan/the project invariants,
         // the test fails loudly so the docs + code stay in sync.
         const matrix = await page.evaluate(() => {
             const shouldDefer = (netTier: string, tier: 'small' | 'medium' | 'large') => {

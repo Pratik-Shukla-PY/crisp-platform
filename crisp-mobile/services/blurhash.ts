@@ -1,5 +1,5 @@
 /**
- * blurhash.ts — RN port of the vendored BlurHash algorithm.
+ * blurhash.ts - RN port of the vendored BlurHash algorithm.
  *
  * Keep this file in byte-equivalent behaviour to `mobile-app/src/blurhash.js`
  * (the PWA vendor). Same algorithm, same output hashes for the same inputs.
@@ -11,7 +11,7 @@
  *   - No canvas/DOM. Callers decode a source JPEG via `jpeg-js` (already a
  *     dependency through services/piiBlur.ts) and pass the resulting RGBA
  *     Uint8Array/Uint8ClampedArray to `encode`.
- *   - Decoding is unused here — the RN app never decodes blurhashes for
+ *   - Decoding is unused here - the RN app never decodes blurhashes for
  *     display (the dashboard does that). Export the decoder anyway for
  *     symmetry + future use (e.g. device-local preview of queued reports).
  *

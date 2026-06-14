@@ -1,4 +1,4 @@
-# Maestro flow — merged always-on home page renders all channels.
+# Maestro flow - merged always-on home page renders all channels.
 #
 # Run manually: maestro test crisp-mobile/.maestro/consent-and-channels.yaml
 
@@ -19,7 +19,7 @@ appId: com.crispundp.crispmobile
 - assertVisible:
     text: "Get the app:"
     optional: true
-# Consent state — first launch should show consent UI.
+# Consent state - first launch should show consent UI.
 - assertVisible:
     text: "I consent"
     optional: true

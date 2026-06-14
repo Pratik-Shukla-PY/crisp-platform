@@ -1,6 +1,6 @@
-"""Media storage abstraction — local disk vs. AWS S3.
+"""Media storage abstraction - local disk vs. AWS S3.
 
-Apr 2026 — Phase 1 of the UNDP scaling story. Previously every photo,
+Apr 2026 - Phase 1 of the UNDP scaling story. Previously every photo,
 audio file, partial chunk, and satellite verify thumbnail was written
 to a Docker-named-volume on the EC2 instance's local disk
 (`uploads:/usr/share/nginx/html/static`). That made EC2 a single
@@ -11,21 +11,21 @@ architecture didn't scale horizontally.
 This module abstracts the "where do media bytes live" decision behind
 a single MediaStorage protocol. Two backends ship today:
 
-  • LocalStorage  — preserves legacy behaviour (writes to UPLOAD_DIR,
+  • LocalStorage  - preserves legacy behaviour (writes to UPLOAD_DIR,
                     serves via nginx /static/). Default for dev / CI.
-  • S3Storage     — writes to a private S3 bucket via boto3. Reads
+  • S3Storage     - writes to a private S3 bucket via boto3. Reads
                     return signed presigned URLs with a short TTL.
                     For prod EC2.
 
 Selected by the `MEDIA_BACKEND` env var (default `local`). The S3
-backend uses boto3's default credential chain — on EC2 that picks up
+backend uses boto3's default credential chain - on EC2 that picks up
 the IAM instance profile automatically; locally it falls through to
 ~/.aws/credentials etc. We never ship static AWS creds in env vars.
 
 DB storage format (`media.url` column):
 
-  • LocalStorage  — `/static/<filename>` (legacy, unchanged)
-  • S3Storage     — `s3://<key>` (a marker, not a real URL — backend
+  • LocalStorage  - `/static/<filename>` (legacy, unchanged)
+  • S3Storage     - `s3://<key>` (a marker, not a real URL - backend
                     converts to a signed https:// URL on response
                     serialization via storage.public_url())
 
@@ -36,7 +36,7 @@ Migrating between backends:
     old `s3://` rows still readable as long as S3 is reachable
     (S3Storage.read() handles both formats during migration windows).
 
-The interface is intentionally narrow — just the operations the rest
+The interface is intentionally narrow - just the operations the rest
 of the app actually needs. No fancy directory listings, no streaming
 uploads (we already buffer in memory anyway for chunk assembly).
 """
@@ -59,20 +59,20 @@ class MediaStorage(Protocol):
 
     def save(self, filename: str, data: bytes, content_type: str = "application/octet-stream") -> str:
         """Persist `data` under `filename`. Return the value to store
-        in DB (media.url). Idempotent — overwriting an existing key
+        in DB (media.url). Idempotent - overwriting an existing key
         is fine for chunked-upload reassembly."""
         ...
 
     def read(self, db_url: str) -> bytes:
         """Read back the bytes given the DB-stored URL. Backends are
-        forgiving — S3Storage will read legacy `/static/...` rows from
+        forgiving - S3Storage will read legacy `/static/...` rows from
         local disk if the bytes haven't been migrated yet, so the
         migration window doesn't break readers."""
         ...
 
     def delete(self, db_url: str) -> bool:
         """Remove the object. Returns True on success, False if the
-        object didn't exist (idempotent — purge / GDPR-delete callers
+        object didn't exist (idempotent - purge / GDPR-delete callers
         treat both the same)."""
         ...
 
@@ -85,13 +85,13 @@ class MediaStorage(Protocol):
     def exists(self, db_url: str) -> bool:
         """True iff the object behind `db_url` is durably present in the
         backend (local: file on disk; S3: HEAD 200). Used to gate
-        destructive cleanups — e.g. reclaiming media_chunks only once the
+        destructive cleanups - e.g. reclaiming media_chunks only once the
         assembled file is CONFIRMED stored. Returns False on any
         uncertainty (empty / cross-backend URL, 404, transient error) so
         callers stay conservative and keep the redundant copy."""
         ...
 
-    # ── B-F (May 2026) — internal-only store for pre-blur retention ──
+    # ── B-F (May 2026) - internal-only store for pre-blur retention ──
     # These methods write/read/delete from a sibling namespace that is
     # NEVER exposed via public routes. Used by the retroactive blur
     # upgrade path: when a higher-tier arrival detects additional PII,
@@ -115,7 +115,7 @@ class MediaStorage(Protocol):
         """Remove `pre_blur/<key>`. Idempotent."""
         ...
 
-    # ── R3.b (May 2026) — disk-orphan reconciliation surface ──
+    # ── R3.b (May 2026) - disk-orphan reconciliation surface ──
     # The daemon's Action ⑦ walks the storage backend and cross-
     # references against live Media.url rows. Anything older than
     # CRISP_HARD_ABANDON_DAYS with no live referrer is deleted.
@@ -131,7 +131,7 @@ class MediaStorage(Protocol):
         last-modified timestamp.
 
         If ``older_than_unix_ts`` is supplied, only entries with
-        ``mtime <= older_than_unix_ts`` are returned — this lets the
+        ``mtime <= older_than_unix_ts`` are returned - this lets the
         daemon avoid pulling fresh entries it would never delete.
 
         Implementations MUST be paginated under the hood (S3 buckets
@@ -182,7 +182,7 @@ class LocalStorage:
                 "Set MEDIA_BACKEND=s3 to read this row, or run the "
                 "reverse migration script."
             )
-        # Bare filename or legacy oddity — try as a relative path.
+        # Bare filename or legacy oddity - try as a relative path.
         path = os.path.join(self.upload_dir, db_url.lstrip("/"))
         with open(path, "rb") as f:
             return f.read()
@@ -205,11 +205,11 @@ class LocalStorage:
         if not db_url or db_url.startswith("s3://"):
             # Empty, or a cross-backend s3:// row we can't confirm locally.
             return False
-        # Bare/relative filename (legacy oddity) — try under upload_dir.
+        # Bare/relative filename (legacy oddity) - try under upload_dir.
         return os.path.isfile(os.path.join(self.upload_dir, db_url.lstrip("/")))
 
     def public_url(self, db_url: str) -> str:
-        # Pass through — dashboard's getMediaUrl() prepends BACKEND_HOST
+        # Pass through - dashboard's getMediaUrl() prepends BACKEND_HOST
         # to relative paths starting with `/`.
         return db_url
 
@@ -248,7 +248,7 @@ class LocalStorage:
         except FileNotFoundError:
             return False
 
-    # ── R3.b — disk-orphan reconciliation surface (local) ──────────
+    # ── R3.b - disk-orphan reconciliation surface (local) ──────────
     def list_keys(
         self, *, prefix: str = "", older_than_unix_ts: float | None = None,
         limit: int = 1000,
@@ -301,7 +301,7 @@ class S3Storage:
     Credentials: we rely on boto3's default chain. In prod that's the
     EC2 instance-profile attached IAM role; locally it falls through
     to ~/.aws/credentials, env vars, or container metadata. We never
-    accept static creds in our own env vars — keeps the rotation
+    accept static creds in our own env vars - keeps the rotation
     surface aligned with AWS-native practice.
     """
 
@@ -325,7 +325,7 @@ class S3Storage:
         # URLs (`<bucket>.s3.<region>.amazonaws.com/...`) instead of the
         # legacy global form (`<bucket>.s3.amazonaws.com/...`). Without
         # this, presigned URLs got a 307 redirect to the regional
-        # endpoint at request time — fine for direct fetches, but the
+        # endpoint at request time - fine for direct fetches, but the
         # dashboard's CSP check happens BEFORE the redirect fires, so
         # we had to whitelist both hosts. SigV4 is required for
         # ap-south-1 + later regions and is the future-default anyway.
@@ -340,7 +340,7 @@ class S3Storage:
         )
 
     def save(self, filename: str, data: bytes, content_type: str = "application/octet-stream") -> str:
-        # Object key matches the filename — keeps debug + grep simple
+        # Object key matches the filename - keeps debug + grep simple
         # ("just look for sat_xyz_2.png" works in the bucket too).
         # ServerSideEncryption=AES256 is the default but explicit for
         # compliance auditing. No ACL set; bucket-default-private.
@@ -392,7 +392,7 @@ class S3Storage:
                 self.s3.head_object(Bucket=self.bucket, Key=key)
                 return True
             except Exception:
-                # 404 / ClientError / transient — treat as "not confirmed
+                # 404 / ClientError / transient - treat as "not confirmed
                 # present" so callers stay conservative (keep the chunks).
                 return False
         if db_url.startswith("/static/") and self.legacy_local_dir:
@@ -416,14 +416,14 @@ class S3Storage:
                 # SOMETHING. The dashboard will 403 on this URL but
                 # at least the rest of the response renders.
                 return db_url
-        # Legacy /static/ pass-through — dashboard prepends BACKEND_HOST.
+        # Legacy /static/ pass-through - dashboard prepends BACKEND_HOST.
         return db_url
 
     # ── B-F internal-store interface ──────────────────────────────────
     # Pre-blur internal store. Lives under a `pre_blur/` prefix in the
     # SAME bucket. The bucket-level policy does NOT have any public
     # readability on this prefix; even the existing `media.url` public
-    # routes don't resolve here — these bytes never leave the
+    # routes don't resolve here - these bytes never leave the
     # server-internal sphere.
 
     def save_internal(
@@ -457,7 +457,7 @@ class S3Storage:
             logger.warning(f"S3 delete_internal failed for {s3_key}: {exc}")
             return False
 
-    # ── R3.b — disk-orphan reconciliation surface (S3) ────────────
+    # ── R3.b - disk-orphan reconciliation surface (S3) ────────────
     def list_keys(
         self, *, prefix: str = "", older_than_unix_ts: float | None = None,
         limit: int = 1000,

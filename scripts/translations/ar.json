@@ -1,7 +1,7 @@
 {
   "add_to_homescreen": "+ إضافة إلى الشاشة الرئيسية",
   "aria_add_to_homescreen": "إضافة CRISP إلى شاشتك الرئيسية",
-  "aria_channels_strip": "طرق أخرى للإبلاغ — اضغط لرؤية جميع القنوات",
+  "aria_channels_strip": "طرق أخرى للإبلاغ - اضغط لرؤية جميع القنوات",
   "login_channel_email": "البريد الإلكتروني",
   "login_channel_phone": "الهاتف",
   "login_code_sent_prefix": "أرسلنا رمزاً مكوّناً من 6 أرقام إلى",
@@ -27,5 +27,5 @@
   "settings_logout": "تسجيل الخروج",
   "settings_title": "الإعدادات",
   "settings_unlink_device": "إلغاء ربط هذا الجهاز",
-  "summary_none": "—"
+  "summary_none": "-"
 }

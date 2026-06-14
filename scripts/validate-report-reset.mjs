@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * validate-report-reset.mjs — permanent guard against the recurring
+ * validate-report-reset.mjs - permanent guard against the recurring
  * "stale report state leaks into the next report" bug.
  *
  * Every field written to the global PWA `state` object must be classified as
@@ -11,7 +11,7 @@
  * in neither set (or if the two sets overlap).
  *
  * Result: a future PR that adds a capture field (e.g. `state.newThing = …`)
- * without deciding whether it resets or persists CANNOT pass CI — so the leak
+ * without deciding whether it resets or persists CANNOT pass CI - so the leak
  * class cannot silently return. The reset itself stays correct because
  * `reportLifecycleReset()` does `Object.assign(state, _freshReportState())`.
  *
@@ -78,11 +78,11 @@ if (presMatch) for (const m of presMatch[1].matchAll(/['"]([A-Za-z_]\w*)['"]/g))
 let problems = 0;
 const fail = (msg) => { console.error(`${RED}✘${RESET} ${msg}`); problems++; };
 
-if (factoryKeys.size === 0) fail('could not extract _freshReportState() keys — has the factory moved or changed shape?');
-if (preserved.size === 0) fail('could not extract _PRESERVED_STATE_KEYS — has the array moved or changed shape?');
+if (factoryKeys.size === 0) fail('could not extract _freshReportState() keys - has the factory moved or changed shape?');
+if (preserved.size === 0) fail('could not extract _PRESERVED_STATE_KEYS - has the array moved or changed shape?');
 
 // 3. Overlap check.
-for (const k of factoryKeys) if (preserved.has(k)) fail(`"${k}" is in BOTH _freshReportState() and _PRESERVED_STATE_KEYS — pick one.`);
+for (const k of factoryKeys) if (preserved.has(k)) fail(`"${k}" is in BOTH _freshReportState() and _PRESERVED_STATE_KEYS - pick one.`);
 
 // 4. Scan every write target.
 const classified = new Set([...factoryKeys, ...preserved]);
@@ -102,7 +102,7 @@ for (const rel of SCAN) {
 }
 
 // COMPUTED-KEY blind spot (Jun 2026): the review UNDP sheet writes state via
-// `_setState({ [row.getAttribute('data-undp-field')]: … })` — a computed key the
+// `_setState({ [row.getAttribute('data-undp-field')]: … })` - a computed key the
 // scans above cannot see. The field names live in index.html as
 // data-undp-field="…" attributes, so harvest them there too. This is exactly
 // how debris_present / electricity_status / water_status / health_status /
@@ -128,7 +128,7 @@ for (const [k, files] of [...offenders].sort()) {
 
 console.log(`${YELLOW}report-reset audit${RESET}: ${factoryKeys.size} reset-per-report keys, ${preserved.size} preserved keys.`);
 if (problems) {
-    console.error(`\n${RED}FAIL${RESET} — ${problems} issue(s). Classify each field: add it to _freshReportState() in mobile-app/src/app.js (resets every report) OR to _PRESERVED_STATE_KEYS (survives across reports). This guard exists so report state can never silently leak between reports.`);
+    console.error(`\n${RED}FAIL${RESET} - ${problems} issue(s). Classify each field: add it to _freshReportState() in mobile-app/src/app.js (resets every report) OR to _PRESERVED_STATE_KEYS (survives across reports). This guard exists so report state can never silently leak between reports.`);
     process.exit(1);
 }
-console.log(`${GREEN}PASS${RESET} — every state.* field is classified reset-or-preserve.`);
+console.log(`${GREEN}PASS${RESET} - every state.* field is classified reset-or-preserve.`);

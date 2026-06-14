@@ -1,5 +1,5 @@
 """
-Security Core — JWT, password hashing, OTP generation, email delivery.
+Security Core - JWT, password hashing, OTP generation, email delivery.
 Zero-trust, GDPR-compliant, enterprise-ready.
 """
 import os
@@ -13,7 +13,7 @@ from typing import Optional, Any
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# May 2026 — JWT migrated from python-jose → PyJWT to close
+# May 2026 - JWT migrated from python-jose → PyJWT to close
 # CVE-2024-33663 (algorithm confusion) + CVE-2024-33664 (DoS via crafted
 # JWE). PyJWT signs HS256 byte-for-byte identically, so existing tokens
 # in DB / cookies / clients keep verifying through the cutover. We
@@ -22,7 +22,7 @@ from email.mime.multipart import MIMEMultipart
 # tests) don't have to change.
 import jwt
 from jwt import PyJWTError as JWTError
-# May 2026 — Password hashing migrated OFF passlib (last release 2020;
+# May 2026 - Password hashing migrated OFF passlib (last release 2020;
 # imports the removed-in-Python-3.13 `crypt` stdlib module; its
 # detect_wrap_bug self-test breaks on bcrypt 5.x). We call bcrypt
 # directly. Wire format unchanged ($2b$12$…) so historical password
@@ -33,9 +33,9 @@ logger = logging.getLogger(__name__)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-# P1.2 — JWT secret. In production we REQUIRE the env var. A previous fallback
+# P1.2 - JWT secret. In production we REQUIRE the env var. A previous fallback
 # built the secret as "crisp-dev-secret-change-in-production-" + random hex,
-# which rotated on every worker restart — that invalidated everyone's tokens
+# which rotated on every worker restart - that invalidated everyone's tokens
 # AND meant a misconfigured prod ran with dev-grade secret generation. Now:
 #   - APP_ENV=production + missing var → raise at import (service won't boot)
 #   - APP_ENV=dev        + missing var → auto-generate a dev secret and log a
@@ -51,10 +51,10 @@ if not _JWT_SECRET_ENV:
             "deploy environment. Aborting boot to avoid shipping with a "
             "dev-grade key."
         )
-    # Dev mode — generate an ephemeral secret + shout about it.
+    # Dev mode - generate an ephemeral secret + shout about it.
     _JWT_SECRET_ENV = "dev-insecure-" + secrets.token_hex(16)
     logger.warning(
-        "⚠  JWT_SECRET not set and APP_ENV=%s — using an ephemeral dev secret. "
+        "⚠  JWT_SECRET not set and APP_ENV=%s - using an ephemeral dev secret. "
         "All tokens will be invalidated on next restart.", _APP_ENV
     )
 JWT_SECRET = _JWT_SECRET_ENV
@@ -98,9 +98,9 @@ def hash_password(plain: str) -> str:
 def verify_password(plain: str, hashed: str) -> bool:
     """Verify a plaintext against a stored bcrypt hash. Accepts BOTH new
     hashes (produced by this module) AND legacy hashes from the passlib
-    era — same $2b$… wire format, so back-compat is byte-level identity.
+    era - same $2b$… wire format, so back-compat is byte-level identity.
     Returns False on any error (malformed hash, wrong algorithm prefix)
-    rather than raising — matches passlib's prior contract so call sites
+    rather than raising - matches passlib's prior contract so call sites
     in auth.py don't change."""
     if not hashed or not isinstance(hashed, str):
         return False
@@ -109,7 +109,7 @@ def verify_password(plain: str, hashed: str) -> bool:
         return _bcrypt.checkpw(pw_bytes, hashed.encode("utf-8"))
     except (ValueError, TypeError):
         # Malformed hash (e.g. legacy non-bcrypt prefix, empty, or
-        # mutated bytes) — same outcome as passlib's CryptContext.verify
+        # mutated bytes) - same outcome as passlib's CryptContext.verify
         # when the input isn't a recognisable hash.
         return False
 
@@ -185,12 +185,12 @@ def get_otp_expiry() -> datetime:
 def send_otp_email(email: str, code: str, purpose: str) -> bool:
     """Send OTP via SMTP. Returns True on success."""
     subject_map = {
-        "SIGNUP": "CRISP — Verify Your Email",
-        "LOGIN": "CRISP — Your Login Code",
-        "MFA": "CRISP — Verification Required",
-        "PASSWORD_RESET": "CRISP — Password Reset Code",
+        "SIGNUP": "CRISP - Verify Your Email",
+        "LOGIN": "CRISP - Your Login Code",
+        "MFA": "CRISP - Verification Required",
+        "PASSWORD_RESET": "CRISP - Password Reset Code",
     }
-    subject = subject_map.get(purpose, "CRISP — Verification Code")
+    subject = subject_map.get(purpose, "CRISP - Verification Code")
 
     html_body = f"""
     <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;background:#111827;color:#f1f5f9;border-radius:16px;">
@@ -208,7 +208,7 @@ def send_otp_email(email: str, code: str, purpose: str) -> bool:
     """
 
     if not SMTP_HOST or not SMTP_USER:
-        logger.warning(f"[OTP] SMTP not configured — OTP for {email}: {code} (purpose: {purpose})")
+        logger.warning(f"[OTP] SMTP not configured - OTP for {email}: {code} (purpose: {purpose})")
         return True  # Dev mode: log to console
 
     try:

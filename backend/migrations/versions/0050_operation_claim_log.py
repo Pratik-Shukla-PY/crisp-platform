@@ -1,4 +1,4 @@
-"""Phase 3 — operation_claim_log (reversible cluster-claim audit / undo trail)
+"""Phase 3 - operation_claim_log (reversible cluster-claim audit / undo trail)
 
 Revision ID: 0050_operation_claim_log
 Revises: 0049_building_responder_phase3
@@ -7,8 +7,8 @@ Create Date: 2026-06-13 (Operations redesign Phase 3c)
 Append-only log of "Claim (with undo)" actions: launching an operation from the
 un-operationalised critical cluster bulk-claims reports (sets crisis_event_id);
 each CLAIMED row snapshots exactly which report ids were claimed so the action is
-reversible (UNCLAIMED un-sets them). A dedicated table — NOT DeletionAuditLog
-(anonymized + non-reversible, wrong semantics) — keyed by operation for cheap undo
+reversible (UNCLAIMED un-sets them). A dedicated table - NOT DeletionAuditLog
+(anonymized + non-reversible, wrong semantics) - keyed by operation for cheap undo
 lookups; mirrors the BuildingEvent append-only/event_kind house style.
 """
 from typing import Sequence, Union

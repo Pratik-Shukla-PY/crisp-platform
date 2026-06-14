@@ -1,7 +1,7 @@
-# Database Migrations — Alembic Workflow
+# Database Migrations - Alembic Workflow
 
 Effective **April 2026**, CRISP uses Alembic for all DB schema changes.
-Before that, the app relied on SQLAlchemy `create_all()` at boot — which
+Before that, the app relied on SQLAlchemy `create_all()` at boot - which
 worked for a hackathon but would lose data the moment we shipped a
 column rename or type change. Alembic is a prerequisite for any
 credible claim about scaling to UNDP's 50k/250k/500k reports-per-crisis
@@ -10,7 +10,7 @@ DB on every schema update.
 
 ## Setup once
 
-Nothing special — Alembic is in `backend/requirements.txt`. Configuration
+Nothing special - Alembic is in `backend/requirements.txt`. Configuration
 lives in `backend/alembic.ini` and `backend/migrations/env.py`. The
 `env.py` is wired so that:
 
@@ -45,7 +45,7 @@ alembic history --verbose
 For production, set `DATABASE_URL` to the Postgres DSN before running
 `alembic upgrade head`. See `.env.production.example`.
 
-## Postgres dev setup (Apr 2026 — full-switch)
+## Postgres dev setup (Apr 2026 - full-switch)
 
 The full migration chain (0002 → 0006) has been verified end-to-end on
 PostgreSQL 15 and lives in CI as a Postgres-service matrix cell. To
@@ -82,14 +82,14 @@ sprint by using `.astimezone(utc)` instead of `.replace(tzinfo=utc)`.
 
 Two of the six migrations have explicit Postgres branches:
 
-  * **0003_infra** — uses `ALTER TYPE infratypeenum ADD VALUE IF NOT
+  * **0003_infra** - uses `ALTER TYPE infratypeenum ADD VALUE IF NOT
     EXISTS` (Postgres-only, autocommit-block) to widen the enum BEFORE
     the backfill UPDATE can write `RESIDENTIAL` / `COMMUNITY` / etc.
     into the column. SQLite is untyped and accepts the new values
     directly. The backfill also uses `infrastructure_type::text` when
     `UPPER()`-ing the enum on Postgres because the planner refuses
     `UPPER(enum_col)` without an explicit cast.
-  * **0005_pii** — the backfill `WHERE client_blur_applied = :truthy`
+  * **0005_pii** - the backfill `WHERE client_blur_applied = :truthy`
     binds a Python `True` rather than the literal `1`; SQLAlchemy emits
     the right token for each dialect (`TRUE` on Postgres, `1` on SQLite).
 
@@ -106,7 +106,7 @@ cp crisp_local.db crisp_local.db.pre-alembic.bak
 # Tell Alembic this DB already has the baseline schema
 alembic stamp 7964f14c120d
 
-# Apply the follow-on migrations — the 0002 step handles the
+# Apply the follow-on migrations - the 0002 step handles the
 # crisis_category column addition + legacy NO_DAMAGE → MINIMAL
 # backfill without data loss.
 alembic upgrade head
@@ -120,12 +120,12 @@ in one shot.
 ## Workflow for a new model change
 
 1. Edit `backend/app/models/*.py`.
-2. Run `alembic revision --autogenerate -m "…"` — inspect the generated
+2. Run `alembic revision --autogenerate -m "…"` - inspect the generated
    migration carefully, Alembic cannot detect every change reliably (in
    particular it misses server-side defaults and enum-value edits).
 3. Test with `alembic upgrade head` against a throw-away SQLite DB
    (see `tests/test_migrations.py` for the pattern).
-4. Run `pytest tests/test_migrations.py` — the `test_migrated_schema_*`
+4. Run `pytest tests/test_migrations.py` - the `test_migrated_schema_*`
    tests fail CI if the migration and models drift.
 5. Commit the migration alongside the model change.
 
@@ -134,11 +134,11 @@ in one shot.
   * **SQLite `ALTER TABLE` is limited**. The `render_as_batch=True`
     setting in `env.py` lets Alembic work around this by recreating
     tables. Still avoid anything that would break a partial online
-    migration in Postgres — no destructive drops without a paired
+    migration in Postgres - no destructive drops without a paired
     backfill migration first.
   * **Enum value changes need manual SQL**. Alembic autogenerate ignores
     enum member additions. When adding a new value (e.g. a new
-    `CrisisTypeEnum`), write the migration by hand — see
+    `CrisisTypeEnum`), write the migration by hand - see
     `migrations/versions/0002_backfill_crisis_category.py` as a model.
   * **Never edit a migration after it has shipped**. Write a follow-on
     migration instead. Production DBs that already ran the old version

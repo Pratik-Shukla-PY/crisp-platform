@@ -1,4 +1,4 @@
-# CRISP — Prod alignment with UNDP must-haves
+# CRISP - Prod alignment with UNDP must-haves
 
 **Status**: 2026-04-26 audit
 **Live URL**: https://undp.crisplabs.tech
@@ -38,7 +38,7 @@ backend's `/api/v1/reports/meta` POST handler:
 | Field | UI (PWA stage) | Backend field |
 |---|---|---|
 | Type of infrastructure (7 super-types + Other) | `#stage-infra` | `infrastructure_type` |
-| Nature of crisis (Natural / Tech / Human-made — 9 specific) | `#stage-crisis` | `crisis_type` |
+| Nature of crisis (Natural / Tech / Human-made - 9 specific) | `#stage-crisis` | `crisis_type` |
 | Damage classification (Minimal / Partial / Complete) | `#stage-extras` | `damage_classification` |
 | Debris yes/no | `#stage-extras` | `debris_present` |
 | Date and time | (auto, server_created_at) | `server_created_at` |
@@ -46,13 +46,13 @@ backend's `/api/v1/reports/meta` POST handler:
 | GPS coordinates / building-level | `#stage-where` (+ `#building-select-box`) | `gps_lat`, `gps_lng`, `building_id` |
 
 Modular Appendix-1 fields (electricity status, health services, pressing needs)
-are wired at backend enum level and exposed via `/api/v1/modules/applicable` —
+are wired at backend enum level and exposed via `/api/v1/modules/applicable` -
 verified by backend pytest, surfaced in PWA via the modular-render block in
 the review stage.
 
 ---
 
-## How prod is verified — deploy pipeline (current)
+## How prod is verified - deploy pipeline (current)
 
 ```
 git push origin main
@@ -109,8 +109,8 @@ by prod-smoke after being missed by initial deploy:
 | 10 | Normal refresh fails, hard-refresh works | SW `cacheFirst` does internal `fetch()` on miss; that fetch is governed by **`connect-src`**, not `script-src`/`style-src`/`font-src`; CSP omitted unpkg/cdnjs/gstatic from connect-src | Extend connect-src with SW-intercepted hosts; new prod-smoke tests (structural + behavioral) lock in invariant | prod-smoke iter 7 |
 | 11 | AR / ZH text rendered in inconsistent system fonts | Inter / Outfit don't ship CJK or full Arabic glyphs; browser fell through to whatever the device picked | Add Noto Sans Arabic + Noto Sans SC to Google Fonts URL + CSS cascade on PWA + dashboard | manual visual verify |
 | 12 | Geocoder returned Latin transliteration to AR/ZH callers | Mapbox `language=` + Nominatim `Accept-Language` hardcoded to "en"; w3w `language=` hardcoded "en" | Thread caller's locale through `geocode_text` → all 3 upstream APIs; pytest covers happy + bogus-fallback paths | backend pytest +2 |
-| 13 | Browser HTTP cache pinning the OLD CSP — fix #10 deployed but normal-refresh still failed | nginx didn't send `Cache-Control` on HTML, so browsers heuristic-cached index.html for hours/days. The cached response carried the OLD CSP RESPONSE HEADER. Even after the connect-src fix landed, browsers kept applying the cached old CSP. Hard-refresh worked because it bypasses HTTP cache. | (a) `set $crisp_csp` at server level + nested `location ~ \.html$` and `~ sw\.js$` per prefix block emitting `Cache-Control: no-cache, must-revalidate`. (b) SW navigation bypass uses `fetch(req, { cache: 'no-cache' })` so SW-routed navigations also force-revalidate. (c) Cache versions bumped to evict stale clients. | prod-smoke iter 8 (new "HTML responses set Cache-Control: no-cache" assertion) |
-| 14 | After fix #13, normal-refresh still failed for tile layers — `*.basemaps.cartocdn.com` + `server.arcgisonline.com` 503'd | Same SW-context-fetch bug class as #10 but for the tile hosts. They're in img-src for browser-driven `<img>` loads, but the dashboard SW's catch-all routes ALL cross-origin GETs through fetch(request) which is connect-src governed. img-src is fine on first visit; once SW claims the page, every fetch needs connect-src. Earlier fix #10 only covered the unpkg/cdnjs/gstatic trio because that's what the user's HAR showed. | connect-src extended with `*.tile.openstreetmap.org`, `*.basemaps.cartocdn.com`, `server.arcgisonline.com`. Structural prod-smoke test extended with these hosts + behavioral test extended with two tile probes (no-cors mode). | prod-smoke iter 9 |
+| 13 | Browser HTTP cache pinning the OLD CSP - fix #10 deployed but normal-refresh still failed | nginx didn't send `Cache-Control` on HTML, so browsers heuristic-cached index.html for hours/days. The cached response carried the OLD CSP RESPONSE HEADER. Even after the connect-src fix landed, browsers kept applying the cached old CSP. Hard-refresh worked because it bypasses HTTP cache. | (a) `set $crisp_csp` at server level + nested `location ~ \.html$` and `~ sw\.js$` per prefix block emitting `Cache-Control: no-cache, must-revalidate`. (b) SW navigation bypass uses `fetch(req, { cache: 'no-cache' })` so SW-routed navigations also force-revalidate. (c) Cache versions bumped to evict stale clients. | prod-smoke iter 8 (new "HTML responses set Cache-Control: no-cache" assertion) |
+| 14 | After fix #13, normal-refresh still failed for tile layers - `*.basemaps.cartocdn.com` + `server.arcgisonline.com` 503'd | Same SW-context-fetch bug class as #10 but for the tile hosts. They're in img-src for browser-driven `<img>` loads, but the dashboard SW's catch-all routes ALL cross-origin GETs through fetch(request) which is connect-src governed. img-src is fine on first visit; once SW claims the page, every fetch needs connect-src. Earlier fix #10 only covered the unpkg/cdnjs/gstatic trio because that's what the user's HAR showed. | connect-src extended with `*.tile.openstreetmap.org`, `*.basemaps.cartocdn.com`, `server.arcgisonline.com`. Structural prod-smoke test extended with these hosts + behavioral test extended with two tile probes (no-cors mode). | prod-smoke iter 9 |
 
 Every future iteration of the prod-smoke gate gets cheaper because the bug
 class shifts from "I have to manually click around in 3 browsers" to "the

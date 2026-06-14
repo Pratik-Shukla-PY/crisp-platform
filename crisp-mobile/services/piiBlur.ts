@@ -1,5 +1,5 @@
 /**
- * CRISP Mobile — Client-side PII face pixelation.
+ * CRISP Mobile - Client-side PII face pixelation.
  *
  * BlazeFace (the same face-detection model the backend uses) runs in-process
  * and pixelates every face it finds client-side *before* the photo is
@@ -11,7 +11,7 @@
  *
  *   1. jpeg-js decodes the base64 JPEG into an RGBA Uint8Array.
  *   2. @tensorflow-models/blazeface detects faces on a 256-px downscaled tensor.
- *   3. We pixelate every face bbox directly on the pixel buffer — averaging
+ *   3. We pixelate every face bbox directly on the pixel buffer - averaging
  *      10×10 blocks destroys enough facial detail to be irreversible, much
  *      like the server's blur but even stronger.
  *   4. jpeg-js re-encodes at quality 85 → base64.
@@ -36,7 +36,7 @@ const jpeg = require('jpeg-js') as {
 let _model: blazeface.BlazeFaceModel | null = null;
 let _loading: Promise<blazeface.BlazeFaceModel> | null = null;
 
-// Apr 2026 — TF.js in Expo Go needs `fetch` to be on `tf.env().global` so
+// Apr 2026 - TF.js in Expo Go needs `fetch` to be on `tf.env().global` so
 // `@tensorflow-models/blazeface` can download its GraphModel weights from the
 // TFHub CDN. On bare RN `global.fetch` exists but tf.env() may not proxy it,
 // which surfaces as "Cannot read property 'fetch' of undefined". Shim both
@@ -73,7 +73,7 @@ export async function ensureModel(): Promise<blazeface.BlazeFaceModel> {
   if (_loading) return _loading;
   _loading = (async () => {
     _shimTfGlobals();
-    // WebGL isn't available in RN — TF.js picks cpu automatically, but be explicit.
+    // WebGL isn't available in RN - TF.js picks cpu automatically, but be explicit.
     try { await tf.setBackend('cpu'); } catch { /* backend may already be set */ }
     await tf.ready();
     const m = await blazeface.load({ maxFaces: 10 });
@@ -164,10 +164,10 @@ async function _detectFaces(rgba: Uint8Array, w: number, h: number): Promise<{x:
     const preds = await model.estimateFaces(input, /*returnTensors=*/false, /*flipHorizontal=*/false);
     const invScale = 1 / scale;
     // Confidence filter: BlazeFace's default threshold (~0.5) produces many
-    // false positives on shadows, repeating patterns, or leaf-textures — we
+    // false positives on shadows, repeating patterns, or leaf-textures - we
     // were blurring plenty of images without faces. Raise the bar to 0.85.
     // Callers still get [] if nothing is above threshold, which triggers the
-    // "no faces — return original bytes unchanged" fast path in blurFacesBase64.
+    // "no faces - return original bytes unchanged" fast path in blurFacesBase64.
     const CONF_THRESHOLD = 0.85;
     return (preds as any[])
       .filter((p) => {
@@ -190,7 +190,7 @@ async function _detectFaces(rgba: Uint8Array, w: number, h: number): Promise<{x:
 }
 
 /** Pixelate every face region directly on the RGBA buffer. Uses block-average
- *  mosaicking + ellipse clip — fast (O(pixels)), irreversible, and matches
+ *  mosaicking + ellipse clip - fast (O(pixels)), irreversible, and matches
  *  the visual expectation set by the server's oval-blur.
  *
  *  Phase 1 (Apr 2026):
@@ -212,7 +212,7 @@ function _pixelateFaces(rgba: Uint8Array, W: number, H: number, faces: { x:numbe
 
     // Block size: ~1/12 of the face's larger side, floored at 8 px and
     // capped at 24 px. A 100-px face becomes an 8-px mosaic; a 1000-px
-    // face (at capture res) becomes a 24-px mosaic — still 1/40 of the
+    // face (at capture res) becomes a 24-px mosaic - still 1/40 of the
     // face, enough to destroy identity while staying fast.
     const block = Math.max(8, Math.min(24, Math.round(Math.max(w, h) / 12)));
     const cx = x + w / 2;

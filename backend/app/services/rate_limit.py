@@ -8,7 +8,7 @@ Why this matters
 ================
 Production runs N uvicorn workers behind nginx. The legacy in-memory
 counter is per-PROCESS, so an attacker sending 30 req/min per worker
-got 30·N req/min through the front door — defeating the rate-limit's
+got 30·N req/min through the front door - defeating the rate-limit's
 fairness story. A coordinated burst at N=8 workers gets ~240 req/min,
 which is enough to drown a single device's submission flow.
 
@@ -23,7 +23,7 @@ exceeds the cap. Boundary effect: a client can briefly burst 2× the
 nominal rate at the window edge. Acceptable trade-off vs.
 sliding-window-log complexity (O(N) per request, multi-roundtrip).
 
-UNDP must-have #12 (scale to 500k reports per crisis) — this is the
+UNDP must-have #12 (scale to 500k reports per crisis) - this is the
 mechanism that keeps a single misbehaving device from monopolising
 the meta-create pipe during a crisis surge.
 
@@ -39,7 +39,7 @@ Failure mode
 ============
 * ``REDIS_URL`` unset → in-memory fallback (dev + CI + first deploy).
 * ``REDIS_URL`` set but unreachable / auth-failed → log once, fall
-  back to in-memory for that request. Never raise — a 500 here would
+  back to in-memory for that request. Never raise - a 500 here would
   break submission entirely.
 """
 from __future__ import annotations
@@ -52,7 +52,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # ── Module-level state ───────────────────────────────────────────────
-# Legacy in-memory counter — kept as a fallback when Redis is unset
+# Legacy in-memory counter - kept as a fallback when Redis is unset
 # or unreachable. defaultdict semantics mirror the original
 # `app.main._rate_limits`.
 _inmemory_buckets: dict[str, list[float]] = defaultdict(list)
@@ -68,7 +68,7 @@ def _get_redis():
     """Lazy-init the Redis client.
 
     Returns ``None`` if REDIS_URL is empty OR if the client failed to
-    connect. The failure is logged once at WARNING — after that we
+    connect. The failure is logged once at WARNING - after that we
     silently fall back to in-memory until the process restarts.
     """
     global _redis_client, _redis_init_attempted, _redis_warning_logged
@@ -83,7 +83,7 @@ def _get_redis():
     try:
         from app.core.config import settings
     except Exception:
-        # Config not loadable — only happens during a botched import.
+        # Config not loadable - only happens during a botched import.
         return None
 
     url = (settings.REDIS_URL or "").strip()
@@ -112,7 +112,7 @@ def _get_redis():
     except Exception as e:
         if not _redis_warning_logged:
             logger.warning(
-                "[rate-limit] Redis unreachable (%s) — falling back to in-memory "
+                "[rate-limit] Redis unreachable (%s) - falling back to in-memory "
                 "counter. This means the rate-limit is per-WORKER instead of "
                 "distributed; under multi-worker deploys an attacker effectively "
                 "gets Nx the nominal rate. Fix REDIS_URL to restore distributed "
@@ -166,7 +166,7 @@ def _redis_check(client, key: str, max_requests: int, window: int) -> bool:
     fresh window.
 
     Atomicity: we use a pipeline so INCR + EXPIRE land in one round-
-    trip. EXPIRE is only set when the key is NEW (counter == 1) — if
+    trip. EXPIRE is only set when the key is NEW (counter == 1) - if
     it already existed, the TTL is whatever the prior hit set, which
     is exactly what we want for fixed-window semantics.
     """
@@ -180,11 +180,11 @@ def _redis_check(client, key: str, max_requests: int, window: int) -> bool:
         return count <= max_requests
     except Exception as e:
         # Redis went down mid-request. Log once + fall back to
-        # in-memory for THIS request — better degraded than 500.
+        # in-memory for THIS request - better degraded than 500.
         global _redis_warning_logged
         if not _redis_warning_logged:
             logger.warning(
-                "[rate-limit] Redis request failed mid-flight (%s) — falling back "
+                "[rate-limit] Redis request failed mid-flight (%s) - falling back "
                 "to in-memory for this request. Counters may drift until Redis "
                 "recovers.", e,
             )
@@ -196,7 +196,7 @@ def check_rate_limit(key: str, max_requests: int = 30, window: int = 60) -> bool
     """Returns ``True`` if the request is allowed, ``False`` if the
     caller should respond with HTTP 429.
 
-    Phase 1.8 (May 2026) — backed by Redis when REDIS_URL is set, in-
+    Phase 1.8 (May 2026) - backed by Redis when REDIS_URL is set, in-
     memory otherwise. Public signature unchanged from the legacy
     ``app.main.check_rate_limit``.
 

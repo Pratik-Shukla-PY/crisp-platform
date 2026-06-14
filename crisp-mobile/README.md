@@ -1,4 +1,4 @@
-# CRISP Mobile — React Native Android App
+# CRISP Mobile - React Native Android App
 
 Offline-first crisis reporting app for the UNDP InnoCentive Challenge.
 
@@ -32,12 +32,12 @@ cd android && ./gradlew assembleRelease
 - **PII warning**: Amber banner before photo capture.
 
 ## Screen Flow
-1. **Home** — Language picker + START button
-2. **Photo** — Camera/browse + PII warning
-3. **Audio** — Mic recording + text input
-4. **Review** — Type, severity, location, description
-5. **Send** — Summary + submit
-6. **Success** — Report ID + new report
+1. **Home** - Language picker + START button
+2. **Photo** - Camera/browse + PII warning
+3. **Audio** - Mic recording + text input
+4. **Review** - Type, severity, location, description
+5. **Send** - Summary + submit
+6. **Success** - Report ID + new report
 
 ## Backend API
 Uses the same endpoints as the PWA:

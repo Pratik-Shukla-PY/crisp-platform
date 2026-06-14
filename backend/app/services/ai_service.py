@@ -1,11 +1,11 @@
 """
-CRISP AI Service — Local Whisper-based audio transcription.
+CRISP AI Service - Local Whisper-based audio transcription.
 
 Uses faster-whisper (CTranslate2) for on-device transcription.
 Model: 'base' (good speed/accuracy balance on CPU).
 
 Key feature: task="translate" ensures ALL audio (Hindi, Spanish, Arabic, etc.)
-is output as English text — critical for control center operators.
+is output as English text - critical for control center operators.
 
 Used by: backend chunk assembly, IVR webhook, partial transcription during upload.
 """

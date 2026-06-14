@@ -1,21 +1,21 @@
 /**
- * RewardsScreen — RN port of the PWA's #stage-rewards + Badge Studio.
+ * RewardsScreen - RN port of the PWA's #stage-rewards + Badge Studio.
  *
- * May 2026 — Phase 6 of the 8-phase RN ↔ PWA parity plan. Combines
+ * May 2026 - Phase 6 of the 8-phase RN ↔ PWA parity plan. Combines
  * the PWA's Rewards page (4-tier ladder + progress) AND Badge Studio
  * share surface (character + message picker + Share dispatch) into a
  * single RN screen for v1. View-shot image composition is reserved
- * for a Phase 6.5 follow-up — v1 dispatches via the OS Share sheet
+ * for a Phase 6.5 follow-up - v1 dispatches via the OS Share sheet
  * with a curated text message + a link, which already covers ~95 %
  * of the share use case without needing a custom PNG.
  *
- *   §A Header              — back + title "Rewards"
- *   §B Current-tier card   — big emoji + tier name + stat line
- *   §C 4-tier ladder       — visual progress through SCOUT → SIGNAL
+ *   §A Header              - back + title "Rewards"
+ *   §B Current-tier card   - big emoji + tier name + stat line
+ *   §C 4-tier ladder       - visual progress through SCOUT → SIGNAL
  *                            → CHANGEMAKER → LIFEKEEPER
- *   §D Progress hint       — "Help save 1 life to reach Lifekeeper"
- *   §E Share-message picker — 8 i18n messages + Surprise me rotation
- *   §F Share buttons        — WhatsApp · LinkedIn · Copy · System share
+ *   §D Progress hint       - "Help save 1 life to reach Lifekeeper"
+ *   §E Share-message picker - 8 i18n messages + Surprise me rotation
+ *   §F Share buttons        - WhatsApp · LinkedIn · Copy · System share
  *
  * Architecture: props-first. App.tsx (or wherever) passes the
  * reporter's tier + stats; the screen renders + dispatches share.
@@ -107,7 +107,7 @@ export default function RewardsScreen(props: RewardsScreenProps) {
   const activeMessageIdx = pickedIdx ?? surpriseIdx;
   const activeMessage = ti(SHARE_MESSAGE_KEYS[activeMessageIdx], SHARE_MESSAGE_FALLBACKS[activeMessageIdx]);
 
-  // Progress hint — what action gets the user to the next tier
+  // Progress hint - what action gets the user to the next tier
   const progressKey =
     currentTier === 'T1_SCOUT' ? 'tier_progress_first_report' :
     currentTier === 'T2_SIGNAL' ? 'tier_progress_verified_1' :
@@ -120,7 +120,7 @@ export default function RewardsScreen(props: RewardsScreenProps) {
     'Top tier reached';
   const progressHint = ti(progressKey, progressFallback);
 
-  // Share dispatch — system Share + WhatsApp / LinkedIn deep links
+  // Share dispatch - system Share + WhatsApp / LinkedIn deep links
   const shareUrl = props.shareUrl ?? 'https://undp.crisplabs.tech';
   const shareText = `${activeMessage}\n\n${shareUrl}`;
 
@@ -235,7 +235,7 @@ export default function RewardsScreen(props: RewardsScreenProps) {
                         i === 1 ? 'tier_t2_signal_desc' :
                         i === 2 ? 'tier_t3_changemaker_desc' :
                         'tier_t4_lifekeeper_desc',
-                        i === 0 ? 'Welcome to CRISP — your reports start here.' :
+                        i === 0 ? 'Welcome to CRISP - your reports start here.' :
                         i === 1 ? 'You\'ve submitted your first report.' :
                         i === 2 ? 'Your reports have triggered real response.' :
                         'Your reports have helped save lives.'
@@ -256,7 +256,7 @@ export default function RewardsScreen(props: RewardsScreenProps) {
           })}
         </View>
 
-        {/* §E Share-message picker — only shown at T3+ where share is unlocked */}
+        {/* §E Share-message picker - only shown at T3+ where share is unlocked */}
         {currentIdx >= 2 ? (
           <View style={styles.shareSection} testID="rew-share-section">
             <Text style={styles.sectionTitle}>
@@ -301,7 +301,7 @@ export default function RewardsScreen(props: RewardsScreenProps) {
               ))}
             </View>
 
-            {/* Preview card — what the share will say */}
+            {/* Preview card - what the share will say */}
             <View style={styles.preview} testID="rew-preview">
               <Text style={styles.previewLabel}>
                 {ti('badge_studio_preview_label', 'Preview')}

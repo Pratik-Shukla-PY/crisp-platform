@@ -6,11 +6,11 @@ AFTER its own DB commit. We:
 
   1. Look up every PushSubscription tied to that reporter
      (by `device_hash` and/or `user_id`).
-  2. Build a small JSON payload (~200 bytes — Web Push payloads
+  2. Build a small JSON payload (~200 bytes - Web Push payloads
      are encrypted but capped at ~4 KB; small is more reliable).
   3. Hand each delivery to a ThreadPoolExecutor and return.
      The HTTP request that triggered the status change is NEVER
-     blocked on push delivery — providers can be slow / unreachable
+     blocked on push delivery - providers can be slow / unreachable
      / rate-limit us, none of which should affect the analyst
      workflow.
 
@@ -27,17 +27,17 @@ Failure handling:
     dead (some providers stop returning 410 after their own GC
     window).
   * 401 / 403 → VAPID key mismatch or expired claim. Operator
-    needs to look at the logs — could be a key rotation gone wrong.
+    needs to look at the logs - could be a key rotation gone wrong.
     Not retried (would just fail again with the same auth error).
 
 The in-task retry was added in Phase 2.3 (May 2026) after operator
 feedback that the report→response feedback loop felt unreliable
-when push providers hiccup. Retries are still cheap — they happen
+when push providers hiccup. Retries are still cheap - they happen
 on the executor thread, NEVER on the API request path.
 
 If VAPID is not configured (any of public-key / private-key /
 contact-email is empty) the entry point short-circuits with a
-single startup log line — the platform stays healthy, push is
+single startup log line - the platform stays healthy, push is
 just "feature off" rather than failing.
 """
 from __future__ import annotations
@@ -54,7 +54,7 @@ from app.models.report import PushSubscription, Report
 
 logger = logging.getLogger(__name__)
 
-# Single executor — all push deliveries share it. 4 workers is plenty
+# Single executor - all push deliveries share it. 4 workers is plenty
 # for the burst rate (status changes are human-paced; even at 100
 # concurrent reports each fanning out to 5 devices, the queue drains
 # within seconds).
@@ -62,7 +62,7 @@ _push_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="webpush")
 
 _warned_vapid_missing = False
 
-# Phase 2.3 (May 2026) — bounded retry + dead-letter knobs.
+# Phase 2.3 (May 2026) - bounded retry + dead-letter knobs.
 #
 # Retry policy is exponential: 1s / 2s / 4s = 7s total worst case
 # per delivery. Bounded to keep the executor pool from filling with
@@ -72,7 +72,7 @@ _warned_vapid_missing = False
 PUSH_RETRY_BACKOFF_S = [1, 2, 4]
 # Subscriptions whose failure_count crosses this threshold get
 # auto-pruned. Some providers stop returning 410 GONE after their
-# own GC window — without this prune, we'd retry forever on dead
+# own GC window - without this prune, we'd retry forever on dead
 # endpoints. Tuned at 10 (≈ a fortnight of daily-fail status
 # changes) so a brief provider outage doesn't accidentally prune a
 # healthy subscription.
@@ -89,7 +89,7 @@ def _vapid_configured() -> bool:
 
 
 def _vapid_claims() -> Dict[str, str]:
-    """RFC 8292 §2 — `sub` is the operator's contact URI."""
+    """RFC 8292 §2 - `sub` is the operator's contact URI."""
     return {"sub": f"mailto:{settings.VAPID_CONTACT_EMAIL}"}
 
 
@@ -130,7 +130,7 @@ def _send_one(
         # Provider returned an error response we can map.
         if exc.response is not None:
             return exc.response.status_code
-        # Network / encryption error — surface as 500-class so the
+        # Network / encryption error - surface as 500-class so the
         # caller treats it as transient (failure_count bump, leave
         # the row in place).
         logger.warning("[push] WebPushException without response: %s", exc)
@@ -143,13 +143,13 @@ def _deliver_one(
 ) -> None:
     """Run inside the executor pool. Owns its own DB session.
 
-    Phase 2.3 (May 2026) — bounded retry + dead-letter pruning.
+    Phase 2.3 (May 2026) - bounded retry + dead-letter pruning.
     Transient failures (429 / 5xx) now retry up to len(PUSH_RETRY_BACKOFF_S)
     times with exponential backoff before giving up. Auth failures
-    (401 / 403) skip retry — they'd just fail again with the same
+    (401 / 403) skip retry - they'd just fail again with the same
     error.
 
-    Any exception here is logged but not propagated — the executor
+    Any exception here is logged but not propagated - the executor
     swallows it anyway, and we don't want a malformed subscription
     to abort sibling deliveries.
     """
@@ -182,17 +182,17 @@ def _deliver_one(
             if 200 <= status_code < 300:
                 break
 
-            # Hard failures — break and let the post-loop handler
+            # Hard failures - break and let the post-loop handler
             # delete / log.
             if status_code in (404, 410, 401, 403):
                 break
 
-            # Transient — sleep + retry. If this was the LAST
+            # Transient - sleep + retry. If this was the LAST
             # attempt, fall through to the failure-bump branch.
             if attempt_idx < len(PUSH_RETRY_BACKOFF_S):
                 backoff = PUSH_RETRY_BACKOFF_S[attempt_idx]
                 logger.info(
-                    "[push] transient (status=%s) for sub %s — retrying in %ds "
+                    "[push] transient (status=%s) for sub %s - retrying in %ds "
                     "(attempt %d/%d)",
                     status_code, sub_id, backoff,
                     attempt_idx + 1, attempts,
@@ -207,15 +207,15 @@ def _deliver_one(
             return
 
         if status_code in (404, 410):
-            # Subscription is dead — provider explicitly says "this
+            # Subscription is dead - provider explicitly says "this
             # endpoint is gone." Drop the row; client will re-subscribe
             # next time the PWA loads.
-            logger.info("[push] sub %s gone (status=%s) — deleting", sub_id, status_code)
+            logger.info("[push] sub %s gone (status=%s) - deleting", sub_id, status_code)
             db.delete(sub)
             db.commit()
             return
 
-        # Transient (429, 5xx) — every retry exhausted — OR auth
+        # Transient (429, 5xx) - every retry exhausted - OR auth
         # (401/403, which skips retry). Bump failure + log.
         sub.last_failure_at = datetime.utcnow()
         sub.failure_count = (sub.failure_count or 0) + 1
@@ -225,7 +225,7 @@ def _deliver_one(
 
         if status_code in (401, 403):
             logger.error(
-                "[push] AUTH FAILURE (status=%s) for sub %s — VAPID key may be wrong "
+                "[push] AUTH FAILURE (status=%s) for sub %s - VAPID key may be wrong "
                 "or the claim expired. Investigate immediately.",
                 status_code, sub_id,
             )
@@ -239,7 +239,7 @@ def _deliver_one(
         # ── Dead-letter pruning ─────────────────────────────────
         # If we've failed N times in a row on the same endpoint,
         # auto-delete the subscription. Some push providers stop
-        # returning 410 for endpoints they've internally GC'd —
+        # returning 410 for endpoints they've internally GC'd -
         # without this threshold we'd retry forever. Operator sees
         # the dead-letter log line so they know which subscription
         # got pruned + why.
@@ -255,7 +255,7 @@ def _deliver_one(
                     db.commit()
                     logger.warning(
                         "[push] DEAD-LETTER pruning sub %s (endpoint=%s, "
-                        "failure_count=%d ≥ threshold=%d) — last status=%s",
+                        "failure_count=%d ≥ threshold=%d) - last status=%s",
                         sub_id, endpoint_for_log[:60] + "…",
                         new_fc, PUSH_DEAD_LETTER_THRESHOLD, status_code,
                     )
@@ -271,7 +271,7 @@ def _deliver_one(
 def _build_payload(report: "Report") -> Dict[str, Any]:
     """Map a Report row to the small notification payload.
 
-    Kept deliberately small — payloads are encrypted but providers
+    Kept deliberately small - payloads are encrypted but providers
     enforce a ~4 KB ceiling and bigger payloads have higher delivery
     failure rates on flaky links. The PWA's notificationclick handler
     uses `data.url` to open the right deep link.
@@ -318,7 +318,7 @@ def _subscriptions_for_reporter(
 
     A reporter may have multiple subscriptions: same person on phone +
     desktop, or same browser on multiple installs of the PWA. We push
-    to all of them — each is one device × one browser instance.
+    to all of them - each is one device × one browser instance.
 
     `OR` semantics: device_hash matches `device_hash IS NOT NULL` rows
     AND user_id matches `user_id IS NOT NULL` rows. A row that has
@@ -356,7 +356,7 @@ def push_report_status_change(report: "Report") -> int:
         if not _warned_vapid_missing:
             logger.info(
                 "[push] VAPID not configured (set VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / "
-                "VAPID_CONTACT_EMAIL to enable) — skipping all reporter notifications."
+                "VAPID_CONTACT_EMAIL to enable) - skipping all reporter notifications."
             )
             _warned_vapid_missing = True
         return 0
@@ -383,7 +383,7 @@ def push_report_status_change(report: "Report") -> int:
         if not subs:
             return 0
         payload = _build_payload(report)
-        # Capture the IDs before submitting — we don't want the executor
+        # Capture the IDs before submitting - we don't want the executor
         # threads holding references to the SQLAlchemy session objects.
         sub_ids = [s.id for s in subs]
     finally:
@@ -418,7 +418,7 @@ def upsert_subscription(
     The endpoint URL is globally unique per (browser × push provider)
     pair, so we use it as the natural dedup key. A repeat subscribe
     from the same device updates the identity columns (e.g. user
-    just logged in — device_hash stays the same but user_id is now
+    just logged in - device_hash stays the same but user_id is now
     set). This is idempotent on the client side: the PWA can call
     `POST /api/v1/push/subscribe` on every load without creating
     duplicate rows.
@@ -454,7 +454,7 @@ def upsert_subscription(
             sub.user_agent = user_agent
         if locale:
             sub.locale = locale
-        # Reset transient failure state — the client just told us they
+        # Reset transient failure state - the client just told us they
         # exist, so any past 5xx is stale.
         sub.failure_count = 0
         sub.last_failure_at = None

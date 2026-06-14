@@ -1,4 +1,4 @@
-"""media_upload_generation — R2.a: epoch column for zombie-replay defense
+"""media_upload_generation - R2.a: epoch column for zombie-replay defense
 
 Revision ID: 0041_media_upload_generation
 Revises: 0040_media_recovered_at_recovery
@@ -19,10 +19,10 @@ The fix is the canonical epoch pattern: the server tracks an integer
 generation on every chunk POST; the server rejects mismatched
 generations with 409 Conflict (response body includes the current
 generation so the client can resync). On revival from a soft-abandon,
-the server bumps the generation by 1 — any pre-abandonment in-flight
+the server bumps the generation by 1 - any pre-abandonment in-flight
 chunk replay now sees a stale generation and 409s harmlessly.
 
-Default value 1 keeps every existing client working — legacy clients
+Default value 1 keeps every existing client working - legacy clients
 that don't send the header are treated as "epoch 1", which matches the
 default-1 column value on every row.
 

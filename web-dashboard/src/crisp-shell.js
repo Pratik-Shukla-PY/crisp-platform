@@ -1,4 +1,4 @@
-/* crisp-shell.js — CRISP unified Command Center shell (global navigation bar).
+/* crisp-shell.js - CRISP unified Command Center shell (global navigation bar).
  *
  * A single persistent top bar shown on EVERY authed surface (Operations,
  * Crisis Intelligence Center, Exports, Crisis Forms, Organisation, Users,
@@ -8,13 +8,13 @@
  * reads as a single application instead of a stack of separate pages.
  *
  * It owns:
- *   • CRISP brand mark (→ Home) — the same ripple-tile used in the PWA/ops bar.
+ *   • CRISP brand mark (→ Home) - the same ripple-tile used in the PWA/ops bar.
  *   • Primary nav <nav id="cc-nav">: Home · Operations · Exports · Crisis Forms ·
  *     Organisation · Users · Account. Reproduces the exact contract the landing
  *     used to render (data-route / data-intent="users" / admin items disabled
  *     with an "admin" chip) so the role-gating + control-center e2e specs keep
- *     passing — the bar is now the single #cc-nav.
- *   • LIVE freshness badge + the user/role/profile menu — RE-PARENTED from the
+ *     passing - the bar is now the single #cc-nav.
+ *   • LIVE freshness badge + the user/role/profile menu - RE-PARENTED from the
  *     ops command-bar (#cache-freshness-badge / #user-menu) so there is exactly
  *     one of each across the app and all existing app.js wiring (by id) keeps
  *     working untouched.
@@ -57,7 +57,7 @@
   // Org identity in the brand (single source of branding across every surface).
   async function loadOrg() {
     try {
-      // no-store: org branding must be authoritative — never serve a stale
+      // no-store: org branding must be authoritative - never serve a stale
       // cached name after an admin updates it (see config.py GET / comment).
       const res = await fetch(`${BACKEND_HOST}/api/v1/config/`, { cache: 'no-store', headers: { Authorization: `Bearer ${token() || ''}` } });
       if (!res.ok) return;
@@ -88,7 +88,7 @@
   }
 
   const BAR_ID = 'crisp-globalnav';
-  // The ripple-tile CRISP mark — identical to index.html .command-bar .brand-icon
+  // The ripple-tile CRISP mark - identical to index.html .command-bar .brand-icon
   // and the PWA home brand, so branding is consistent across every surface.
   const LOGO_SVG =
     '<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CRISP">' +
@@ -104,7 +104,7 @@
 
   // route → nav button that should read as the active section. Both /users
   // buttons map to /users; the Account button (no data-intent) is the primary
-  // active target — "Users" is a sub-destination (the admin user-management tab).
+  // active target - "Users" is a sub-destination (the admin user-management tab).
   const ROUTE_LABEL = {
     '/': 'Home', '/operations': 'Operations', '/incidents': 'Incidents',
     '/exports': 'Exports',
@@ -126,7 +126,7 @@
     .cgn-brand{display:inline-flex;align-items:center;gap:9px;cursor:pointer;flex:none;background:none;border:0;
       padding:0;font-family:inherit}
     .cgn-brand:focus-visible{outline:2px solid #418FDE;outline-offset:3px;border-radius:8px}
-    /* the brand mark IS the Home link — show a "you are here" cue on the root */
+    /* the brand mark IS the Home link - show a "you are here" cue on the root */
     .cgn-brand.on .cgn-org{color:#7db8ef}
     .cgn-brand.on .cgn-logo{box-shadow:0 0 0 2px rgba(65,143,222,.55);border-radius:8px}
     .cgn-logo{width:30px;height:30px;border-radius:8px;overflow:hidden;flex:none;display:block}
@@ -150,12 +150,12 @@
     #${BAR_ID} #cc-nav .ad{font-size:9px;font-weight:700;color:#fbbf24;background:rgba(251,191,36,.14);
       padding:1px 6px;border-radius:999px;margin-left:2px;text-transform:uppercase}
     .cgn-spacer{flex:1 1 auto;min-width:8px}
-    /* right cluster — hosts the re-parented LIVE badge + user menu */
+    /* right cluster - hosts the re-parented LIVE badge + user menu */
     .cgn-right{display:flex;align-items:center;gap:12px;flex:none}
-    /* scope chip — the AFFIRMATIVE mode indicator. GLOBAL by default; flips to
+    /* scope chip - the AFFIRMATIVE mode indicator. GLOBAL by default; flips to
        OP · {name} (op-colour) when an operation is open, so the operator always
        knows their scope (op mode also has the banner + body class; global mode
-       previously had NO indicator — only the absence of the banner). */
+       previously had NO indicator - only the absence of the banner). */
     .cgn-scope{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
       padding:3px 10px;border-radius:999px;border:1px solid #2C3A52;color:#9fb3d1;background:#141F35;
       flex:none;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}
@@ -179,7 +179,7 @@
     body.crisp-has-globalnav #cc-st-overlay,
     body.crisp-has-globalnav #cc-ops-overlay,
     body.crisp-has-globalnav #cc-cf-overlay{padding-top:var(--gnav-h);box-sizing:border-box}
-    /* Transient FULLSCREEN viewers/modals are focused tasks — they must cover
+    /* Transient FULLSCREEN viewers/modals are focused tasks - they must cover
        the shell bar (the nav is contextually unavailable while they're open),
        not sit under it with their top controls clipped. Raise them above the
        bar's z-index (100001). The route-level section overlays (cc-*) stay
@@ -193,11 +193,11 @@
     /* Top-of-viewport alert strip sits just BELOW the bar (both are top:0
        fixed), so its dismiss control isn't intercepted by the bar. */
     body.crisp-has-globalnav .truncation-banner{top:var(--gnav-h)}
-    /* The bell now lives in the shell — its dropdown panel must open ABOVE the
+    /* The bell now lives in the shell - its dropdown panel must open ABOVE the
        route-level section overlays (99990-99999) so it's usable on Home /
        Exports / etc., not trapped behind the open overlay. The center-screen
        toasts (.notif-stack / .notif-burst-banner) deliberately keep their
-       original layer so they surface in the Operations context only — on Home
+       original layer so they surface in the Operations context only - on Home
        the dedicated #cgn-home-alert banner is the (subtler) awareness cue,
        avoiding a stacked double-alert. */
     body.crisp-has-globalnav .notif-panel{z-index:100002}
@@ -222,8 +222,8 @@
        down so nothing hides behind it. */
     body.crisp-has-globalnav.crisp-home-alert #cc-home-overlay{padding-top:calc(var(--gnav-h) + 42px)}
 
-    /* ── Operation context (Phase 2e — triple-cue safety on /operations/{id}) ── */
-    /* Cue 1: colored operation chrome — an accent underline on the global bar. */
+    /* ── Operation context (Phase 2e - triple-cue safety on /operations/{id}) ── */
+    /* Cue 1: colored operation chrome - an accent underline on the global bar. */
     body.crisp-has-globalnav.crisp-op-scoped #${BAR_ID}{
       box-shadow:0 2px 0 var(--op-color,#418FDE),0 8px 24px rgba(0,0,0,.35)}
     /* Cue 2+3: persistent context banner with breadcrumb + "Exit to global". */
@@ -283,7 +283,7 @@
       `<span aria-hidden="true">${glyph}</span> ${esc(label)}` +
       `${adminOnly && !admin ? '<span class="ad">admin</span>' : ''}</button>`;
     return [
-      // No "Home" item — the CRISP brand mark (left) is the Home affordance
+      // No "Home" item - the CRISP brand mark (left) is the Home affordance
       // (aria-label "go to Home"); a separate Home button was redundant.
       // Operations (the operation-centric workspace) is primary; Incidents is
       // the raw global report feed.
@@ -305,7 +305,7 @@
     bar.id = BAR_ID;
     bar.setAttribute('role', 'banner');
     bar.innerHTML =
-      `<button class="cgn-brand" id="cgn-brand" title="CRISP — Home" aria-label="CRISP — go to Home">
+      `<button class="cgn-brand" id="cgn-brand" title="CRISP - Home" aria-label="CRISP - go to Home">
          <span class="cgn-logo" aria-hidden="true">${LOGO_SVG}</span>
          <span class="cgn-word">
            <span class="cgn-org" id="cc-home-orgname">CRISP</span>
@@ -314,7 +314,7 @@
        </button>
        <nav id="cc-nav" aria-label="Primary">${navHtml()}</nav>
        <span class="cgn-spacer"></span>
-       <span class="cgn-right" id="cgn-right"><span class="cgn-clock" id="cgn-clock" title="Local time">—</span></span>
+       <span class="cgn-right" id="cgn-right"><span class="cgn-clock" id="cgn-clock" title="Local time">-</span></span>
        <button class="cgn-burger" id="cgn-burger" aria-label="Toggle navigation" aria-expanded="false"
                aria-controls="cc-nav">☰</button>`;
     document.body.insertBefore(bar, document.body.firstChild);
@@ -400,7 +400,7 @@
       if (match) btn.setAttribute('aria-current', 'page');
       else btn.removeAttribute('aria-current');
     });
-    // Home has no nav button — the brand mark IS the Home affordance, so it
+    // Home has no nav button - the brand mark IS the Home affordance, so it
     // carries the "you are here" cue on the root route.
     const brand = el('cgn-brand');
     if (brand) {
@@ -416,7 +416,7 @@
   // bell), exposes window.__crispNotifSummary(), and fires 'crisp:notif-change'
   // on every render. The shell surfaces that on the Home route so an operator
   // who never opened Operations still sees incoming reports. Counts are
-  // inherently synced (same source) — no duplicates possible.
+  // inherently synced (same source) - no duplicates possible.
   let _homeAlertDismissed = 0;   // suppress until MORE arrive than were dismissed
   function notifSummary() {
     try {
@@ -462,7 +462,7 @@
     if (s.critical) {
       msg.innerHTML = '⚠ <strong>Critical incident received</strong>' + (s.count > 1 ? ' · ' + s.count + ' new awaiting review' : '');
     } else {
-      msg.innerHTML = '🔔 <strong>' + s.count + '</strong> new incident' + (s.count > 1 ? 's' : '') + ' — awaiting review';
+      msg.innerHTML = '🔔 <strong>' + s.count + '</strong> new incident' + (s.count > 1 ? 's' : '') + ' - awaiting review';
     }
     a.classList.toggle('crit', !!s.critical);
     a.classList.add('show');
@@ -482,7 +482,7 @@
     updateHomeAlert();
   }
 
-  // ── Operation context (Phase 2e) — driven directly by cc-operations.js ─────
+  // ── Operation context (Phase 2e) - driven directly by cc-operations.js ─────
   // We drive this via an explicit hook rather than inferring from data-route:
   // the route stays '/operations' across /operations/A → /operations/B (same
   // base), so the data-route MutationObserver wouldn't fire, and the operation
@@ -504,7 +504,7 @@
     }
     return b;
   }
-  // Scope chip in #cgn-right — the symmetric GLOBAL/OP mode indicator. Lazily
+  // Scope chip in #cgn-right - the symmetric GLOBAL/OP mode indicator. Lazily
   // created + prepended so it sits leftmost in the right cluster; defaults to
   // GLOBAL so global routes have an AFFIRMATIVE cue (not just the absence of the
   // op banner). setOpContext/clearOpContext flip it.
@@ -525,13 +525,13 @@
     c = c || ensureScopeChip();
     c.classList.remove('op');
     c.textContent = 'GLOBAL';
-    c.title = 'Global monitoring — all incidents worldwide';
+    c.title = 'Global monitoring - all incidents worldwide';
   }
   function setOpScope(name) {
     const c = ensureScopeChip();
     c.classList.add('op');
     c.textContent = 'OP · ' + (name || 'Operation');
-    c.title = 'Operation mode — ' + (name || 'Operation');
+    c.title = 'Operation mode - ' + (name || 'Operation');
   }
   function setOpContext(id, name, color) {
     const b = ensureContextBanner();

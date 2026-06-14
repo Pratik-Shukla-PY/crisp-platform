@@ -1,12 +1,12 @@
 """
-CRISP PII Blur Service — MediaPipe (faces) + easyocr (text).
+CRISP PII Blur Service - MediaPipe (faces) + easyocr (text).
 
 Both run 100% locally, zero API cost, work offline.
 
-MediaPipe BlazeFace: Neural network face detection — handles angles, lighting,
+MediaPipe BlazeFace: Neural network face detection - handles angles, lighting,
     glasses, occlusion, small faces on ID cards. Far superior to Haar Cascade.
 
-easyocr: Deep learning OCR — reads text at any angle, any lighting, 80+ languages.
+easyocr: Deep learning OCR - reads text at any angle, any lighting, 80+ languages.
     Far superior to Tesseract for real-world photos of documents.
 
 Strategy:
@@ -34,8 +34,8 @@ except Exception:
 # Tracks availability of the two deep-learning backends so the
 # `/api/v1/health/pii` endpoint can surface status loudly. Pre-April 2026
 # a missing MediaPipe model would silently no-op the face-blur pass,
-# which — combined with the bug where the client hardcoded
-# `client_blur_applied: true` — let unblurred PII reach the dashboard.
+# which - combined with the bug where the client hardcoded
+# `client_blur_applied: true` - let unblurred PII reach the dashboard.
 # Both halves now fail loudly: the client sends a truthful flag (see
 # pii-blur.js + app.js::_blurIfPossible), the server sets these module
 # flags and exposes them to operators.
@@ -54,17 +54,17 @@ try:
     model_path = os.path.join(os.path.dirname(__file__), '..', '..', 'blaze_face_short_range.tflite')
     model_path = os.path.abspath(model_path)
     if os.path.exists(model_path):
-        # L1 — confidence floor (May 2026, blur-audit follow-up).
+        # L1 - confidence floor (May 2026, blur-audit follow-up).
         #
         # Pre-L1: min_detection_confidence=0.2 with 5-pass multi-scale
         # (1 full image + 4 tiles). On operator-captured iPhone photos
         # this produced 1-5 false positives per non-face frame
         # (light fixtures, building windows, vegetation patterns,
-        # cushions, signage — anything with a vaguely face-shaped
+        # cushions, signage - anything with a vaguely face-shaped
         # luminance pattern). Operator reproduced: 3-photo report where
         # only 1 photo had a real face → all 3 photos were
         # `complete_with_redactions`, with disagreeing counts across
-        # SMALL/MEDIUM/ORIGINAL tiers (5/3/5 and 2/3 — classic FP
+        # SMALL/MEDIUM/ORIGINAL tiers (5/3/5 and 2/3 - classic FP
         # signature; real faces stay consistent across resolutions).
         #
         # The new floor is 0.7. Real faces at any reasonable size
@@ -96,7 +96,7 @@ try:
     else:
         _face_detector_error = f"MediaPipe model missing at {model_path}"
         logger.error(
-            "PII-BLUR CRITICAL: %s — face-blur pass will be skipped, "
+            "PII-BLUR CRITICAL: %s - face-blur pass will be skipped, "
             "reports with PII faces will land on the dashboard unredacted "
             "unless the client-side blur covered them.",
             _face_detector_error,
@@ -104,7 +104,7 @@ try:
 except Exception as e:
     _face_detector_error = f"MediaPipe import/load failed: {e}"
     logger.error(
-        "PII-BLUR CRITICAL: %s — server will NOT blur faces. Install the "
+        "PII-BLUR CRITICAL: %s - server will NOT blur faces. Install the "
         "`mediapipe` package and confirm the .tflite model is present.",
         _face_detector_error,
     )
@@ -127,13 +127,13 @@ def _multiscale_face_detect(img, detector, mp_module):
        │ (top-L)  │ (top-R)  │   tile 2: x=40..100%, y=0..60%
        ├──────────┼──────────┤   tile 3: x=0..60%, y=40..100%
        │  tile 3  │  tile 4  │   tile 4: x=40..100%, y=40..100%
-       │ (bot-L)  │ (bot-R)  │   (centre region covered 4× — high
+       │ (bot-L)  │ (bot-R)  │   (centre region covered 4× - high
        └──────────┴──────────┘    recall for faces in middle)
 
-    Returns: list of (fx, fy, fw, fh) tuples — duplicates expected;
+    Returns: list of (fx, fy, fw, fh) tuples - duplicates expected;
     caller dedupes via NMS.
 
-    L2 (May 2026, blur-audit) — minimum face size as % of frame.
+    L2 (May 2026, blur-audit) - minimum face size as % of frame.
     Real faces in citizen-captured "report damage" photos subtend at
     least `CRISP_MIN_FACE_FRAC` (default 0.03 = 3 %) of the shortest
     frame dimension. Anything smaller is overwhelmingly a false
@@ -153,17 +153,17 @@ def _multiscale_face_detect(img, detector, mp_module):
         min_face_frac = 0.03
     min_dim_px = max(1, int(min(w, h) * min_face_frac))
 
-    # L4 (May 2026, blur-audit) — skin-tone gate.
+    # L4 (May 2026, blur-audit) - skin-tone gate.
     #
     # After BlazeFace returns a candidate box, sample the interior.
     # Real-face interiors are dominated by skin-tone pixels (broadly:
     # H ∈ [0°,50°] ∪ [340°,360°], S ∈ [20,70], V ∈ [40,90] in HSV).
     # FP sources (light fixtures, building windows, signage, vegetation,
-    # cushions) almost never carry skin-tone interiors — they're
+    # cushions) almost never carry skin-tone interiors - they're
     # bright-on-bright, dark-on-dark, or texture patterns far outside
     # the skin band.
     #
-    # Default OFF — controlled by CRISP_SKIN_TONE_GATE. Default-off
+    # Default OFF - controlled by CRISP_SKIN_TONE_GATE. Default-off
     # because the gate is opinionated and could drop a legitimate face
     # in extreme lighting (sodium-vapor streetlamp, full-shadow). Once
     # we canary against operator's iPhone corpus + 5-photo stress AND
@@ -194,11 +194,11 @@ def _multiscale_face_detect(img, detector, mp_module):
             return frac >= _skin_min_frac
         except Exception as _e:
             # Belt-and-braces: if the gate function fails (numpy
-            # missing in a CI image), don't reject — fall through.
-            logger.debug("L4 skin-tone gate failed: %s — passing through", _e)
+            # missing in a CI image), don't reject - fall through.
+            logger.debug("L4 skin-tone gate failed: %s - passing through", _e)
             return True
 
-    # L5 (May 2026, blur-audit) — rejection counter import. Lazy /
+    # L5 (May 2026, blur-audit) - rejection counter import. Lazy /
     # best-effort so a missing observability stack (CI without
     # prometheus_client) doesn't break the blur pipeline.
     try:
@@ -222,11 +222,11 @@ def _multiscale_face_detect(img, detector, mp_module):
         dets = detector.detect(mp_image)
         for det in dets.detections:
             bb = det.bounding_box
-            # L2 — drop too-small candidates (FP-killer).
+            # L2 - drop too-small candidates (FP-killer).
             if bb.width < min_dim_px or bb.height < min_dim_px:
                 _bump_reject("L2_min_size")
                 continue
-            # L4 — skin-tone gate. Opt-in via env. Crop the candidate
+            # L4 - skin-tone gate. Opt-in via env. Crop the candidate
             # box from the original region and check skin-tone fraction.
             # The crop is on `region_img` (post-tile crop), so the
             # bbox coords are already relative to it.
@@ -238,7 +238,7 @@ def _multiscale_face_detect(img, detector, mp_module):
                 if x1 > x0 and y1 > y0:
                     candidate = region_img[y0:y1, x0:x1]
                     if not _is_skin_tone_dominant(candidate):
-                        # Skip — likely FP (no skin-tone interior).
+                        # Skip - likely FP (no skin-tone interior).
                         _bump_reject("L4_skin_tone")
                         continue
             detections_xywh.append((
@@ -248,15 +248,15 @@ def _multiscale_face_detect(img, detector, mp_module):
                 bb.height,
             ))
     # L1 rejection (sub-confidence-threshold) is handled inside MediaPipe
-    # itself before `dets.detections` even lists the candidate — so there
+    # itself before `dets.detections` even lists the candidate - so there
     # is no in-line increment for L1. We log the configured threshold at
     # detector-creation time so operators can correlate the counter
     # absence with "L1 is doing its job silently".
 
-    # Pass 1 — full image
+    # Pass 1 - full image
     _detect_on_region(img, 0, 0)
 
-    # Passes 2..5 — 4 overlapping tiles at 60%×60% of the image.
+    # Passes 2..5 - 4 overlapping tiles at 60%×60% of the image.
     # Tile boundaries deliberately overlap by 20% so a face spanning
     # the centre isn't split.
     tile_w = int(w * 0.6)
@@ -268,7 +268,7 @@ def _multiscale_face_detect(img, detector, mp_module):
         (w - tile_w, h - tile_h),
     ]:
         # Skip degenerate tiles (image already smaller than 60%
-        # threshold — Pass 1 already covered it).
+        # threshold - Pass 1 already covered it).
         if tile_w >= w and tile_h >= h:
             break
         tile_img = img[y_off:y_off + tile_h, x_off:x_off + tile_w]
@@ -285,12 +285,12 @@ def _nms_merge_faces(detections, iou_threshold=0.4, keep="smallest"):
     saw it); collapse to a single bbox per face.
 
     keep:
-      "smallest" (default, May 2026 operator review) — within each
+      "smallest" (default, May 2026 operator review) - within each
           cluster of overlapping detections, keep the SMALLEST bbox.
-          Gives a tighter fit to the actual face — blur stays
+          Gives a tighter fit to the actual face - blur stays
           localized. Larger duplicates from tile passes often include
           skin / clothing / background adjacent to the face.
-      "largest" — keep the largest. Generous coverage, but blur
+      "largest" - keep the largest. Generous coverage, but blur
           ellipse can extend onto neck / shoulders / hair.
 
     Returns: deduped list of (fx, fy, fw, fh).
@@ -344,7 +344,7 @@ try:
 except Exception as e:
     _ocr_reader_error = f"easyocr import/load failed: {e}"
     logger.error(
-        "PII-BLUR CRITICAL: %s — server will NOT blur text PII (phone, "
+        "PII-BLUR CRITICAL: %s - server will NOT blur text PII (phone, "
         "Aadhaar, passport, etc). Install `easyocr` to restore.",
         _ocr_reader_error,
     )
@@ -364,9 +364,9 @@ def pii_health_snapshot() -> dict:
         }
 
     Values:
-      * "healthy"     — both backends loaded.
-      * "degraded"    — one of two backends missing (still some coverage).
-      * "unavailable" — neither backend loaded. Server-side blur is a no-op;
+      * "healthy"     - both backends loaded.
+      * "degraded"    - one of two backends missing (still some coverage).
+      * "unavailable" - neither backend loaded. Server-side blur is a no-op;
                         the client-side pipeline MUST succeed for PII to be
                         redacted at all.
     """
@@ -397,17 +397,17 @@ PII_PATTERNS = [
     re.compile(r'\d{12,}'),                       # Generic long ID
 ]
 
-# B-G (May 2026) — OCR multi-layer enhancements. The regex set above
+# B-G (May 2026) - OCR multi-layer enhancements. The regex set above
 # catches the well-known ID formats. The two new layers catch what
 # regex misses:
 #
-#   1. Density heuristic — any OCR line where >= 30% of chars are
+#   1. Density heuristic - any OCR line where >= 30% of chars are
 #      digits AND length >= 6. Catches handwritten IDs, license
 #      plates, blood-group + medical record numbers, ad-hoc numeric
 #      tags. False-positive risk on numeric signage ("Building 145")
 #      but the privacy ratchet (privacy-first) accepts that trade.
 #
-#   2. spaCy NER — if `en_core_web_sm` is installed, run the NER
+#   2. spaCy NER - if `en_core_web_sm` is installed, run the NER
 #      pipeline on each OCR string. Blur tokens tagged as PERSON,
 #      EMAIL, URL, or CARDINAL of length 6-20. Catches handwritten
 #      names ("John Doe"), email signatures missed by the regex's
@@ -445,7 +445,7 @@ def _get_nlp():
     try:
         import spacy  # type: ignore
         # disable=["parser", "tagger", "lemmatizer"] keeps the
-        # model lean — we only need NER tokens.
+        # model lean - we only need NER tokens.
         _nlp = spacy.load(
             "en_core_web_sm",
             disable=["parser", "tagger", "lemmatizer"],
@@ -454,7 +454,7 @@ def _get_nlp():
         return _nlp
     except Exception as e:
         logger.info(
-            f"PII blur: spaCy NER layer disabled — {e}. Install with "
+            f"PII blur: spaCy NER layer disabled - {e}. Install with "
             f"`pip install spacy && python -m spacy download en_core_web_sm` "
             f"to enable broader PII detection."
         )
@@ -464,7 +464,7 @@ def _get_nlp():
 def _density_heuristic_is_pii(text: str) -> bool:
     """True iff the text looks like an ID by digit density. Catches
     license plates, handwritten numbers, ad-hoc IDs that the strict
-    regexes miss. Conservative false-positive trade-off — we accept
+    regexes miss. Conservative false-positive trade-off - we accept
     over-blurring "Building 145" to avoid missing "MH04AB1234"."""
     if os.getenv("CRISP_OCR_DENSITY_ENABLED", "1") not in ("1", "true", "yes"):
         return False
@@ -482,11 +482,11 @@ def _density_heuristic_is_pii(text: str) -> bool:
 def _ner_is_pii(text: str) -> bool:
     """True iff spaCy NER tags this text as a PII-bearing entity.
     Categories blurred:
-      PERSON         — handwritten names ("John Doe").
-      EMAIL          — emails missed by the strict regex.
-      CARDINAL       — long numeric tokens length 6-20.
-      ORG            — organisation names rarely PII alone; skip.
-      GPE            — place names (city/country); skip — operator
+      PERSON         - handwritten names ("John Doe").
+      EMAIL          - emails missed by the strict regex.
+      CARDINAL       - long numeric tokens length 6-20.
+      ORG            - organisation names rarely PII alone; skip.
+      GPE            - place names (city/country); skip - operator
                        needs locations for response coordination.
     Returns False if spaCy unavailable."""
     nlp = _get_nlp()
@@ -516,7 +516,7 @@ def _denormalize_boxes(
     Input: ``[{"x": 0.42, "y": 0.18, "w": 0.15, "h": 0.20}, ...]``
     Output: ``[(x1, y1, x2, y2), ...]`` in pixel coords clamped to
     the image bounds. Malformed entries (missing keys, out-of-range
-    values, non-numeric) are silently dropped — we never want a
+    values, non-numeric) are silently dropped - we never want a
     bogus client hint to crash the blur worker.
     """
     result = []
@@ -562,11 +562,11 @@ def _box_iou(a: tuple, b: tuple) -> float:
 def _union_boxes(
     client_boxes: list, server_boxes: list, iou_threshold: float = 0.4
 ) -> list:
-    """Merge two box sets via IoU dedup. Returns the UNION — every
+    """Merge two box sets via IoU dedup. Returns the UNION - every
     distinct region either detector saw is kept. Boxes that overlap
     (IoU > threshold) collapse into the larger of the two (the larger
     bounds the union of the two regions, which is the safe redaction
-    choice — privacy ratchets forward only)."""
+    choice - privacy ratchets forward only)."""
     all_boxes = list(client_boxes) + list(server_boxes)
     # Sort by area descending so the larger box wins in dedup loops.
     all_boxes.sort(key=lambda b: -((b[2] - b[0]) * (b[3] - b[1])))
@@ -586,7 +586,7 @@ def _union_boxes(
 def blur_pii_with_hints(
     image_path: str, client_boxes_normalized: list = None
 ) -> dict:
-    """B-C — blur with optional client-supplied face-box hints.
+    """B-C - blur with optional client-supplied face-box hints.
 
     Wrapper around ``blur_pii`` that takes the union of the server's
     MediaPipe detection + the client's BlazeFace hints before
@@ -598,7 +598,7 @@ def blur_pii_with_hints(
     Args:
       image_path: filesystem path to the image to blur in place.
       client_boxes_normalized: list of {x, y, w, h} dicts in
-        [0.0, 1.0] coords. May be None (legacy / non-PWA uploads) —
+        [0.0, 1.0] coords. May be None (legacy / non-PWA uploads) -
         falls back to MediaPipe-only behaviour.
 
     Returns: same shape as ``blur_pii``, with two extra fields:
@@ -609,7 +609,7 @@ def blur_pii_with_hints(
     Privacy invariant: the final blur applies on the UNION. Never
     on the intersection. Never with client boxes overriding server
     boxes. The client is a HINT-PROVIDER, not the authoritative
-    detector — the server-side MediaPipe pass always runs.
+    detector - the server-side MediaPipe pass always runs.
     """
     # If no client hints, just defer to plain blur_pii.
     if not client_boxes_normalized:
@@ -685,7 +685,7 @@ def blur_pii_with_hints(
     # detect whether server already covered each client hint.
     # Simplest correct behaviour: re-run a quick second pass that
     # adds blur on each client box, EVEN if server already did
-    # (idempotent — re-blurring already-blurred pixels just makes
+    # (idempotent - re-blurring already-blurred pixels just makes
     # them more blurred, never less). The trade-off is one extra
     # encode round-trip; the upside is provable union semantics
     # without serializing box sets across calls.
@@ -741,16 +741,16 @@ def blur_pii(image_path: str) -> dict:
     landed; clean images pass through byte-for-byte unchanged.
 
     Result vocabulary (May 2026, Batch B-B):
-      * ``ran=True,  blurred=True,  clean=False`` — at least one face
+      * ``ran=True,  blurred=True,  clean=False`` - at least one face
         or PII-text region detected; image OVERWRITTEN with the blurred
         bytes (JPEG re-encode at q=85).
-      * ``ran=True,  blurred=False, clean=True``  — pipeline ran end-
+      * ``ran=True,  blurred=False, clean=True``  - pipeline ran end-
         to-end and found NOTHING. ``cv2.imwrite`` is NOT called; the
         file on disk is bit-identical to the input. Important for the
-        70-80 % of crisis photos that legitimately have no PII —
+        70-80 % of crisis photos that legitimately have no PII -
         operator gets the full original JPEG quality, not a
         re-compressed copy.
-      * ``ran=False, error=...``                   — backends were
+      * ``ran=False, error=...``                   - backends were
         unavailable (MediaPipe + easyocr both missing); file NOT
         processed; dashboard MUST flag the row.
 
@@ -764,7 +764,7 @@ def blur_pii(image_path: str) -> dict:
         "faces": 0,
         "pii_texts": 0,
         "blurred": False,
-        # B-B (May 2026) — explicit "no detections, file unchanged"
+        # B-B (May 2026) - explicit "no detections, file unchanged"
         # signal. Mirrors the inverse of `blurred` when `ran=True`;
         # stays False when `ran=False` (we can't claim cleanliness if
         # we never inspected).
@@ -811,8 +811,8 @@ def blur_pii(image_path: str) -> dict:
         if _face_detector:
             try:
                 # P1 multi-face detection (May 2026):
-                # Pass 1 — full image. Catches close-up / large faces.
-                # Pass 2..5 — 4 overlapping tiles at 60% size each.
+                # Pass 1 - full image. Catches close-up / large faces.
+                # Pass 2..5 - 4 overlapping tiles at 60% size each.
                 #   Each tile crops a region of the image; faces in that
                 #   region appear larger relative to BlazeFace's 128×128
                 #   internal input → distant / group faces that were too
@@ -839,7 +839,7 @@ def blur_pii(image_path: str) -> dict:
                 # face. Filter conservatively to keep blur localized.
                 image_area = w * h
                 MAX_FACE_AREA_RATIO = 0.15
-                # Also reject bboxes with wild aspect ratios — a face
+                # Also reject bboxes with wild aspect ratios - a face
                 # is roughly square (h/w between 0.6 and 1.8). Tile
                 # hallucinations often come back as very wide or
                 # very tall bands.
@@ -878,7 +878,7 @@ def blur_pii(image_path: str) -> dict:
         # LAYER 2: TEXT DETECTION (easyocr)
         # If face detected: blur ALL nearby text (document = all PII)
         # If no face: only blur text matching PII regex patterns
-        # Performance: on CPU easyocr scales roughly O(pixels) — a 3000x4000
+        # Performance: on CPU easyocr scales roughly O(pixels) - a 3000x4000
         # phone photo can take 30–120 s, which blocked the chunk handler and
         # stranded uploads at partial %. Resize to max 1024 px on the long side
         # before OCR, then scale bbox coords back to original space.
@@ -903,7 +903,7 @@ def blur_pii(image_path: str) -> dict:
                 for bbox, text, conf in ocr_results:
                     if len(text.strip()) < 2:
                         continue
-                    # Keep ALL detections — even low confidence.
+                    # Keep ALL detections - even low confidence.
                     # easyocr on phone photos of documents often gives low conf
                     # but the detection bounding box is still accurate.
                     pts = np.array(bbox).astype(float) * inv_scale
@@ -914,9 +914,9 @@ def blur_pii(image_path: str) -> dict:
 
                 # Phase 1: DROPPED the "≥5 text regions → blur all
                 # text" escalation and the "has_face → blur all text" clause.
-                # Both over-redacted legitimate crisis information —
+                # Both over-redacted legitimate crisis information -
                 # "DANGER HIGH VOLTAGE", "EVACUATION ROUTE", store signage,
-                # street names — exactly the context responders rely on.
+                # street names - exactly the context responders rely on.
                 # Now every text region is evaluated independently against
                 # the PII regex set; only true matches get blurred. Faces
                 # are still blurred unconditionally (face_regions path
@@ -931,12 +931,12 @@ def blur_pii(image_path: str) -> dict:
                         if pat.search(text):
                             should_blur = True
                             break
-                    # Layer 2 (B-G): density heuristic — fallback for
+                    # Layer 2 (B-G): density heuristic - fallback for
                     # handwritten / license-plate text the regex
                     # misses.
                     if not should_blur and _density_heuristic_is_pii(text):
                         should_blur = True
-                    # Layer 3 (B-G): spaCy NER — catches handwritten
+                    # Layer 3 (B-G): spaCy NER - catches handwritten
                     # names, missed-format emails, long numeric IDs.
                     # Skipped silently if spaCy isn't installed.
                     if not should_blur and _ner_is_pii(text):
@@ -956,7 +956,7 @@ def blur_pii(image_path: str) -> dict:
                 logger.warning(f"PII OCR error: {e}")
 
         # ═══════════════════════════════════════════════════════════════
-        # APPLY BLUR — oval for faces, rectangle for text
+        # APPLY BLUR - oval for faces, rectangle for text
         # ═══════════════════════════════════════════════════════════════
         all_regions = face_regions + text_blur_regions
         if all_regions:
@@ -965,7 +965,7 @@ def blur_pii(image_path: str) -> dict:
             # PWA, 8–16 px pixelation on RN). Stacking a cap-71 server
             # Gaussian on top produced the visible bloat the user saw. We
             # halve the cap (41 for faces, 31 for text) and drop the
-            # double-pass on faces — server now does a single strong pass
+            # double-pass on faces - server now does a single strong pass
             # which is enough to kill any face that slipped past the
             # client detector.
             for (x1, y1, x2, y2) in face_regions:
@@ -975,18 +975,18 @@ def blur_pii(image_path: str) -> dict:
                 roi = img[y1:y2, x1:x2]
                 # P1 follow-up (May 2026, operator-reported "no blur
                 # detected"): kernel size now scales with face
-                # dimensions. Pre-fix the cap was 41 — adequate for
+                # dimensions. Pre-fix the cap was 41 - adequate for
                 # the short-range model's typical 100–300 px faces,
                 # but the multi-scale detector now returns regions
                 # up to 2000+ px (faces in 12 MP phone photos). 41 px
-                # blur on an 800 px face is visually negligible —
+                # blur on an 800 px face is visually negligible -
                 # variance test on the operator's actual file
                 # showed ratio 0.47 (face still recognizable, target
                 # < 0.20).
                 #
                 # New: kernel ~= face_dim / 6, clamped [25, 199].
                 # Sigma scales proportionally so the blur strength
-                # tracks the kernel — without that, large kernels
+                # tracks the kernel - without that, large kernels
                 # with small sigma still leave faces recognizable.
                 face_dim = max(rw, rh)
                 ksize = max(25, min(199, (face_dim // 6) * 2 + 1))
@@ -1023,9 +1023,9 @@ def blur_pii(image_path: str) -> dict:
             logger.info(f"PII blurred [{os.path.basename(image_path)}]: "
                         f"faces={result['faces']} text={result['pii_texts']}")
         else:
-            # B-B (May 2026) — explicit clean path. The pipeline
+            # B-B (May 2026) - explicit clean path. The pipeline
             # examined the image and found no PII to redact. We do
-            # NOT call cv2.imwrite here — the file on disk is bit-
+            # NOT call cv2.imwrite here - the file on disk is bit-
             # identical to the input. Callers can use `clean=True`
             # to skip the read-back round-trip + save the original
             # bytes directly to storage (preserves full JPEG quality
@@ -1033,7 +1033,7 @@ def blur_pii(image_path: str) -> dict:
             result["clean"] = True
             logger.info(
                 f"PII blur ran on [{os.path.basename(image_path)}]: "
-                f"no PII detected — image unchanged (clean)"
+                f"no PII detected - image unchanged (clean)"
             )
 
     except Exception as e:

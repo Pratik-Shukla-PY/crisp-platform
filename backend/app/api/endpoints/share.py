@@ -2,7 +2,7 @@
 
 The PWA's Badge Studio (mobile-app/src/badge-studio.js) generates the
 badge image client-side via Canvas. LinkedIn's share dialog does NOT
-accept an image attachment via URL — it scrapes Open Graph meta tags
+accept an image attachment via URL - it scrapes Open Graph meta tags
 from the URL the user shares. So when the user taps the "LinkedIn"
 share chip, we mint a short-lived signed token + open
 ``https://www.linkedin.com/sharing/share-offsite/?url=...&token=<t>``;
@@ -16,13 +16,13 @@ Design considerations:
   but signing prevents random URL guessing from rendering arbitrary
   brand-misuse pages. TTL is 24 h (the share usually happens within
   minutes of generating).
-* **Image source — embedded data URL.** First-pass implementation
+* **Image source - embedded data URL.** First-pass implementation
   embeds the composed PNG as a base64 data URL in the ``og:image``
   field. LinkedIn's scraper handles data URLs up to ~50 KB; our
   composed badge images run ~30-80 KB, so we ship at 720×720 (smaller
   than the client preview) so we stay under the scraper limit. If
   share volume justifies it, a Phase 2 follow-up stores the PNG in S3
-  and points OG at the stable URL — but that adds an upload round-trip
+  and points OG at the stable URL - but that adds an upload round-trip
   the simple path avoids.
 * **Read-only.** No DB writes. The endpoint is pure server-rendering;
   the token signature is the only state.
@@ -30,7 +30,7 @@ Design considerations:
   profile photo composed by the user. The user controls whether their
   photo is included (and the face-blur toggle defaults ON).
 
-May 2026 — first ship. See ``/Users/pks/.claude/plans/swirling-forging-raccoon.md``
+May 2026 - first ship. See the design plan
 phase D.6 for the full design.
 """
 from __future__ import annotations
@@ -55,7 +55,7 @@ router = APIRouter()
 # ── Token signing ───────────────────────────────────────────────────────
 
 def _signing_key() -> bytes:
-    """HMAC key. Reuses JWT_SECRET when present (same trust boundary —
+    """HMAC key. Reuses JWT_SECRET when present (same trust boundary -
     if an attacker has the JWT secret they can do worse than mint share
     tokens). Falls back to a fixed dev string when neither var is set so
     local pytest doesn't crash on import."""
@@ -103,7 +103,7 @@ def _verify_share_token(token: str) -> Optional[dict]:
 
 # ── Share-page rendering ────────────────────────────────────────────────
 #
-# Phase 2.1 (May 2026) — emoji + label come from the shared canonical
+# Phase 2.1 (May 2026) - emoji + label come from the shared canonical
 # tier config at `shared/tier-config.json` via
 # `app.services.tier_config`. Keep `_TIER_LABELS` as a thin local
 # alias used by the existing validation paths so we don't churn every
@@ -136,7 +136,7 @@ def _escape_html(s: str) -> str:
 def _render_share_page(payload: dict, image_data_url: Optional[str]) -> str:
     """Render the HTML share page with OG meta + a centered preview.
 
-    The page itself is plain HTML — no JS, no auth, no DB. LinkedIn's
+    The page itself is plain HTML - no JS, no auth, no DB. LinkedIn's
     scraper reads only the ``<meta>`` tags; humans who follow the link
     see a centered badge preview + a CTA back to crisplabs.tech.
     """
@@ -145,7 +145,7 @@ def _render_share_page(payload: dict, image_data_url: Optional[str]) -> str:
     lives = int(payload.get("lives", 0) or 0)
     reports = int(payload.get("reports", 0) or 0)
 
-    og_title = f"{emoji} I'm a CRISP {label} — report what you see."
+    og_title = f"{emoji} I'm a CRISP {label} - report what you see."
     og_desc = f"{reports} reports submitted · {lives} lives saved through CRISP."
     og_image = image_data_url or "https://crisplabs.tech/static/og-default.png"
 
@@ -198,7 +198,7 @@ def get_share_page(token: str, request: Request):
     payload = _verify_share_token(token)
     if payload is None:
         # Distinguish expired (which had a valid signature once) from
-        # genuinely-bad — but only at the cost of trying to b64-decode
+        # genuinely-bad - but only at the cost of trying to b64-decode
         # twice. The simpler split: any failure -> 404 except when the
         # signature itself verified, in which case it's 410 Gone. For
         # this MVP we lean on 404 for both; the LinkedIn scraper
@@ -234,7 +234,7 @@ def mint_share_endpoint(payload: dict):
     img = payload.get("img")
     if img is not None and not isinstance(img, str):
         raise HTTPException(status_code=400, detail="img must be a data: URL string")
-    # Hard cap on image payload size — LinkedIn's scraper drops huge
+    # Hard cap on image payload size - LinkedIn's scraper drops huge
     # OG images, and we don't want to mint tokens carrying multi-MB
     # blobs. 100 KB is comfortably above our 720×720 PNG budget.
     if img and len(img) > 100_000:

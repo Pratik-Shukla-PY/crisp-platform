@@ -3,18 +3,18 @@ endpoints (Phase H.1.c).
 
 Two main shapes:
 
-  BuildingSummary  — compact representation for the LIST endpoint.
+  BuildingSummary  - compact representation for the LIST endpoint.
                      Operator-facing dashboard renders these as cards
                      in the building-grouped view. ~20 fields.
 
-  BuildingDetail   — full intelligence for the /buildings/{id} endpoint.
+  BuildingDetail   - full intelligence for the /buildings/{id} endpoint.
                      Inherits BuildingSummary, adds nested reports +
                      satellite roll-up + AI summary. Built for the
                      Building Intelligence Console (H.1.d) which
                      replaces the right-side detail panel when a
                      building is selected.
 
-  FootprintUpdate  — POST body for caching an OSM polygon that the
+  FootprintUpdate  - POST body for caching an OSM polygon that the
                      dashboard fetched via Overpass.
 """
 from __future__ import annotations
@@ -37,7 +37,7 @@ class BuildingSummary(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: str = Field(..., description="Building id — either osm:way:<n> or a proximity UUID")
+    id: str = Field(..., description="Building id - either osm:way:<n> or a proximity UUID")
     id_source: str = Field(..., description="Provenance: OSM / PROXIMITY / MANUAL")
 
     # OSM-derived display labels (nullable for proximity-clustered rows).
@@ -55,7 +55,7 @@ class BuildingSummary(BaseModel):
     state: str = Field("ACTIVE")
 
     # Five intelligence scores (0-100). NULL until the hook has fired
-    # at least once for this building — the dashboard renders "—" for
+    # at least once for this building - the dashboard renders "-" for
     # NULL rather than 0 (which would be misleading).
     severity_score: Optional[float] = None
     confidence_score: Optional[float] = None
@@ -80,7 +80,7 @@ class BuildingSummary(BaseModel):
     latest_report_at: Optional[datetime] = None
     state_changed_at: Optional[datetime] = None
 
-    # AI summary presence — boolean only on the summary view; the
+    # AI summary presence - boolean only on the summary view; the
     # full body lands on BuildingDetail.
     has_ai_summary: bool = False
     ai_summary_at: Optional[datetime] = None
@@ -102,7 +102,7 @@ class AISummaryPayload(BaseModel):
     key_findings: Optional[List[str]] = None
     conflicting_signals: Optional[List[str]] = None
     responder_recommendation: Optional[str] = None
-    # Phase H.9 — deterministic trends + structured recommended types.
+    # Phase H.9 - deterministic trends + structured recommended types.
     trends: Optional[dict] = None
     recommended_responder_types: Optional[List[str]] = None
     model: Optional[str] = None
@@ -116,16 +116,16 @@ class BuildingDetail(BuildingSummary):
     first), the AI summary body when cached, satellite roll-up, and
     the cached footprint GeoJSON.
 
-    Lists are bounded — `reports` is the full version stack (typically
+    Lists are bounded - `reports` is the full version stack (typically
     <50 entries per building per the audit), `crisis_types_top3` is
     capped at 3 entries by the SQLAlchemy hook.
     """
 
-    # Nested constituent reports — full ReportResponse so the console
+    # Nested constituent reports - full ReportResponse so the console
     # can render the per-report inline cards without a second fetch.
     reports: List[ReportResponse] = Field(default_factory=list)
 
-    # Cached OSM polygon — GeoJSON Feature dict. Set by POST
+    # Cached OSM polygon - GeoJSON Feature dict. Set by POST
     # /buildings/{id}/footprint after the dashboard fetched it via
     # Overpass. Future readers don't re-pay the Overpass round-trip.
     footprint_geojson: Optional[dict] = None
@@ -137,11 +137,11 @@ class BuildingDetail(BuildingSummary):
     # Mean + count for the score; max verdict label by severity rank.
     satellite_summary: Optional["SatelliteRollup"] = None
 
-    # Phase H.3 — active responders + monitors. cleared_at IS NULL.
+    # Phase H.3 - active responders + monitors. cleared_at IS NULL.
     responders: List["ResponderResponse"] = Field(default_factory=list)
     monitors: List["MonitorResponse"] = Field(default_factory=list)
 
-    # Phase H.4 — operator notes (newest-first, pinned first). Includes
+    # Phase H.4 - operator notes (newest-first, pinned first). Includes
     # active + soft-deleted (the latter render as tombstones). Capped
     # at 50 entries in the endpoint to keep the detail payload bounded.
     notes: List["NoteResponse"] = Field(default_factory=list)
@@ -166,7 +166,7 @@ class BuildingListResponse(BaseModel):
     next_cursor: Optional[str] = None
 
 
-# ─── Phase H.2 — state transition + event timeline ─────────────────
+# ─── Phase H.2 - state transition + event timeline ─────────────────
 class StateTransitionRequest(BaseModel):
     """POST body for state-change endpoints.
 
@@ -192,7 +192,7 @@ class BuildingEventResponse(BaseModel):
     occurred_at: datetime
 
 
-# ─── Phase H.3 — responder coordination + watch list ───────────────
+# ─── Phase H.3 - responder coordination + watch list ───────────────
 class ResponderResponse(BaseModel):
     """Single responder assignment for the console panel."""
     model_config = ConfigDict(from_attributes=True)
@@ -220,7 +220,7 @@ class ResponderCreate(BaseModel):
     responder_contact: Optional[str] = Field(None, max_length=200)
     eta_minutes: Optional[int] = Field(None, ge=0, le=10080)
     notes: Optional[str] = None
-    # Phase 3 — bounded org vocabulary (app-validated, not a Postgres enum).
+    # Phase 3 - bounded org vocabulary (app-validated, not a Postgres enum).
     org_type: Optional[str] = Field(
         "OTHER", pattern="^(GOV|NGO|VOLUNTEER|INTERNAL|OTHER)$")
 
@@ -228,7 +228,7 @@ class ResponderCreate(BaseModel):
 class ResponderUpdate(BaseModel):
     """PATCH body for updating responder lifecycle.
 
-    `action` is one of dispatched / arrived / cleared — the endpoint
+    `action` is one of dispatched / arrived / cleared - the endpoint
     sets the corresponding timestamp + emits the matching
     BuildingEvent kind. Free-form patches to other fields go via the
     other optional keys.
@@ -253,7 +253,7 @@ class MonitorResponse(BaseModel):
     note: Optional[str] = None
 
 
-# ─── Phase H.4 — Operator notes thread ─────────────────────────────
+# ─── Phase H.4 - Operator notes thread ─────────────────────────────
 class NoteResponse(BaseModel):
     """Single operator note. `author_email` + `author_name` are
     denormalised at read time so the dashboard doesn't have to follow
@@ -287,7 +287,7 @@ class NoteCreate(BaseModel):
 class NoteUpdate(BaseModel):
     """PATCH body for editing a note.
 
-    All fields optional — only what's provided gets touched. Empty
+    All fields optional - only what's provided gets touched. Empty
     body is rejected (use DELETE to soft-delete instead).
     """
     body: Optional[str] = Field(None, min_length=1, max_length=4000)

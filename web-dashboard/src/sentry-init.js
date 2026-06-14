@@ -1,9 +1,9 @@
 /**
- * CRISP — Sentry initialization (May 2026 audit fix — Dashboard observability).
+ * CRISP - Sentry initialization (May 2026 audit fix - Dashboard observability).
  *
  * Mirrors mobile-app/src/sentry-init.js but tagged `surface: dashboard`
  * so events split cleanly between reporter PWA and analyst dashboard
- * in the Sentry project. Operators see field errors here too — if
+ * in the Sentry project. Operators see field errors here too - if
  * an analyst can't dispatch a report because the dashboard JS broke,
  * that lands in Sentry instead of silently failing.
  *
@@ -68,12 +68,12 @@
             ],
         });
 
-        // Dashboard tags — distinguish from PWA in the Sentry UI.
+        // Dashboard tags - distinguish from PWA in the Sentry UI.
         window.Sentry.setTag('surface', 'dashboard');
         window.Sentry.setTag('viewport',
             window.innerWidth >= 1024 ? 'desktop' : 'tablet');
 
-        // Phase 3.2 mirror (Gap C, May 2026) — triage parity with
+        // Phase 3.2 mirror (Gap C, May 2026) - triage parity with
         // the PWA sentry-init: locale / online / network tags +
         // breadcrumb on every online↔offline flip. Even though
         // dashboard users are typically on stable office networks,
@@ -98,7 +98,7 @@
             }
         } catch (_) { /* Connection API not available on iOS Safari */ }
 
-        // Tag with analyst email if available (no PII risk — analysts
+        // Tag with analyst email if available (no PII risk - analysts
         // are CRISP-internal staff, not field reporters).
         try {
             const authStore = window.AuthStore || null;
@@ -109,7 +109,7 @@
             }
         } catch (_) { /* AuthStore not ready or unavailable */ }
 
-        // Phase 3.2 mirror — breadcrumb on every offline↔online flip.
+        // Phase 3.2 mirror - breadcrumb on every offline↔online flip.
         for (const evt of ['online', 'offline']) {
             window.addEventListener(evt, () => {
                 window.Sentry.addBreadcrumb({

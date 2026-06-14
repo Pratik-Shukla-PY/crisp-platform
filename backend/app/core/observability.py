@@ -1,5 +1,5 @@
 """
-CRISP — Observability plumbing (P3.7 + P3.8).
+CRISP - Observability plumbing (P3.7 + P3.8).
 
 Three pieces:
   - Structured JSON logs via ``structlog`` so each record carries the request
@@ -13,7 +13,7 @@ Three pieces:
     unhandled exceptions show up in a real error tracker instead of just
     the stderr of one container.
 
-Both Prometheus and Sentry are optional — neither is required for the app to
+Both Prometheus and Sentry are optional - neither is required for the app to
 boot. This file is safe to import before the FastAPI app instance exists.
 """
 
@@ -52,7 +52,7 @@ def configure_structlog() -> None:
     """Set up structlog to emit JSON (prod) or human-friendly (dev) lines.
 
     structlog here wraps the stdlib ``logging`` module so every logger in
-    the codebase gets the same formatting — no need to migrate callers.
+    the codebase gets the same formatting - no need to migrate callers.
     """
     shared_processors = [
         structlog.contextvars.merge_contextvars,
@@ -188,7 +188,7 @@ reports_submitted_total = Counter(
 
 # Guaranteed-delivery: per-variant upload + first-image SLIs.
 # The SLO we promise operators is "responders see SOME image within 5 s on a
-# 64 kbps link" — `crisp_time_to_first_image_seconds` is how we measure it.
+# 64 kbps link" - `crisp_time_to_first_image_seconds` is how we measure it.
 # `crisp_time_to_full_image_seconds` tracks the time until LARGE lands, which
 # is the quality-ceiling metric.
 variant_uploads_total = Counter(
@@ -206,17 +206,17 @@ time_to_full_image_seconds = Histogram(
     "Seconds from report creation → LARGE variant complete.",
     buckets=(1, 5, 10, 30, 60, 120, 300, 600, 1800),
 )
-# Phase C.1 (May 2026) — whole-asset integrity. Counts assemblies that
+# Phase C.1 (May 2026) - whole-asset integrity. Counts assemblies that
 # computed a djb2 over the concatenated file and found it different from
 # the PWA-supplied checksum. Should always read 0 in steady state; any
 # non-zero value indicates either (a) a real assembler regression
-# (sort/decode/concat bug — the reason this metric exists) or (b) a
+# (sort/decode/concat bug - the reason this metric exists) or (b) a
 # storage-backend corruption between assembled bytes → persistent store.
 media_asset_integrity_fail_total = Counter(
     "crisp_media_asset_integrity_fail_total",
     "Assemblies where the post-assembly djb2 didn't match the PWA-supplied "
     "whole-asset checksum. Should be 0 in healthy operation.",
-    ["tier"],  # LOW | MEDIUM | HIGH | ORIGINAL — tier of the failed variant
+    ["tier"],  # LOW | MEDIUM | HIGH | ORIGINAL - tier of the failed variant
 )
 
 # reviewer verdict counter.
@@ -227,7 +227,7 @@ reports_reviewed_total = Counter(
 )
 
 
-# ── Phase K K.6.c — submission-reliability SLIs ──────────────────────────────
+# ── Phase K K.6.c - submission-reliability SLIs ──────────────────────────────
 #
 # Four operator-facing gauges/counters that surface the failure modes
 # the K.0 audit + K.5 dashboard chips made visible. Each metric has a
@@ -235,18 +235,18 @@ reports_reviewed_total = Counter(
 # alert rules in `monitoring/alerts.yml` should fire BEFORE the
 # operator notices the chip pattern visually.
 #
-#   ① media_abandon_reason   — rate of media rows reaching the abandon
+#   ① media_abandon_reason   - rate of media rows reaching the abandon
 #       terminal state, labelled by reason. Drives the "20%+ of
 #       uploads losing higher tiers" alert.
-#   ② anon_due_expired_token — count of reports whose Bearer token
+#   ② anon_due_expired_token - count of reports whose Bearer token
 #       expired between capture + drain. Drives the "5%+ losing
 #       attribution" alert. Confirms token TTL is appropriate for
 #       field operations.
-#   ③ partial_promote        — count of Action ④ idle-window
+#   ③ partial_promote        - count of Action ④ idle-window
 #       promotions. A sudden burst implies the network conditions
-#       degraded (more soft-drained variants) — not a hot-path
+#       degraded (more soft-drained variants) - not a hot-path
 #       failure, but visibility lets ops correlate with backlog.
-#   ④ pii_blur_status        — count of Media rows by pii_blur_status,
+#   ④ pii_blur_status        - count of Media rows by pii_blur_status,
 #       sampled at ingest time. Distinct from `pii_blur_runs_total`
 #       (which counts /run/ outcomes inside the AI executor); this
 #       one is /persisted state/ via the /attach path. Operators
@@ -278,26 +278,26 @@ pii_blur_status_total = Counter(
     ["status"],
 )
 
-# R2.c (May 2026) — recovery observability for the upload-recovery
+# R2.c (May 2026) - recovery observability for the upload-recovery
 # hardening (R1 + R2 + R3). Three signals:
 #
-#   ① media_recovery_total          — count of post-abandon recovery
+#   ① media_recovery_total          - count of post-abandon recovery
 #                                      outcomes. The success rate is
 #                                      `succeeded / (succeeded + failed)`.
-#   ② media_recovery_duration_      — wall-clock interval from
+#   ② media_recovery_duration_      - wall-clock interval from
 #      seconds                         abandoned_at to recovered_at.
 #                                      Histogram buckets cover a few
 #                                      minutes (typical reconnect)
 #                                      through several days (long
 #                                      offline gaps the operator wants
 #                                      to honour).
-#   ③ media_hard_deleted_total      — rows purged by daemon Action ⑥
+#   ③ media_hard_deleted_total      - rows purged by daemon Action ⑥
 #                                      past the hard-abandon retention
 #                                      window. Operators alert on this
 #                                      to track storage reclaim.
 #
 # Together with the existing `media_abandon_reason_total` the operator
-# can compute the daemon's "false-abandon rate" — the fraction of
+# can compute the daemon's "false-abandon rate" - the fraction of
 # rows the daemon abandoned that ended up recovered. A high
 # false-abandon rate means the 30-minute deadline is too aggressive
 # for the network conditions in the field.
@@ -326,7 +326,7 @@ media_hard_deleted_total = Counter(
     #           checksum_mismatch, bandwidth_tier_deferred, ...}
     ["reason"],
 )
-# R3.b — disk-orphan GC counter. See daemon Action ⑦.
+# R3.b - disk-orphan GC counter. See daemon Action ⑦.
 disk_orphan_deleted_total = Counter(
     "crisp_disk_orphan_deleted_total",
     "Storage objects deleted by daemon Action ⑦ because no live "
@@ -336,7 +336,7 @@ disk_orphan_deleted_total = Counter(
     ["prefix"],
 )
 
-# L5 (May 2026, blur-audit) — face-detection rejection counter.
+# L5 (May 2026, blur-audit) - face-detection rejection counter.
 # Increments each time a BlazeFace candidate box is rejected by the
 # L1+L2+L4 stack before NMS / blur application. Operators watch this
 # to:
@@ -358,7 +358,7 @@ blur_candidate_rejected_total = Counter(
     ["layer", "tier"],
 )
 
-# K.6.b — AI retry queue depth. Two gauges: total pending rows + a
+# K.6.b - AI retry queue depth. Two gauges: total pending rows + a
 # breakdown by status (pending|in_progress|complete|terminal_failed)
 # so operators can see backlog trends without inspecting the DB.
 ai_retry_queue_depth = Gauge(
@@ -389,7 +389,7 @@ class PrometheusRequestMiddleware(BaseHTTPMiddleware):
         try:
             response = await call_next(request)
         except Exception:
-            # Let the global handler finish formatting — but still record the
+            # Let the global handler finish formatting - but still record the
             # 500 in metrics.
             elapsed = time.perf_counter() - start
             path_template = _path_template(request)
@@ -416,7 +416,7 @@ def _path_template(request: Request) -> str:
 
 
 def _sample_ai_retry_queue_gauge() -> None:
-    """K.6.c — refresh the ai_retry_queue depth gauge from the DB
+    """K.6.c - refresh the ai_retry_queue depth gauge from the DB
     at scrape time. Pulled into a try/except so a transient DB
     blip never breaks /metrics.
 
@@ -479,19 +479,19 @@ def init_sentry() -> bool:
             environment=_APP_ENV,
             release=os.getenv("CRISP_RELEASE", "dev"),
             traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.05")),
-            send_default_pii=False,    # crisis data — never forward PII
+            send_default_pii=False,    # crisis data - never forward PII
             max_breadcrumbs=30,
             integrations=[FastApiIntegration(), StarletteIntegration()],
         )
         return True
-    except Exception as exc:  # noqa: BLE001 — sentry init must never crash the app
+    except Exception as exc:  # noqa: BLE001 - sentry init must never crash the app
         logging.getLogger(__name__).warning("Sentry init failed: %s", exc)
         return False
 
 
 @contextmanager
 def timed(histogram: Histogram, **labels: str) -> Iterable[None]:
-    """Helper — `with timed(ai_jobs_duration_seconds, kind='blur'): ...`."""
+    """Helper - `with timed(ai_jobs_duration_seconds, kind='blur'): ...`."""
     start = time.perf_counter()
     try:
         yield

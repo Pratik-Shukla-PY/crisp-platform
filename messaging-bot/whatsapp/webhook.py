@@ -1,5 +1,5 @@
 """
-WhatsApp Webhook — Secure FastAPI router for Meta Cloud API.
+WhatsApp Webhook - Secure FastAPI router for Meta Cloud API.
 
 Security features:
   - Non-guessable webhook path using a random secret string
@@ -30,7 +30,7 @@ whatsapp_router = APIRouter()
 VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "crisp-webhook-verify-2026")
 APP_SECRET = os.getenv("WHATSAPP_APP_SECRET", "")
 
-# Non-guessable webhook path segment — generated once per server start,
+# Non-guessable webhook path segment - generated once per server start,
 # or use a fixed value from .env for stable ngrok configuration.
 WEBHOOK_SECRET_PATH = os.getenv(
     "WHATSAPP_WEBHOOK_PATH_SECRET",
@@ -65,7 +65,7 @@ def _mask_phone(phone: str) -> str:
 def _validate_signature(payload: bytes, signature: str) -> bool:
     """Validate X-Hub-Signature-256 header using HMAC-SHA256."""
     if not APP_SECRET:
-        logger.warning("WHATSAPP_APP_SECRET not configured — rejecting webhook for security")
+        logger.warning("WHATSAPP_APP_SECRET not configured - rejecting webhook for security")
         return False  # Reject when secret not configured (secure by default)
     expected = "sha256=" + hmac.new(
         APP_SECRET.encode(), payload, hashlib.sha256
@@ -100,7 +100,7 @@ async def verify_webhook(
     hub_challenge: str = Query(None, alias="hub.challenge"),
 ):
     """
-    Meta Webhook Verification — called once when you register the webhook URL.
+    Meta Webhook Verification - called once when you register the webhook URL.
     Returns hub.challenge if hub.verify_token matches. Rejects all others.
     """
     client_ip = request.client.host if request.client else "unknown"
@@ -110,14 +110,14 @@ async def verify_webhook(
         raise HTTPException(status_code=429, detail="Too many requests")
 
     if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
-        logger.info(f"Webhook verified — ip={client_ip}")
+        logger.info(f"Webhook verified - ip={client_ip}")
         # Meta requires the hub.challenge echoed back VERBATIM as plain text.
         # `int(hub_challenge)` 500s on any non-numeric challenge and returns a
         # JSON content-type; echoing the raw string is correct for every
         # challenge format Meta may send.
         return PlainTextResponse(content=hub_challenge or "")
 
-    logger.warning(f"Webhook verification REJECTED — ip={client_ip}, mode={hub_mode}")
+    logger.warning(f"Webhook verification REJECTED - ip={client_ip}, mode={hub_mode}")
     raise HTTPException(status_code=403, detail="Verification failed")
 
 
@@ -144,7 +144,7 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
     # Validate HMAC signature
     signature = request.headers.get("X-Hub-Signature-256", "")
     if APP_SECRET and not _validate_signature(body, signature):
-        logger.warning(f"Invalid signature — ip={client_ip}")
+        logger.warning(f"Invalid signature - ip={client_ip}")
         raise HTTPException(status_code=401, detail="Invalid signature")
 
     # Parse JSON
@@ -155,10 +155,10 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
 
     # Validate WhatsApp payload structure
     if not _validate_whatsapp_payload(payload):
-        logger.warning(f"Malformed WhatsApp payload — ip={client_ip}")
+        logger.warning(f"Malformed WhatsApp payload - ip={client_ip}")
         raise HTTPException(status_code=400, detail="Invalid payload structure")
 
-    # Process messages — only log safe metadata
+    # Process messages - only log safe metadata
     msg_count = 0
     try:
         for entry in payload.get("entry", []):
@@ -175,10 +175,10 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
                     ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
                     msg_count += 1
 
-                    # Safe logging — only type and masked phone
+                    # Safe logging - only type and masked phone
                     logger.info(f"[{ts}] WA msg: type={msg_type} from={_mask_phone(phone)}")
 
-                    # Process in background — return 200 immediately
+                    # Process in background - return 200 immediately
                     background_tasks.add_task(handle_incoming_message, phone, message)
 
     except Exception as e:
@@ -186,7 +186,7 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
         logger.error(f"Webhook processing error: {type(e).__name__}")
 
     if msg_count == 0:
-        # Status updates, read receipts, etc. — acknowledge silently
+        # Status updates, read receipts, etc. - acknowledge silently
         logger.debug(f"Non-message webhook event from {client_ip}")
 
     return {"status": "ok"}

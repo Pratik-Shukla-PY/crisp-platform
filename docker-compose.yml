@@ -10,7 +10,7 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql://crisp:crisp@db:5432/crisp
-      # Phase 1.8 — distributed rate-limit (audit critical-finding #4).
+      # Phase 1.8 - distributed rate-limit (audit critical-finding #4).
       # In-memory counters were per-WORKER, which meant a coordinated
       # attacker effectively got Nx the nominal rate under multi-worker
       # uvicorn deploys. Pointing at the redis service routes all
@@ -56,9 +56,9 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # ── Redis (Phase 1.8 — distributed rate-limit) ──────────────
+  # ── Redis (Phase 1.8 - distributed rate-limit) ──────────────
   # Holds the atomic INCR + EXPIRE counters that gate the meta /
-  # chunk / classify endpoints. Single instance is fine — we're
+  # chunk / classify endpoints. Single instance is fine - we're
   # only storing short-lived counters (TTL ≤ 60s), the volume of
   # data is tiny (one int per active bucket), and the failure
   # mode is graceful (falls back to per-worker in-memory). No

@@ -5,10 +5,10 @@ Three endpoints:
                                               the PWA needs to subscribe.
                                               Public, unauthenticated.
   • POST   /api/v1/push/subscribe         → upserts a PushSubscription row.
-                                              Optional JWT — if present,
+                                              Optional JWT - if present,
                                               the row also stores user_id.
   • POST   /api/v1/push/unsubscribe       → removes a row by endpoint URL.
-                                              Public — endpoint URL is itself
+                                              Public - endpoint URL is itself
                                               the access token (provider-issued,
                                               hard to guess). Worst-case
                                               authorisation gap is "someone
@@ -50,7 +50,7 @@ def get_vapid_public_key():
     once at startup and passes it to the browser as `applicationServerKey`.
 
     `enabled: false` signals to the PWA that push is not configured on
-    this deployment — the client should skip the permission prompt
+    this deployment - the client should skip the permission prompt
     entirely instead of subscribing against a useless key.
     """
     return VapidPublicKeyResponse(
@@ -74,7 +74,7 @@ def subscribe(
 
     Idempotent on `endpoint`: a repeat subscribe from the same browser
     updates the row's keys + identity rather than inserting a duplicate.
-    Returns 201 on either insert or update — the client doesn't care
+    Returns 201 on either insert or update - the client doesn't care
     which happened, only that the server now has a current subscription.
     """
     # Identity resolution: prefer JWT user_id when present; fall back to
@@ -92,7 +92,7 @@ def subscribe(
 
     # `Accept-Language` from the browser is a sensible default for the
     # subscription's locale (so the SW can render notifications in the
-    # right language) — but only the first tag.
+    # right language) - but only the first tag.
     locale_hdr = request.headers.get("accept-language", "") or ""
     locale = locale_hdr.split(",")[0].split(";")[0].strip() or None
     user_agent = request.headers.get("user-agent")
@@ -120,7 +120,7 @@ def unsubscribe(payload: PushSubscriptionDelete, db: Session = Depends(get_db)):
 
     Returns `{"deleted": true|false}` so the client can distinguish
     "I unsubscribed, server confirmed" from "subscription was already
-    gone." Idempotent — re-calling on a missing endpoint returns
+    gone." Idempotent - re-calling on a missing endpoint returns
     `{"deleted": false}` rather than 404, because the desired state
     (no subscription) is already met.
     """

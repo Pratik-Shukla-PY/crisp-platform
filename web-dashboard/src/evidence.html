@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CRISP — Verification Evidence</title>
+    <title>CRISP - Verification Evidence</title>
     <meta name="crisp-sentry-dsn" content="">
-    <meta name="crisp-release" content="crisp-dashboard@v52">
+    <meta name="crisp-release" content="crisp-dashboard@v53">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <!-- Phase C.2 (May 2026, UNDP-grade satellite-verification rebuild) —
+    <!-- Phase C.2 (May 2026, UNDP-grade satellite-verification rebuild) -
          Public, auth-free shareable evidence page. Loaded via
          /web-dashboard/src/evidence.html?id=<report_id>; renders
          JSON from /api/v1/reports/<id>/evidence. Designed for the UNDP
@@ -17,11 +17,11 @@
          No login. No dashboard.css. No app.js. Standalone, fast,
          linkable. Trust model matches the existing presigned-URL
          pattern: anyone with the report_id (a UUID) can view. -->
-    <meta name="description" content="CRISP verification evidence — citizen photo cross-checked with multi-source satellite imagery using AWS Sentinel-2, Microsoft Planetary Computer, ESA Copernicus, and Mapbox.">
+    <meta name="description" content="CRISP verification evidence - citizen photo cross-checked with multi-source satellite imagery using AWS Sentinel-2, Microsoft Planetary Computer, ESA Copernicus, and Mapbox.">
     <meta name="robots" content="noindex">
-    <!-- May 2026 (LCP perf fix) — self-hosted Outfit + JetBrains Mono +
+    <!-- May 2026 (LCP perf fix) - self-hosted Outfit + JetBrains Mono +
          Font Awesome. Public evidence page is a top-of-funnel demo
-         surface for the UNDP judges — every CDN round-trip is one
+         surface for the UNDP judges - every CDN round-trip is one
          more chance to flap. See web-dashboard/src/fonts/fonts.css. -->
     <link rel="preload" as="font" type="font/woff2" href="fonts/outfit-900.woff2" crossorigin>
     <link rel="stylesheet" href="fonts/fontawesome/all.min.css">
@@ -52,7 +52,7 @@
         }
         .container { max-width: 920px; margin: 0 auto; }
 
-        /* Header — UN-blue + CRISP logotype */
+        /* Header - UN-blue + CRISP logotype */
         .ev-header {
             display: flex; align-items: center; justify-content: space-between;
             margin-bottom: 24px;
@@ -322,7 +322,7 @@
     <div class="container">
         <header class="ev-header">
             <div class="ev-logo">
-                <!-- May 2026 — FA satellite-dish replaced with the new
+                <!-- May 2026 - FA satellite-dish replaced with the new
                      ripple-tile brand mark for consistency with the PWA
                      + login page. -->
                 <div class="ev-logo-mark" aria-hidden="true">
@@ -356,13 +356,13 @@
             </div>
         </main>
         <footer class="ev-footer">
-            <p><strong>Verified by CRISP</strong> — citizen reports cross-checked against multi-source satellite imagery
+            <p><strong>Verified by CRISP</strong> - citizen reports cross-checked against multi-source satellite imagery
                 (AWS Sentinel-2 · Microsoft Planetary Computer · ESA Copernicus · Mapbox)
                 using an AI vision model.</p>
             <p style="margin-top:6px;">This page is read-only and shareable. The full dashboard requires authentication.</p>
         </footer>
     </div>
-    <!-- Sentry observability — May 2026 audit fix. -->
+    <!-- Sentry observability - May 2026 audit fix. -->
     <script src="vendor/sentry.min.js?v=8.30.0"></script>
     <script src="sentry-init.js?v=1"></script>
     <script src="evidence.js"></script>

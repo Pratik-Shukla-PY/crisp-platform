@@ -1,4 +1,4 @@
-"""media_recovered_at_recovery — R1: distinguish abandoned-and-recovered from abandoned-forever
+"""media_recovered_at_recovery - R1: distinguish abandoned-and-recovered from abandoned-forever
 
 Revision ID: 0040_media_recovered_at_recovery
 Revises: 0039_media_pre_blur_retention
@@ -10,14 +10,14 @@ Problem this column closes:
   ``assembly_status='complete'`` but with ``abandoned_at`` + ``abandon_reason``
   still populated. The dashboard chip predicate ("Upload abandoned") read
   ``abandon_reason`` directly, so successfully-recovered uploads were
-  permanently rendered as abandoned — a contradiction the operator hit on
+  permanently rendered as abandoned - a contradiction the operator hit on
   iPhone Safari multi-photo capture in May 2026.
 
 The fix preserves the audit trail (``abandoned_at`` + ``abandon_reason``
 remain write-once at abandonment) and adds a third column that the
 assembly worker stamps on successful post-abandon recovery:
 
-  - ``recovered_at: TIMESTAMPTZ NULL`` — set by ``_try_full_assembly_bg``
+  - ``recovered_at: TIMESTAMPTZ NULL`` - set by ``_try_full_assembly_bg``
     when assembly succeeds AND the row was previously abandoned. NULL
     means either (a) never abandoned, or (b) abandoned and not yet
     recovered.
@@ -28,7 +28,7 @@ the standard chip rules.
 
 Backfill: any row currently in ``assembly_status='complete'`` with
 ``abandoned_at IS NOT NULL`` is the exact population this bug already
-produced — chunks landed after the abandon stamp, assembly succeeded, but
+produced - chunks landed after the abandon stamp, assembly succeeded, but
 the chip stayed wrong. Stamp ``recovered_at = updated_at`` for these so
 they clear immediately post-deploy. ``updated_at`` is the closest
 approximation to the actual completion timestamp (assembly worker bumps
@@ -64,7 +64,7 @@ def upgrade() -> None:
             ),
         ),
     )
-    # Partial index — most rows have recovered_at IS NULL; only the
+    # Partial index - most rows have recovered_at IS NULL; only the
     # recovered population is interesting. Partial indexes keep storage
     # cost flat as the table grows.
     op.create_index(

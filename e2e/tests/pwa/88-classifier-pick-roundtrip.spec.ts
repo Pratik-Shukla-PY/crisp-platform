@@ -18,7 +18,7 @@
  * user taps to snake_case fields, submitReport read camelCase
  * legacy fields, _clearCaptureState reset the legacy fields to
  * hardcoded defaults. Three-way collision documented in detail in
- * sw.js v224 comment + CLAUDE.md "Classifier-state field naming"
+ * sw.js v224 comment + the project invariants "Classifier-state field naming"
  * invariant.
  *
  * Fix (v6.7):
@@ -110,7 +110,7 @@ async function clearQueue(page: Page) {
 async function pickClassifiers(
     page: Page,
     damage: 'MINIMAL' | 'PARTIAL' | 'COMPLETE',
-    // InfrastructureTypeEnum per CLAUDE.md — `SCHOOL` and `HOSPITAL`
+    // InfrastructureTypeEnum per the project invariants — `SCHOOL` and `HOSPITAL`
     // replaced the legacy `EDUCATIONAL` and `HEALTHCARE` during the v3
     // sub-type expansion; this signature drifted until Sprint 1D.
     // Main types plus the granular sub-types the v4 picker also surfaces.

@@ -8,7 +8,7 @@ Central source of truth for the mappings:
   * damage_classification normalisation (legacy "NO_DAMAGE" → "MINIMAL")
 
 Keep this module pure (no DB / HTTP imports). Both the backend
-endpoints and a small CLI could consume it — and the tests can assert
+endpoints and a small CLI could consume it - and the tests can assert
 the mapping round-trips without a live DB.
 """
 import enum as _enum
@@ -56,7 +56,7 @@ def categorise_crisis(crisis_type) -> Optional[str]:
     """Return the UNDP Appendix-1 category for a crisis_type string.
 
     Accepts plain strings or enum members. None and unrecognised values
-    return None — callers can then fall through to 'OTHER' or leave
+    return None - callers can then fall through to 'OTHER' or leave
     the column unset at their discretion.
     """
     key = _to_key(crisis_type)
@@ -68,7 +68,7 @@ def categorise_crisis(crisis_type) -> Optional[str]:
 # ── Damage classification normalisation ───────────────────────────────────────
 
 # UNDP spec: "Minimal/No damage", "Partially damaged", "Completely damaged".
-# CRISP stored "NO_DAMAGE" historically — accept both, emit "MINIMAL" on write.
+# CRISP stored "NO_DAMAGE" historically - accept both, emit "MINIMAL" on write.
 DAMAGE_ALIASES = {
     "NO_DAMAGE": "MINIMAL",
     "NONE": "MINIMAL",
@@ -160,7 +160,7 @@ UNDP_CRISIS_TYPES = [
 UNDP_DAMAGE_CLASSES = ["MINIMAL", "PARTIAL", "COMPLETE"]
 
 
-# Phase L (May 2026) — resolution_tier canonical vocabulary is
+# Phase L (May 2026) - resolution_tier canonical vocabulary is
 # SMALL / MEDIUM / ORIGINAL. The legacy LOW/HIGH aliases that this
 # module previously normalized were removed from `ResolutionEnum`
 # in alembic 0036; Pydantic now rejects them at the schema layer

@@ -1,9 +1,9 @@
 /**
- * CRISP icon pack — shared SVG sprites.
+ * CRISP icon pack - shared SVG sprites.
  *
  * Single source of truth for every chip icon on the capture flow, so
  * both the PWA (inline SVG) and RN (react-native-svg) render the same
- * shapes. Sourced from Lucide (MIT) — https://lucide.dev/ — trimmed to
+ * shapes. Sourced from Lucide (MIT) - https://lucide.dev/ - trimmed to
  * just the CRISP-needed glyphs + constant-width stroke styling.
  *
  * Why SVG over FontAwesome: (a) UNDP wants colour-coded icons per
@@ -24,7 +24,7 @@
 
 const _STROKE = 2;
 
-/** Tiny helper — every glyph shares the same outer shell + viewport. */
+/** Tiny helper - every glyph shares the same outer shell + viewport. */
 function svg(inner) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ` +
          `stroke="currentColor" stroke-width="${_STROKE}" stroke-linecap="round" ` +
@@ -56,7 +56,7 @@ const _PANDEMIC     = svg(`<circle cx="12" cy="12" r="8"/><path d="M12 4v-2M12 2
 const _CONFLICT     = svg(`<path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5L18 3h3v3l-3.5 3.5"/>`);
 const _CIVIL_UNREST = svg(`<circle cx="9" cy="7" r="3"/><circle cx="17" cy="7" r="3"/><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2M14 21v-2a4 4 0 0 1 3-3.87"/>`);
 
-// ── Damage severity dots — hollow vs filled, palette-ready ──────────────────
+// ── Damage severity dots - hollow vs filled, palette-ready ──────────────────
 
 const _DAMAGE_MINIMAL  = svg(`<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="currentColor"/>`);
 const _DAMAGE_PARTIAL  = svg(`<circle cx="12" cy="12" r="10"/><path d="M4.93 4.93l14.14 14.14" stroke-width="2.5"/>`);
@@ -78,7 +78,7 @@ const _BOLT          = svg(`<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 1
 const _HEALTH        = svg(`<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>`);
 
 export const ICON_PACK = Object.freeze({
-  // Infra super-types / legacy chips — same lookup keys the app.js uses.
+  // Infra super-types / legacy chips - same lookup keys the app.js uses.
   HOUSE:      _HOUSE,
   RESIDENTIAL: _HOUSE,
   HOSPITAL:   _HOSPITAL,
@@ -108,7 +108,7 @@ export const ICON_PACK = Object.freeze({
   CONFLICT:   _CONFLICT,
   CIVIL_UNREST: _CIVIL_UNREST,
 
-  // Damage levels — used in severity dots (visual only).
+  // Damage levels - used in severity dots (visual only).
   MINIMAL:   _DAMAGE_MINIMAL,
   PARTIAL:   _DAMAGE_PARTIAL,
   COMPLETE:  _DAMAGE_COMPLETE,
@@ -121,7 +121,7 @@ export const ICON_PACK = Object.freeze({
 });
 
 /**
- * Lookup helper — always returns a valid SVG string (falls through to
+ * Lookup helper - always returns a valid SVG string (falls through to
  * OTHER glyph on unknown keys, never undefined). Exposed on `window`
  * so inline HTML data-attributes can resolve to an icon without a
  * module import.
@@ -130,7 +130,7 @@ export function iconFor(key) {
   return ICON_PACK[key] || ICON_PACK.OTHER;
 }
 
-// Browser-side convenience — a single entry point for inline `onload`
+// Browser-side convenience - a single entry point for inline `onload`
 // handlers + the stage-split renderer in app.js.
 if (typeof window !== 'undefined') {
   window.CrispIconPack = ICON_PACK;

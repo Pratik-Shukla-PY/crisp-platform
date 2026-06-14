@@ -1,5 +1,5 @@
 """
-Prediction Models — PredictionZone + PredictionResult
+Prediction Models - PredictionZone + PredictionResult
 Stores monitored geographic zones and Claude-powered risk forecasts.
 """
 import uuid
@@ -41,7 +41,7 @@ class PredictionZone(Base):
 
 
 class PredictionResult(Base):
-    """Single prediction run — risk forecast for a zone at a point in time."""
+    """Single prediction run - risk forecast for a zone at a point in time."""
     __tablename__ = "prediction_results"
 
     id = Column(String(36), primary_key=True, default=gen_uuid)

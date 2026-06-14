@@ -1,5 +1,5 @@
 """
-Telegram Session Manager — Reuses the same pattern as WhatsApp.
+Telegram Session Manager - Reuses the same pattern as WhatsApp.
 Per-user session buffers to aggregate multiple Telegram messages into
 a single structured CRISP report.
 """
@@ -28,7 +28,7 @@ TYPE_MAP = {
     # 8 UNDP Appendix-1
     # super-types exposed as the canonical chip set. Legacy chip callbacks
     # (type_road / type_hospital / etc.) are still accepted so users on
-    # offline-queued pre-v3 buttons don't break — the backend's taxonomy
+    # offline-queued pre-v3 buttons don't break - the backend's taxonomy
     # hook normalises them on write.
     "type_residential":            "RESIDENTIAL",
     "type_commercial":             "COMMERCIAL",
@@ -38,7 +38,7 @@ TYPE_MAP = {
     "type_community":              "COMMUNITY",
     "type_public_spaces":          "PUBLIC_SPACES",
     "type_other":                  "OTHER",
-    # Legacy (pre-v3) aliases — back-compat with older clients.
+    # Legacy (pre-v3) aliases - back-compat with older clients.
     "type_road":     "TRANSPORT_COMMUNICATION",
     "type_hospital": "COMMUNITY",
     "type_house":    "RESIDENTIAL",
@@ -57,11 +57,11 @@ TYPE_MAP = {
     "school": "COMMUNITY", "telecom": "UTILITY",
 }
 CRISIS_MAP = {
-    # UNDP-canonical taxonomy (CLAUDE.md must-have #5):
+    # UNDP-canonical taxonomy (the project invariants must-have #5):
     #   EARTHQUAKE / FLOOD / TSUNAMI / CYCLONE (HURRICANE alias)
     #   WILDFIRE / EXPLOSION / CHEMICAL_INCIDENT
     #   CONFLICT / CIVIL_UNREST / OTHER
-    # — and nothing else. The backend's `_enforce_undp_taxonomy`
+    # - and nothing else. The backend's `_enforce_undp_taxonomy`
     # validator rejects any other value with 422.
     # Natural
     "crisis_earthquake":         "EARTHQUAKE",
@@ -94,7 +94,7 @@ DAMAGE_MAP = {
 DEBRIS_MAP = {
     "debris_yes": True,
     "debris_no":  False,
-    "debris_na":  None,   # Phase 2: "Not sure / N/A" — non-blocking; stored NULL
+    "debris_na":  None,   # Phase 2: "Not sure / N/A" - non-blocking; stored NULL
 }
 
 
@@ -134,11 +134,11 @@ class TelegramSession:
     # native-language building name the reporter
     # types in-chat when asked. Sent to the backend as `infrastructure_name`
     # with `infrastructure_name_from_osm=False` so the dashboard knows it
-    # needs to be mapped to an OSM footprint by an operator. Optional — the
+    # needs to be mapped to an OSM footprint by an operator. Optional - the
     # reporter can skip and the field stays empty.
     infra_name: str = ""
     infra_name_answered: bool = False
-    # UX fix — when the reporter taps an Overpass suggestion
+    # UX fix - when the reporter taps an Overpass suggestion
     # chip, this holds the `osm:way:<id>` / `osm:relation:<id>` string.
     # Emitted on the meta payload as `building_id` so dashboard pins the
     # report to the exact footprint without needing operator mapping.
@@ -154,7 +154,7 @@ class TelegramSession:
     created_at: float = field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
     last_activity: float = field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
     message_ids: set = field(default_factory=set)
-    # UX fix — Telegram callback_query.id dedupe. Every chip tap
+    # UX fix - Telegram callback_query.id dedupe. Every chip tap
     # fires a callback that the bot answers + acts on. Network lag means
     # the user may tap twice before the first reply paints, so the second
     # callback_query arrives with a fresh id but identical `data`. We
@@ -163,7 +163,7 @@ class TelegramSession:
     # no-op. Bounded queue → never grows unbounded.
     callback_ids: set = field(default_factory=set)
     callback_recent_data: list = field(default_factory=list)   # [(data, ts)]
-    # BUGFIX May 2026 — stale-message dedupe.
+    # BUGFIX May 2026 - stale-message dedupe.
     #
     # The 2-second `(data, ts)` window above caught only rapid double-taps
     # (network-lag → user taps twice). It did NOT catch the operator-
@@ -181,7 +181,7 @@ class TelegramSession:
     # so the user can't physically tap it again.
     active_prompt_msg_id: Optional[int] = None
     submitted_report_id: Optional[str] = None
-    # P3.5 — tracks whether the user has consented to data capture. Flipped
+    # P3.5 - tracks whether the user has consented to data capture. Flipped
     # true only by the explicit "I consent" callback; all data handlers
     # bail early if false. Persisted across the session lifetime so returning
     # users don't re-consent until /start wipes the session.
@@ -236,9 +236,9 @@ class TelegramSession:
 
 _sessions: Dict[str, TelegramSession] = {}
 
-# Phase 6 — throttle the full-dict stale sweep. get_or_create_session runs the
+# Phase 6 - throttle the full-dict stale sweep. get_or_create_session runs the
 # sweep at most once per _SWEEP_INTERVAL_SEC instead of on every update, so a
-# busy bot doesn't pay an O(n) scan per message (must-have #12 — scale). In
+# busy bot doesn't pay an O(n) scan per message (must-have #12 - scale). In
 # webhook mode (no polling loop) this throttled sweep IS the periodic cleanup.
 _SWEEP_INTERVAL_SEC = 300.0
 _last_sweep_ts: float = 0.0
@@ -255,8 +255,8 @@ def _is_stale(s: TelegramSession, now_ts: float) -> bool:
       • it never created a report and has sat for > 2 h (abandoned draft), or
       • Phase 6: it created a report early but never finalized AND has been
         idle for > 12 h (abandoned mid-flow). Without this last rule a
-        report-bearing session lingered forever — neither of the first two
-        conditions ever matched it — so the dict grew unbounded.
+        report-bearing session lingered forever - neither of the first two
+        conditions ever matched it - so the dict grew unbounded.
     The idle check uses last_activity (not created_at) so a slow-but-active
     long report is never reaped out from under the reporter."""
     age = now_ts - s.created_at
@@ -282,7 +282,7 @@ def _sweep(now_ts: float) -> int:
 
 def get_or_create_session(user_id: int, chat_id: int) -> TelegramSession:
     uh = hash_user(user_id)
-    # Phase 6 — throttled stale sweep: at most once per _SWEEP_INTERVAL_SEC,
+    # Phase 6 - throttled stale sweep: at most once per _SWEEP_INTERVAL_SEC,
     # not on every update (the old behavior was an O(n) scan per message).
     global _last_sweep_ts
     now_ts = datetime.now(timezone.utc).timestamp()
@@ -328,7 +328,7 @@ def is_duplicate_callback(session: TelegramSession, cq_id: str, data: str, windo
       1. Telegram re-delivering the same cq_id (rare but happens under
          poor connectivity → the client retries the answer_callback).
       2. User tapping the same button twice within `window_seconds` because
-         of network lag — different cq_id but identical `data`. Without
+         of network lag - different cq_id but identical `data`. Without
          this the bot would fire the handler twice, re-submit, etc.
 
     Keeps the per-session state bounded: callback_ids ring holds the last
@@ -337,17 +337,17 @@ def is_duplicate_callback(session: TelegramSession, cq_id: str, data: str, windo
     import time
     now = time.monotonic()
 
-    # Pattern 1 — cq_id already seen.
+    # Pattern 1 - cq_id already seen.
     if cq_id and cq_id in session.callback_ids:
         return True
     if cq_id:
         session.callback_ids.add(cq_id)
         if len(session.callback_ids) > 64:
             # Drop the oldest-ish half; set doesn't maintain order, but we
-            # don't need strict LRU — just a soft cap.
+            # don't need strict LRU - just a soft cap.
             session.callback_ids = set(list(session.callback_ids)[-32:])
 
-    # Pattern 2 — same data within the window.
+    # Pattern 2 - same data within the window.
     # Purge entries outside the window first.
     session.callback_recent_data = [
         (d, ts) for (d, ts) in session.callback_recent_data if now - ts < window_seconds
@@ -373,7 +373,7 @@ def is_stale_callback_message(session: TelegramSession, message_id) -> bool:
     `active_prompt_msg_id` is set every time we send a prompt with an
     inline keyboard (`session_manager._track_prompt_msg` is wired up
     from the `_prompt_for_step` helper). If the click arrives on any
-    other message_id, the user has tapped a stale button — drop it.
+    other message_id, the user has tapped a stale button - drop it.
 
     Treat the case where `active_prompt_msg_id` is None as "not stale"
     so the very first interaction (no prompt sent yet) still works.
@@ -388,13 +388,13 @@ def is_stale_callback_message(session: TelegramSession, message_id) -> bool:
 def track_prompt_msg(session: TelegramSession, send_result) -> None:
     """Save the message_id of the latest prompt-with-inline-keyboard.
 
-    `send_result` is what `bot_replies._send` returns — the Telegram
+    `send_result` is what `bot_replies._send` returns - the Telegram
     Bot API response object `{ok, result: {message_id, ...}}`. We grab
     the message_id off `result` and stash it on the session so the
     stale-message dedupe in `_handle_callback` can match against it.
 
     Best-effort: any unexpected response shape (None, malformed JSON,
-    network error) leaves `active_prompt_msg_id` unchanged — the bot
+    network error) leaves `active_prompt_msg_id` unchanged - the bot
     falls back to the existing (data, 2s window) dedupe.
     """
     if not isinstance(send_result, dict):
@@ -407,7 +407,7 @@ def track_prompt_msg(session: TelegramSession, send_result) -> None:
         session.active_prompt_msg_id = msg_id
 
 
-# ── Language detection — EXACT SAME logic as mobile app (COUNTRY_LANG_DATA + REGION_LANG_MAP) ──
+# ── Language detection - EXACT SAME logic as mobile app (COUNTRY_LANG_DATA + REGION_LANG_MAP) ──
 # 190+ countries → language code (mirrors mobile-app/src/app.js COUNTRY_LANG_DATA)
 _COUNTRY_LANG = {
     # Asia & Pacific
@@ -446,7 +446,7 @@ _COUNTRY_LANG = {
     'BR': 'pt', 'HT': 'fr', 'JM': 'en', 'TT': 'en', 'GY': 'en', 'SR': 'nl', 'BZ': 'en',
 }
 
-# Sub-national regions (India) — mirrors mobile-app/src/app.js REGION_LANG_MAP
+# Sub-national regions (India) - mirrors mobile-app/src/app.js REGION_LANG_MAP
 _REGION_LANG_MAP = [
     {'match': ['karnataka', 'bangalore', 'bengaluru', 'mysore', 'hubli'], 'code': 'kn'},
     {'match': ['tamil nadu', 'tamilnadu'], 'code': 'ta'},
@@ -501,7 +501,7 @@ async def resolve_location_name(session: TelegramSession):
                 if session.location_name:
                     logger.info(f"Location resolved: {session.location_name}")
 
-                # Override language based on location — same logic as mobile app
+                # Override language based on location - same logic as mobile app
                 # Step 1: Check sub-national regions first (e.g. Indian states)
                 region_str = " ".join([
                     state, addr.get("state_district", ""),
@@ -518,7 +518,7 @@ async def resolve_location_name(session: TelegramSession):
                 if not detected_lang:
                     detected_lang = _COUNTRY_LANG.get(country_code, "")
 
-                # BUGFIX May 2026 (operator-reported) — pre-fix this
+                # BUGFIX May 2026 (operator-reported) - pre-fix this
                 # block was `if detected_lang:` (no guard). It
                 # UNCONDITIONALLY overwrote `session.lang` with the
                 # geo-detected default, including the case where the
@@ -539,17 +539,17 @@ async def resolve_location_name(session: TelegramSession):
                     session.lang = detected_lang
                     logger.info(f"Language filled from location: → {detected_lang} (country={country_code}, region={state})")
                 elif detected_lang:
-                    logger.info(f"Location-detected lang {detected_lang} ignored — user already on {session.lang}")
+                    logger.info(f"Location-detected lang {detected_lang} ignored - user already on {session.lang}")
     except Exception as e:
         logger.warning(f"Reverse geocode failed: {e}")
 
 
 async def forward_geocode(query: str):
-    """Phase 2 — forward-geocode a typed place name to coordinates.
+    """Phase 2 - forward-geocode a typed place name to coordinates.
 
     Lets desktop / GPS-denied Telegram reporters set a location by typing a
     place name instead of being stuck on the (mobile-only) "Send Location"
-    button — the single biggest blocker in the old flow. Uses the same
+    button - the single biggest blocker in the old flow. Uses the same
     OpenStreetMap Nominatim provider as the reverse geocoder above, /search.
     Returns (lat, lng, short_name) on a hit, else None. Best-effort + bounded
     timeout; never raises.
@@ -622,7 +622,7 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
         session.pwa_device_hash if getattr(session, "pwa_device_hash", None)
         else session.user_hash
     )
-    # K.2.f (May 2026, Phase K) — compute `expected_media` from the
+    # K.2.f (May 2026, Phase K) - compute `expected_media` from the
     # session's ACTUAL media state at meta-create time, instead of the
     # legacy hardcoded `2` (which assumed photo + audio and left every
     # photo-only Telegram report stuck PARTIAL forever).
@@ -630,7 +630,7 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
     # present-ness, see TelegramSession.media_count at L201) as the
     # actual count. Defensive floor of 1: Telegram sessions reach
     # `create_report_early` only after some media has been received,
-    # so 0 should be impossible — but if it ever happens we don't
+    # so 0 should be impossible - but if it ever happens we don't
     # want to land a row with expected_media=0 that subsequent attach
     # calls would over-count.
     _expected_media = max(1, session.media_count)
@@ -651,7 +651,7 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
     if session.infra_name:
         meta["infrastructure_name"] = session.infra_name
         meta["infrastructure_name_from_osm"] = False
-    # UNDP "Other, please specify" rule (report.py:185) — when the
+    # UNDP "Other, please specify" rule (report.py:185) - when the
     # Telegram user picked OTHER without typing a name (or skipped the
     # infra-name question entirely), backend rejects with 422. Fall
     # back to a description snippet so the early-create lands; the
@@ -663,7 +663,7 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
             else "Reporter did not specify"
         )
         meta["infrastructure_name_from_osm"] = False
-    # Telegram UX polish — OSM building pick goes into meta too.
+    # Telegram UX polish - OSM building pick goes into meta too.
     # When present, the dashboard skips the "needs mapping" badge (the
     # footprint IS the mapping). infrastructure_name_from_osm is TRUE
     # so the needs_manual_mapping derivation treats it as resolved.
@@ -678,11 +678,11 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
 
     if session.has_location:
         meta["location"] = _location_payload(session)
-        # Operation linkage — Telegram shares a precise GPS location, so resolve
+        # Operation linkage - Telegram shares a precise GPS location, so resolve
         # the active crisis zone there and echo its event id. The backend treats
         # this as a hint and re-derives authoritatively from the location, so a
         # stale lookup can't mislabel; no active zone → absent → GLOBAL report.
-        # NOTE: only crisis_event_id is sent (NOT form_pack_id) — Telegram doesn't
+        # NOTE: only crisis_event_id is sent (NOT form_pack_id) - Telegram doesn't
         # render the dynamic Stage 2/3 pack, so attaching a pack would 422 on its
         # unanswered required fields.
         _eid = await resolve_active_event_id(session.latitude, session.longitude)
@@ -723,7 +723,7 @@ async def upload_image(session: TelegramSession) -> bool:
 
 
 async def upload_extra_images(session: TelegramSession) -> bool:
-    """Phase 4 — upload any not-yet-uploaded extra album photos as independent
+    """Phase 4 - upload any not-yet-uploaded extra album photos as independent
     ORIGINAL Media rows on the report. Telegram has one variant per photo, so
     each extra is its own Media row (no photo_group_id); expected_media counts
     them. Best-effort per photo: a failure on one doesn't block the others, and
@@ -747,7 +747,7 @@ async def upload_extra_images(session: TelegramSession) -> bool:
 
 
 async def upload_video_deferred(session: TelegramSession) -> bool:
-    """Upload video as a secondary media item — runs after audio+image are done."""
+    """Upload video as a secondary media item - runs after audio+image are done."""
     if not session.report_id or not session.video_data_url:
         return False
     try:
@@ -800,7 +800,7 @@ async def update_report_metadata(session: TelegramSession):
             if session.infra_name:
                 payload["infrastructure_name"] = session.infra_name
                 payload["infrastructure_name_from_osm"] = False
-            # Telegram UX polish — OSM building pick via the
+            # Telegram UX polish - OSM building pick via the
             # suggestion chips. Overrides the free-text from-osm=False
             # branch above because the pick IS the mapping.
             if session.building_id:
@@ -867,7 +867,7 @@ async def update_report_location(session: TelegramSession) -> bool:
 
 
 async def submit_report(session: TelegramSession) -> Optional[str]:
-    """Final submission — await pending uploads, update metadata, return report_id."""
+    """Final submission - await pending uploads, update metadata, return report_id."""
     if not session.report_id:
         await create_report_early(session)
     if session.report_id:

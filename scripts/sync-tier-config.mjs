@@ -3,7 +3,7 @@
  * Generate platform-native tier-config files from the canonical
  * `shared/tier-config.json`.
  *
- * Phase 2.1 (Badge Studio premium) — extract a single source of truth
+ * Phase 2.1 (Badge Studio premium) - extract a single source of truth
  * for the V4 reward ladder so emoji / label / color / ring gradient
  * never drift between PWA, dashboard, RN, and backend share endpoint.
  *
@@ -11,16 +11,16 @@
  *   node scripts/sync-tier-config.mjs --check    # CI: exit non-zero on drift
  *
  * Outputs:
- *   shared/tier-config.js   — IIFE that exports window.CRISP_TIERS +
+ *   shared/tier-config.js   - IIFE that exports window.CRISP_TIERS +
  *                             window.CRISP_TIERS_BY_ID for vanilla
  *                             JS (PWA + dashboard). Loaded via
  *                             <script src="..."> BEFORE app.js.
- *   shared/tier-config.ts   — `export const TIERS` + `TIERS_BY_ID`
+ *   shared/tier-config.ts   - `export const TIERS` + `TIERS_BY_ID`
  *                             for RN / Expo (importable as a typed
  *                             constant).
  *
  * The Python backend reads the JSON directly (`json.load`) so no
- * generated .py file — see backend/app/services/tier_config.py.
+ * generated .py file - see backend/app/services/tier_config.py.
  *
  * The generator is deterministic: same JSON → same output bytes, so
  * the `--check` mode is just a diff against the freshly-regenerated
@@ -51,7 +51,7 @@ const tiers = config.tiers;
 
 // ── Header (rendered in every generated file) ────────────────────────
 const header = `// ╭──────────────────────────────────────────────────────────────────╮
-// │ AUTO-GENERATED — DO NOT EDIT BY HAND                            │
+// │ AUTO-GENERATED - DO NOT EDIT BY HAND                            │
 // │ Source: shared/tier-config.json                                  │
 // │ Regenerate with: node scripts/sync-tier-config.mjs               │
 // │ CI verifies with: node scripts/sync-tier-config.mjs --check      │
@@ -160,12 +160,12 @@ console.log("");
 if (problems) {
     if (CHECK_ONLY) {
         console.error(
-            `${RED}FAIL${RESET} — ${problems} tier-config output(s) out of sync. ` +
+            `${RED}FAIL${RESET} - ${problems} tier-config output(s) out of sync. ` +
             `Run without --check to regenerate, then commit.`,
         );
     } else {
-        console.error(`${RED}FAIL${RESET} — ${problems} problem(s).`);
+        console.error(`${RED}FAIL${RESET} - ${problems} problem(s).`);
     }
     process.exit(1);
 }
-console.log(`${GREEN}PASS${RESET} — tier-config outputs in sync with canonical JSON.`);
+console.log(`${GREEN}PASS${RESET} - tier-config outputs in sync with canonical JSON.`);

@@ -7,7 +7,7 @@ Create Date: 2026-05-14
 The "Verified Reports Nearby" feature (/api/v1/reports/nearby) does a
 bounding-box pre-filter on Location.latitude + Location.longitude
 BEFORE running haversine. Without an index that pre-filter is a full
-table scan on `locations`, which scales to ~O(n) per query — exactly
+table scan on `locations`, which scales to ~O(n) per query - exactly
 what we want to avoid for the home-stage poll path (one request per
 boot per device).
 
@@ -18,11 +18,11 @@ in a city with 50k reports, this drops the query from a 50k-row scan
 to ~50-500 candidates (the bbox).
 
 Phase 3 (post-submission) will swap this for a PostGIS GIST index +
-ST_DWithin — better for true radius (vs bbox) but requires the
+ST_DWithin - better for true radius (vs bbox) but requires the
 PostGIS extension. This btree is the pre-PostGIS speedup that gets
 us through the UNDP demo deadline.
 
-Idempotent — `CREATE INDEX IF NOT EXISTS` semantics via the inspector
+Idempotent - `CREATE INDEX IF NOT EXISTS` semantics via the inspector
 guard pattern used in 0013_push_subscriptions / 0015_geo_conf /
 0017_full_asset_checksum.
 """

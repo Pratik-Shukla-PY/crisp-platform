@@ -1,4 +1,4 @@
-"""Phase 3 — extend building_responders for operation-level + org-typed responders
+"""Phase 3 - extend building_responders for operation-level + org-typed responders
 
 Revision ID: 0049_building_responder_phase3
 Revises: 0048_crisis_event_idx
@@ -11,7 +11,7 @@ Option B of the Operations redesign: a responder can now target an OPERATION
   - org_type        : GOV | NGO | VOLUNTEER | INTERNAL | OTHER (app-validated vocab)
   - building_id relaxed to nullable so OPERATION-target rows need no phantom building
 
-All additive-nullable (metadata-only on Postgres — no table rewrite). The
+All additive-nullable (metadata-only on Postgres - no table rewrite). The
 backfill UPDATE + the building_id nullable relax are safe inline: the responder
 roster is small (operator-assigned), not report-scale.
 """

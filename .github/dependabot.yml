@@ -1,6 +1,6 @@
 version: 2
-# Dependabot — weekly automated PRs for dependency updates.
-# Apr 2026 — added alongside the deploy pipeline so security advisories
+# Dependabot - weekly automated PRs for dependency updates.
+# Apr 2026 - added alongside the deploy pipeline so security advisories
 # land as PRs you can review + merge instead of requiring manual audit.
 # Each ecosystem caps open PRs at 5 to avoid review-fatigue.
 
@@ -97,7 +97,7 @@ updates:
   # supply-chain-safe pattern. Currently we use @v4 / @v5-style tags;
   # this ecosystem will surface advisories on those.
   #
-  # May 2026 (Sprint 3) — DAILY (not weekly) by operator directive.
+  # May 2026 (Sprint 3) - DAILY (not weekly) by operator directive.
   # Rationale: action-version drift was the proximate cause of the
   # Node 20 deprecation warning at deploy time. Weekly leaves up to
   # a 6-day blast radius between an action shipping a security fix

@@ -19,7 +19,7 @@ These tests pin the pre-INSERT upsert behavior in
   · idempotent — second submit reuses the existing buildings row
   · fallback — upsert failure does NOT 500 the submission; report lands
     with building_id=NULL + infrastructure_name_from_osm=False so the
-    dashboard surfaces it under "needs mapping" (CLAUDE.md UNDP #6).
+    dashboard surfaces it under "needs mapping" (the project invariants UNDP #6).
 
 Note: the FK is not declared on the SQLAlchemy model (it's added only
 by alembic 0028), so `Base.metadata.create_all` in the test DB does

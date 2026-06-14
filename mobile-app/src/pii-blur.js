@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-//  CRISP — Client-side PII blur (PWA)
+//  CRISP - Client-side PII blur (PWA)
 //
 //  Runs BlazeFace (via TF.js) directly in the browser and Gaussian-blurs every
 //  face it finds *before* the photo is uploaded. Sensitive pixels never leave
@@ -9,9 +9,9 @@
 //  Exposed as a global `PIIBlur` object so `app.js` (non-module vanilla JS) can
 //  call it without a bundler. The same pattern TF.js uses via CDN.
 //
-//  Dependencies — LAZY-LOADED at first ensureModel() call:
-//    - tf           (@tensorflow/tfjs@4) — ~360 KB
-//    - blazeface    (@tensorflow-models/blazeface@0.1) — ~70 KB
+//  Dependencies - LAZY-LOADED at first ensureModel() call:
+//    - tf           (@tensorflow/tfjs@4) - ~360 KB
+//    - blazeface    (@tensorflow-models/blazeface@0.1) - ~70 KB
 //  These were eagerly downloaded at boot before this change → cost
 //  every PWA visitor ~430 KB on Slow 4G even if they never captured a
 //  photo. Now injected dynamically the first time `_blurIfPossible`
@@ -20,7 +20,7 @@
 (function () {
     'use strict';
 
-    /** Cached singleton model — loaded on first call, reused thereafter. */
+    /** Cached singleton model - loaded on first call, reused thereafter. */
     let _model = null;
     /** In-flight load promise so concurrent callers wait on the same load. */
     let _loading = null;
@@ -31,7 +31,7 @@
     let _lastStats = { faces: 0, ms: 0, skipped: false };
 
     /**
-     * Inject a <script> tag and wait for it to load. Idempotent — calling
+     * Inject a <script> tag and wait for it to load. Idempotent - calling
      * twice with the same URL re-uses the existing tag. Returns a promise.
      */
     function _loadScript(url) {
@@ -56,13 +56,13 @@
 
     /**
      * Lazy-load tf.js + blazeface. Idempotent + concurrent-safe.
-     * Only fired when we actually need to blur a photo — saves ~1 MB
+     * Only fired when we actually need to blur a photo - saves ~1 MB
      * on the home page for users who never capture.
      *
      * HC89 (Sprint 1B, May 2026): local-first script load. Previously
      * we pulled both libs from jsdelivr at every cold start; when
      * jsdelivr was unreachable / rate-limited / aliased a 404, the
-     * load promise rejected and faces shipped UNBLURRED — a UNDP
+     * load promise rejected and faces shipped UNBLURRED - a UNDP
      * must-have #7 violation that surfaced in the May operator HAR.
      * Vendored copies under mobile-app/src/vendor/{tf,blazeface}/
      * load same-origin (instant on subsequent visits via SW cache).
@@ -193,10 +193,10 @@
 
         const preds = await model.estimateFaces(off, /*returnTensors=*/false, /*flipHorizontal=*/false);
         const invScale = 1 / scale;
-        // (revised) — lowered threshold from 0.85 → 0.5.
+        // (revised) - lowered threshold from 0.85 → 0.5.
         //
         // The previous 0.85 threshold filtered out real faces at side
-        // profiles, distant, partial, or low-light — BlazeFace's
+        // profiles, distant, partial, or low-light - BlazeFace's
         // confidence drops below 0.85 for those cases. Combined with
         // the optimistic "blurred:true when 0 faces detected" fallback
         // and the server's then-skip behaviour, real faces leaked
@@ -204,13 +204,13 @@
         // in last 2-3 reports" on 2026-04-28.
         //
         // Trade-off: 0.5 will occasionally blur non-face textures
-        // (shadows, patterns) — false positives. For a privacy-
+        // (shadows, patterns) - false positives. For a privacy-
         // critical pipeline this is the right side to err on. Better
         // to over-blur a wall texture than miss a face.
         //
         // Defense-in-depth: even with this lower threshold, the
         // server-side MediaPipe pass (backend/app/services/pii_blur.py)
-        // now ALWAYS runs regardless of client claim — see the
+        // now ALWAYS runs regardless of client claim - see the
         // matching commit on the backend. Client+server combined
         // makes the privacy guarantee robust against either side
         // missing a face.
@@ -245,10 +245,10 @@
      *    upscales. `ctx.filter = 'blur(Npx)'` is O(N·r²) in the canvas area,
      *    so blurring 4032×3024 at r=120 was easily 3–8 s on mid-range phones
      *    and blocked the main thread (→ Next button felt frozen). Down-sampling
-     *    by 4–5× cuts work by 16–25× with no visual difference — blur is
+     *    by 4–5× cuts work by 16–25× with no visual difference - blur is
      *    itself a low-pass filter, so down-then-blur-then-up is indistinguishable
      *    from the original.
-     *  - 5 % padding kept (was 20 % — stacking client + server pad bloated
+     *  - 5 % padding kept (was 20 % - stacking client + server pad bloated
      *    redaction zones).
      */
     function _paintBlur(srcCanvas, faces) {
@@ -256,7 +256,7 @@
         const W = srcCanvas.width, H = srcCanvas.height;
 
         // Lighter per-face radius: divide by 10 (was 6), clamp 6–60 (was 12–120).
-        // Still enough for identity obscuration — BlazeFace bboxes are typically
+        // Still enough for identity obscuration - BlazeFace bboxes are typically
         // 100–600 px, so radius lands in 10–60 px (was 16–100 px).
         let maxRadius = 6;
         const perFace = faces.map((f) => {
@@ -285,7 +285,7 @@
         bCtx.filter = 'none';
 
         faces.forEach((f, i) => {
-            // 5 % padding — tight ellipse, no bloat.
+            // 5 % padding - tight ellipse, no bloat.
             const padX = Math.round(f.w * 0.05);
             const padY = Math.round(f.h * 0.05);
             const x = Math.max(0, f.x - padX);
@@ -311,22 +311,22 @@
         });
     }
 
-    // CRITICAL FIX (May 21 2026 v249, audit Item 5 — second pass).
+    // CRITICAL FIX (May 21 2026 v249, audit Item 5 - second pass).
     // SERIALISE every call to blurFaces so the TF.js / BlazeFace
     // singleton model is never running two `estimateFaces` in flight
     // at once. Pre-fix the v243 bitmap.close() addressed GPU-memory
-    // aliasing between bitmaps, but the deeper bug — confirmed by
+    // aliasing between bitmaps, but the deeper bug - confirmed by
     // operator-submitted screenshots of report 365933f6 showing
     // image 1 with a real face correctly blurred AND images 2-5 of
     // a water bottle WITHOUT faces still blurred in the same upper-
-    // center region image 1's face occupied — is concurrent model
+    // center region image 1's face occupied - is concurrent model
     // calls returning each other's results.
     //
     // Repro path that triggered the bug:
     //  · User captures 5 photos in tight succession from the camera
     //    modal.
     //  · `_ingestFileAsPhoto` schedules each photo's
-    //    `ImageVariants.generate(blob)` via `_runWhenIdle` — 5
+    //    `ImageVariants.generate(blob)` via `_runWhenIdle` - 5
     //    independent idle callbacks.
     //  · `generate` calls `_maybeBlur(blob)` which calls
     //    `window.PIIBlur.blurFaces(blob)`.
@@ -339,17 +339,17 @@
     // Wrapping the public `blurFaces` in a chained-promise serialiser
     // guarantees one detection at a time. The wrapper preserves all
     // existing behaviour (return value shape, error fall-through,
-    // telemetry timing) — it just funnels callers through a queue.
+    // telemetry timing) - it just funnels callers through a queue.
     //
     // Cost: on the slowest network/device path (multi-photo capture
     // on mid-range Android), end-to-end blur latency scales linearly
     // with photo count. Mid-range Android measures ~150 ms per
-    // detection. 5 photos = 750 ms TOTAL wall-clock blur time — the
+    // detection. 5 photos = 750 ms TOTAL wall-clock blur time - the
     // user is already on the review screen by then, so they don't
     // notice. Correctness >>> a few hundred ms.
     let _blurChain = Promise.resolve();
     async function blurFaces(srcBlob, opts) {
-        // B-D (May 2026) — prefer the Web Worker pool when available.
+        // B-D (May 2026) - prefer the Web Worker pool when available.
         // The pool runs the same detect + blur + encode logic in
         // worker context, keeping the main thread free. For 3-photo
         // bursts on mid-range Android, this is the difference between
@@ -376,7 +376,7 @@
                         skipped: false,
                     };
                 }
-                // Worker resolved with an error sentinel — return the
+                // Worker resolved with an error sentinel - return the
                 // original blob, server safety net handles the rest.
                 if (result) {
                     return {
@@ -391,7 +391,7 @@
             }
         } catch (poolErr) {
             // Pool init failed (e.g. Worker constructor threw under
-            // strict CSP). Don't crash — fall through to legacy.
+            // strict CSP). Don't crash - fall through to legacy.
             console.warn('[PIIBlur] worker pool failed; falling back to main-thread blur:', poolErr);
         }
 
@@ -401,7 +401,7 @@
         _blurChain = new Promise((r) => { resolveSlot = r; });
         try {
             // Wait for the previous call's slot to release. Catch so a
-            // prior failure doesn't poison the chain — each call is
+            // prior failure doesn't poison the chain - each call is
             // independent.
             try { await prev; } catch (_) {}
             return await _doBlurFaces(srcBlob, opts);
@@ -411,7 +411,7 @@
     }
 
     /**
-     * Internal worker — same body as the original blurFaces. The
+     * Internal worker - same body as the original blurFaces. The
      * public `blurFaces` above wraps this in a serialiser.
      *
      * Detect + blur faces in `srcBlob`. Returns a detailed result
@@ -420,7 +420,7 @@
      *     blob:             Blob,     // blurred or original, never null
      *     blurred:          boolean,  // true IFF the full pipeline ran
      *     facesDetected:    number,
-     *     normalizedBoxes:  Array<{x, y, w, h}>  // B-C — face boxes in
+     *     normalizedBoxes:  Array<{x, y, w, h}>  // B-C - face boxes in
      *                                   // [0.0, 1.0] coords (fraction
      *                                   // of width/height). Shipped to
      *                                   // server via X-Client-Face-Boxes
@@ -435,7 +435,7 @@
      *
      * Legacy behaviour preserved: `blob` is always a Blob, never null,
      * so call-sites still have something to upload. The truthful
-     * `blurred` flag is new — before the fix every call-site hardcoded
+     * `blurred` flag is new - before the fix every call-site hardcoded
      * `client_blur_applied: true`, so BlazeFace failures slipped PII
      * past both client AND server blur (server skipped thinking client
      * did it).
@@ -457,7 +457,7 @@
             await _ensureScripts();
         } catch (e) {
             const err = 'tf/blazeface load failed: ' + (e?.message || e);
-            console.warn('[PIIBlur] ' + err + ' — returning raw blob; server MUST run its own blur');
+            console.warn('[PIIBlur] ' + err + ' - returning raw blob; server MUST run its own blur');
             _lastStats = { faces: 0, ms: 0, skipped: true };
             return { blob: srcBlob, blurred: false, facesDetected: 0, normalizedBoxes: [], skipped: true, error: err };
         }
@@ -465,7 +465,7 @@
         // Pipeline is disabled entirely if the backing libraries didn't load.
         if (typeof tf === 'undefined' || typeof blazeface === 'undefined') {
             const err = 'tf/blazeface not loaded';
-            console.warn('[PIIBlur] ' + err + ' — returning raw blob; server MUST run its own blur');
+            console.warn('[PIIBlur] ' + err + ' - returning raw blob; server MUST run its own blur');
             _lastStats = { faces: 0, ms: 0, skipped: true };
             return { blob: srcBlob, blurred: false, facesDetected: 0, normalizedBoxes: [], skipped: true, error: err };
         }
@@ -480,7 +480,7 @@
         }
 
         // BUGFIX May 2026 (operator-reported, blur cross-contamination
-        // audit) — close the ImageBitmap on EVERY exit path. Pre-fix,
+        // audit) - close the ImageBitmap on EVERY exit path. Pre-fix,
         // the bitmap was allocated at `_decode()` and abandoned to the
         // garbage collector at every return below. ImageBitmap is
         // GPU/shared-memory backed; under rapid multi-image processing
@@ -488,7 +488,7 @@
         // reuse the underlying memory for the NEXT image's bitmap
         // before the prior image's `canvas.toBlob()` callback fires.
         // Result: image B's encoded output reads pixels that still
-        // hold image A's blur paint — operator-visible as "blur
+        // hold image A's blur paint - operator-visible as "blur
         // appears in regions of image B with no detected faces."
         //
         // The fix has two layers:
@@ -528,7 +528,7 @@
                 w: f.w / _imgW,
                 h: f.h / _imgH,
             })).filter((b) =>
-                // Drop any box that scales out of [0, 1] (defensive —
+                // Drop any box that scales out of [0, 1] (defensive -
                 // shouldn't happen given _detectFaces clamps, but the
                 // server's denormalizer will drop these too).
                 b.x >= 0 && b.y >= 0
@@ -538,7 +538,7 @@
 
             if (faces.length === 0) {
                 _lastStats = { faces: 0, ms: Math.round(performance.now() - t0), skipped: false };
-                // No faces detected — pipeline ran successfully, just had
+                // No faces detected - pipeline ran successfully, just had
                 // nothing to redact. Safe for server to skip its face pass.
                 return { blob: srcBlob, blurred: true, facesDetected: 0, normalizedBoxes: [], skipped: false };
             }
@@ -556,7 +556,7 @@
                 canvas.width = bitmap.width;
                 canvas.height = bitmap.height;
                 canvas.getContext('2d').drawImage(bitmap, 0, 0);
-                // Layer-1 close: canvas now owns the pixels — release the
+                // Layer-1 close: canvas now owns the pixels - release the
                 // bitmap NOW, before _paintBlur + the async toBlob. This
                 // is the close that actually prevents the GPU-memory
                 // aliasing bug (the finally-backstop below would close
@@ -577,7 +577,7 @@
                 console.log(`[PIIBlur] blurred ${faces.length} face(s) in ${_lastStats.ms}ms`);
                 return { blob: outBlob, blurred: true, facesDetected: faces.length, normalizedBoxes, skipped: false };
             } catch (e) {
-                // Paint / canvas / toBlob crash — faces WERE detected but not
+                // Paint / canvas / toBlob crash - faces WERE detected but not
                 // redacted. Server MUST run its own blur on this one. We
                 // STILL emit the normalizedBoxes so the server can use them
                 // as detection hints (faces we saw but couldn't paint).
@@ -620,7 +620,7 @@
                 if (conn.saveData === true) return;
                 if (conn.effectiveType === 'slow-2g' || conn.effectiveType === '2g') return;
             }
-        } catch (_) { /* connection API unavailable — proceed */ }
+        } catch (_) { /* connection API unavailable - proceed */ }
         const _kick = () => {
             ensureModel().catch((e) => console.log('[PIIBlur] prewarm skipped:', e.message));
         };

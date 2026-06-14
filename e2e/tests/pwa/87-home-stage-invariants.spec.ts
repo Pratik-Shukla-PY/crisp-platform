@@ -30,7 +30,7 @@
  *      (portrait → landscape → portrait) — past pixel-math fixes
  *      broke specifically on dynamic safe-area-inset changes.
  *
- * See CLAUDE.md "Home header alignment", "Channels strip safe-area",
+ * See the project invariants "Home header alignment", "Channels strip safe-area",
  * and "My Reports tile" invariants for the permanent guards behind
  * each.
  */

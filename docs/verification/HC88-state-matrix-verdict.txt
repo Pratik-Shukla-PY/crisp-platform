@@ -1,4 +1,4 @@
-# HC88 — Reconcile state-matrix verification verdict
+# HC88 - Reconcile state-matrix verification verdict
 
   Probe: /tmp/hc88-reconcile-matrix.mjs (Playwright + headless Chromium)
   Run against: localhost:8080 (PWA static server) + localhost:8000 (FastAPI)
@@ -12,7 +12,7 @@ HC88 inverted the HARD-FAIL gate in `_reconcileBeforeDequeue`'s caller
 (app.js:10520-10553) so that HARD-FAIL fires *only* when SMALL is
 genuinely missing from the server. The previous gate condition
 (`else if (smallAssembling > 0 && smallMissing === 0)` for WAIT) fell
-through to HARD-FAIL when only `softAssembling` was non-empty —
+through to HARD-FAIL when only `softAssembling` was non-empty -
 triggering false re-upload loops while MEDIUM/ORIGINAL were still
 mid-assembly server-side.
 
@@ -23,7 +23,7 @@ calls should promote the 13th tick to WAIT-EXHAUSTED (3-min cap).
 
 # Expected behaviour matrix
 
-  sM = smallMissing count       (genuine missing — must HARD-FAIL)
+  sM = smallMissing count       (genuine missing - must HARD-FAIL)
   sA = smallAssembling count    (server has SMALL, still stitching)
   soA = softAssembling count    (server has MEDIUM/ORIGINAL, stitching)
 
@@ -64,7 +64,7 @@ bound test ✓ PASS
   # 3. Expected: "ALL 8 STATES + BOUND TEST PASS" + exit 0
 
 # Related commits
-  06fceae  fix(pwa,submit): HC88 — invert HARD-FAIL gate + bound WAIT-ASSEMBLY
-  8872262  fix(pwa,submit): HC87 — submitReport crashed on legacy DOM IDs
-           (HC87 + HC88 must be reverted together — HC87 unblocks the
+  06fceae  fix(pwa,submit): HC88 - invert HARD-FAIL gate + bound WAIT-ASSEMBLY
+  8872262  fix(pwa,submit): HC87 - submitReport crashed on legacy DOM IDs
+           (HC87 + HC88 must be reverted together - HC87 unblocks the
            code path HC88 protects.)

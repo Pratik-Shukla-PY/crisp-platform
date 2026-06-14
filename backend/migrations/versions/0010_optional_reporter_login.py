@@ -1,4 +1,4 @@
-"""optional reporter login — user_id on reports + user_device_link + OTP channel
+"""optional reporter login - user_id on reports + user_device_link + OTP channel
 
 Revision ID: 0010_auth
 Revises: 0009_ifno
@@ -21,7 +21,7 @@ Changes:
     otp_records
       + destination                   VARCHAR(255) NOT NULL  (holds email OR phone)
       + channel                       VARCHAR(10)  NOT NULL  (EMAIL | PHONE)
-      email column stays — backfilled into destination; legacy rows keep it
+      email column stays - backfilled into destination; legacy rows keep it
       so the dashboard audit trail doesn't lose the original source field.
       +compound index (destination, purpose, used, expires_at) for verify
       hot-path.
@@ -89,7 +89,7 @@ def upgrade() -> None:
             batch_op.add_column(
                 sa.Column("primary_auth_channel", sa.String(length=10), nullable=True)
             )
-    # Relax email NOT NULL — phone-only reporters are now a valid shape.
+    # Relax email NOT NULL - phone-only reporters are now a valid shape.
     try:
         with op.batch_alter_table("users") as batch_op:
             batch_op.alter_column("email", existing_type=sa.String(length=255), nullable=True)

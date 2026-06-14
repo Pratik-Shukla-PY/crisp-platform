@@ -1,5 +1,5 @@
 /**
- * blur-worker.js — Web Worker that runs PII face blur off the main
+ * blur-worker.js - Web Worker that runs PII face blur off the main
  * thread.
  *
  * Created May 2026 (Batch B-D of the Forensic Blur Audit). Sibling
@@ -25,7 +25,7 @@
  *
  *   { type: 'error', jobId, error: <string>, blob }
  *     - On failure (decode error, model load failure, etc.). `blob`
- *       is the ORIGINAL input — the main thread can still upload it
+ *       is the ORIGINAL input - the main thread can still upload it
  *       and the server will run its own blur as a safety net.
  *
  * Browser compatibility:
@@ -49,11 +49,11 @@
 let _modelPromise = null;
 let _tfReady = false;
 
-// HC89 (Sprint 1B, May 2026) — local-first script load. Previously
+// HC89 (Sprint 1B, May 2026) - local-first script load. Previously
 // the worker pulled both libs from jsdelivr at every cold start; any
 // time jsdelivr was rate-limited / 404'd (which broke
 // `blazeface.min.js`'s alias in some windows) the worker errored
-// closed and faces shipped UNBLURRED — a UNDP must-have #7 violation.
+// closed and faces shipped UNBLURRED - a UNDP must-have #7 violation.
 //
 // Now we try the same-origin vendored copies first
 // (mobile-app/src/vendor/{tf,blazeface}/). If those importScripts
@@ -64,7 +64,7 @@ let _tfReady = false;
 //
 // Version pin: TF.js 4.22.0 (unified with pii-blur.js's main-thread
 // path; pre-HC89 the worker shipped 3.21.0 while the page used
-// 4.22.0 — silent behavioural divergence between the two blur paths).
+// 4.22.0 - silent behavioural divergence between the two blur paths).
 const LOCAL_TF = './vendor/tf/tf.min.js';
 const LOCAL_BLAZEFACE = './vendor/blazeface/blazeface.min.js';
 const TF_CDN = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js';
@@ -73,7 +73,7 @@ const BLAZEFACE_CDN = 'https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface
 function _loadTfStack() {
     if (_tfReady) return Promise.resolve();
     // Classic worker: importScripts is synchronous (blocks the worker
-    // thread, NOT the main thread — that's the point).
+    // thread, NOT the main thread - that's the point).
     //
     // Try vendored first; both libs in a single call so we share the
     // same network/install round-trip. If that throws, fall back to
@@ -109,11 +109,11 @@ function _ensureModel() {
         if (typeof self.blazeface === 'undefined') {
             throw new Error('blazeface global missing after importScripts');
         }
-        // HC89 (Sprint 1B, May 2026) — vendored BlazeFace model URL.
+        // HC89 (Sprint 1B, May 2026) - vendored BlazeFace model URL.
         // Mirrors pii-blur.js's main-thread path. Default
         // blazeface.load() (no args) fetches model.json from tfhub.dev
         // / Kaggle which CORS-block from the worker's null origin and
-        // 404 in some windows — same root cause as the JS lib outage.
+        // 404 in some windows - same root cause as the JS lib outage.
         // The vendored model weights (model.json + shards) live at
         // mobile-app/src/vendor/blazeface/ and are part of STATIC_ASSETS.
         const modelUrl = new URL(
@@ -238,7 +238,7 @@ async function _processPhoto(blob) {
     try {
         bitmap = await createImageBitmap(blob);
     } catch (e) {
-        // Decode failure. Return the original blob — server is the
+        // Decode failure. Return the original blob - server is the
         // authoritative blur layer; client output is cosmetic.
         return {
             blob, normalizedBoxes: [], blurred: false, facesDetected: 0,
@@ -264,7 +264,7 @@ async function _processPhoto(blob) {
             );
 
         if (faces.length === 0) {
-            // No faces — return the ORIGINAL blob (no re-encode).
+            // No faces - return the ORIGINAL blob (no re-encode).
             // B-B's bit-identity invariant on the server side relies
             // on clients NOT re-encoding when they didn't change pixels.
             return {

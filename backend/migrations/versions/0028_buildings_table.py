@@ -1,4 +1,4 @@
-"""buildings table + FK from reports — Phase H.1 foundation
+"""buildings table + FK from reports - Phase H.1 foundation
 
 Revision ID: 0028_buildings_table
 Revises: 0027_building_versioning
@@ -12,8 +12,8 @@ the Building Intelligence & Response Coordination system. Today,
 (migration 0027) shipped the version-ordinal columns but the building
 itself remained denormalised. The operator wants buildings to behave
 as humanitarian-ops entities with state, scores, monitor/responder/
-note satellite tables, and AI summaries — see plan H section in
-/Users/pks/.claude/plans/swirling-forging-raccoon.md.
+note satellite tables, and AI summaries - see plan H section in
+the design plan.
 
 This migration is the FOUNDATION ONLY:
 
@@ -36,7 +36,7 @@ This migration is the FOUNDATION ONLY:
        - centroid_lat / lng from the FIRST report's Location (best-
          available signal until the H.1.c endpoint caches an
          operator-confirmed footprint)
-     Scores + severity_max + crisis_types_top3 stay NULL — they get
+     Scores + severity_max + crisis_types_top3 stay NULL - they get
      populated by the H.1.b `_apply_building_link` hook on the next
      Report INSERT, or by an explicit one-off re-score sweep.
   5. Add FK constraint `fk_reports_building_id` from
@@ -45,7 +45,7 @@ This migration is the FOUNDATION ONLY:
      building_id quietly becomes NULL rather than orphaning the row).
   6. PostGIS `footprint_geom POLYGON(4326)` column + GiST index.
      Probed for PostGIS availability the same way migration 0023
-     does — skips the geom + index if the extension isn't installed
+     does - skips the geom + index if the extension isn't installed
      on the cluster (the application layer's polygon-fetch fallback
      handles the missing column).
 
@@ -70,7 +70,7 @@ def upgrade() -> None:
     # ── Step 1: create the buildings table ─────────────────────────
     # SQLAlchemy's sa.Enum auto-creates the Postgres ENUM TYPE at
     # table-create time (default create_type=True). No separate
-    # DO block needed — the type lifecycle is managed alongside
+    # DO block needed - the type lifecycle is managed alongside
     # the table.
     op.create_table(
         "buildings",
@@ -112,7 +112,7 @@ def upgrade() -> None:
 
         # Computed intelligence scores (0–100). All NULLable until the
         # H.1.b hook + initial sweep populate them; NULL means "not
-        # yet scored" and the dashboard renders a "—" placeholder.
+        # yet scored" and the dashboard renders a "-" placeholder.
         sa.Column("severity_score", sa.Float, nullable=True),
         sa.Column("confidence_score", sa.Float, nullable=True),
         sa.Column("activity_score", sa.Float, nullable=True),
@@ -152,7 +152,7 @@ def upgrade() -> None:
         sa.Column("ai_summary_at", sa.DateTime(timezone=True), nullable=True),
 
         # Soft archive. Set when all constituent reports are deleted
-        # within grace — Building survives as a tombstone for audit.
+        # within grace - Building survives as a tombstone for audit.
         sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
     )
 
@@ -176,7 +176,7 @@ def upgrade() -> None:
         )
     else:
         print(
-            "[migration 0028] postgis extension not available — "
+            "[migration 0028] postgis extension not available - "
             "skipping footprint_geom column + GiST index. Operator-"
             "facing polygon queries will fall through to lat/lng-only "
             "filters until PostGIS is installed."
@@ -253,7 +253,7 @@ def upgrade() -> None:
     """)
 
     # ── Step 6: FK constraint reports.building_id → buildings.id ────
-    # ON DELETE SET NULL: defensive — if a building is ever hard-
+    # ON DELETE SET NULL: defensive - if a building is ever hard-
     # purged (admin action), the reports just lose their FK rather
     # than cascade-deleting. Operators can re-link manually.
     op.create_foreign_key(
@@ -272,7 +272,7 @@ def downgrade() -> None:
     op.drop_constraint("fk_reports_building_id", "reports", type_="foreignkey")
 
     # Narrow reports.building_id back to String(36). This will FAIL if
-    # any existing row exceeds 36 chars — by design (downgrade should
+    # any existing row exceeds 36 chars - by design (downgrade should
     # not silently truncate data; operator can resolve by trimming the
     # offending row first).
     op.alter_column(
@@ -298,6 +298,6 @@ def downgrade() -> None:
 
     op.drop_table("buildings")
 
-    # Drop the enum LAST — Postgres rejects DROP TYPE if any column
+    # Drop the enum LAST - Postgres rejects DROP TYPE if any column
     # still references it. After table drop the enum is unreferenced.
     op.execute("DROP TYPE IF EXISTS building_id_source")

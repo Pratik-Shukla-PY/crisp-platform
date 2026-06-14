@@ -34,10 +34,10 @@ The IAM policy currently attached to the EC2 instance role:
 
 `s3:ListBucket` is needed by the migration script's idempotency check (`HeadObject` requires it).
 
-## Phase 1 — flip new uploads to S3, migrate existing files
+## Phase 1 - flip new uploads to S3, migrate existing files
 
 Order matters: get the env in place first, then migrate, then verify.
-Default `MEDIA_BACKEND=local` means doing this in the wrong order is harmless — new uploads keep going to disk until you flip the flag.
+Default `MEDIA_BACKEND=local` means doing this in the wrong order is harmless - new uploads keep going to disk until you flip the flag.
 
 ### 1. Add the env vars to `.env.production` on EC2
 
@@ -50,13 +50,13 @@ nano .env.production
 Append:
 
 ```
-# Apr 2026 — flip media off EC2 disk onto S3
+# Apr 2026 - flip media off EC2 disk onto S3
 MEDIA_BACKEND=s3
 AWS_S3_BUCKET=crisp-uploads-prod-824604027263
 AWS_REGION=ap-south-1
 ```
 
-`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` should NOT be set — the EC2 instance profile provides credentials automatically through boto3's default chain. If those env vars are present, boto3 prefers them and you bypass the IAM role; remove them.
+`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` should NOT be set - the EC2 instance profile provides credentials automatically through boto3's default chain. If those env vars are present, boto3 prefers them and you bypass the IAM role; remove them.
 
 Save (Ctrl+O Enter Ctrl+X).
 
@@ -85,13 +85,13 @@ AWS_REGION=<set>
 docker compose -f docker-compose.prod.yml exec backend python -c "
 import boto3
 s3 = boto3.client('s3', region_name='ap-south-1')
-# HeadBucket requires neither GetObject nor ListBucket on objects — just bucket exists + reachable.
+# HeadBucket requires neither GetObject nor ListBucket on objects - just bucket exists + reachable.
 s3.head_bucket(Bucket='crisp-uploads-prod-824604027263')
 print('S3 reachable + IAM OK')
 "
 ```
 
-Expected: `S3 reachable + IAM OK`. If you get `AccessDenied` or `NoCredentialsError`, the IAM role isn't attached or the policy is wrong — fix that first.
+Expected: `S3 reachable + IAM OK`. If you get `AccessDenied` or `NoCredentialsError`, the IAM role isn't attached or the policy is wrong - fix that first.
 
 ### 4. Run the migration script in dry-run mode
 
@@ -113,7 +113,7 @@ docker compose -f docker-compose.prod.yml exec -T backend python /app/backend/sc
 ```
 
 The script:
-1. Uploads each local file to S3 (idempotent — skips files that are already there).
+1. Uploads each local file to S3 (idempotent - skips files that are already there).
 2. Rewrites `media.url` from `/static/foo.jpg` to `s3://foo.jpg` for every legacy row.
 3. Same rewrite for `satellite_verifications.satellite_image_url`, `satellite_image_url_alt`, and the `satellite_images_json` list entries.
 4. Commits the DB transaction.
@@ -122,7 +122,7 @@ For ~hundreds of files this completes in seconds; thousands of files in a minute
 
 ### 6. Verify the dashboard still shows existing media
 
-Open the dashboard, click an existing report, view its photo + satellite verify panel. Both should load — they're now coming from S3 via signed URLs (you'll see `https://crisp-uploads-prod-...s3.ap-south-1.amazonaws.com/...?X-Amz-Signature=...` in the network tab).
+Open the dashboard, click an existing report, view its photo + satellite verify panel. Both should load - they're now coming from S3 via signed URLs (you'll see `https://crisp-uploads-prod-...s3.ap-south-1.amazonaws.com/...?X-Amz-Signature=...` in the network tab).
 
 ### 7. Verify a NEW upload lands directly in S3
 
@@ -148,9 +148,9 @@ If S3 misbehaves and you need to revert to local-disk:
 
 1. Set `MEDIA_BACKEND=local` in `.env.production`.
 2. `docker compose ... up -d --force-recreate backend`.
-3. New uploads land on disk. Existing `s3://` rows still resolve from S3 (LocalStorage falls through to S3 lookup if AWS creds present), but the safest path is to also migrate them back via a reverse script (not yet written — call out if needed).
+3. New uploads land on disk. Existing `s3://` rows still resolve from S3 (LocalStorage falls through to S3 lookup if AWS creds present), but the safest path is to also migrate them back via a reverse script (not yet written - call out if needed).
 
-## Phase 2 — CloudFront edge cache (optional, follow-up)
+## Phase 2 - CloudFront edge cache (optional, follow-up)
 
 After Phase 1 is stable, layer CloudFront in front for edge caching. Adds:
 - Faster repeat dashboard views (CloudFront edge POPs cache the S3 response).
@@ -160,7 +160,7 @@ After Phase 1 is stable, layer CloudFront in front for edge caching. Adds:
 Setup:
 1. Console: CloudFront → Create distribution → Origin = your S3 bucket → Origin access = "Origin access control" → create new OAC → "Sign requests".
 2. Default cache behavior: viewer protocol = "Redirect HTTP to HTTPS".
-3. After distribution creates, CloudFront will offer a "Copy policy" snippet — paste it into the bucket policy in S3 console (grants CloudFront read access to the bucket).
+3. After distribution creates, CloudFront will offer a "Copy policy" snippet - paste it into the bucket policy in S3 console (grants CloudFront read access to the bucket).
 4. Wait ~10 minutes for the distribution to deploy.
 5. Note the distribution domain (`d12345.cloudfront.net`).
 
@@ -178,7 +178,7 @@ Recreate the container. The backend's `S3Storage.public_url()` will switch to si
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Dashboard photos show 403 | Presign expired (15-min TTL) and the page sat open. Reload. | Reload — backend re-signs on each response. |
+| Dashboard photos show 403 | Presign expired (15-min TTL) and the page sat open. Reload. | Reload - backend re-signs on each response. |
 | Migration script: `AccessDenied` on `head_object` | IAM policy missing `s3:GetObject` or bucket name typo | Verify policy + bucket name in env. |
 | New uploads still land on `/static/` | `MEDIA_BACKEND` not set, or container didn't pick up env (used `restart` instead of `up -d --force-recreate`) | Recreate the container, not just restart. |
 | `boto3.session.Session` fails to find creds | EC2 IAM role detached | Re-attach the role in EC2 console → Instance → Actions → Security → Modify IAM role. |
@@ -186,6 +186,6 @@ Recreate the container. The backend's `S3Storage.public_url()` will switch to si
 
 ## What's deliberately unchanged
 
-- Inline processing (CAFF→WAV transcode, server-side PII blur, perceptual hash) still uses local disk as a transient working copy. The blur worker re-uploads to S3 after redacting, so the canonical S3 object always has the blurred bytes. Local disk fills slowly with these working copies — clean periodically.
+- Inline processing (CAFF→WAV transcode, server-side PII blur, perceptual hash) still uses local disk as a transient working copy. The blur worker re-uploads to S3 after redacting, so the canonical S3 object always has the blurred bytes. Local disk fills slowly with these working copies - clean periodically.
 - GDPR delete (`DELETE /api/v1/reports/...`) currently only removes local-disk copies. For S3 backend we'd need to also call `storage.delete()`. Tracked as a follow-up; manually delete the S3 keys for any GDPR purge during the gap window.
-- IVR + Telegram media uploads use `_assemble_media_file` so they ride the storage abstraction transparently — no per-channel changes needed.
+- IVR + Telegram media uploads use `_assemble_media_file` so they ride the storage abstraction transparently - no per-channel changes needed.

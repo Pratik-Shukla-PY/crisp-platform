@@ -1,24 +1,24 @@
 /**
- * V4ReviewScreen — RN port of the PWA's #stage-v4-review.
+ * V4ReviewScreen - RN port of the PWA's #stage-v4-review.
  *
- * May 2026 — Phase 5 of the 8-phase RN ↔ PWA parity plan. Final
+ * May 2026 - Phase 5 of the 8-phase RN ↔ PWA parity plan. Final
  * step (Step 3 of 3) before Send. Surfaces every captured field,
  * lets the user jump back to fix anything, and asks for the
  * UNDP-required follow-up details (debris / service status /
  * pressing needs) before submission.
  *
- *   §A Header        — back + 3-step progress (Step 3 of 3)
- *   §B Captured strip — 3 chips (Photo / Voice / Text) with status
- *   §C Summary card   — 4 tap-edit rows (Location / Infra /
- *                       Crisis / Damage) — taps fire callbacks
+ *   §A Header        - back + 3-step progress (Step 3 of 3)
+ *   §B Captured strip - 3 chips (Photo / Voice / Text) with status
+ *   §C Summary card   - 4 tap-edit rows (Location / Infra /
+ *                       Crisis / Damage) - taps fire callbacks
  *                       that route App.tsx back to the right
  *                       sub-step
- *   §D Building       — UNDP must-have #6 footprint picker mount
- *   §E Voice/text     — collapsed drawer with mic + textarea
- *   §F UNDP details   — EXPANDED by default per UNDP rubric:
+ *   §D Building       - UNDP must-have #6 footprint picker mount
+ *   §E Voice/text     - collapsed drawer with mic + textarea
+ *   §F UNDP details   - EXPANDED by default per UNDP rubric:
  *                       Debris Y/N · Electricity · Water · Health
  *                       · Pressing needs (multi-select chips)
- *   §G Footer Send    — submits the report
+ *   §G Footer Send    - submits the report
  *
  * Props-first: all state values + setters flow from App.tsx. The
  * screen is RENDER-ONLY for state; behavioural logic (location
@@ -54,7 +54,7 @@ const SERVICE_OPTIONS: { v: ServiceLevel; labelKey: string; fb: string }[] = [
   { v: 'UNKNOWN',     labelKey: 'v4_unknown',         fb: 'Unknown' },
 ];
 
-// ── Pressing-needs registry — EXACT mirror of the PWA's #v4-undp-sheet
+// ── Pressing-needs registry - EXACT mirror of the PWA's #v4-undp-sheet
 //    pressing_needs chips (mobile-app/src/index.html data-value + undp_need_*
 //    keys + order). Submitted values (food_water / shelter / medical / cash /
 //    protection / services) match the dashboard humanizer + the canonical
@@ -76,10 +76,10 @@ function ti(key: string, fallback: string): string {
 }
 
 // Pretty-prints an enum value (RESIDENTIAL → "Residential",
-// CHEMICAL_INCIDENT → "Chemical incident") — used as a fallback
+// CHEMICAL_INCIDENT → "Chemical incident") - used as a fallback
 // when an i18n label isn't available.
 function prettify(s: string): string {
-  if (!s) return '—';
+  if (!s) return '-';
   return s
     .toLowerCase()
     .split('_')
@@ -89,7 +89,7 @@ function prettify(s: string): string {
 
 // ── Props ───────────────────────────────────────────────────────────
 export interface V4ReviewScreenProps {
-  // Captured state — surfaced as chips in the captured strip
+  // Captured state - surfaced as chips in the captured strip
   hasPhoto: boolean;
   hasVoice: boolean;
   hasText: boolean;
@@ -116,7 +116,7 @@ export interface V4ReviewScreenProps {
   onChangeDescription: (v: string) => void;
 
   // UNDP details
-  // debris is a UNDP CORE question — null = unanswered (gates Send).
+  // debris is a UNDP CORE question - null = unanswered (gates Send).
   debrisClearing: boolean | null;
   onSetDebris: (v: boolean) => void;
   electricityStatus: ServiceLevel;
@@ -136,14 +136,14 @@ export interface V4ReviewScreenProps {
   onBack: () => void;
   onEditPhoto: () => void;
   onEditClassify: () => void;
-  /** Called when user taps the summary's location row — App.tsx
+  /** Called when user taps the summary's location row - App.tsx
    *  decides whether to open an inline editor or jump back to
    *  the location-picking surface. */
   onEditLocation: () => void;
 }
 
 /**
- * UNDP core-question submit gate (Jun 2026) — parity with the PWA _onSend
+ * UNDP core-question submit gate (Jun 2026) - parity with the PWA _onSend
  * gate. A report may only be sent once the three classifiers AND the debris
  * question are answered. debris is nullable: null = unanswered. Exported as a
  * pure function so the contract is unit-testable without a render harness.
@@ -168,13 +168,13 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
   const [voiceDrawerOpen, setVoiceDrawerOpen] = useState(false);
   const [undpDrawerOpen, setUndpDrawerOpen] = useState(true);
 
-  // (May 2026 — Fix-R2) — measure footer height at runtime so the
+  // (May 2026 - Fix-R2) - measure footer height at runtime so the
   // ScrollView's bottom padding adapts to the actual rendered Send
   // button (previously hard-coded +88, broken under accessibility
   // font scaling on iOS / Android).
   const [footerHeight, setFooterHeight] = useState(88);
 
-  // UNDP core-question gate (Jun 2026) — parity with the PWA submit gate.
+  // UNDP core-question gate (Jun 2026) - parity with the PWA submit gate.
   // Send is disabled until the three classifiers AND the debris question are
   // answered. The classify screen gates the classifiers on the way through;
   // this is the last line of defence (back-nav edits, debris answered here).
@@ -189,7 +189,7 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
   const sendDisabled = props.isSending || missingRequired;
 
   return (
-    // (May 2026 — Fix-R3) — KAV so the soft keyboard doesn't cover
+    // (May 2026 - Fix-R3) - KAV so the soft keyboard doesn't cover
     // the Voice/Text drawer's inline TextInput (line ~285) or the
     // Send button below it.
     <KeyboardAvoidingView
@@ -227,7 +227,7 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
         style={{ flex: 1 }}
         contentContainerStyle={{
           paddingHorizontal: 20,
-          // (Fix-R2) — runtime-measured footer height.
+          // (Fix-R2) - runtime-measured footer height.
           paddingBottom: Math.max(12, insets.bottom) + footerHeight,
         }}
         keyboardShouldPersistTaps="handled"
@@ -273,7 +273,7 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
             icon="🏠"
             text={props.infraType
               ? ti(`infra_${props.infraType.toLowerCase()}`, prettify(props.infraType))
-              : '—'}
+              : '-'}
             onPress={props.onEditClassify}
             testID="v4rev-row-infra"
           />
@@ -281,7 +281,7 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
             icon="🌪"
             text={props.crisisType
               ? ti(`crisis_${props.crisisType.toLowerCase()}`, prettify(props.crisisType))
-              : '—'}
+              : '-'}
             onPress={props.onEditClassify}
             testID="v4rev-row-crisis"
           />
@@ -289,7 +289,7 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
             icon="⚠"
             text={props.damageClass
               ? ti(`damage_${props.damageClass.toLowerCase()}`, prettify(props.damageClass))
-              : '—'}
+              : '-'}
             onPress={props.onEditClassify}
             isLast
             testID="v4rev-row-damage"
@@ -303,7 +303,7 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
           </View>
         ) : null}
 
-        {/* §E Voice/Text drawer — collapsed by default */}
+        {/* §E Voice/Text drawer - collapsed by default */}
         <Drawer
           title={ti('v4_add_voice_text', 'Add voice or text (optional)')}
           open={voiceDrawerOpen}
@@ -344,7 +344,7 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
           />
         </Drawer>
 
-        {/* §F UNDP details drawer — EXPANDED by default */}
+        {/* §F UNDP details drawer - EXPANDED by default */}
         <Drawer
           title={ti('v4_undp_modules', 'UNDP details')}
           open={undpDrawerOpen}
@@ -352,7 +352,7 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
           icon="📋"
           testID="v4rev-undp-drawer"
         >
-          {/* Debris Y/N — UNDP CORE question (required to answer before
+          {/* Debris Y/N - UNDP CORE question (required to answer before
               submit). The "Required" chip clears once an explicit Yes/No is
               chosen; null leaves neither pill active so it never looks
               pre-answered. */}
@@ -389,7 +389,7 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
             </View>
           </View>
 
-          {/* Electricity / Water / Health — service-status pickers */}
+          {/* Electricity / Water / Health - service-status pickers */}
           <ServicePicker
             label={ti('v4_electricity', 'Electricity')}
             value={props.electricityStatus}
@@ -409,7 +409,7 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
             testID="v4rev-health"
           />
 
-          {/* Pressing needs — multi-select chips */}
+          {/* Pressing needs - multi-select chips */}
           <View style={styles.undpRowNeeds}>
             <Text style={styles.undpLabel}>
               {ti('v4_needs', 'Pressing needs')}
@@ -450,7 +450,7 @@ export default function V4ReviewScreen(props: V4ReviewScreenProps) {
           <Text style={styles.sendHint} testID="v4rev-send-hint">
             {!debrisAnswered
               ? ti('v4_submit_missing_debris', 'One required question left: is there debris to clear?')
-              : ti('v4_submit_missing_classify', 'Please answer the required questions first — damage, infrastructure and crisis type.')}
+              : ti('v4_submit_missing_classify', 'Please answer the required questions first - damage, infrastructure and crisis type.')}
           </Text>
         )}
         <TouchableOpacity
@@ -734,7 +734,7 @@ const styles = StyleSheet.create({
   undpLabel: {
     flex: 1, color: Colors.text, fontSize: 12.5, fontWeight: '600',
   },
-  // Debris is a required core question — label + "Required" chip sit on one
+  // Debris is a required core question - label + "Required" chip sit on one
   // row so the chip reads as part of the question, not the answer pills.
   undpLabelRow: {
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap',

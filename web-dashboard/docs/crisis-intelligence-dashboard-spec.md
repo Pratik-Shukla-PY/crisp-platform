@@ -278,7 +278,7 @@ Template per component: **Purpose · Data source · API · DB · Refresh · Erro
 - [ ] **A11y** — Lighthouse ≥90; severity never color-only; keyboard + `aria-live`; map list fallback.
 - [ ] **Perf** — summary endpoint `EXPLAIN` <50 ms @ 500k; landing TTI <2 s; idle poll <1 KB via 304.
 - [ ] **SW/release** — dashboard isn't PWA-precached, but bump any dashboard release tag; run `node scripts/sync-release-tags.mjs --check`.
-- [ ] **No AI attribution** in code/commits (CLAUDE.md).
+- [ ] **No AI attribution** in code/commits (the project invariants).
 - [ ] **Tests** — new e2e `dashboard/*-landing-intel.spec.ts` asserting each KPI renders from a mocked summary response + role gating; backend pytest for `/analytics/summary` aggregates.
 - [ ] **Local-first** — verified against `localhost:8000/8080`; no PROD push without explicit approval.
 

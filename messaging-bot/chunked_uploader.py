@@ -1,5 +1,5 @@
 """
-Adaptive Chunked Media Uploader — Server-side (Telegram/WhatsApp/IVR).
+Adaptive Chunked Media Uploader - Server-side (Telegram/WhatsApp/IVR).
 
 Server-to-server uploads (localhost) use large chunks + high concurrency.
 Adapts dynamically if backend becomes slow (e.g., under load).
@@ -13,14 +13,14 @@ Transport (May 2026)
 ====================
 Primary path: multipart/form-data raw bytes to
 ``POST /api/v1/reports/{id}/media/chunk-bin``. Matches the modern PWA
-binary transport — saves the ~33% base64 bandwidth overhead and the
+binary transport - saves the ~33% base64 bandwidth overhead and the
 JSON encode/decode round-trip per chunk. Server-to-server is already
 fast, so the saving translates directly to lower assembly latency on
 the dashboard side.
 
 Fallback path: JSON+base64 to ``POST .../media/chunk`` if the binary
 endpoint isn't on this backend yet (a 404 response). Process-scoped
-sticky flag — once we fall back, we stay on base64 for the rest of
+sticky flag - once we fall back, we stay on base64 for the rest of
 this bot process. Restart picks up the binary path again.
 
 Caller contract is unchanged: pass a base64 string in, get a bool
@@ -56,7 +56,7 @@ _binary_chunk_unavailable = False
 
 
 def _djb2_checksum(data: str) -> str:
-    """DJB2 hash over a text/base64 string — kept for the legacy
+    """DJB2 hash over a text/base64 string - kept for the legacy
     base64 fallback path and any external callers. The polynomial
     is identical to `_djb2_bytes`; only the input alphabet differs."""
     h = 5381
@@ -67,7 +67,7 @@ def _djb2_checksum(data: str) -> str:
 
 
 def _djb2_bytes(data: bytes) -> str:
-    """DJB2 hash over raw bytes — mirrors backend ``djb2_bytes``.
+    """DJB2 hash over raw bytes - mirrors backend ``djb2_bytes``.
 
     For pure-ASCII input ``_djb2_bytes(b"x") == _djb2_checksum("x")``
     because ``ord(char) == byte``. The byte variant exists because the
@@ -114,13 +114,13 @@ async def upload_media_chunked(
 
     Caller still passes base64 (Telegram / WhatsApp / IVR adapters all
     give us base64 today). Internally we decode once to raw bytes and
-    chunk on byte boundaries for the binary transport — saves the
+    chunk on byte boundaries for the binary transport - saves the
     ~33 % base64 bloat over the wire. Old base64 transport stays as
     a process-scoped fallback if the binary endpoint 404s.
     """
     media_id = str(uuid4())
 
-    # Decode base64 once. Pad if needed — Telegram/WhatsApp sometimes
+    # Decode base64 once. Pad if needed - Telegram/WhatsApp sometimes
     # strip padding on data URLs. Same padding behaviour as the legacy
     # backend assembler used to apply per-chunk.
     try:
@@ -134,7 +134,7 @@ async def upload_media_chunked(
     if total_len == 0:
         return False
 
-    # Phase C.1 — compute whole-asset djb2 once over the raw payload.
+    # Phase C.1 - compute whole-asset djb2 once over the raw payload.
     # Sent on chunk 0 only; the backend stores it on the Media row and
     # re-verifies post-assembly. Gives the messaging-bot path the same
     # integrity guarantee the modern PWA has.
@@ -148,7 +148,7 @@ async def upload_media_chunked(
 
     async with httpx.AsyncClient(timeout=30) as c:
         # Thumbnail for instant preview. Stays on the JSON+base64
-        # ``/media/thumbnail`` endpoint — payload is capped at ~20 KB so
+        # ``/media/thumbnail`` endpoint - payload is capped at ~20 KB so
         # the b64 overhead is negligible, and the endpoint expects a
         # data URL string anyway.
         if media_type == "IMAGE":
@@ -158,10 +158,10 @@ async def upload_media_chunked(
                 thumb_url = f"data:{mime_type};base64,{thumb_b64}"
                 await c.post(
                     f"{BACKEND_URL}/api/v1/reports/{report_id}/media/thumbnail",
-                    # Tier matches the SMALL the chunk POSTs send below — the
+                    # Tier matches the SMALL the chunk POSTs send below - the
                     # backend used to hard-code MEDIUM on this row regardless,
                     # which left every messaging-bot photo mis-tagged.
-                    # Phase L (May 2026) — canonical SMALL (was LOW pre-rename).
+                    # Phase L (May 2026) - canonical SMALL (was LOW pre-rename).
                     json={
                         "media_id": media_id,
                         "thumbnail_data": thumb_url,
@@ -171,7 +171,7 @@ async def upload_media_chunked(
             except Exception:
                 pass
 
-        # Adaptive chunked upload — binary transport.
+        # Adaptive chunked upload - binary transport.
         offset = 0
         total_chunks = (total_len + _chunk_size - 1) // _chunk_size
         success_count = 0
@@ -238,7 +238,7 @@ async def _send_chunk_with_retry(client, report_id, media_id, media_type,
         )
 
     checksum = _djb2_bytes(chunk_bytes)
-    # BUGFIX May 2026 — Telegram-channel Originals never reached the
+    # BUGFIX May 2026 - Telegram-channel Originals never reached the
     # dashboard (operator-reported).
     #
     # Single-tier transport: messaging-channel media isn't run through
@@ -251,20 +251,20 @@ async def _send_chunk_with_retry(client, report_id, media_id, media_type,
     #
     # Telegram serves photos in 4-5 progressively larger renditions
     # (max 1280×1280 for legacy Bot API). The bot already picks
-    # `photos[-1]` — the largest the channel can deliver — so those
+    # `photos[-1]` - the largest the channel can deliver - so those
     # bytes ARE the "Original" for that report from Telegram's
     # perspective. Tag the chunks as ORIGINAL for IMAGE uploads so the
     # dashboard surfaces them as the Original. AUDIO stays SMALL
     # because the resolution_tier semantics there are still
     # minimum-tier on the dashboard side.
     #
-    # Phase L (May 2026) — tier vocabulary is SMALL/MEDIUM/ORIGINAL.
+    # Phase L (May 2026) - tier vocabulary is SMALL/MEDIUM/ORIGINAL.
     # Pre-L this code used LOW/HIGH; the rename keeps the same
     # operator-visible behaviour with the cleaner canonical names.
     #
     # The backend's existing tier-upgrade logic at
     # `attach_media_chunk` already allows a chunk to *upgrade* an
-    # existing SMALL/MEDIUM row to ORIGINAL — so even if the
+    # existing SMALL/MEDIUM row to ORIGINAL - so even if the
     # thumbnail (SMALL) lands first via /media/thumbnail, the chunks'
     # ORIGINAL tag wins and the Media row ends up at ORIGINAL for IMAGE.
     tier = "ORIGINAL" if media_type == "IMAGE" else "SMALL"
@@ -291,13 +291,13 @@ async def _send_chunk_with_retry(client, report_id, media_id, media_type,
             )
             if r.status_code == 200:
                 return True
-            # Endpoint missing — backend predates April 2026 binary
+            # Endpoint missing - backend predates April 2026 binary
             # transport. Flip the sticky flag + retry via base64. We
             # also reattempt THIS chunk via the fallback so the upload
             # doesn't lose a chunk to the version-skew window.
             if r.status_code == 404:
                 logger.warning(
-                    "/media/chunk-bin returned 404 — backend predates "
+                    "/media/chunk-bin returned 404 - backend predates "
                     "binary transport; falling back to base64 for the "
                     "rest of this process."
                 )
@@ -323,7 +323,7 @@ async def _send_chunk_b64_fallback(client, report_id, media_id, media_type,
     # path. Otherwise a backend that 404s on /media/chunk-bin would
     # still mis-tag every Telegram photo as SMALL and hide it from the
     # Originals tab. (See the long comment in the bin path above.)
-    # Phase L — canonical SMALL/ORIGINAL (was LOW/HIGH pre-rename).
+    # Phase L - canonical SMALL/ORIGINAL (was LOW/HIGH pre-rename).
     tier = "ORIGINAL" if media_type == "IMAGE" else "SMALL"
     payload = {
         "media_id": media_id, "type": media_type,

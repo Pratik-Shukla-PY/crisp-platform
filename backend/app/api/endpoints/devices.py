@@ -1,5 +1,5 @@
 """
-Device telemetry capture — Phase 5.1 (May 2026,
+Device telemetry capture - Phase 5.1 (May 2026,
 docs/NEARBY_REPORTS_PIPELINE.md §6.2).
 
 Upgrades the Phase-5 emulator_farm detector from a UA-substring scaffold
@@ -16,7 +16,7 @@ Endpoint:
        per UNDP must-have #9). Returns 200 with { ok: true } on
        success.
 
-       Auth-free by design — devices need to post before the user has
+       Auth-free by design - devices need to post before the user has
        any account. The Device.device_hash is the per-install opaque
        identifier; abuse is bounded by the per-IP rate limit applied at
        the nginx tier in production. In development the endpoint accepts
@@ -72,7 +72,7 @@ _ALLOWED_SUMMARY_KEYS: frozenset[str] = frozenset({
 class TelemetryIn(BaseModel):
     """Request body for POST /devices/telemetry. The `summary` dict is
     permissive (Any) at the Pydantic layer so a future client can add a
-    new probe without the backend rejecting the request — keys outside
+    new probe without the backend rejecting the request - keys outside
     the allow-list are filtered at storage time."""
     device_hash: str = Field(..., min_length=4, max_length=255)
     summary: dict[str, Any] = Field(default_factory=dict)
@@ -94,7 +94,7 @@ def _sanitise_summary(raw: dict[str, Any]) -> dict[str, Any]:
         elif k == "locale" and isinstance(v, str):
             out[k] = v[:16]
         elif k == "battery_level" and isinstance(v, (int, float)):
-            # Coarsen to 10-percent buckets — keeps the signal useful
+            # Coarsen to 10-percent buckets - keeps the signal useful
             # for the "emulator-stuck-at-100" check while reducing the
             # fingerprint resolution.
             clamped = max(0, min(100, int(v)))
@@ -114,7 +114,7 @@ def post_device_telemetry(
     db: Session = Depends(get_db),
 ):
     """Upsert telemetry summary on the device row. Auth-free per the
-    module docstring — abuse is bounded by per-IP rate limits at the
+    module docstring - abuse is bounded by per-IP rate limits at the
     nginx tier. Creates the Device row on first contact.
 
     Returns 200 with `{ok: true}` for both upsert paths. 422 is the
@@ -139,7 +139,7 @@ def post_device_telemetry(
         db.add(dev)
     else:
         dev.telemetry_summary = summary
-        # Backfill `platform` if it wasn't set on first registration —
+        # Backfill `platform` if it wasn't set on first registration -
         # purely a quality-of-life improvement so admin tooling shows
         # a non-empty platform string.
         if not dev.platform and platform_short:

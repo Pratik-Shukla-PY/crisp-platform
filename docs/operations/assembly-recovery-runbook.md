@@ -1,4 +1,4 @@
-# Assembly recovery — operator runbook
+# Assembly recovery - operator runbook
 
 Diagnostic + intervention guide for the chunked-media assembly
 pipeline. Use this when a row gets stuck in a non-terminal
@@ -23,7 +23,7 @@ runs every 5 minutes and applies four actions in order:
 
 | Step | Filter | Action | Reason |
 |---|---|---|---|
-| ⓪ HC91 (May 2026) | `assembling`/`pending` + chunks complete + `created_at > 60 min ago` | flip to `failed`, abandon | wedged assembler — Action ① reviving forever |
+| ⓪ HC91 (May 2026) | `assembling`/`pending` + chunks complete + `created_at > 60 min ago` | flip to `failed`, abandon | wedged assembler - Action ① reviving forever |
 | ① REVIVE | `assembling`/`failed` + chunks complete + `updated_at > 2 min ago` + not abandoned | flip to `pending` + re-submit | salvage worker crash mid-assembly |
 | ② ABANDON worker-lost | `assembling` + chunks INCOMPLETE + `updated_at > 30 min ago` | flip to `failed`, abandon (`assembly_worker_lost`) | worker hung mid-stream, chunks won't complete |
 | ③ ABANDON chunks-never-arrived | `pending` + chunks incomplete + `updated_at > 30 min ago` | flip to `failed`, abandon (`chunks_never_arrived`) | client never delivered final chunks |
@@ -36,10 +36,10 @@ Prometheus counter (when observability is wired).
 
 | User-visible symptom | Likely state | First place to look |
 |---|---|---|
-| Dashboard shows "Original lost (network timeout)" | `assembly_status=failed`, `abandon_reason=chunks_never_arrived` | Step ③ — client tab closed |
-| Dashboard shows "uploading…" forever | `assembly_status=assembling` or `pending`, not yet abandoned | Step ① / ② / ⓪ — depends on chunk completeness |
-| PWA "queued" count never decreases | client-side `_reconcileBeforeDequeue` rejecting | HC88 `reconcileWaitTicks` cap (3 min) — also see HC90 send-attempts cap |
-| Report appears, photos blank | `assembly_status=complete` but `url=''` | rare — server-side bug, file a Sentry issue |
+| Dashboard shows "Original lost (network timeout)" | `assembly_status=failed`, `abandon_reason=chunks_never_arrived` | Step ③ - client tab closed |
+| Dashboard shows "uploading…" forever | `assembly_status=assembling` or `pending`, not yet abandoned | Step ① / ② / ⓪ - depends on chunk completeness |
+| PWA "queued" count never decreases | client-side `_reconcileBeforeDequeue` rejecting | HC88 `reconcileWaitTicks` cap (3 min) - also see HC90 send-attempts cap |
+| Report appears, photos blank | `assembly_status=complete` but `url=''` | rare - server-side bug, file a Sentry issue |
 | Abandon-rate alert (SLO § 4) | `media_abandon_reason_total` spike | this runbook |
 
 ## Diagnostic queries
@@ -107,7 +107,7 @@ GROUP BY abandon_reason, hour
 ORDER BY hour DESC, n DESC;
 ```
 
-Useful when SLO § 4 alerts fire — gives the per-hour distribution
+Useful when SLO § 4 alerts fire - gives the per-hour distribution
 so you can correlate spikes with deploy windows.
 
 ## Manual interventions
@@ -126,7 +126,7 @@ _run_assembly_recovery_sweep(boot=False)
 ```
 
 Output includes per-action counts (`revived N`, `abandoned M`, etc.).
-Safe to run repeatedly — all actions are idempotent.
+Safe to run repeatedly - all actions are idempotent.
 
 ### 2. Force-revive an abandoned row (operator-authorised reclaim)
 
@@ -151,7 +151,7 @@ trail shows it was operator-driven rather than automated.
 ### 3. Hard-fail a row the sweep can't catch
 
 Rare: a row stuck in a state the four actions don't match (e.g.
-`assembly_status='complete'` but `url=''` — a partial commit bug).
+`assembly_status='complete'` but `url=''` - a partial commit bug).
 Use only after confirming the row is truly broken:
 
 ```sql
@@ -183,8 +183,8 @@ WHERE assembly_status IN ('assembling', 'pending')
 ```
 
 If the list is unexpectedly large (> a handful), bump the
-`CRISP_ASSEMBLER_WEDGED_MIN` env var temporarily — e.g. `120` for
-two hours of additional retry budget — and re-evaluate after a sweep
+`CRISP_ASSEMBLER_WEDGED_MIN` env var temporarily - e.g. `120` for
+two hours of additional retry budget - and re-evaluate after a sweep
 cycle:
 
 ```sh
@@ -206,9 +206,9 @@ docker exec -e CRISP_ASSEMBLER_WEDGED_MIN=120 crisp-backend-1 \
 
 ## Related references
 
-- `backend/app/main.py:_run_assembly_recovery_sweep` — implementation
-- `backend/tests/test_assembly_recovery_sweep.py` — pinned behaviour
-- `docs/operations/SLOs.md` § 4 — abandon-rate SLO
+- `backend/app/main.py:_run_assembly_recovery_sweep` - implementation
+- `backend/tests/test_assembly_recovery_sweep.py` - pinned behaviour
+- `docs/operations/SLOs.md` § 4 - abandon-rate SLO
 - `mobile-app/src/app.js` HC88 (reconcile wait cap) + HC90 (send-attempts cap)
-- Operator HAR from May 2026 (`/Users/pks/Desktop/api-log-1.har`) —
+- Operator HAR from May 2026 (`/Users/pks/Desktop/api-log-1.har`) -
   the regression that motivated HC88+HC90+HC91

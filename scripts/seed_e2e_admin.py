@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-CRISP — Seed a deterministic SUPER_ADMIN user for end-to-end tests.
+CRISP - Seed a deterministic SUPER_ADMIN user for end-to-end tests.
 
 The public /auth/register endpoint always assigns RoleEnum.VIEWER and leaves
-the user unverified — fine for real users, unusable for E2E because every
+the user unverified - fine for real users, unusable for E2E because every
 admin-scoped test would fail on 403. This script writes the user directly
 via SQLAlchemy and promotes them in a single transaction.
 
@@ -14,7 +14,7 @@ Invoked from test.sh before Playwright starts; safe to run standalone:
 
     cd backend && source venv/bin/activate && python ../scripts/seed_e2e_admin.py
 
-The user created here matches helpers/api.ts:ADMIN — if either side
+The user created here matches helpers/api.ts:ADMIN - if either side
 changes, both must change.
 """
 import sys, os

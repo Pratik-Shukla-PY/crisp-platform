@@ -1,4 +1,4 @@
-# Maestro flow — walk the v4 capture → classify → review flow on RN.
+# Maestro flow - walk the v4 capture → classify → review flow on RN.
 #
 # Run manually:
 #   maestro test crisp-mobile/.maestro/v4-capture-flow.yaml
@@ -23,7 +23,7 @@
 # What it does NOT cover (that the PWA spec does):
 #   • Building footprint selection (no Leaflet on RN).
 #   • Image upload pipeline (mocked out for Maestro speed).
-#   • Service-worker / offline (no SW on RN — uses native NetInfo).
+#   • Service-worker / offline (no SW on RN - uses native NetInfo).
 
 appId: com.crispundp.crispmobile  # Update when EAS builds with a real bundle id
 

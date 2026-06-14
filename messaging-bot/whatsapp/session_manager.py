@@ -1,5 +1,5 @@
 """
-WhatsApp Session Manager — Maintains per-user session buffers to aggregate
+WhatsApp Session Manager - Maintains per-user session buffers to aggregate
 multiple WhatsApp messages into a single structured CRISP report.
 
 Each user (phone number) gets a session that collects inputs over time.
@@ -22,7 +22,7 @@ from messaging_bot.crisis_forms_client import resolve_active_event_id
 logger = logging.getLogger(__name__)
 
 BACKEND_URL = os.getenv("CRISP_BACKEND_URL", "http://localhost:8000")
-SESSION_TTL_SECONDS = 300  # 5 minutes — auto-submit after this
+SESSION_TTL_SECONDS = 300  # 5 minutes - auto-submit after this
 
 # Severity and type mappings from button IDs
 SEVERITY_MAP = {
@@ -51,7 +51,7 @@ DAMAGE_MAP = {
 @dataclass
 class SessionBuffer:
     """Per-user session that accumulates WhatsApp inputs."""
-    phone_hash: str          # WA-{sha256[:16]} — anonymized
+    phone_hash: str          # WA-{sha256[:16]} - anonymized
     phone_raw: str           # raw number (for sending replies only, never stored in DB)
     lang: str = "en"         # Detected/selected language
     state: str = "COLLECTING"  # COLLECTING → AWAITING_SEVERITY → AWAITING_TYPE → AWAITING_LOCATION → SUBMITTING → DONE
@@ -81,7 +81,7 @@ class SessionBuffer:
 
     @property
     def is_complete(self) -> bool:
-        """All required fields gathered — ready to submit."""
+        """All required fields gathered - ready to submit."""
         return (
             self.has_evidence
             and self.severity != "UNKNOWN"
@@ -160,7 +160,7 @@ async def submit_report(session: SessionBuffer) -> Optional[str]:
         "crisis_type": session.crisis_type or None,
         "damage_classification": session.damage_class or None,
     }
-    # UNDP "Other, please specify" rule (backend report.py:185) — when
+    # UNDP "Other, please specify" rule (backend report.py:185) - when
     # the WhatsApp user picked OTHER (or fell through the chip menu
     # without picking), backend rejects with 422. Synthesise a name
     # from the description snippet so the report lands rather than
@@ -181,11 +181,11 @@ async def submit_report(session: SessionBuffer) -> Optional[str]:
             "device_longitude": session.longitude,
             "accuracy_meters": 50.0,
         }
-        # Operation linkage — WhatsApp shares a precise GPS location, so resolve
+        # Operation linkage - WhatsApp shares a precise GPS location, so resolve
         # the active crisis zone there and echo its event id. The backend treats
         # it as a hint and re-derives authoritatively from the location; no active
         # zone → absent → GLOBAL report. Only crisis_event_id is sent (NOT
-        # form_pack_id) — WhatsApp doesn't render the dynamic pack, so attaching
+        # form_pack_id) - WhatsApp doesn't render the dynamic pack, so attaching
         # one would 422 on its unanswered required fields.
         _eid = await resolve_active_event_id(session.latitude, session.longitude)
         if _eid:

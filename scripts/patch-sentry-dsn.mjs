@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Patch the `<meta name="crisp-sentry-dsn">` tag's content attribute
- * across every HTML entrypoint in the repo. Idempotent — re-running
+ * across every HTML entrypoint in the repo. Idempotent - re-running
  * with the same DSN is a no-op; re-running with empty string un-wires
  * Sentry. Intended to be called from the deploy pipeline AFTER the
  * tarball is unpacked into the docker-compose build context but BEFORE
@@ -17,7 +17,7 @@
  *
  * Why a separate script (vs hand-editing 4 HTML files):
  *   · The four HTML files (PWA index + 3 dashboard pages) MUST stay
- *     in lockstep — partial wiring = inconsistent error capture.
+ *     in lockstep - partial wiring = inconsistent error capture.
  *   · sentry-init.js stays inert when content="" so we ship the
  *     source with empty values + patch at deploy. No DSN ever lands
  *     in git history that way.
@@ -61,12 +61,12 @@ if (!CHECK_ONLY && !process.env.SENTRY_DSN) {
     process.exit(2);
 }
 
-// Light DSN-format check — catches obvious typos. Real validation
+// Light DSN-format check - catches obvious typos. Real validation
 // happens at Sentry's ingest endpoint.
 if (dsn && !/^https:\/\/[a-f0-9]+@[a-z0-9.]+\.ingest(?:\.[a-z]+)?\.sentry\.io\/\d+$/.test(dsn)) {
     if (!CHECK_ONLY) {
         warn(`DSN format looks unusual: ${dsn.slice(0, 30)}...`);
-        warn("Proceeding anyway — Sentry's ingest will reject if it's truly invalid.");
+        warn("Proceeding anyway - Sentry's ingest will reject if it's truly invalid.");
     }
 }
 

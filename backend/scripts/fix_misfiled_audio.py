@@ -1,6 +1,6 @@
 """Fix S3 audio objects with mismatched extension/Content-Type.
 
-Background — May 2026 audio playback bug. The legacy single-shot base64
+Background - May 2026 audio playback bug. The legacy single-shot base64
 attach path used `ext = "jpg" if "image" in header else "webm"`, so every
 audio data: URL got renamed to `.webm` regardless of what the client
 actually recorded. iOS records as MP4/AAC; the server stored those bytes
@@ -15,7 +15,7 @@ and:
     Content-Type, update the corresponding `media.url` row, and delete
     the old key.
 
-Idempotent — re-running just no-ops over already-correct files.
+Idempotent - re-running just no-ops over already-correct files.
 
 Usage:
     cd backend
@@ -107,7 +107,7 @@ def main(dry_run: bool) -> int:
 
                 sniff = _sniff(body)
                 if not sniff:
-                    logger.info(f"  [{key}] unrecognisable magic bytes — skipping")
+                    logger.info(f"  [{key}] unrecognisable magic bytes - skipping")
                     n_ok += 1
                     continue
                 actual_ext, actual_ct = sniff
@@ -145,7 +145,7 @@ def main(dry_run: bool) -> int:
                             n_failed += 1
                     continue
 
-                # Extension mismatch — rename + update DB row.
+                # Extension mismatch - rename + update DB row.
                 stem = key.rsplit(".", 1)[0]
                 new_key = f"{stem}.{actual_ext}"
                 logger.info(

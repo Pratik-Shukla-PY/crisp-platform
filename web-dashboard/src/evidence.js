@@ -1,8 +1,8 @@
 // ══════════════════════════════════════════════════════════════════════════════
-// CRISP — Public Evidence Page  (Phase C.2, May 2026 UNDP-grade rebuild)
+// CRISP - Public Evidence Page  (Phase C.2, May 2026 UNDP-grade rebuild)
 // ══════════════════════════════════════════════════════════════════════════════
 //
-// Standalone page — no auth, no app.js, no dashboard.css. Loaded via:
+// Standalone page - no auth, no app.js, no dashboard.css. Loaded via:
 //   evidence.html?id=<report_id>
 //
 // Fetches /api/v1/reports/<id>/evidence and renders a clean truth-score
@@ -16,7 +16,7 @@
     'use strict';
 
     // ── Config: backend host detection ──
-    // Same logic as app.js — same-origin in PROD, localhost:8000 in dev.
+    // Same logic as app.js - same-origin in PROD, localhost:8000 in dev.
     const _isLocalDev = ['localhost', '127.0.0.1', '0.0.0.0'].includes(window.location.hostname);
     const BACKEND_HOST = _isLocalDev
         ? `http://${window.location.hostname}:8000`
@@ -28,10 +28,10 @@
     const root = document.getElementById('ev-root');
 
     if (!reportId) {
-        renderError('Missing <code>?id=</code> parameter — open this page from the dashboard\'s "Share evidence" button.');
+        renderError('Missing <code>?id=</code> parameter - open this page from the dashboard\'s "Share evidence" button.');
         return;
     }
-    // Soft validation — UUIDs are 36 chars w/ hyphens. We don't reject
+    // Soft validation - UUIDs are 36 chars w/ hyphens. We don't reject
     // non-UUID values (legacy ids could differ); just guard against
     // path-injection nonsense.
     if (reportId.length > 64 || /[^a-zA-Z0-9-]/.test(reportId)) {
@@ -135,7 +135,7 @@
             const data = await res.json();
             render(data);
         } catch (e) {
-            renderError('Network error — check your connection and reload.');
+            renderError('Network error - check your connection and reload.');
         }
     }
 

@@ -10,7 +10,7 @@ CRISP is an open-source, offline-first platform that enables communities to repo
 
 | Role | Tool | Purpose |
 |------|------|---------|
-| **Field Reporter** | Mobile PWA, Telegram, WhatsApp, SMS, IVR Call | Report damage from any device — smartphone, feature phone, or landline |
+| **Field Reporter** | Mobile PWA, Telegram, WhatsApp, SMS, IVR Call | Report damage from any device - smartphone, feature phone, or landline |
 | **Control Center** | Web Dashboard | Triage incidents, AI assessment, satellite verification, dispatch rescue teams |
 | **Data Analyst** | Export API / PDF | Download CSV/GeoJSON/Shapefile/KML or generate PDF reports for rescue teams |
 | **Prediction Analyst** | Predictive Intelligence | Multi-signal risk forecasting with weather, seismic, and historical data |
@@ -20,17 +20,17 @@ CRISP is an open-source, offline-first platform that enables communities to repo
 - **6-Channel Intake**: Mobile PWA, Telegram Bot, WhatsApp Bot, SMS Gateway, IVR Voice Calls
 - **Offline-first**: Reports queue in IndexedDB, sync progressively even at 2Kbps
 - **Voice-first multilingual**: Auto-detects language from GPS, supports 190+ countries, 7 languages
-- **AI Assessment**: Claude Sonnet cross-verifies text, photos, satellite imagery, nearby reports, caller identity — produces confidence score (0-100) with recommended action
+- **AI Assessment**: the AI cross-verifies text, photos, satellite imagery, nearby reports, caller identity - produces confidence score (0-100) with recommended action
 - **Satellite Verification**: Sentinel-2 + Mapbox/Maxar imagery compared against ground photos
 - **Progressive media streaming**: Photos and audio arrive chunk-by-chunk in real-time
 - **Real-time transcription**: Audio translated to English via Whisper (any language in, English out)
-- **AI Geocoding**: Claude fixes mangled voice transcriptions of place names + Mapbox geocoding
+- **AI Geocoding**: AI fixes mangled voice transcriptions of place names + Mapbox geocoding
 - **PDF Export**: Single-page incident reports with photos + satellite images for rescue teams
-- **Prompt Caching**: Claude API calls use ephemeral caching for 90% token cost reduction
+- **Prompt Caching**: the LLM API calls use ephemeral caching for 90% token cost reduction
 - **Source-aware scoring**: IVR/SMS reports scored fairly (no photo penalty for callers without smartphones)
 - **Enterprise Auth**: Email + OTP signup, JWT sessions, RBAC (Super Admin/Admin/Analyst/Viewer), SSO ready (Okta/Auth0/Azure AD/Keycloak)
 - **GDPR Compliance**: Data export, account deletion, consent management, audit logging
-- **Predictive Intelligence**: Multi-signal risk forecasting (weather + seismic + historical + geospatial + conflict) with Claude AI
+- **Predictive Intelligence**: Multi-signal risk forecasting (weather + seismic + historical + geospatial + conflict) with AI
 - **Gamification**: Reporter badges (Newcomer→Helper→Guardian→Hero) based on verified report count
 - **UNDP Damage Classification**: 3-tier (No Damage/Partial/Complete), 9 crisis types, 9 infrastructure types, debris clearing, service status
 - **Data Export**: CSV, GeoJSON, Shapefile (.shp), KML for GIS tools
@@ -46,7 +46,7 @@ CRISP is an open-source, offline-first platform that enables communities to repo
   Mobile PWA (offline-first)  ─────>
   Telegram Bot (guided flow)  ─────>   FastAPI + SQLAlchemy        Web Dashboard
   WhatsApp Bot (media+text)   ─────>   Whisper Transcription  ──>  Leaflet Map + Clusters
-  SMS Gateway (text parsing)  ─────>   Claude AI Geocoding         Decision-first Detail Panel
+  SMS Gateway (text parsing)  ─────>   AI Geocoding         Decision-first Detail Panel
   IVR Voice Call (auto-stop)  ─────>   Sentinel Hub Satellite      AI Assessment (on-demand)
                                        Mapbox Geocoding             Satellite Verification
                                        Prompt Caching               PDF Export
@@ -60,11 +60,11 @@ CRISP is an open-source, offline-first platform that enables communities to repo
 Every channel produces the same `Report` row shape, but channels differ in how
 the UNDP core questions are answered. Rich clients ask the reporter directly;
 lean channels capture what they can and the rest is classified downstream (by
-AI from the transcript, or by a UNDP analyst from the evidence — both
+AI from the transcript, or by a UNDP analyst from the evidence - both
 explicitly anticipated in the challenge Q&A, which notes that "technical
 validation and deeper analysis remain essential functions of UNDP teams").
 
-Legend: ✅ asked & enforced · 🟢 asked (optional) · 🤖 AI-extracted · 👤 analyst-classified · — n/a
+Legend: ✅ asked & enforced · 🟢 asked (optional) · 🤖 AI-extracted · 👤 analyst-classified · - n/a
 
 | Core question | PWA | Android (RN) | Telegram | WhatsApp | SMS | IVR |
 |---|:--:|:--:|:--:|:--:|:--:|:--:|
@@ -73,7 +73,7 @@ Legend: ✅ asked & enforced · 🟢 asked (optional) · 🤖 AI-extracted · �
 | Crisis type | ✅ | ✅ | ✅ | 👤 | 🤖 | 🤖 |
 | Debris clearing | ✅ | ✅ | ✅ | 👤 | 🤖 | 🤖 |
 | Location (GPS / textual) | ✅ | ✅ | ✅ | ✅ | 🤖 | 🤖 |
-| Photo / evidence | 🟢 | 🟢 | 🟢 | ✅ | — | — |
+| Photo / evidence | 🟢 | 🟢 | 🟢 | ✅ | - | - |
 
 **WhatsApp** is intentionally a rapid-intake channel: it collects severity,
 infrastructure type, location, and media/text evidence with minimal back-and-
@@ -90,13 +90,13 @@ only the fields a given report actually carries.
 | Mobile App (PWA) | Vanilla JS PWA, Service Worker, IndexedDB, Web Speech API |
 | Mobile App (Native) | React Native (Expo), TypeScript, expo-audio, expo-camera |
 | Backend API | Python 3.11, FastAPI, SQLAlchemy, Uvicorn |
-| AI/ML | faster-whisper (local), Anthropic Claude Sonnet + Haiku (cloud) |
+| AI/ML | faster-whisper (local), Cloud LLM (Haiku/Sonnet) |
 | Satellite | ESA Sentinel-2 L2A (10m), Mapbox/Maxar (0.5m fallback) |
-| Geocoding | Mapbox Geocoding API + Claude AI place name correction |
+| Geocoding | Mapbox Geocoding API + AI place name correction |
 | Dashboard | Vanilla JS, Leaflet.js, Turf.js, leaflet.heat, MarkerCluster |
 | Messaging | Telegram Bot API (long-polling), WhatsApp Cloud API, Twilio (SMS+IVR) |
 | Auth | JWT (python-jose), bcrypt (passlib), OTP email, RBAC, SSO stubs |
-| Prediction | Claude Sonnet + OpenWeatherMap + USGS Earthquake + geospatial heuristics |
+| Prediction | the AI + OpenWeatherMap + USGS Earthquake + geospatial heuristics |
 | Database | PostgreSQL 15 (dev + prod; SQLite retired Apr 2026) |
 
 ---
@@ -120,14 +120,14 @@ Simplified 2-step voice flow:
 1. "Say your location" (auto-stops after 10s silence or `*`)
 2. "Describe your problem" (auto-stops after 20s silence or `*`)
 
-Audio transcribed by Whisper, translated to English, geocoded by Claude AI + Mapbox. Both recordings uploaded to dashboard. Caller phone number and telecom circle captured. Uses Twilio Voice API with TwiML.
+Audio transcribed by Whisper, translated to English, geocoded by AI + Mapbox. Both recordings uploaded to dashboard. Caller phone number and telecom circle captured. Uses Twilio Voice API with TwiML.
 
 ---
 
 ## Credibility Check System (AI-Powered)
 
 ### On-Demand Assessment (Analyst-Triggered)
-When an analyst clicks **"Credibility Check"**, Claude Sonnet builds a 360° intelligence dossier from 8 data sections and produces a scored assessment:
+When an analyst clicks **"Credibility Check"**, the AI builds a 360° intelligence dossier from 8 data sections and produces a scored assessment:
 
 **For App/Telegram/WhatsApp (photo possible):**
 | Signal | Weight | What It Checks |
@@ -152,15 +152,15 @@ When an analyst clicks **"Credibility Check"**, Claude Sonnet builds a 360° int
 - False negatives (dismissing real incidents) cost lives
 - Assessment stored in DB permanently (one-time cost per incident)
 
-### Intelligence Dossier (8 Sections Fed to Claude):
-1. **Report Data** — infrastructure type, crisis type, damage classification, location
-2. **Evidence** — photo, audio, description, data completeness %
-3. **Reporter Profile** — badge level, report count, verified count, false alarm rate
-4. **Satellite Verification** — truth score, scene description, key findings
-5. **Corroboration** — nearby reports (quality-weighted), source diversity, temporal clustering
-6. **Historical Context** — 30d/90d report count, false alarm rate, recurring location
-7. **Service Status** — electricity, water, health services, pressing needs
-8. **Urgency Signals** — response wait time, night report, batch submission detection
+### Intelligence Dossier (8 Sections Fed to the AI):
+1. **Report Data** - infrastructure type, crisis type, damage classification, location
+2. **Evidence** - photo, audio, description, data completeness %
+3. **Reporter Profile** - badge level, report count, verified count, false alarm rate
+4. **Satellite Verification** - truth score, scene description, key findings
+5. **Corroboration** - nearby reports (quality-weighted), source diversity, temporal clustering
+6. **Historical Context** - 30d/90d report count, false alarm rate, recurring location
+7. **Service Status** - electricity, water, health services, pressing needs
+8. **Urgency Signals** - response wait time, night report, batch submission detection
 
 ### Output:
 - **Priority Level**: P1 (Immediate) → P5 (Likely False)
@@ -180,7 +180,7 @@ When an analyst clicks **"Credibility Check"**, Claude Sonnet builds a 360° int
 
 ## Predictive Intelligence Dashboard
 
-Claude-powered multi-signal risk forecasting that predicts future crises before they happen.
+AI-powered multi-signal risk forecasting that predicts future crises before they happen.
 
 ### Data Sources (5 Signals):
 | Signal | Source | What It Provides |
@@ -198,7 +198,7 @@ Claude-powered multi-signal risk forecasting that predicts future crises before 
 - **Contributing Factors**: Top 5 with specific data points
 - **Signal Breakdown**: Weighted scores per signal source
 - **Recommended Action**: "Pre-position flood rescue boats" etc.
-- **Full Reasoning**: Claude's multi-paragraph analysis
+- **Full Reasoning**: the AI's multi-paragraph analysis
 
 ### Dashboard Features:
 - Prediction heatmap overlay on map (blue→cyan→yellow→orange→purple)
@@ -207,7 +207,7 @@ Claude-powered multi-signal risk forecasting that predicts future crises before 
 - Time window selector (24h / 3d / 7d)
 
 ### Prompt Caching
-All Claude API calls use `cache_control: {"type": "ephemeral"}` on static system prompts:
+All the LLM API calls use `cache_control: {"type": "ephemeral"}` on static system prompts:
 - **Geocoder**: Place name correction examples cached (~90% savings)
 - **Satellite Scorer**: Scoring rubric cached (~90% savings)
 - **AI Assessment**: Scoring rules + format cached (~90% savings)
@@ -219,7 +219,7 @@ All Claude API calls use `cache_control: {"type": "ephemeral"}` on static system
 ### Prerequisites
 - Python 3.10+
 - A modern browser (Chrome, Safari, Firefox)
-- **PostgreSQL 15** — via Docker Compose (zero host install) or Homebrew.
+- **PostgreSQL 15** - via Docker Compose (zero host install) or Homebrew.
   SQLite was retired Apr 2026; see `docs/MIGRATIONS.md` for why.
 
 ### 1. Clone & Configure
@@ -278,12 +278,12 @@ docker compose up --build
 ```
 Report
   +-- Location (GPS coords, device vs. geocoded, place names)
-  +-- Media[] (IMAGE, AUDIO — adaptive chunked upload 1KB-512KB)
+  +-- Media[] (IMAGE, AUDIO - adaptive chunked upload 1KB-512KB)
   |     +-- MediaChunk[] (base64 packets with DJB2 checksum)
   +-- AIAnalysis (Whisper transcription, AI summary, damage labels)
   +-- SatelliteVerification (truth score, component breakdown, satellite metadata)
-  +-- ai_assessment (JSON — priority, confidence, score breakdown, key factors, reasoning)
-  +-- caller_info (JSON — phone number, network city/state for IVR/SMS)
+  +-- ai_assessment (JSON - priority, confidence, score breakdown, key factors, reasoning)
+  +-- caller_info (JSON - phone number, network city/state for IVR/SMS)
   +-- UNDP fields: crisis_type, damage_classification, infrastructure_name, debris_clearing, service_status, building_id
   +-- ReporterProfile (gamification: badge_level, report_count, verified_count)
 
@@ -333,14 +333,14 @@ Single-page structured report with:
 ## Security & Privacy
 
 - **No PII collected from reporters**: Device identified by anonymous hash only
-- **Zero registration for reporting**: Anyone can report via any channel — no login required
+- **Zero registration for reporting**: Anyone can report via any channel - no login required
 - **Enterprise auth for dashboard**: Email + OTP login, JWT sessions, RBAC (Super Admin/Admin/Analyst/Viewer)
 - **SSO ready**: Architecture supports Okta, Auth0, Azure AD, Keycloak (SAML/OIDC)
 - **GDPR compliant**: Data export, account deletion, consent management, 30-day deletion grace
 - **Brute force protection**: Account lockout after 5 failed attempts (15 min cooldown)
 - **OTP security**: 6-digit, 10 min expiry, max 5 attempts, 3 requests/10 min rate limit
 - **Audit trail**: Every login, logout, role change, dispatch, and deletion logged with IP + user agent
-- **PII blur**: MediaPipe BlazeFace (faces) + easyocr (text) — 100% local, zero API cost
+- **PII blur**: MediaPipe BlazeFace (faces) + easyocr (text) - 100% local, zero API cost
 - **API keys**: Stored in `.env`, excluded from git via `.gitignore`
 
 ---
@@ -365,7 +365,7 @@ crisp-platform/
         deps.py              # Auth dependencies (require_viewer, require_analyst, etc.)
       services/
         prediction_engine.py # Multi-signal prediction (weather, seismic, historical, geospatial)
-        truth_scorer.py      # Claude Haiku satellite truth verification
+        truth_scorer.py      # the AI satellite truth verification
         satellite_fetcher.py # Sentinel-2 + Mapbox imagery
         pii_blur.py          # Face + text blur (MediaPipe + easyocr)
       schemas/               # Pydantic request/response validation
@@ -384,7 +384,7 @@ crisp-platform/
     whatsapp/                # WhatsApp Cloud API webhook
     sms/                     # SMS gateway + AI geocoder
     ivr/                     # IVR voice call webhook (TwiML)
-    ai_extractor.py          # Claude AI text extraction
+    ai_extractor.py          # AI text extraction
     chunked_uploader.py      # Adaptive chunked media upload (1KB-512KB)
   docker-compose.yml         # Production deployment
   .env.example               # API key template
@@ -400,6 +400,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE) for details.
+Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
 Built for the UNDP InnoCentive Challenge on Rapid Community Damage Assessment.

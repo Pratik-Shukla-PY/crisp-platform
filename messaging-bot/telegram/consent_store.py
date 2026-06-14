@@ -8,17 +8,17 @@ re-ask for consent on every `/start`, which gets in the way after the
 first session.
 
 Design notes:
-  * SQLite on disk — zero external deps, survives bot restarts, trivial
+  * SQLite on disk - zero external deps, survives bot restarts, trivial
     to back up. File lives next to the bot code by default; override via
     `CRISP_TELEGRAM_CONSENT_DB` env var for test isolation.
-  * `user_id` is Telegram's numeric id — stable across restarts, survives
+  * `user_id` is Telegram's numeric id - stable across restarts, survives
     the user changing their display name / phone number. We hash it the
     same way session.user_hash does for consistency.
   * `granted_at` is UTC ISO 8601. Used for the GDPR delete path + audit.
   * `revoke(user_id)` drops the row so the next `/start` re-prompts.
     Wired to the `/delete` command via the existing session-teardown hook.
 
-Never raises — DB errors degrade to "not granted" so the flow always
+Never raises - DB errors degrade to "not granted" so the flow always
 falls back to the (safe) consent prompt. This keeps consent collection
 robust even if the file is missing / read-only / corrupted.
 """
@@ -71,7 +71,7 @@ def has_consented(user_id: int) -> bool:
 
 
 def grant(user_id: int, lang: Optional[str] = None) -> None:
-    """Record consent. Idempotent — repeated calls refresh granted_at."""
+    """Record consent. Idempotent - repeated calls refresh granted_at."""
     try:
         with _conn() as c:
             c.execute(
@@ -102,7 +102,7 @@ def get_lang(user_id: int) -> Optional[str]:
     lang-picker keyboard), or None when the user has never picked or has
     no consent row yet.
 
-    Added May 2026 (operator-reported) — previously the user's language
+    Added May 2026 (operator-reported) - previously the user's language
     choice was held only in the in-memory `TelegramSession.lang`, which
     means `/start` (which calls `clear_session`) wiped it back to the
     Telegram-locale default. Persisting picks here lets `/start` restore
@@ -123,14 +123,14 @@ def get_lang(user_id: int) -> Optional[str]:
 
 
 def set_lang(user_id: int, lang: str) -> None:
-    """Persist the user's most recent explicit language pick. Idempotent —
+    """Persist the user's most recent explicit language pick. Idempotent -
     repeated calls overwrite. Safe to call from the lang-picker callback
     on every tap.
 
     UPDATE-only on purpose: writing this row would make has_consented()
     return True (it just checks for row existence). The row only gets
     created by `grant()` at consent time, with the user's then-current
-    language. Pre-consent language picks live in session.lang only —
+    language. Pre-consent language picks live in session.lang only -
     once the user consents, `grant(user_id, session.lang)` persists
     their pick and subsequent set_lang calls update it.
     """

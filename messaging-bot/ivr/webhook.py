@@ -1,5 +1,5 @@
 """
-IVR Webhook — FastAPI router for voice call-based incident reporting.
+IVR Webhook - FastAPI router for voice call-based incident reporting.
 Supports BOTH Exotel (India) and Twilio Voice API.
 
 Simplified 2-step call flow (no buttons needed):
@@ -10,13 +10,13 @@ Simplified 2-step call flow (no buttons needed):
 Background processing after call:
   1. Download both recordings from Twilio (WAV format, authenticated)
   2. Whisper transcribes both to English (task="translate")
-  3. Claude AI fixes mangled place names (geocoder with prompt caching)
+  3. AI fixes mangled place names (geocoder with prompt caching)
   4. Mapbox geocodes the corrected place name
   5. Report created with caller_info (phone, network city/state/country)
   6. Both audio recordings uploaded as chunked media
 
 AI Assessment (type/severity classification) is triggered manually by admin
-on the dashboard — not auto-run (saves API costs).
+on the dashboard - not auto-run (saves API costs).
 
 Caller detection:
   - Inbound calls: caller = From (production)
@@ -54,7 +54,7 @@ def _resolve_ivr_secret() -> str:
     Precedence:
       1. `IVR_WEBHOOK_PATH_SECRET` env var (operator-controlled, stable).
       2. Cached value at `/data/.ivr_webhook_secret` (host-mounted
-         volume — survives docker rebuilds).
+         volume - survives docker rebuilds).
       3. New random `secrets.token_urlsafe(16)`, then persisted to
          the cache file when possible.
 
@@ -91,7 +91,7 @@ def _resolve_ivr_secret() -> str:
         except OSError:
             pass
     except (OSError, IOError):
-        # Read-only filesystem — fall back to in-memory (will rotate
+        # Read-only filesystem - fall back to in-memory (will rotate
         # on every restart, but we log loudly below so the operator
         # can re-sync Twilio).
         pass
@@ -106,7 +106,7 @@ IVR_WEBHOOK_SECRET = _resolve_ivr_secret()
 # chars) in case CloudWatch / log aggregators get exfiltrated; the
 # full URL is available via the localhost-only /webhook-url endpoint.
 logging.getLogger(__name__).info(
-    "IVR webhook secret resolved (suffix=…%s) — set IVR_WEBHOOK_PATH_SECRET "
+    "IVR webhook secret resolved (suffix=…%s) - set IVR_WEBHOOK_PATH_SECRET "
     "in .env.production to keep this stable across rebuilds. The full URL "
     "is exposed via GET /api/v1/ivr/webhook-url (localhost only).",
     IVR_WEBHOOK_SECRET[-6:] if len(IVR_WEBHOOK_SECRET) >= 6 else IVR_WEBHOOK_SECRET,
@@ -192,7 +192,7 @@ def _extract_params(request: Request, form_data: dict = None) -> dict:
 async def handle_incoming_call(request: Request):
     """Entry point: play welcome, ask for location. Auto-stops after 3s silence.
 
-    P2.16 — rate limited per IP (Twilio/Exotel all call from a small pool of
+    P2.16 - rate limited per IP (Twilio/Exotel all call from a small pool of
     IPs, so this is only protective against a leaked URL path being spammed
     by a hostile actor; legitimate traffic is comfortably under the limit).
     """
@@ -270,16 +270,16 @@ async def handle_incoming_call(request: Request):
     #
     # the fallback URL uses `&amp;lang=…` (not `?lang=…`)
     # because loc_url already carries a `?sid=…` query string.
-    # Arabic language code is "ar-XA" (Twilio's accepted form) — not
+    # Arabic language code is "ar-XA" (Twilio's accepted form) - not
     # "arb" (AWS Polly's MSA code, which Twilio rejects). Twilio's
     # `<Say>` validation rejects the whole TwiML response when ANY
     # voice/language combo is unrecognised, which silently drops
     # the call (no audio at all on the caller end). The rest of the
     # CRISP codebase has always used "ar-XA" with Polly.Zeina in
     # `_IVR_VOICES`; the welcome menu now matches.
-    # May 2026 — extended language menu from 5 → 7 options. Russian +
+    # May 2026 - extended language menu from 5 → 7 options. Russian +
     # Chinese added with native-voice <Say> lines (Polly.Tatyana ru-RU,
-    # Polly.Zhiyu cmn-CN — voice IDs already in _IVR_VOICES). The
+    # Polly.Zhiyu cmn-CN - voice IDs already in _IVR_VOICES). The
     # Gather's `timeout="6"` is silence-after-prompt, not total time,
     # so the additional ~4 s of menu audio doesn't change the effective
     # DTMF wait.
@@ -313,12 +313,12 @@ _IVR_VOICES = {
     "zh": ("Polly.Zhiyu", "cmn-CN"),
 }
 
-# May 2026 (operator-reported) — each `loc` and `desc` prompt now ends
+# May 2026 (operator-reported) - each `loc` and `desc` prompt now ends
 # with a native-language "press star to finish" instruction so callers
 # who speak quickly don't sit through the silence timeout (10 s for
 # location, 20 s for description). Capability has been in place since
 # day one (`finishOnKey="*"` on both <Record> verbs at line ~441,493),
-# but no audio prompt told callers it existed. Discovery fix only —
+# but no audio prompt told callers it existed. Discovery fix only -
 # no logic / timeout changes.
 #
 # Russian + Chinese added in the same change (operator scope expansion).
@@ -349,7 +349,7 @@ _IVR_PROMPTS = {
            "done": "谢谢您。您的报告已收到。救援队伍将收到通知。请保持安全。"},
 }
 
-# Welcome-menu DTMF map. May 2026 — extended from 5 → 7 languages
+# Welcome-menu DTMF map. May 2026 - extended from 5 → 7 languages
 # (added Russian = 6 and Chinese = 7). The Gather verb in
 # handle_incoming_call below renders one <Say> line per language.
 _DIGIT_LANG = {"1": "en", "2": "hi", "3": "es", "4": "fr", "5": "ar", "6": "ru", "7": "zh"}
@@ -483,7 +483,7 @@ async def handle_location_step(request: Request):
 async def handle_describe(request: Request, background_tasks: BackgroundTasks):
     """
     Receives location recording (if any), asks user to describe problem.
-    If user didn't record location (timeout/no speech), we still continue —
+    If user didn't record location (timeout/no speech), we still continue -
     better to get partial data than nothing.
     """
     params = dict(request.query_params)
@@ -535,7 +535,7 @@ async def handle_describe(request: Request, background_tasks: BackgroundTasks):
 async def handle_done(request: Request, background_tasks: BackgroundTasks):
     """
     Receives description recording (if any). Thanks the user and hangs up.
-    Processes everything in background — even partial data gets submitted.
+    Processes everything in background - even partial data gets submitted.
     """
     params = dict(request.query_params)
     if request.method == "POST":
@@ -558,7 +558,7 @@ async def handle_done(request: Request, background_tasks: BackgroundTasks):
     session["step"] = "done"
     _ivr_sessions[call_sid] = session
 
-    # Always process — even if we only got location or only description
+    # Always process - even if we only got location or only description
     background_tasks.add_task(_process_ivr_report, call_sid)
 
     lang = session.get("lang", "en")
@@ -632,7 +632,7 @@ async def _download_and_transcribe(audio_url: str, label: str = "audio") -> tupl
 
 async def _process_ivr_report(call_sid: str):
     """Download audio, transcribe via Whisper, geocode, create CRISP report.
-    AI (Claude) determines type + severity from description — no DTMF needed."""
+    AI (Claude) determines type + severity from description - no DTMF needed."""
     import httpx
 
     session = _ivr_sessions.get(call_sid)
@@ -665,7 +665,7 @@ async def _process_ivr_report(call_sid: str):
         _ivr_sessions.pop(call_sid, None)
         return
 
-    # ── 3. Geocode — try location recording first, then description, then both
+    # ── 3. Geocode - try location recording first, then description, then both
     # User might say location in step 1, step 2, or both
     from messaging_bot.sms.geocoder import geocode_text
     geo = {"latitude": None, "longitude": None, "location_name": "", "confidence": "low"}
@@ -675,13 +675,13 @@ async def _process_ivr_report(call_sid: str):
         geo = await geocode_text(location_text)
         logger.info(f"IVR geocoded location audio: '{location_text}' → {geo.get('location_name', 'unknown')}")
 
-    # If location step failed/empty, try the description — user may have
+    # If location step failed/empty, try the description - user may have
     # mentioned location while describing ("I am in Bansdih and there is a flood")
     if not geo.get("latitude") and description_text:
         geo = await geocode_text(description_text)
         logger.info(f"IVR geocoded from description: '{description_text[:60]}' → {geo.get('location_name', 'unknown')}")
 
-    # Last resort: combine both texts and try — AI geocoder can pick up
+    # Last resort: combine both texts and try - AI geocoder can pick up
     # fragmented location mentions across both recordings
     if not geo.get("latitude") and location_text and description_text:
         combined = f"{location_text} {description_text}"
@@ -702,7 +702,7 @@ async def _process_ivr_report(call_sid: str):
     # ── 5. Create CRISP report (type=OTHER, severity=SEVERE as defaults) ─────
     # AI extractor will update type + severity after analyzing the text.
     #
-    # UNDP "Other, please specify" rule (backend report.py:185) — when
+    # UNDP "Other, please specify" rule (backend report.py:185) - when
     # we default to OTHER we MUST supply a non-empty infrastructure_name
     # or /reports/meta returns 422 and the IVR call is silently lost.
     # The AI extractor runs ASYNC after the report lands, so we need a
@@ -712,7 +712,7 @@ async def _process_ivr_report(call_sid: str):
     _ivr_snippet = (full_text or "").strip()
     _ivr_name_placeholder = (
         _ivr_snippet[:40] if _ivr_snippet
-        else "Voice report — type pending AI analysis"
+        else "Voice report - type pending AI analysis"
     )
     meta = {
         "device_hash": phone_hash,
@@ -721,7 +721,7 @@ async def _process_ivr_report(call_sid: str):
         "severity": "SEVERE",
         "infrastructure_type": "OTHER",
         "infrastructure_name": _ivr_name_placeholder,
-        "description": full_text or "Voice report — awaiting AI analysis",
+        "description": full_text or "Voice report - awaiting AI analysis",
         "expected_media": (1 if location_b64 else 0) + (1 if audio_b64 else 0),
         "caller_info": caller_info,
     }
@@ -768,7 +768,7 @@ async def _process_ivr_report(call_sid: str):
                 #   (a) capture the chunked uploader's return value,
                 #   (b) on failure, fall back to the single-shot
                 #       /reports/{id}/media endpoint (data: URL POST
-                #       with `audio/wav` MIME) — slower but more robust
+                #       with `audio/wav` MIME) - slower but more robust
                 #       for the small ≤2 MB WAV files Twilio returns,
                 #   (c) loudly log success/failure with byte counts so
                 #       the operator can grep for upload trouble.
@@ -835,7 +835,7 @@ async def _process_ivr_report(call_sid: str):
                 # damage_classification on the Report, replacing the
                 # OTHER / SEVERE placeholders above. Wrapped in
                 # try/except so a Claude outage never blocks the
-                # report — the placeholders persist and the admin can
+                # report - the placeholders persist and the admin can
                 # still trigger an AI re-pass manually from the
                 # dashboard.
                 if full_text:
@@ -864,13 +864,13 @@ async def _process_ivr_report(call_sid: str):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Exotel Passthru Applet — alternate entry point for Exotel's applet system
+# Exotel Passthru Applet - alternate entry point for Exotel's applet system
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @ivr_router.api_route(f"/exotel/{IVR_WEBHOOK_SECRET}", methods=["GET", "POST"])
 async def exotel_passthru(request: Request, background_tasks: BackgroundTasks):
     """
-    Exotel Passthru Applet — receives call data AFTER Record applets.
+    Exotel Passthru Applet - receives call data AFTER Record applets.
     Processes the recording in background and returns 200 OK.
     """
     params = dict(request.query_params)

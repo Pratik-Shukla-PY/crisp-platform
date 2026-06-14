@@ -1,5 +1,5 @@
 """
-SMS Webhook — FastAPI router for SMS gateway integration.
+SMS Webhook - FastAPI router for SMS gateway integration.
 Supports Exotel and Twilio incoming SMS webhooks.
 Each SMS = one report submitted to the CRISP backend.
 """
@@ -147,10 +147,10 @@ async def _process_sms(phone: str, text: str):
 
     # 3. Create report on CRISP backend
     # damage_classification is an enum-validated field on the backend
-    # schema — pass None (not "") when the parser couldn't classify,
+    # schema - pass None (not "") when the parser couldn't classify,
     # otherwise /reports/meta returns 422 and the SMS is silently lost.
     #
-    # UNDP "Other, please specify" rule (report.py:185) — when the SMS
+    # UNDP "Other, please specify" rule (report.py:185) - when the SMS
     # parser couldn't match a specific infrastructure keyword it returns
     # OTHER. The backend then requires a non-empty infrastructure_name.
     # We synthesise one from the first line of the SMS description so
@@ -161,7 +161,7 @@ async def _process_sms(phone: str, text: str):
     infra_name = parsed.get("infrastructure_name")
     if infra_type == "OTHER" and not (infra_name and infra_name.strip()):
         # Use the first 40 chars of the description (the SMS body)
-        # as the "please specify" text — gives operators something
+        # as the "please specify" text - gives operators something
         # meaningful to triage on. Falls back to a sentinel if even
         # the description is empty.
         snippet = (parsed.get("description") or "").strip()
@@ -179,7 +179,7 @@ async def _process_sms(phone: str, text: str):
         "caller_info": {"phone": phone, "source": "SMS"},
         "crisis_type": parsed.get("crisis_type") or None,
         "damage_classification": parsed.get("damage_classification") or None,
-        # UNDP core question — True when the SMS text signals debris, else
+        # UNDP core question - True when the SMS text signals debris, else
         # None (unknown). Never False from SMS: absence of the word is not a
         # "no". `is None` check (not `or None`) so a real False would survive.
         "debris_clearing_needed": parsed.get("debris_clearing_needed"),
@@ -208,7 +208,7 @@ async def _process_sms(phone: str, text: str):
                 reply_template = _SMS_REPLIES.get(sms_lang, _SMS_REPLIES["en"])
                 await _send_reply(phone, reply_template.format(id=report_id[:8]))
 
-                # AI extraction removed — admin triggers AI Assessment on dashboard instead
+                # AI extraction removed - admin triggers AI Assessment on dashboard instead
                 # This saves 1 Claude API call per SMS report
 
                 # If location was unclear, ask for clarification
@@ -261,7 +261,7 @@ async def _send_reply(phone: str, message: str):
         except Exception as e:
             logger.warning(f"Twilio send failed: {e}")
 
-    logger.warning(f"No SMS gateway configured — reply not sent to {_hash_phone(phone)}")
+    logger.warning(f"No SMS gateway configured - reply not sent to {_hash_phone(phone)}")
 
 
 # ── Status ─────────────────────────────────────────────────────────────────────

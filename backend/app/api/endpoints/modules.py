@@ -9,7 +9,7 @@ impact on livelihoods in the months after a crisis."
 KoBoToolbox owns the "modular forms" differentiation axis today; this
 module closes the gap by letting field operators drop a YAML module
 into `backend/app/modules/` and have both PWA + RN pickers render it
-without a code change. The endpoint returns JSON — the client
+without a code change. The endpoint returns JSON - the client
 translators (`t()`) and renderers don't need to know YAML.
 
 Endpoints:
@@ -20,16 +20,16 @@ Endpoints:
         the `applies_to` block on each module.
 
     GET /api/v1/modules/{module_id}
-        Single module — small-response path for when a client already
+        Single module - small-response path for when a client already
         knows which module it wants.
 
     GET /api/v1/modules/applicable?crisis_type=FLOOD&…
-        Convenience filter — server-side evaluates `applies_to` so
+        Convenience filter - server-side evaluates `applies_to` so
         clients that can't (or don't want to) implement the matcher
         get a ready-to-render list.
 
 Security: read-only, unauthenticated. Module definitions are contract,
-not secret — the evaluator should be able to `curl` the endpoint and
+not secret - the evaluator should be able to `curl` the endpoint and
 see every module CRISP ships.
 """
 from __future__ import annotations
@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# Directory resolution: `backend/app/modules/*.yaml` — co-located with
+# Directory resolution: `backend/app/modules/*.yaml` - co-located with
 # the code for now so it ships with the Docker image. Operators can
 # override via `CRISP_MODULES_DIR` env var for out-of-tree authoring.
 def _modules_dir() -> str:
@@ -57,7 +57,7 @@ def _modules_dir() -> str:
 
 
 def _validate_module(mod: Dict[str, Any], file_name: str) -> None:
-    """Cheap shape check. Loud on malformed — operators should notice
+    """Cheap shape check. Loud on malformed - operators should notice
     at load-time, not once a field engineer discovers a broken form."""
     required = ["id", "version", "title", "fields"]
     for r in required:
@@ -84,7 +84,7 @@ def _load_all() -> List[Dict[str, Any]]:
     from a hot-reload handler if you add that later."""
     d = _modules_dir()
     if not os.path.isdir(d):
-        logger.warning("[modules] directory missing: %s — returning []", d)
+        logger.warning("[modules] directory missing: %s - returning []", d)
         return []
     out: List[Dict[str, Any]] = []
     for name in sorted(os.listdir(d)):
@@ -98,7 +98,7 @@ def _load_all() -> List[Dict[str, Any]]:
             out.append(mod)
         except Exception as e:
             logger.error("[modules] %s: load failed: %s", name, e)
-            # Never raise at import-time — module failures shouldn't take
+            # Never raise at import-time - module failures shouldn't take
             # the whole API down. Operator gets the error via the log.
             continue
     logger.info("[modules] loaded %d module(s) from %s", len(out), d)
@@ -128,7 +128,7 @@ def _applies(mod: Dict[str, Any], *,
         "Returns the full set of modular forms CRISP ships. Each entry "
         "carries a top-level `id`, `version`, `title` (+ i18n key), "
         "`description`, an `applies_to` gating block, and a `fields` "
-        "array. Client rendering is driven entirely by the JSON — "
+        "array. Client rendering is driven entirely by the JSON - "
         "drop a new YAML file in `backend/app/modules/` and it appears "
         "in the next response."
     ),

@@ -1,25 +1,25 @@
 """Reclaim media_chunks for already-assembled media (post-assembly cleanup backfill).
 
-Background — May 2026: `media_chunks` rows hold the raw uploaded bytes ONLY for
+Background - May 2026: `media_chunks` rows hold the raw uploaded bytes ONLY for
 reassembly. Once a Media row reaches `assembly_status='complete'` with its
-assembled file durably in storage, the chunks are dead weight — the public
+assembled file durably in storage, the chunks are dead weight - the public
 `GET /media/{id}/file` route serves `media.url` from storage, never the chunks
 (and the `pre_blur/` retention store, not chunks, backs any re-blur). They were
 historically never deleted, so they accumulated (DB bloat + original bytes at
 rest).
 
 `_assemble_media_file` now reclaims them INLINE on completion. This script is the
-one-shot backfill for the EXISTING accumulation — rows that completed before the
+one-shot backfill for the EXISTING accumulation - rows that completed before the
 inline reclaim shipped, or that the inline reclaim skipped because a transient
 `storage.exists()` check returned False.
 
 Safety:
   * Acts ONLY on media with `assembly_status='complete'` (failed / pending /
-    assembling rows keep their chunks — they may still need them).
+    assembling rows keep their chunks - they may still need them).
   * By default verifies the assembled object is actually present in storage
     (`storage.exists(media.url)`) before deleting that media's chunks; skips +
     logs otherwise. Pass --no-verify-storage to delete on status alone.
-  * Dry-run by default — prints what it would do, changes nothing. Pass
+  * Dry-run by default - prints what it would do, changes nothing. Pass
     --confirm to act.
 
 Usage:
@@ -48,7 +48,7 @@ def main(*, dry_run: bool, verify_storage: bool, report_id: str | None) -> int:
 
     from app.db.session import SessionLocal
     # Register auth models (FKs into users/organizations) before touching
-    # Media — same gotcha as the sibling scripts that bypass app-boot.
+    # Media - same gotcha as the sibling scripts that bypass app-boot.
     from app.models import auth as _auth  # noqa: F401
     from app.models.report import Media, MediaChunk
 
@@ -57,9 +57,9 @@ def main(*, dry_run: bool, verify_storage: bool, report_id: str | None) -> int:
         try:
             from app.services.storage import get_storage
             storage = get_storage()
-        except Exception as e:  # pragma: no cover — defensive
+        except Exception as e:  # pragma: no cover - defensive
             logger.warning(
-                f"storage init failed ({e}) — proceeding WITHOUT storage verification "
+                f"storage init failed ({e}) - proceeding WITHOUT storage verification "
                 "(delete based on assembly_status alone)"
             )
             storage = None
@@ -102,12 +102,12 @@ def main(*, dry_run: bool, verify_storage: bool, report_id: str | None) -> int:
                 try:
                     present = bool(m.url) and storage.exists(m.url)
                 except Exception as e:
-                    logger.warning(f"  {m.id}: storage.exists raised ({e}) — skipping")
+                    logger.warning(f"  {m.id}: storage.exists raised ({e}) - skipping")
                     present = False
                 if not present:
                     logger.warning(
                         f"  {m.id}: assembled object NOT confirmed in storage "
-                        f"(url={m.url!r}) — skipping, {n} chunk(s) kept"
+                        f"(url={m.url!r}) - skipping, {n} chunk(s) kept"
                     )
                     skipped += 1
                     continue
@@ -135,7 +135,7 @@ def main(*, dry_run: bool, verify_storage: bool, report_id: str | None) -> int:
             f"{len(targets) - skipped} media; {skipped} skipped (storage unconfirmed)."
         )
         if dry_run:
-            logger.info("Dry run — nothing deleted. Pass --confirm to act.")
+            logger.info("Dry run - nothing deleted. Pass --confirm to act.")
         return 0
     except Exception as e:
         db.rollback()

@@ -1,4 +1,4 @@
-"""Dynamic Crisis Forms — geo-scoped Stage 2/3 question packs
+"""Dynamic Crisis Forms - geo-scoped Stage 2/3 question packs
 
 Adds three new tables (crisis_form_packs, crisis_form_pack_versions,
 crisis_events) and four ADDITIVE nullable columns on reports

@@ -1,4 +1,4 @@
-# CRISP Platform — Gap Analysis Report
+# CRISP Platform - Gap Analysis Report
 ### Product Manager Evaluation Against UNDP InnoCentive Requirements
 
 **Date:** April 2026
@@ -37,7 +37,7 @@ CRISP covers **~85% of the UNDP requirements**. The platform exceeds expectation
 **GAP #1: Service Disruption Status**
 - **What's missing:** A field to report whether services (health, power, water, education) are disrupted at the location, separate from infrastructure damage type.
 - **How to fix (2 hours):** Add a `service_status` JSON field to Report model. Values: `{"health": "disrupted", "power": "operational", "water": "disrupted"}`. Add toggle buttons in mobile app. AI Assessment can also infer this from description.
-- **Priority:** MEDIUM — The infrastructure types partially cover this, but an explicit field shows judges we thought about service continuity.
+- **Priority:** MEDIUM - The infrastructure types partially cover this, but an explicit field shows judges we thought about service continuity.
 
 ---
 
@@ -56,7 +56,7 @@ CRISP covers **~85% of the UNDP requirements**. The platform exceeds expectation
 **GAP #2: Drop Pin on Map**
 - **What's missing:** Users cannot tap/click on a map to place a pin. They can only search by place name or share GPS.
 - **How to fix (4 hours):** In mobile app, add a Leaflet map view with a draggable marker. On tap/drag-end, capture coordinates. Add a "Drop Pin" button next to the existing "Share Location" button.
-- **Priority:** HIGH — Judges will specifically test this. Place name search is good but a map pin is the expected UX.
+- **Priority:** HIGH - Judges will specifically test this. Place name search is good but a map pin is the expected UX.
 
 ---
 
@@ -118,7 +118,7 @@ CRISP covers **~85% of the UNDP requirements**. The platform exceeds expectation
 **GAP #3: Russian Language in Telegram Bot**
 - **What's missing:** Telegram bot has 7 languages (en, hi, es, fr, ar, pt, sw) but **Russian is not one of them**. It's a UN official language.
 - **How to fix (1 hour):** Add `"ru"` strings to `_STRINGS` dict in `messaging-bot/telegram/bot_replies.py`. Add 🇷🇺 Russian button to welcome message.
-- **Priority:** HIGH — Judges will check all 6 UN languages.
+- **Priority:** HIGH - Judges will check all 6 UN languages.
 
 ---
 
@@ -149,7 +149,7 @@ CRISP covers **~85% of the UNDP requirements**. The platform exceeds expectation
 **GAP #4: Priority Zones Not Persisted**
 - **What's missing:** Priority zones are stored in browser localStorage, so they're lost if the admin switches browsers/devices. Not shared across team members.
 - **How to fix (3 hours):** Add a `priority_zones` table in the database. Create `/api/v1/zones` CRUD endpoints. Dashboard loads zones from API on init.
-- **Priority:** LOW — Functional but not persistent. Judges may not notice.
+- **Priority:** LOW - Functional but not persistent. Judges may not notice.
 
 ---
 
@@ -164,7 +164,7 @@ CRISP covers **~85% of the UNDP requirements**. The platform exceeds expectation
 **GAP #5: CSV and GeoJSON Export API**
 - **What's missing:** The `exports` table exists in schema.sql, and the dashboard has an `exportData()` function shell, but the backend API endpoint to generate CSV/GeoJSON files is not implemented.
 - **How to fix (4 hours):** Add `GET /api/v1/reports/export?format=csv` and `format=geojson` endpoints. CSV: flatten reports with location + media URLs. GeoJSON: standard FeatureCollection with point geometries. Add download buttons to dashboard.
-- **Priority:** HIGH — Judges expect this. The schema is ready, just needs the endpoint.
+- **Priority:** HIGH - Judges expect this. The schema is ready, just needs the endpoint.
 
 ---
 
@@ -246,7 +246,7 @@ CRISP covers **~85% of the UNDP requirements**. The platform exceeds expectation
 **GAP #6: Wildfire / Fire Infrastructure Type**
 - **What's missing:** No `FIRE` enum value in InfraTypeEnum. Fires are classified under "OTHER".
 - **How to fix (30 minutes):** Add `FIRE = "FIRE"` to InfraTypeEnum. Add fire icon to dashboard. Add "fire" keywords to SMS parser.
-- **Priority:** MEDIUM — Easy fix, shows comprehensiveness.
+- **Priority:** MEDIUM - Easy fix, shows comprehensiveness.
 
 ---
 
@@ -277,7 +277,7 @@ CRISP covers **~85% of the UNDP requirements**. The platform exceeds expectation
 **GAP #7: Demo Video**
 - **What's missing:** No video walkthrough demonstrating user flow, features, and offline→sync process.
 - **How to fix (2-3 hours):** Record a screen capture showing: (1) Mobile app offline report, (2) Sync on reconnect, (3) Telegram bot guided flow, (4) IVR voice call, (5) Dashboard AI Assessment + satellite verification, (6) PDF export.
-- **Priority:** CRITICAL — This is a required deliverable. Must be done.
+- **Priority:** CRITICAL - This is a required deliverable. Must be done.
 
 ---
 
@@ -286,7 +286,7 @@ CRISP covers **~85% of the UNDP requirements**. The platform exceeds expectation
 | Criteria | Score (1-5) | Notes |
 |----------|-------------|-------|
 | **Completeness** | 4/5 | Missing: drop-pin, CSV export, demo video |
-| **Offline capability** | 5/5 | Excellent — IndexedDB, chunked upload, auto-sync |
+| **Offline capability** | 5/5 | Excellent - IndexedDB, chunked upload, auto-sync |
 | **Geo-tagging & mapping** | 4/5 | Missing: drop-pin manual input |
 | **Ease of use** | 5/5 | IVR for landlines, emoji-driven Telegram, 3-step flow |
 | **Accessibility** | 5/5 | 6 UN languages, 190+ countries, voice input |
@@ -297,7 +297,7 @@ CRISP covers **~85% of the UNDP requirements**. The platform exceeds expectation
 | **Data governance** | 4/5 | Missing: dedicated audit table |
 | **Innovation** | 5/5 | 6 channels (incl. IVR), AI assessment, satellite verify, prompt caching |
 
-**Overall Readiness: 4.4/5 — Strong submission, needs targeted fixes**
+**Overall Readiness: 4.4/5 - Strong submission, needs targeted fixes**
 
 ---
 
@@ -322,17 +322,17 @@ CRISP covers **~85% of the UNDP requirements**. The platform exceeds expectation
 ## Recommendations
 
 ### Must-Do (Before Submission)
-1. **Record demo video** (G7) — Screen capture of full user journey across channels
-2. **Add drop-pin map** (G2) — Leaflet map in mobile app with draggable marker
-3. **Implement CSV/GeoJSON export** (G5) — Backend endpoints + dashboard buttons
-4. **Add Russian to Telegram** (G3) — Translate strings, add flag button
+1. **Record demo video** (G7) - Screen capture of full user journey across channels
+2. **Add drop-pin map** (G2) - Leaflet map in mobile app with draggable marker
+3. **Implement CSV/GeoJSON export** (G5) - Backend endpoints + dashboard buttons
+4. **Add Russian to Telegram** (G3) - Translate strings, add flag button
 
 ### Should-Do (If Time Permits)
-5. **Add FIRE type** (G6) — 30 minutes, easy completeness win
-6. **Add service disruption field** (G1) — Shows depth
-7. **Add Chinese to Telegram** (G8) — UN language completeness
+5. **Add FIRE type** (G6) - 30 minutes, easy completeness win
+6. **Add service disruption field** (G1) - Shows depth
+7. **Add Chinese to Telegram** (G8) - UN language completeness
 
 ### Nice-to-Have (Post-Submission)
-8. **Persist priority zones** (G4) — Backend API for zone management
-9. **Dedicated audit table** — For compliance
-10. **OCHA/ReliefWeb integration** — For real-world deployment
+8. **Persist priority zones** (G4) - Backend API for zone management
+9. **Dedicated audit table** - For compliance
+10. **OCHA/ReliefWeb integration** - For real-world deployment

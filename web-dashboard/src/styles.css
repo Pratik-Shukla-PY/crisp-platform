@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════
-   CRISP UN Crisis Command Center — Design System v3.0
+   CRISP UN Crisis Command Center - Design System v3.0
    Hierarchical Decision-Focused Control Panel
    ══════════════════════════════════════════════════════════════ */
 :root {
@@ -24,7 +24,7 @@
     --text-sub:    #94a3b8;
     --text-dim:    #475569;
 
-    /* Apr 2026 — Noto Sans Arabic + Noto Sans SC added after the primary
+    /* Apr 2026 - Noto Sans Arabic + Noto Sans SC added after the primary
        families. Browsers do per-glyph font cascade: Latin text picks
        Inter / Outfit / JetBrains, Arabic codepoints fall through to
        Noto Sans Arabic, CJK to Noto Sans SC. Without these, analysts
@@ -39,7 +39,7 @@
     --shadow:      0 20px 60px rgba(0,0,0,0.7);
     --shadow-sm:   0 4px 16px rgba(0,0,0,0.4);
 
-    /* Type scale — 5 tiers for clear hierarchy */
+    /* Type scale - 5 tiers for clear hierarchy */
     --fs-display:  20px;
     --fs-heading:  16px;
     --fs-body:     14px;
@@ -184,7 +184,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 .ac-list-name { flex:1; color:var(--text); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ac-list-count { font-family:var(--font-mono); font-weight:700; color:var(--info); }
 
-/* Phase G.4 — drill-down hover states for clickable analytics rows */
+/* Phase G.4 - drill-down hover states for clickable analytics rows */
 .ac-subtitle {
     font-size: 9px;
     color: var(--text-dim);
@@ -224,7 +224,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 }
 .analytics-grid-drill { margin-top: 8px; }
 
-/* ── Phase G.5 — Bulk multi-select + batch verify ───────────── */
+/* ── Phase G.5 - Bulk multi-select + batch verify ───────────── */
 .qrt-bulk-check {
     position: absolute;
     top: 8px;
@@ -323,7 +323,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
     justify-content: center;
 }
 
-/* ── Phase G.6 — Saved view presets dropdown ────────────────── */
+/* ── Phase G.6 - Saved view presets dropdown ────────────────── */
 .cmd-views-wrap { position: relative; display: inline-flex; }
 .cmd-views-toggle { padding-right: 8px; }
 .cmd-views-menu {
@@ -440,7 +440,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
     line-height: 1.5;
 }
 
-/* ── Phase F.2.b — Per-report admin-action ribbon ───────────── */
+/* ── Phase F.2.b - Per-report admin-action ribbon ───────────── */
 .dp-audit-ribbon {
     background: rgba(148, 163, 184, 0.05);
     border: 1px solid rgba(148, 163, 184, 0.14);
@@ -469,7 +469,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
     font-weight: 500;
 }
 .dp-audit-loading {
-    /* Phase J.5 — Quieter loading state. Was a spinner-style line
+    /* Phase J.5 - Quieter loading state. Was a spinner-style line
        that flashed for ~80 ms on every panel open; now a 3-bar
        skeleton that's invisible for the first 300 ms (most fetches
        complete inside that window) and gently fades in only on
@@ -536,7 +536,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
     font-style: normal;
 }
 
-/* ══ Phase J.2 (May 2026) — Detail panel simplification ════════ */
+/* ══ Phase J.2 (May 2026) - Detail panel simplification ════════ */
 
 /* One-sentence operator headline at the very top of the panel.
    Replaces the operator's mental scan of chips / fields with a
@@ -553,7 +553,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
     letter-spacing: 0.01em;
 }
 
-/* Verdict dropdown — replaces the 4-button Accept/Reject/Disp/Arr row. */
+/* Verdict dropdown - replaces the 4-button Accept/Reject/Disp/Arr row. */
 .dp-verdict-row {
     display: flex;
     flex-wrap: wrap;
@@ -644,7 +644,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 .dp-verdict-item-title { font-size: 12.5px; font-weight: 700; color: var(--text); }
 .dp-verdict-item-sub { font-size: 10.5px; color: var(--text-dim); }
 
-/* Response-progress chips — Dispatched / Arrived. Clickable when
+/* Response-progress chips - Dispatched / Arrived. Clickable when
    not yet stamped; passive timestamp display when stamped. */
 .dp-response-chips {
     display: inline-flex;
@@ -685,7 +685,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
     cursor: default;
 }
 
-/* Overflow `⋯` menu — collapses False Alarm / Delete out of the
+/* Overflow `⋯` menu - collapses False Alarm / Delete out of the
    always-visible action row. */
 .dp-overflow-btn {
     appearance: none;
@@ -750,7 +750,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 }
 .dp-overflow-menu .dp-overflow-danger i { color: #f87171; }
 
-/* Collapsible <details> sections — Timeline + Activity Log + future
+/* Collapsible <details> sections - Timeline + Activity Log + future
    sections. Visually consistent calm-card style. */
 .dp-section {
     background: rgba(15, 23, 42, 0.40);
@@ -791,7 +791,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
     padding: 4px 10px 10px 10px;
     border-top: 1px solid rgba(148, 163, 184, 0.10);
 }
-/* B3 — curated crisis-pack answers (Report.form_data) + form provenance tag. */
+/* B3 - curated crisis-pack answers (Report.form_data) + form provenance tag. */
 .dp-crisis-answers .dp-section-header i:first-child { color: #67e8f9; }
 .dp-cf-count {
     font-size: 10px; font-weight: 700; line-height: 1;
@@ -825,7 +825,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
     margin: 0;
 }
 
-/* ══ Phase F.7 — Dashboard i18n: language picker + RTL safety ══ */
+/* ══ Phase F.7 - Dashboard i18n: language picker + RTL safety ══ */
 .dash-lang-toggle {
     display: inline-flex;
     align-items: center;
@@ -869,7 +869,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
     border-color: rgba(167, 139, 250, 0.45);
 }
 
-/* ── Phase F.8.a — Offline-queued stale-arrival badge ─────── */
+/* ── Phase F.8.a - Offline-queued stale-arrival badge ─────── */
 .qrt-stale {
     display: inline-flex;
     align-items: center;
@@ -902,7 +902,7 @@ html[dir="rtl"] .bc-rf-input { text-align: right; }
 
 /* Force `dir="auto"` on user-content surfaces so an Arabic free-text
    description renders right-to-left even when the surrounding chrome
-   is LTR — without us having to add the attribute to every span. */
+   is LTR - without us having to add the attribute to every span. */
 .dp-summary-text,
 .bc-r-line1 .bc-r-dmg,
 .bc-r-line1 .bc-r-crisis,
@@ -945,7 +945,7 @@ html[dir="rtl"] .bc-rf-input { text-align: right; }
 }
 
 .brand { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-/* May 2026 — brand-icon hosts the inlined ripple-tile SVG. Dropped the
+/* May 2026 - brand-icon hosts the inlined ripple-tile SVG. Dropped the
    old orange→red gradient (clashed with the navy SVG underneath) +
    subtle box-shadow halo to give the mark a slight glow against the
    command bar. */
@@ -977,7 +977,7 @@ html[dir="rtl"] .bc-rf-input { text-align: right; }
 .user-logout-btn { background:none; border:1px solid rgba(239,68,68,0.2); color:#f87171; border-radius:5px; padding:3px 6px; cursor:pointer; font-size:11px; transition:all .15s; }
 .user-logout-btn:hover { background:rgba(239,68,68,0.1); }
 
-/* ── Phase J.1 (May 2026) — User chip dropdown + Tools menu ─── */
+/* ── Phase J.1 (May 2026) - User chip dropdown + Tools menu ─── */
 .user-menu-trigger {
     appearance: none;
     background: rgba(255, 255, 255, 0.04);
@@ -1066,7 +1066,7 @@ html[dir="rtl"] .bc-rf-input { text-align: right; }
     margin: 4px 6px;
 }
 
-/* Tools dropdown — reuses .export-dropdown open/close behaviour. */
+/* Tools dropdown - reuses .export-dropdown open/close behaviour. */
 .tools-menu .tools-menu-body {
     min-width: 240px;
     padding: 6px;
@@ -1155,7 +1155,7 @@ html[dir="rtl"] .bc-rf-input { text-align: right; }
 .stat-pill.unverified { border-color: rgba(100,116,139,0.3); color: #94a3b8; background: rgba(100,116,139,0.08); }
 .stat-pill.avg-response { border-color: rgba(56,189,248,0.3); color: var(--info); background: rgba(56,189,248,0.08); }
 .stat-pill.media-pending { border-color: rgba(249,115,22,0.3); color: var(--severe); background: rgba(249,115,22,0.08); }
-/* Phase C.2 — Originals-pending filter pill. Amber so it visually
+/* Phase C.2 - Originals-pending filter pill. Amber so it visually
    rhymes with the in-card ORIG chip + the gallery-strip pending chip. */
 .stat-pill.originals_pending { border-color: rgba(245,158,11,0.4); color: #f59e0b; background: rgba(245,158,11,0.10); }
 .clickable-pill { cursor:pointer; transition:all 0.2s; }
@@ -1216,7 +1216,7 @@ html[dir="rtl"] .bc-rf-input { text-align: right; }
 .del-item.del-expired { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.08); }
 .del-item-info { min-width: 0; }
 
-/* ── Phase 5.1 (May 2026) — Moderation overlay (admin triage + appeals).
+/* ── Phase 5.1 (May 2026) - Moderation overlay (admin triage + appeals).
    Reuses the .deletions-panel scaffold (positioning + shadow + close
    button); adds a tabs strip and two card families (.mod-triage-card,
    .mod-appeal-card). Slightly wider than the deletions panel because
@@ -1823,7 +1823,7 @@ html[dir="rtl"] .bc-rf-input { text-align: right; }
 .detail-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 .detail-header h3 { display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
 
-/* ══ Phase G.3 — Full-report max-modal ════════════════════════
+/* ══ Phase G.3 - Full-report max-modal ════════════════════════
    Toggled by adding `dp-fullscreen` to <body>. The detail panel
    grows to a near-fullscreen modal (centred, with breathing room
    to keep the operator's eye on the report rather than the chrome).
@@ -1852,7 +1852,7 @@ body.dp-fullscreen .detail-panel {
 }
 body.dp-fullscreen .detail-body {
     padding: 18px 28px;
-    /* Big breathing layout — let the section cards stretch to a
+    /* Big breathing layout - let the section cards stretch to a
        reasonable reading-width column and centre on the page. */
     max-width: 920px;
     margin: 0 auto;
@@ -1899,7 +1899,7 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 .dp-field-badge { font-size:11px; font-weight:600; padding:3px 8px; border-radius:8px; display:inline-flex; align-items:center; gap:4px; border:1px solid rgba(255,255,255,0.1); }
 .dp-building-link:hover { filter:brightness(1.3); }
 
-/* Phase E (Apr 2026 UI v3) — "Needs mapping" badge.
+/* Phase E (Apr 2026 UI v3) - "Needs mapping" badge.
    Subtle pulse so the operator's eye catches the pending work item among the
    other steady-state UNDP field badges. Matches the dp-urgency-red pulse
    cadence (2s ease-in-out) so the rhythm feels consistent across the panel. */
@@ -2022,7 +2022,7 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 .dp-sat-bar-fill { height:100%; border-radius:2px; transition:width 0.4s ease; }
 .dp-sat-para { font-size:12px; color:#94a3b8; line-height:1.5; margin:0; }
 
-/* Phase B (May 2026) — UNDP-grade verification metadata chips: surface
+/* Phase B (May 2026) - UNDP-grade verification metadata chips: surface
    acquisition date + sign-aware days-gap, cloud cover %, sources used,
    and "Last verified Xm ago" inline so analysts can read the evidence
    freshness without drilling into the AI reasoning. */
@@ -2077,7 +2077,7 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 }
 .dp-reverify-btn i, .dp-share-evidence-btn i { font-size:10px; }
 
-/* Phase B.3 (May 2026) — empty-state CTA when no verification has run.
+/* Phase B.3 (May 2026) - empty-state CTA when no verification has run.
    Sits in the place where vGaugeHtml would otherwise render. */
 .dp-verify-empty-cta {
     margin-top:6px;
@@ -2110,7 +2110,7 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 .dp-pii-badge { position:absolute; top:6px; right:6px; background:rgba(0,0,0,0.65); backdrop-filter:blur(4px); color:#22c55e; font-size:9px; font-weight:600; padding:3px 7px; border-radius:4px; display:flex; align-items:center; gap:3px; z-index:2; pointer-events:none; }
 .dp-pii-badge i { font-size:8px; }
 
-/* Phase A (May 2026) — multi-photo count badge. Sits on the inline preview
+/* Phase A (May 2026) - multi-photo count badge. Sits on the inline preview
    so operators see at a glance that the report carries more than one
    captured photo. The number after "Photo" updates live as the analyst
    clicks through the thumbnail strip (dpShowGalleryImage keeps it in sync).
@@ -2120,7 +2120,7 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 .dp-img-count-badge i { font-size:9px; color:var(--cyan); }
 .dp-img-count-badge .dp-img-count-active { color:#fff; font-weight:700; }
 
-/* Phase A (May 2026) — "+N originals pending" chip on the gallery label.
+/* Phase A (May 2026) - "+N originals pending" chip on the gallery label.
    Surfaces the case where a reporter on a slow link uploaded SMALL/MEDIUM
    tiers but LARGE is still in flight, so operators don't mistake the
    medium-quality preview for the final-quality Original. Amber pulse
@@ -2129,7 +2129,7 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 .dp-gallery-pending-chip i { font-size:9px; }
 .dp-gallery-label { justify-content:flex-start; }
 
-/* Phase B (May 2026) — PhotoSwipe per-slide tier tabs (Small/Medium/Original).
+/* Phase B (May 2026) - PhotoSwipe per-slide tier tabs (Small/Medium/Original).
    Rendered into PhotoSwipe's top bar via uiRegister(). Matches the in-panel
    `.dp-tier-switcher` aesthetic so analysts have the same controls in both
    the inline preview and the full-screen gallery. */
@@ -2145,7 +2145,7 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
    tier tabs are present so the text reads clearly over varied images. */
 .pswp__top-bar { background:linear-gradient(to bottom, rgba(0,0,0,0.55), transparent); }
 
-/* Guaranteed-delivery tier chip — tells analysts which variant they're seeing
+/* Guaranteed-delivery tier chip - tells analysts which variant they're seeing
    so they know whether a higher-quality one is still in-flight.
    LOW = SMALL (amber, "still uploading" feel)
    MEDIUM = MEDIUM (cyan, "good enough")
@@ -2156,7 +2156,7 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 .dp-tier-chip.dp-tier-high   { color:#22c55e; border:1px solid rgba(34,197,94,0.35); }
 .dp-tier-chip.dp-tier-original { color:#a78bfa; border:1px solid rgba(167,139,250,0.35); }
 
-/* Phase 2 (Apr 2026): tier switcher — 3 clickable buttons inside the detail
+/* Phase 2 (Apr 2026): tier switcher - 3 clickable buttons inside the detail
    image overlay. Replaces the read-only tier chip. Lets analysts pick
    SMALL/MEDIUM/LARGE on demand; the active button keeps the colour grammar
    of the old chip. */
@@ -2169,7 +2169,7 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 .dp-tier-btn.dp-tier-medium.active  { color:#38bdf8; border-color:rgba(56,189,248,0.65); background:rgba(56,189,248,0.12); }
 .dp-tier-btn.dp-tier-high.active    { color:#22c55e; border-color:rgba(34,197,94,0.65); background:rgba(34,197,94,0.12); }
 
-/* Gallery strip for multiple images — bumped to be more visible so users see
+/* Gallery strip for multiple images - bumped to be more visible so users see
    and click the 2nd/3rd photo sent from the mobile app's multi-photo flow. */
 .dp-gallery { margin-top:10px; padding:8px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; }
 .dp-gallery-label { font-size:11px; font-weight:700; color:#cbd5e1; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
@@ -2177,12 +2177,12 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 .dp-gallery-strip { display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; }
 .dp-gallery-strip::-webkit-scrollbar { height:4px; }
 .dp-gallery-strip::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); border-radius:2px; }
-/* 72×72 (was 52×52) — at 52 the 2nd/3rd thumbs were easy to miss. */
+/* 72×72 (was 52×52) - at 52 the 2nd/3rd thumbs were easy to miss. */
 .dp-gallery-thumb { width:72px; height:72px; border-radius:8px; overflow:hidden; cursor:pointer; border:2px solid transparent; flex-shrink:0; position:relative; transition:all .15s; }
-/* May 2026 — preserve aspect ratio on gallery thumbs.
+/* May 2026 - preserve aspect ratio on gallery thumbs.
    Pre-fix used `object-fit:cover` which cropped portrait phone
    photos to a 72×72 square. Operator-reported as "thumbs distort
-   the image — heads are cut off." `contain` letterboxes inside
+   the image - heads are cut off." `contain` letterboxes inside
    the square against the dark `.dp-gallery-thumb` background so
    the operator sees the full frame. */
 .dp-gallery-thumb img { width:100%; height:100%; object-fit:contain; }
@@ -2200,7 +2200,7 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 .dp-expand-btn { width:100%; padding:6px; margin-bottom:4px; background:none; border:1px dashed rgba(255,255,255,0.1); border-radius:6px; color:var(--text-dim); font-size:11px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; transition:0.15s; }
 .dp-expand-btn:hover { background:rgba(255,255,255,0.03); color:var(--text-sub); }
 
-/* Detailed report (Tier 2 — hidden by default) */
+/* Detailed report (Tier 2 - hidden by default) */
 .dp-detail-report { padding:10px 12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); border-radius:8px; margin-bottom:8px; }
 .dp-report-error { padding:6px 8px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:6px; font-size:12px; color:#fca5a5; margin-bottom:8px; display:flex; align-items:center; gap:6px; }
 .dp-report-section { margin-bottom:8px; }
@@ -2241,24 +2241,24 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 .dp-images { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px; }
 .dp-images-single { grid-template-columns:1fr; }
 .dp-img { position:relative; border-radius:8px; overflow:hidden; background:#0f1520; aspect-ratio:4/3; cursor:pointer; }
-/* May 2026 — preserve aspect ratio on the main detail preview.
+/* May 2026 - preserve aspect ratio on the main detail preview.
    `.img-thumb-bg` is the BLURRED placeholder behind the real image
-   (cover is correct — the blur masks any crop). `.img-full-layer`
-   is the sharp final image — must use `contain` so a portrait
+   (cover is correct - the blur masks any crop). `.img-full-layer`
+   is the sharp final image - must use `contain` so a portrait
    phone photo isn't stretched horizontally into the 4:3 box.
    Letterbox bars use the parent's #0f1520 background so they
    read as intentional framing, not as a rendering bug. */
 .dp-img .img-thumb-bg { width:100%; height:100%; object-fit:cover; max-height:none; }
 .dp-img .img-full-layer { width:100%; height:100%; object-fit:contain; border-radius:8px; }
 
-/* ── Image viewer (PhotoSwipe) — custom toolbar icons (rotate/download) ──
+/* ── Image viewer (PhotoSwipe) - custom toolbar icons (rotate/download) ──
    FontAwesome <i> glyphs inside .pswp__button need an explicit light color +
    centering since the vendor button styles target inline SVG, not font icons. */
 .pswp__button .fa-solid { color:#fff; opacity:.82; font-size:17px; line-height:1;
     display:flex; align-items:center; justify-content:center; width:100%; height:100%; }
 .pswp__button:hover .fa-solid { opacity:1; }
 
-/* Top-right geo metadata overlay — compact glass chip. Lives in the pswp root
+/* Top-right geo metadata overlay - compact glass chip. Lives in the pswp root
    UI layer (not the transformed image), so it stays put during zoom/rotation. */
 .pswp-geo-overlay { position:absolute; top:54px; right:12px; z-index:10; max-width:40vw;
     background:var(--panel-glass); border:1px solid var(--border); border-radius:var(--radius-sm);
@@ -2322,7 +2322,7 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 .dp-loc-label { font-size:12px; color:var(--text-dim); font-weight:600; flex-shrink:0; }
 .dp-loc-warn { margin-left:auto; font-size:12px; color:#fbbf24; font-weight:700; display:flex; align-items:center; gap:3px; flex-shrink:0; }
 
-/* Phase 23 — Geocoding confidence chip. Shown on report rows when
+/* Phase 23 - Geocoding confidence chip. Shown on report rows when
    Location.geocoding_confidence is set (IVR / SMS / WhatsApp). Colour
    bands: ≥75% green, 45-74% amber, <45% red. The wand icon flags
    that the location was inferred from text rather than captured GPS. */
@@ -2442,7 +2442,7 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 .dp-act-del:hover { background:rgba(239,68,68,0.15); }
 .dp-act-status { display:flex; align-items:center; gap:4px; flex:1; justify-content:center; font-size:12px; font-weight:700; color:#22c55e; background:rgba(34,197,94,0.08); padding:7px 10px; border-radius:7px; }
 
-/* (toolbar removed — satellite verify is below image, AI is in top bar) */
+/* (toolbar removed - satellite verify is below image, AI is in top bar) */
 
 /* ── AI Assessment Result ─────────────────────────────────────────────── */
 .dp-ai-result { margin-bottom:8px; padding:10px 12px; background:rgba(168,85,247,0.05); border:1px solid rgba(168,85,247,0.15); border-radius:8px; }
@@ -2642,7 +2642,7 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 .crisp-cluster-pulse > div { animation: cluster-pulse 2s ease-in-out infinite; }
 @keyframes cluster-pulse { 0%,100% { box-shadow: 0 0 12px rgba(239,68,68,0.6); } 50% { box-shadow: 0 0 24px rgba(239,68,68,1), 0 0 48px rgba(239,68,68,0.4); } }
 
-/* Spiderfy lines — make them visible on dark map */
+/* Spiderfy lines - make them visible on dark map */
 .leaflet-cluster-anim .leaflet-marker-icon { transition: transform 0.3s ease; }
 svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; stroke-width: 2 !important; }
 
@@ -2732,7 +2732,7 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
 }
 .notif-empty i { font-size: 18px; color: #22c55e40; }
 
-/* Flash notification — CENTER SCREEN, 20% area, neon green glow, 5s then fly to bell */
+/* Flash notification - CENTER SCREEN, 20% area, neon green glow, 5s then fly to bell */
 .notif-flash {
     position: fixed;
     top: 50%; left: 50%;
@@ -2784,7 +2784,7 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
 .notif-op.global { color: #64748b; }
 @keyframes flash-text { 0%,100%{ opacity:1; } 50%{ opacity:0.5; } }
 
-/* ══ Phase J.4 (May 2026) — Notification card-stack ══════════════
+/* ══ Phase J.4 (May 2026) - Notification card-stack ══════════════
    Replaces clobber-and-replace flash with honest stacking. Center-
    screen per operator preference. Cards reuse the .notif-flash
    visual styling (familiar look) but live inside a stack container
@@ -2796,7 +2796,7 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
     transform: translate(-50%, -50%);
     /* Above the Control Center overlays (cc-home / cc-operations = 99990) and the
        launch wizard (99995) so a new-incident notification is ALWAYS visible,
-       whatever screen the operator is on — not buried behind the active surface. */
+       whatever screen the operator is on - not buried behind the active surface. */
     z-index: 100050;
     width: 380px;
     pointer-events: none;
@@ -2829,7 +2829,7 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
         0 0 60px rgba(34,197,94,0.15),
         0 0 100px rgba(34,197,94,0.08),
         0 20px 60px rgba(0,0,0,0.5);
-    /* Baseline does NOT include flash-in — the entrance animation only
+    /* Baseline does NOT include flash-in - the entrance animation only
        runs on cards that just got created (`.is-entering`). The
        border-pulse stays on every card. This is the critical Bug-A
        fix: previously every render destroyed + re-created the DOM,
@@ -2840,7 +2840,7 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
     transition: transform 0.34s cubic-bezier(0.4, 0, 0.2, 1),
                 opacity   0.28s ease;
     transform-origin: 50% 60%;
-    /* Default transform — overridden by data-pos rules below. */
+    /* Default transform - overridden by data-pos rules below. */
     transform: translateY(0) scale(1);
     opacity: 1;
 }
@@ -2864,7 +2864,7 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
     opacity: 0.6;
 }
 
-/* Entrance — applied for ~360 ms after a card is appended, then
+/* Entrance - applied for ~360 ms after a card is appended, then
    stripped by the JS so a subsequent re-render doesn't re-trigger
    the animation on a surviving card. */
 .notif-stack-card.is-entering {
@@ -2872,7 +2872,7 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
                neon-border-pulse 1.8s ease-in-out infinite;
 }
 
-/* Exit — JS adds this class then removes the node 320 ms later so
+/* Exit - JS adds this class then removes the node 320 ms later so
    the animation has time to complete. */
 .notif-stack-card.is-leaving {
     opacity: 0;
@@ -2880,7 +2880,7 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
     pointer-events: none;
 }
 
-/* Upgrade chip — amber arrow showing the card was updated rather
+/* Upgrade chip - amber arrow showing the card was updated rather
    than a brand-new event. Solves the operator's "same report's
    media evolved should not pulse twice" requirement. */
 .notif-upgrade-chip {
@@ -2900,14 +2900,14 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
     letter-spacing: 0.02em;
 }
 .notif-upgrade-chip i { font-size: 9px; }
-/* Subtle "data updated" highlight — no entrance animation, just a
+/* Subtle "data updated" highlight - no entrance animation, just a
    short border-flash so the operator notices the chip if they're
    already looking at the stack. */
 .notif-stack-card.is-upgraded {
     animation: neon-border-pulse 1.8s ease-in-out infinite;
 }
 
-/* Burst banner — replaces per-card spawn when arrival rate >5 in 5s. */
+/* Burst banner - replaces per-card spawn when arrival rate >5 in 5s. */
 .notif-burst-banner {
     position: fixed;
     top: 70px;
@@ -2951,7 +2951,7 @@ body.burst-mode .notif-glow {
     animation: none !important;
 }
 
-/* Respect reduced-motion preference — no fanned-deck transform. */
+/* Respect reduced-motion preference - no fanned-deck transform. */
 @media (prefers-reduced-motion: reduce) {
     .notif-stack-card { transition: none; }
     .notif-stack-card[style*="rotate"] { transform: translateY(8px) scale(0.98) !important; }
@@ -3041,7 +3041,7 @@ body.burst-mode .notif-glow {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   SATELLITE TRUTH VERIFICATION — Detail Panel Section
+   SATELLITE TRUTH VERIFICATION - Detail Panel Section
    ══════════════════════════════════════════════════════════════ */
 
 /* Trigger button */
@@ -3173,7 +3173,7 @@ body.burst-mode .notif-glow {
 .truth-low      { color: var(--severe);   border-color: rgba(249,115,22,0.4);  background: rgba(249,115,22,0.08); }
 .truth-unverified{ color: var(--text-dim);border-color: var(--border);         background: transparent;           }
 
-/* Phase C.2 (May 2026) — per-card "Original pending" chip. Sits in the
+/* Phase C.2 (May 2026) - per-card "Original pending" chip. Sits in the
    card footer next to the truth badge so operators see at a glance which
    reports still have an in-flight LARGE variant. Pulsing cloud icon
    matches the same visual language used in the inline preview's gallery
@@ -3188,7 +3188,7 @@ body.burst-mode .notif-glow {
 .qrt-orig-chip i { font-size: 10px; }
 .qrt-orig-chip .qrt-orig-chip-pct { font-weight: 800; opacity: 0.85; }
 
-/* Phase F image-reliability (May 2026) — tri-state colourisation for the
+/* Phase F image-reliability (May 2026) - tri-state colourisation for the
    per-card LARGE-tier chip. Default amber matches the existing
    "uploading" + "missing-fresh" cosmetic; delayed bumps to a stronger
    warning tone; lost goes red so the operator can spot abandoned
@@ -3213,7 +3213,7 @@ body.burst-mode .notif-glow {
     background: rgba(239,68,68,0.14);
 }
 
-/* Detail-panel chip + Reclaim button — tri-state mirror of the above.
+/* Detail-panel chip + Reclaim button - tri-state mirror of the above.
    The `.dp-gallery-pending-chip` base rule (around line 2100) already
    gives amber styling; the modifier classes override colour-tone +
    border-tone for delayed/lost states. The button matches the action-
@@ -3229,7 +3229,7 @@ body.burst-mode .notif-glow {
     background: rgba(239,68,68,0.14);
 }
 
-/* K.5.a (May 2026, Phase K) — operator-visible status chips on the
+/* K.5.a (May 2026, Phase K) - operator-visible status chips on the
    feed-card footer. Each chip surfaces one of the new state signals
    from Phase K backend work: checksum_mismatch, chunks_never_arrived,
    bandwidth_tier_deferred, pii_blur_status='failed',
@@ -3259,7 +3259,7 @@ body.burst-mode .notif-glow {
     border: 1px solid rgba(148,163,184,0.4);
     background: rgba(148,163,184,0.10);
 }
-/* B-H (May 2026, Forensic Blur Audit) — positive-signal green chip.
+/* B-H (May 2026, Forensic Blur Audit) - positive-signal green chip.
    Used by pii_blur_status='complete_with_redactions'. Same shape +
    typography as the other chips so the operator's visual scan stays
    uniform; only the colour differs (emerald, conveys "safely
@@ -3270,7 +3270,7 @@ body.burst-mode .notif-glow {
     background: rgba(16,185,129,0.10);
 }
 
-/* K.5.e (May 2026, Phase K) — top-of-page truncation banner.
+/* K.5.e (May 2026, Phase K) - top-of-page truncation banner.
    Surfaces when backend X-Total-Count exceeds DASHBOARD_PAGE_LIMIT
    so operators know they're not seeing the full feed. Stays visible
    until either dismissed via the × or the next full-refresh poll
@@ -3309,7 +3309,7 @@ body.burst-mode .notif-glow {
 .dp-gallery-reclaim-btn:hover { background: rgba(59,130,246,0.20); }
 .dp-gallery-reclaim-btn i { font-size: 9px; }
 
-/* Reclaim modal — sits above the detail panel with a backdrop blur.
+/* Reclaim modal - sits above the detail panel with a backdrop blur.
    Lists the affected media ids + offers Retry / Mark-abandoned. */
 .reclaim-modal-backdrop {
     position: fixed; inset: 0;
@@ -3442,7 +3442,7 @@ body.burst-mode .notif-glow {
     min-height: 120px;
 }
 
-/* Blurred thumbnail — always blurred base layer.
+/* Blurred thumbnail - always blurred base layer.
    During loading: acts as a hazy placeholder (top-to-bottom fill is hidden by blur).
    When complete: full-res image fades in on top → visual blur→clear transition. */
 .img-thumb-bg {
@@ -3455,7 +3455,7 @@ body.burst-mode .notif-glow {
     transition: filter 0.5s ease, transform 0.5s ease;
 }
 
-/* Full-resolution image — stacked on top, fades in when loaded */
+/* Full-resolution image - stacked on top, fades in when loaded */
 .img-full-layer {
     position: absolute;
     inset: 0;
@@ -3553,7 +3553,7 @@ body.burst-mode .notif-glow {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   QRT TRIAGE QUEUE — Response-Focused Sidebar
+   QRT TRIAGE QUEUE - Response-Focused Sidebar
    Three buckets: NEEDS RESPONSE · DISPATCHED · RESOLVED
    Each card answers: WHAT happened / WHERE / WHEN
    ══════════════════════════════════════════════════════════════ */
@@ -3605,7 +3605,7 @@ body.burst-mode .notif-glow {
 .view-btn.active { background: var(--accent); color: #000; }
 .view-btn:not(.active):hover { background: rgba(255,255,255,0.08); color: var(--text); }
 
-/* Critical alert banner — pulses when critical incidents await response */
+/* Critical alert banner - pulses when critical incidents await response */
 .qrt-alert-banner {
     display: flex; align-items: center; gap: 8px;
     margin: 4px 8px 2px; padding: 7px 12px;
@@ -3670,7 +3670,7 @@ body.burst-mode .notif-glow {
 }
 .qrt-card:hover { background: rgba(255,255,255,0.07); border-color: var(--border-hi); }
 .qrt-card.selected { border-color: var(--accent); background: rgba(255,174,0,0.07); }
-/* Unified selected-incident highlight (CrispNav.markSelected) — one rule across
+/* Unified selected-incident highlight (CrispNav.markSelected) - one rule across
    the op worklist, the global tree, and the queue/triage cards. --op-color is the
    operation accent (set on <body> by setOpContext) and falls back to brand blue
    in global context. Pairs with scroll-into-view so the focused row is visible. */
@@ -3682,7 +3682,7 @@ body.burst-mode .notif-glow {
   background: color-mix(in srgb, var(--op-color, #418FDE) 14%, transparent);
 }
 
-/* Severity left strip — instant visual triage at a glance */
+/* Severity left strip - instant visual triage at a glance */
 .qrt-sev-strip { width: 4px; flex-shrink: 0; }
 .strip-CRITICAL { background: var(--critical); box-shadow: 2px 0 8px rgba(239,68,68,0.5); }
 .strip-SEVERE   { background: var(--severe);   box-shadow: 2px 0 6px rgba(249,115,22,0.35); }
@@ -3696,7 +3696,7 @@ body.burst-mode .notif-glow {
     display: flex; flex-direction: column; gap: 5px; min-width: 0;
 }
 
-/* WHAT — infrastructure type + severity badge */
+/* WHAT - infrastructure type + severity badge */
 .qrt-what { display: flex; align-items: center; gap: 7px; }
 .qrt-infra-icon {
     font-size: 13px; flex-shrink: 0;
@@ -3720,7 +3720,7 @@ body.burst-mode .notif-glow {
 .qrt-sev-MINOR    { background: rgba(34,197,94,0.12);   color: var(--minor);    }
 .qrt-sev-UNKNOWN  { background: rgba(100,116,139,0.15); color: var(--text-sub); }
 
-/* WHERE — location name */
+/* WHERE - location name */
 .qrt-where {
     display: flex; align-items: center; gap: 5px;
     font-size: 13px; color: var(--info);
@@ -3728,7 +3728,7 @@ body.burst-mode .notif-glow {
 .qrt-where i { font-size: 14px; flex-shrink: 0; }
 .qrt-where-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* UNDP tags — crisis type + damage class on triage cards */
+/* UNDP tags - crisis type + damage class on triage cards */
 .qrt-undp-tags { display: flex; gap: 4px; flex-wrap: wrap; padding: 0 2px; }
 .qrt-tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.3px; }
 .qrt-tag-crisis { background: rgba(124,58,237,0.15); color: #a78bfa; }
@@ -3740,7 +3740,7 @@ body.burst-mode .notif-glow {
 .qrt-tag-dmg-PARTIAL { background: rgba(249,115,22,0.15); color: #fb923c; }
 .qrt-tag-dmg-COMPLETE { background: rgba(239,68,68,0.15); color: #f87171; }
 
-/* WHEN — relative time */
+/* WHEN - relative time */
 .qrt-when {
     display: flex; align-items: center; gap: 5px;
     font-size: 13px; color: var(--text-dim);
@@ -3748,7 +3748,7 @@ body.burst-mode .notif-glow {
 }
 .qrt-when i { font-size: 12px; flex-shrink: 0; }
 
-/* Data indicators — icon-only with color states */
+/* Data indicators - icon-only with color states */
 .qrt-data-progress {
     display: flex; align-items: center; gap: 3px;
     padding: 2px 0; margin-top: 2px;
@@ -3768,7 +3768,7 @@ body.burst-mode .notif-glow {
 .qrt-ai-badge i { font-size: 9px; }
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
 
-/* Card footer — evidence icons + action button */
+/* Card footer - evidence icons + action button */
 .qrt-card-footer {
     display: flex; align-items: center; gap: 5px;
     padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.05);
@@ -3806,7 +3806,7 @@ body.burst-mode .notif-glow {
 }
 
 
-/* ── Phase 5 (Apr 2026) — Reviewer actions block (detail panel) ────────── */
+/* ── Phase 5 (Apr 2026) - Reviewer actions block (detail panel) ────────── */
 .dp-reviewer { margin:8px 0 6px; padding:10px 12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; }
 .dp-reviewer-top { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px; color:#94a3b8; }
 .dp-reviewer-chip { font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; letter-spacing:0.3px; }
@@ -3826,11 +3826,11 @@ body.burst-mode .notif-glow {
 .dp-reviewer-btn.dp-reviewer-accept.active { color:#22c55e; border-color:rgba(34,197,94,0.65); background:rgba(34,197,94,0.12); }
 .dp-reviewer-btn.dp-reviewer-reject.active { color:#ef4444; border-color:rgba(239,68,68,0.65); background:rgba(239,68,68,0.12); }
 
-/* May 2026 (operator-reported) — analyst input for `lives_impacted`.
+/* May 2026 (operator-reported) - analyst input for `lives_impacted`.
    Backend endpoint existed since April but had no UI surface. The
    PWA home card's "Lives Saved" tile is fed by the sum of this
    number across all the user's reports; without an analyst UI it
-   stayed at — for every reporter forever. */
+   stayed at - for every reporter forever. */
 .dp-reviewer-lives {
     margin-top: 10px;
     padding-top: 10px;
@@ -3848,7 +3848,7 @@ body.burst-mode .notif-glow {
     margin-bottom: 6px;
 }
 .dp-reviewer-lives-label i {
-    color: #46DFB1;  /* mint accent — matches PWA's home-impact tile */
+    color: #46DFB1;  /* mint accent - matches PWA's home-impact tile */
 }
 .dp-reviewer-lives-row {
     display: flex;
@@ -3897,21 +3897,21 @@ body.burst-mode .notif-glow {
 }
 
 /* ──────────────────────────────────────────────────────────────────
-   Phase H.1.d (May 2026) — Building Intelligence Console.
+   Phase H.1.d (May 2026) - Building Intelligence Console.
 
    Replaces the right-side detail-panel content when a building is
    selected (via map polygon click, sidebar link, or URL hash
-   `#building=<id>`). The panel container reuses `.detail-panel` —
+   `#building=<id>`). The panel container reuses `.detail-panel` -
    we just toggle `.detail-panel--building` on the container so the
    global panel CSS still applies + a few overrides target the
    console specifically.
 
    Section semantics:
-     .bc-header        — sticky strip with state pill + counters
-     .bc-scores        — 5 tile intelligence grid
-     .bc-section       — generic section wrapper with title + body
-     .bc-reports       — versioned report stack
-     .bc-deferred      — placeholder list for H.2-H.6 future surfaces
+     .bc-header        - sticky strip with state pill + counters
+     .bc-scores        - 5 tile intelligence grid
+     .bc-section       - generic section wrapper with title + body
+     .bc-reports       - versioned report stack
+     .bc-deferred      - placeholder list for H.2-H.6 future surfaces
    ────────────────────────────────────────────────────────────────── */
 .detail-panel--building .detail-body {
     padding: 0;
@@ -3988,7 +3988,7 @@ body.burst-mode .notif-glow {
     font-style: italic;
 }
 
-/* ── Phase H.5+ — Header subtitle (city + coords + OSM hint) ── */
+/* ── Phase H.5+ - Header subtitle (city + coords + OSM hint) ── */
 .bc-header-titles { margin-bottom: 6px; }
 .bc-subtitle {
     display: flex;
@@ -4026,7 +4026,7 @@ body.burst-mode .notif-glow {
     letter-spacing: 0.02em;
 }
 
-/* ── Phase H.5+ — Direct export buttons (CSV · GeoJSON · PDF) ── */
+/* ── Phase H.5+ - Direct export buttons (CSV · GeoJSON · PDF) ── */
 .bc-export-row {
     display: flex;
     gap: 6px;
@@ -4081,7 +4081,7 @@ body.burst-mode .notif-glow {
     border-color: rgba(249, 115, 22, 0.65);
 }
 
-/* ── Phase H.5+ — Horizontal lifecycle stepper ──────────────── */
+/* ── Phase H.5+ - Horizontal lifecycle stepper ──────────────── */
 .bc-lifecycle {
     margin-top: 10px;
     margin-bottom: 10px;
@@ -4091,7 +4091,7 @@ body.burst-mode .notif-glow {
     padding: 10px 12px;
     overflow-x: auto;
     /* Prevent the stepper from causing overall page-scroll on
-       narrow containers — the inner strip scrolls horizontally. */
+       narrow containers - the inner strip scrolls horizontally. */
     scrollbar-width: thin;
 }
 .bc-lifecycle::-webkit-scrollbar { height: 5px; }
@@ -4338,7 +4338,7 @@ body.burst-mode .notif-glow {
 .bc-r-source { display: inline-flex; align-items: center; gap: 3px; }
 .bc-r-resp { display: inline-flex; align-items: center; gap: 3px; color: #a78bfa; }
 
-/* ── Phase H.2 — state-action buttons ─────────────────────────── */
+/* ── Phase H.2 - state-action buttons ─────────────────────────── */
 .bc-state-btn {
     appearance: none;
     background: rgba(148, 163, 184, 0.10);
@@ -4367,7 +4367,7 @@ body.burst-mode .notif-glow {
 .bc-state-btn-ARCHIVED { color: #94a3b8; border-color: rgba(100, 116, 139, 0.30); }
 .bc-state-btn-ACTIVE { color: #fbbf24; border-color: rgba(245, 158, 11, 0.40); }
 
-/* ── Phase J.3 (May 2026) — Building Console State dropdown ────
+/* ── Phase J.3 (May 2026) - Building Console State dropdown ────
    Replaces the 1-5 state-button cluster with a single dropdown
    to match the J.2 Verdict-dropdown pattern. Same visual language;
    same affordance for the operator. */
@@ -4434,7 +4434,7 @@ body.burst-mode .notif-glow {
 .bc-state-menu-item-ARCHIVED    i { color: #94a3b8; }
 .bc-state-menu-item-ACTIVE      i { color: #fbbf24; }
 
-/* ── Phase J.3 — Reason modal (replaces native prompt()) ───── */
+/* ── Phase J.3 - Reason modal (replaces native prompt()) ───── */
 .bc-reason-modal-overlay {
     position: fixed;
     inset: 0;
@@ -4525,7 +4525,7 @@ body.burst-mode .notif-glow {
     filter: brightness(1.15);
 }
 
-/* ── Phase J.5 — Keyboard-shortcuts modal ──────────────────── */
+/* ── Phase J.5 - Keyboard-shortcuts modal ──────────────────── */
 .kbd-shortcuts-modal { width: min(520px, 94vw); }
 .kbd-shortcuts-grid {
     display: grid;
@@ -4562,7 +4562,7 @@ body.burst-mode .notif-glow {
 /* When a row has only one key (most rows), let the span take cols 2-3. */
 .kbd-shortcuts-grid kbd + span { grid-column: span 2; }
 
-/* ── Phase J.5 — Onboarding tooltips ───────────────────────── */
+/* ── Phase J.5 - Onboarding tooltips ───────────────────────── */
 .onboarding-tip {
     background: rgba(15, 23, 42, 0.97);
     border: 1px solid rgba(167, 139, 250, 0.55);
@@ -4628,7 +4628,7 @@ body.burst-mode .notif-glow {
     .onboarding-tip { animation-duration: 0.01ms; }
 }
 
-/* ── Phase H.2 — Building event timeline ───────────────────── */
+/* ── Phase H.2 - Building event timeline ───────────────────── */
 .bc-timeline {
     display: flex;
     flex-direction: column;
@@ -4679,7 +4679,7 @@ body.burst-mode .notif-glow {
     line-height: 1.6;
 }
 
-/* ── Phase H.3 — Responder coordination + monitor toggle ───── */
+/* ── Phase H.3 - Responder coordination + monitor toggle ───── */
 .bc-monitor-btn {
     appearance: none;
     background: rgba(148, 163, 184, 0.10);
@@ -4710,7 +4710,7 @@ body.burst-mode .notif-glow {
     border-color: rgba(56, 189, 248, 0.65);
 }
 
-/* ── Phase H.5 — Building dossier export dropdown ──────────── */
+/* ── Phase H.5 - Building dossier export dropdown ──────────── */
 .bc-export-btn {
     appearance: none;
     background: rgba(148, 163, 184, 0.10);
@@ -4763,7 +4763,7 @@ body.burst-mode .notif-glow {
 }
 .bc-export-menu-item i { font-size: 11px; opacity: 0.8; }
 
-/* ── Phase H.6 — AI building summary card ────────────────── */
+/* ── Phase H.6 - AI building summary card ────────────────── */
 .bc-ai-card {
     background: linear-gradient(180deg, rgba(167, 139, 250, 0.08) 0%, rgba(99, 102, 241, 0.04) 100%);
     border: 1px solid rgba(167, 139, 250, 0.25);
@@ -4860,7 +4860,7 @@ body.burst-mode .notif-glow {
     border-left: 2px solid rgba(56, 189, 248, 0.30);
 }
 
-/* Phase H.9 — trend chips + responder-type badges */
+/* Phase H.9 - trend chips + responder-type badges */
 .bc-ai-trends {
     display: flex;
     flex-wrap: wrap;
@@ -4898,7 +4898,7 @@ body.burst-mode .notif-glow {
 }
 .bc-ai-resp-badge i { font-size: 9.5px; }
 
-/* ── Phase H.10 — Related buildings carousel ────────────────── */
+/* ── Phase H.10 - Related buildings carousel ────────────────── */
 .bc-related {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -4955,7 +4955,7 @@ body.burst-mode .notif-glow {
 }
 .bc-related-stat i { font-size: 9px; opacity: 0.85; }
 
-/* ── Phase H.8 — Priority-coloured buildings map legend ────── */
+/* ── Phase H.8 - Priority-coloured buildings map legend ────── */
 .map-priority-legend {
     background: rgba(15, 23, 42, 0.78);
     border: 1px solid rgba(148, 163, 184, 0.22);
@@ -5195,7 +5195,7 @@ body.burst-mode .notif-glow {
     border-color: rgba(34, 197, 94, 0.55);
 }
 
-/* ── Phase H.4 — Operator notes thread ───────────────────────── */
+/* ── Phase H.4 - Operator notes thread ───────────────────────── */
 .bc-section-notes .bc-section-title { gap: 6px; }
 .bc-note-add-btn {
     appearance: none;
@@ -5395,7 +5395,7 @@ body.burst-mode .notif-glow {
 }
 
 /* ──────────────────────────────────────────────────────────────────
-   Phase G.1 (May 2026) — Stacking multi-filter chip row.
+   Phase G.1 (May 2026) - Stacking multi-filter chip row.
 
    Sits below the command bar, above the rest of the dashboard body.
    Each chip toggles its own filter; multiple chips AND together
@@ -5481,7 +5481,7 @@ body.burst-mode .notif-glow {
 .cmd-filter-chip-clear:hover { color: #f87171; background: rgba(239, 68, 68, 0.08); }
 
 /* ──────────────────────────────────────────────────────────────────
-   Phase F.2.a (May 2026) — per-incident timeline.
+   Phase F.2.a (May 2026) - per-incident timeline.
 
    Collapsed <details> in the detail panel. Each row has a coloured
    dot icon + label + abs/rel timestamp. The dot border-colour
@@ -5580,7 +5580,7 @@ body.burst-mode .notif-glow {
 }
 
 /* ──────────────────────────────────────────────────────────────────
-   Phase F.1.d (May 2026) — sticky reviewer-actions strip.
+   Phase F.1.d (May 2026) - sticky reviewer-actions strip.
 
    The detail panel stacks 10+ sections. The reviewer-actions block
    (Accept / Reject / Dispatched / Arrived + Lives Helped) was
@@ -5592,7 +5592,7 @@ body.burst-mode .notif-glow {
    Lives Helped moved inline into the reviewer-top row (alongside
    the verdict chip) so the most-frequent analyst input is one click
    away regardless of scroll. The old block-level `.dp-reviewer-lives`
-   styles remain in styles.css as harmless dead CSS — no markup
+   styles remain in styles.css as harmless dead CSS - no markup
    matches them after this commit. A later prune phase can remove.
    ────────────────────────────────────────────────────────────────── */
 .dp-reviewer.is-sticky {
@@ -5650,7 +5650,7 @@ body.burst-mode .notif-glow {
 }
 
 /* ──────────────────────────────────────────────────────────────────
-   Phase F.1.b (May 2026) — header chip consolidation.
+   Phase F.1.b (May 2026) - header chip consolidation.
 
    Five separate stat-pills (CRITICAL / PENDING / HELPED / CLOSED /
    TOTAL) collapse into one segmented control. Each segment is a
@@ -5710,7 +5710,7 @@ body.burst-mode .notif-glow {
     letter-spacing: 0.08em;
     color: #94a3b8;
 }
-/* Status-specific accents — each segment's count colour matches the
+/* Status-specific accents - each segment's count colour matches the
    prior stat-pill so operators don't have to relearn the colour
    meaning (red = critical, amber = pending, green = helped, etc.). */
 .cmd-status-seg-item--critical .cmd-status-seg-count { color: #ef4444; }
@@ -5723,7 +5723,7 @@ body.burst-mode .notif-glow {
 .cmd-status-seg-item.active.cmd-status-seg-item--responding { background: rgba(70, 223, 177, 0.16); }
 .cmd-status-seg-item.active.cmd-status-seg-item--resolved   { background: rgba(100, 116, 139, 0.20); }
 .cmd-status-seg-item.active.cmd-status-seg-item--total      { background: rgba(196, 181, 253, 0.16); }
-/* CRITICAL pulse — only when there ARE critical incidents (mirrors
+/* CRITICAL pulse - only when there ARE critical incidents (mirrors
    the prior .stat-pill.critical pulse behaviour). Driven by the
    `active-pulse` class set by updateCommandStats when count > 0
    AND PENDING > 0. */
@@ -5734,7 +5734,7 @@ body.burst-mode .notif-glow {
     50% { opacity: 0.55; }
 }
 
-/* Time-filter dropdown trigger — share the .export-dropdown
+/* Time-filter dropdown trigger - share the .export-dropdown
    open/close + .export-menu styles by reusing the class on the
    wrapper. The label inside the trigger reflects the current
    selection. */
@@ -5753,31 +5753,31 @@ body.burst-mode .notif-glow {
 }
 
 /* ──────────────────────────────────────────────────────────────────
-   Phase F.1.a (May 2026) — dark-theme map label contrast boost.
+   Phase F.1.a (May 2026) - dark-theme map label contrast boost.
 
    The `dark_only_labels` CARTO tiles render city / district names as
    semi-transparent white pixels. On the base `dark_nolabels` raster
    (which has more visual variation than the prior `dark_all`), the
    labels need a brightness + opacity bump so they pop at zoom 11-14
-   — exactly the operator's triage zoom level inside a city.
+   - exactly the operator's triage zoom level inside a city.
 
    We target the labels-only tile layer via the Leaflet pane it sits
    in (overlayPane). Brightness 1.4 + saturate 0 keeps the labels
    strictly white-on-dark, no colour cast. `mix-blend-mode: screen`
    compounds opacity over the base for dramatically clearer text at
    the cost of a faint halo around dense label clusters (acceptable
-   trade-off — operators can read the text now).
+   trade-off - operators can read the text now).
 
    Building footprints (purple-tinted polygon overlays at zoom ≥ 15)
    also live in overlayPane but they're vector SVG paths, not tiles
-   — `.leaflet-tile` only matches the raster labels.
+   - `.leaflet-tile` only matches the raster labels.
    ────────────────────────────────────────────────────────────────── */
 .leaflet-overlay-pane .leaflet-tile {
     filter: brightness(1.4) saturate(0);
     mix-blend-mode: screen;
 }
 
-/* ── Operational queue banner (Jun 2026 — attention-panel deep links) ── */
+/* ── Operational queue banner (Jun 2026 - attention-panel deep links) ── */
 #queue-banner {
     display: flex;
     align-items: center;

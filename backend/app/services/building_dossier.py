@@ -1,22 +1,22 @@
-"""Building dossier generators — Phase H.5.
+"""Building dossier generators - Phase H.5.
 
 Produces three operator-facing artefacts from a Building's joined view
 of reports + intelligence scores + responders + notes + event timeline:
 
   build_dossier_pdf(...)     bytes  application/pdf
   build_dossier_geojson(...) dict   GeoJSON FeatureCollection
-  build_dossier_csv(...)     str    text/csv — one row per Report,
+  build_dossier_csv(...)     str    text/csv - one row per Report,
                                     flat columns suitable for Excel /
                                     Sheets / pandas direct import
 
-The PDF is intended for printing / hand-off to field teams — single-
+The PDF is intended for printing / hand-off to field teams - single-
 page header followed by the report stack (one table per report). The
 GeoJSON is intended for re-import into other GIS surfaces (ArcGIS,
-QGIS) — each constituent report becomes a Feature with the building's
+QGIS) - each constituent report becomes a Feature with the building's
 intelligence scores baked into properties.
 
 Both surfaces RESPECT the same visibility gate that drives the
-per-resource API endpoints — see callers in `app.api.endpoints.buildings`.
+per-resource API endpoints - see callers in `app.api.endpoints.buildings`.
 """
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def build_dossier_pdf(db: Session, b: Building) -> bytes:
     """Render a single-building PDF dossier.
 
     Sections (in order):
-      1. Cover — title + identity + state + intelligence scores grid
+      1. Cover - title + identity + state + intelligence scores grid
       2. Crisis-type + damage-class distribution
       3. Satellite verification roll-up
       4. Responder roster (assigned + lifecycle timestamps)
@@ -74,7 +74,7 @@ def build_dossier_pdf(db: Session, b: Building) -> bytes:
         rightMargin=2 * cm,
         topMargin=2 * cm,
         bottomMargin=2 * cm,
-        title=f"CRISP Building Dossier — {b.id}",
+        title=f"CRISP Building Dossier - {b.id}",
         author="CRISP Platform",
     )
     styles = getSampleStyleSheet()
@@ -140,9 +140,9 @@ def build_dossier_pdf(db: Session, b: Building) -> bytes:
         or (f"OSM way {b.osm_way_id}" if b.osm_way_id else None)
         or (f"Proximity cluster {b.id[:8]}" if b.id_source == "PROXIMITY" else b.id)
     )
-    story.append(Paragraph(f"Building Dossier — {name}", h1))
+    story.append(Paragraph(f"Building Dossier - {name}", h1))
     story.append(Paragraph(
-        f"Generated at {datetime.now(timezone.utc).isoformat()} — "
+        f"Generated at {datetime.now(timezone.utc).isoformat()} - "
         f"Building id <b>{b.id}</b> ({b.id_source})",
         small,
     ))
@@ -153,14 +153,14 @@ def build_dossier_pdf(db: Session, b: Building) -> bytes:
         ["State",                 b.state or ""],
         ["First report",          str(b.first_report_at or "")],
         ["Latest report",         str(b.latest_report_at or "")],
-        ["State changed at",      str(b.state_changed_at or "—")],
+        ["State changed at",      str(b.state_changed_at or "-")],
         ["Reports (total)",       str(b.report_count or 0)],
-        ["Reports — verified",    str(b.verified_report_count or 0)],
-        ["Reports — responding",  str(b.responding_report_count or 0)],
-        ["Reports — resolved",    str(b.resolved_report_count or 0)],
+        ["Reports - verified",    str(b.verified_report_count or 0)],
+        ["Reports - responding",  str(b.responding_report_count or 0)],
+        ["Reports - resolved",    str(b.resolved_report_count or 0)],
         ["Debris-clearing flags", str(b.debris_clearing_needed_count or 0)],
-        ["Severity (max)",        b.severity_max or "—"],
-        ["Damage class (max)",    b.damage_class_max or "—"],
+        ["Severity (max)",        b.severity_max or "-"],
+        ["Damage class (max)",    b.damage_class_max or "-"],
         ["Crisis types (top 3)",  ", ".join(b.crisis_types_top3 or [])],
         ["Centroid (lat, lng)",   f"{b.centroid_lat}, {b.centroid_lng}"],
     ]
@@ -179,11 +179,11 @@ def build_dossier_pdf(db: Session, b: Building) -> bytes:
     # ── Intelligence scores grid ─────────────────────────────────────
     story.append(Paragraph("Intelligence scores", h2))
     score_rows = [
-        ["Severity score",        f"{b.severity_score:.1f}" if b.severity_score is not None else "—"],
-        ["Confidence score",      f"{b.confidence_score:.1f}" if b.confidence_score is not None else "—"],
-        ["Activity score",        f"{b.activity_score:.1f}" if b.activity_score is not None else "—"],
-        ["Escalation risk",       f"{b.escalation_risk:.1f}" if b.escalation_risk is not None else "—"],
-        ["Humanitarian priority", f"{b.humanitarian_priority:.1f}" if b.humanitarian_priority is not None else "—"],
+        ["Severity score",        f"{b.severity_score:.1f}" if b.severity_score is not None else "-"],
+        ["Confidence score",      f"{b.confidence_score:.1f}" if b.confidence_score is not None else "-"],
+        ["Activity score",        f"{b.activity_score:.1f}" if b.activity_score is not None else "-"],
+        ["Escalation risk",       f"{b.escalation_risk:.1f}" if b.escalation_risk is not None else "-"],
+        ["Humanitarian priority", f"{b.humanitarian_priority:.1f}" if b.humanitarian_priority is not None else "-"],
     ]
     score_table = Table(score_rows, colWidths=[5.5 * cm, None], hAlign="LEFT")
     score_table.setStyle(TableStyle([
@@ -204,8 +204,8 @@ def build_dossier_pdf(db: Session, b: Building) -> bytes:
         mean = (sum(total_scores) / len(total_scores)) if total_scores else None
         latest = max(sat_rows, key=lambda s: s.scored_at or datetime.min)
         story.append(Paragraph(
-            f"<b>{(mean or 0):.1f}/100</b> mean across {len(sat_rows)} verified report(s) — "
-            f"latest verdict <b>{latest.verdict or '—'}</b>",
+            f"<b>{(mean or 0):.1f}/100</b> mean across {len(sat_rows)} verified report(s) - "
+            f"latest verdict <b>{latest.verdict or '-'}</b>",
             body,
         ))
     else:
@@ -246,7 +246,7 @@ def build_dossier_pdf(db: Session, b: Building) -> bytes:
         story.append(Paragraph("Currently being monitored by:", h3))
         for m in monitors:
             story.append(Paragraph(
-                f"User {m.user_id[:8]} — since {m.started_at}",
+                f"User {m.user_id[:8]} - since {m.started_at}",
                 small,
             ))
         story.append(Spacer(1, 0.3 * cm))
@@ -281,7 +281,7 @@ def build_dossier_pdf(db: Session, b: Building) -> bytes:
         if i > 0:
             story.append(Spacer(1, 0.4 * cm))
         story.append(Paragraph(
-            f"Report {r.id[:8]} — {r.infrastructure_type or 'UNKNOWN'} / "
+            f"Report {r.id[:8]} - {r.infrastructure_type or 'UNKNOWN'} / "
             f"{r.damage_classification or 'UNKNOWN'}",
             h3,
         ))
@@ -321,7 +321,7 @@ def build_dossier_pdf(db: Session, b: Building) -> bytes:
         for e in events:
             payload_brief = ""
             if e.payload:
-                payload_brief = " — " + ", ".join(
+                payload_brief = " - " + ", ".join(
                     f"{k}={str(v)[:40]}" for k, v in (e.payload or {}).items()
                 )
             story.append(Paragraph(
@@ -517,7 +517,7 @@ def build_dossier_csv(db: Session, b: Building) -> str:
     )
 
     # Strip the "EnumName." prefix off str(EnumValue) so the CSV reads
-    # "APP" rather than "SourceEnum.APP" — friendlier for analysts
+    # "APP" rather than "SourceEnum.APP" - friendlier for analysts
     # opening the file in Excel / pandas.
     def _enum_str(v):
         if v is None:
@@ -541,7 +541,7 @@ def build_dossier_csv(db: Session, b: Building) -> str:
             or ""
         )
         # Squash newlines in description so the CSV stays single-row.
-        # NOTE: variable name MUST NOT be `desc` — that shadows
+        # NOTE: variable name MUST NOT be `desc` - that shadows
         # `sqlalchemy.desc` for the entire function scope and makes
         # the earlier `.order_by(desc(...))` UnboundLocalError.
         descr = (r.description or "").replace("\n", " ").replace("\r", " ")[:1000]
@@ -576,7 +576,7 @@ def build_dossier_csv(db: Session, b: Building) -> str:
 def _escape_xml(text: Optional[str]) -> str:
     """Escape ReportLab's mini-XML so user-supplied text doesn't break
     paragraph rendering. ReportLab paragraphs accept a small XML subset
-    (b, i, font, …) — bare `<` / `>` / `&` confuse the parser."""
+    (b, i, font, …) - bare `<` / `>` / `&` confuse the parser."""
     if not text:
         return ""
     return (

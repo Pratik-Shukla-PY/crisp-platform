@@ -14,8 +14,8 @@ to a filtered scan over the FK index at the 500k-reports/crisis scale target
 (must-have #12).
 
 Two composites cover those access paths:
-  1. (crisis_event_id, status)   — operation worklist + active/closed rollups
-  2. (crisis_event_id, severity) — per-operation critical counts + worst-first sort
+  1. (crisis_event_id, status)   - operation worklist + active/closed rollups
+  2. (crisis_event_id, severity) - per-operation critical counts + worst-first sort
 
 Both created with CONCURRENTLY so a live PROD upgrade doesn't lock `reports`.
 Alembic must run this outside its default transaction (see the COMMIT below).

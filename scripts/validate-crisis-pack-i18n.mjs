@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * validate-crisis-pack-i18n.mjs — coverage gate for the geo-scoped crisis-pack
+ * validate-crisis-pack-i18n.mjs - coverage gate for the geo-scoped crisis-pack
  * curated question labels + select options.
  *
  * The 6 stock crisis packs (web-dashboard/src/cc-crisis.js → CORE_BLOCKS +
@@ -8,14 +8,14 @@
  * (mobile-app/src/v4-flow.js) localizes each via a static i18n key:
  *     field label   → cp_<fieldkey>
  *     select option → cpopt_<fieldkey>_<VALUE>
- * (yes/no options reuse v4_yes / v4_no; the 3 chip-covered taxonomy selects —
- * crisis_type / infrastructure_type / damage_classification — are captured by
+ * (yes/no options reuse v4_yes / v4_no; the 3 chip-covered taxonomy selects -
+ * crisis_type / infrastructure_type / damage_classification - are captured by
  * the PWA's already-translated hardcoded chips, NOT the pack renderer, so they
  * are excluded here.)
  *
  * This gate derives the expected cp_/cpopt_ keys from the stock-pack source and
  * asserts each exists in mobile-app/src/i18n/en.json. validate-i18n.mjs then
- * guarantees those keys are present in all 22 locales — together they make the
+ * guarantees those keys are present in all 22 locales - together they make the
  * crisis-pack flow >99% translated and regression-proof: add a stock question
  * without a translation key and CI fails here.
  *
@@ -30,7 +30,7 @@ const CC = join(ROOT, 'web-dashboard/src/cc-crisis.js');
 const EN = join(ROOT, 'mobile-app/src/i18n/en.json');
 
 // Taxonomy selects captured by the PWA's hardcoded (already-translated) classify
-// chips — the pack renderer never draws them, so they need no cp_/cpopt_ keys.
+// chips - the pack renderer never draws them, so they need no cp_/cpopt_ keys.
 const CHIP_COVERED = new Set(['crisis_type', 'infrastructure_type', 'damage_classification']);
 
 function slicePackSource(src) {
@@ -39,7 +39,7 @@ function slicePackSource(src) {
   const start = src.indexOf('const CORE_BLOCKS');
   const end = src.indexOf('const CRISIS_TO_STOCK');
   if (start < 0 || end < 0 || end <= start) {
-    throw new Error('cc-crisis.js markers (CORE_BLOCKS … CRISIS_TO_STOCK) not found — update this gate.');
+    throw new Error('cc-crisis.js markers (CORE_BLOCKS … CRISIS_TO_STOCK) not found - update this gate.');
   }
   return src.slice(start, end);
 }
@@ -58,7 +58,7 @@ function extractFields(region) {
     const line = rawLine.trim();
     if (!line || line.startsWith('//')) continue;
 
-    // ynStage('<key>', …) — crisis-specific yes/no question (no options).
+    // ynStage('<key>', …) - crisis-specific yes/no question (no options).
     const yn = line.match(/ynStage\(\s*'([a-z0-9_]+)'/);
     if (yn) { add(yn[1], []); continue; }
 

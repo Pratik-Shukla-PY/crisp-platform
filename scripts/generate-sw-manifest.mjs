@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Sprint C.4 (May 2026) — Workbox-style precache manifest generator.
+ * Sprint C.4 (May 2026) - Workbox-style precache manifest generator.
  *
  * Computes a content hash for every entry in sw.js's STATIC_ASSETS and
  * rewrites the inline `SW_ASSET_MANIFEST` block between the BEGIN/END
@@ -71,7 +71,7 @@ function extractStaticAssetPaths(swSrc) {
     const paths = [];
     // Two patterns to match:
     //   SW_BASE + 'app.js'              → 'app.js'
-    //   SW_BASE,                        → ''   (bare entry — root → index.html)
+    //   SW_BASE,                        → ''   (bare entry - root → index.html)
     const lineRe = /(?:SW_BASE\s*\+\s*'([^']+)'|^\s*SW_BASE\s*,?\s*(?:\/\/[^\n]*)?$)/gm;
     let match;
     while ((match = lineRe.exec(block)) !== null) {
@@ -89,7 +89,7 @@ async function main() {
     const swSrc = await readFile(SW_PATH, "utf8");
     const assetPaths = extractStaticAssetPaths(swSrc);
     if (assetPaths.length === 0) {
-        fail("No STATIC_ASSETS entries parsed — check the regex");
+        fail("No STATIC_ASSETS entries parsed - check the regex");
         process.exit(2);
     }
 
@@ -110,7 +110,7 @@ async function main() {
         warn(`Skipped ${missing.length} missing file(s): ${missing.join(", ")}`);
     }
 
-    // Build the new manifest block — fixed-key ordering keeps diffs minimal.
+    // Build the new manifest block - fixed-key ordering keeps diffs minimal.
     const sortedKeys = Object.keys(manifest).sort();
     const lines = [BEGIN_MARK, "const SW_ASSET_MANIFEST = {"];
     for (const k of sortedKeys) {
@@ -121,7 +121,7 @@ async function main() {
 
     // Locate the existing block. If absent, splice it in right before the
     // STATIC_ASSETS declaration so install-handler code below it can see
-    // the constant. Idempotent — re-running the script just rewrites the
+    // the constant. Idempotent - re-running the script just rewrites the
     // body between the sentinels.
     let nextSrc;
     const begin = swSrc.indexOf(BEGIN_MARK);

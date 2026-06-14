@@ -1,8 +1,8 @@
 // ══════════════════════════════════════════════════════════════════════════════
-// CRISP Predictive Intelligence — Frontend Logic
+// CRISP Predictive Intelligence - Frontend Logic
 // ══════════════════════════════════════════════════════════════════════════════
 
-// Apr 2026 — origin-aware backend host (dev → :8000, prod → same origin via nginx).
+// Apr 2026 - origin-aware backend host (dev → :8000, prod → same origin via nginx).
 const _PRED_isLocalDev = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
 const _PRED_BACKEND_HOST = _PRED_isLocalDev
     ? `http://${window.location.hostname}:8000`
@@ -140,7 +140,7 @@ function renderPredictionHeatmap(predictions) {
                 iconSize: [60, 24], iconAnchor: [30, 12],
             }),
         });
-        marker.bindTooltip(`<b>${escapeHtml(p.zone_name)}</b><br>${p.risk_level} — ${(p.predicted_crisis_type||'').replace(/_/g,' ')}<br>${p.headline || ''}`, { sticky: true });
+        marker.bindTooltip(`<b>${escapeHtml(p.zone_name)}</b><br>${p.risk_level} - ${(p.predicted_crisis_type||'').replace(/_/g,' ')}<br>${p.headline || ''}`, { sticky: true });
         marker.addTo(map);
         _predZoneMarkers.push(marker);
     });
@@ -164,7 +164,7 @@ window.addPredictionZone = async function () {
             body: JSON.stringify({ name, latitude: lat, longitude: lng }),
         });
         if (res.ok) {
-            showToast('Zone added — running forecast...', 'success');
+            showToast('Zone added - running forecast...', 'success');
             document.getElementById('pred-zone-name').value = '';
             document.getElementById('pred-zone-lat').value = '';
             document.getElementById('pred-zone-lng').value = '';
@@ -226,13 +226,13 @@ window.showPredictionDetail = async function (zoneId) {
         modal.innerHTML = `
             <div class="ai-logic-card" style="max-width:520px;">
                 <div class="ai-logic-header">
-                    <h3><i class="fa-solid fa-bolt" style="color:#a78bfa;"></i> ${escapeHtml(zone.name)} — Risk Analysis</h3>
+                    <h3><i class="fa-solid fa-bolt" style="color:#a78bfa;"></i> ${escapeHtml(zone.name)} - Risk Analysis</h3>
                     <button onclick="this.closest('.ai-logic-overlay').remove()" class="ai-logic-close"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="ai-logic-body">
                     <div style="text-align:center;margin-bottom:12px;">
                         <div style="font-size:48px;font-weight:900;color:${latest.risk_score >= 76 ? '#ef4444' : latest.risk_score >= 51 ? '#f97316' : '#eab308'};">${latest.risk_score}<small style="font-size:16px;opacity:0.5;">%</small></div>
-                        <div style="font-size:13px;font-weight:700;color:#94a3b8;">${latest.risk_level} RISK — ${(latest.predicted_crisis_type||'').replace(/_/g,' ')}</div>
+                        <div style="font-size:13px;font-weight:700;color:#94a3b8;">${latest.risk_level} RISK - ${(latest.predicted_crisis_type||'').replace(/_/g,' ')}</div>
                         ${latest.headline ? `<p style="font-size:12px;color:#cbd5e1;margin-top:6px;">${escapeHtml(latest.headline)}</p>` : ''}
                     </div>
                     <div class="ai-logic-section">

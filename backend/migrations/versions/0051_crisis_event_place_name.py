@@ -1,4 +1,4 @@
-"""Operations redesign P2 — denormalised place_name on crisis_events
+"""Operations redesign P2 - denormalised place_name on crisis_events
 
 Revision ID: 0051_crisis_event_place_name
 Revises: 0050_operation_claim_log
@@ -11,7 +11,7 @@ create/launch/center-edit) so the /operations rollup stays a single no-N+1 query
 instead of geocoding per row in the hot path. NULL = unresolved (the card falls
 back to coordinates).
 
-No change for the new PAUSED status — crisis_events.status is a plain String(20),
+No change for the new PAUSED status - crisis_events.status is a plain String(20),
 not a DB enum, so it already accepts the value (application logic + the activation
 gate handle the semantics: PAUSED forces is_active=False so a paused op stops
 matching new reports).

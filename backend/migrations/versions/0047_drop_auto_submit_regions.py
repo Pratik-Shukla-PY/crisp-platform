@@ -7,7 +7,7 @@ in the V4 report flow on every client and is being deleted to simplify the app.
 Both drops are safe:
 - `auto_submit_regions` has no inbound FK (only `created_by → users` ON DELETE
   SET NULL), so dropping it can't orphan or block any other row.
-- `reports.is_auto_submitted` was a passive flag — written at ingest, read only
+- `reports.is_auto_submitted` was a passive flag - written at ingest, read only
   by a now-removed cosmetic dashboard badge (never in exports, scoring, or
   filtering). Postgres DROP COLUMN is metadata-only (no table rewrite / lock
   churn), so it's cheap even on a large reports table.

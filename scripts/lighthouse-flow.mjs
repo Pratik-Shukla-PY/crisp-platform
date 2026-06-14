@@ -3,7 +3,7 @@
 //
 // Multi-step Lighthouse user-flow audit. Runs Lighthouse's step API
 // across the v4 capture flow (Home → Capture → Classify → Review) so
-// stage-transition perf is measurable — something `lhci collect` can't
+// stage-transition perf is measurable - something `lhci collect` can't
 // do because it audits ONE URL at a time.
 //
 // Usage:
@@ -19,9 +19,9 @@
 // on real stages with TF.js / Mapbox cold-starts).
 //
 // Env:
-//   LH_FLOW_URL  — base URL (default: http://localhost:8080/mobile-app/src/)
-//   LH_FLOW_OUT  — output dir (default: .lighthouseci/)
-//   LH_HEADLESS  — '1' to run headless (default), '0' to open browser
+//   LH_FLOW_URL  - base URL (default: http://localhost:8080/mobile-app/src/)
+//   LH_FLOW_OUT  - output dir (default: .lighthouseci/)
+//   LH_HEADLESS  - '1' to run headless (default), '0' to open browser
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -37,7 +37,7 @@ const HEADLESS  = process.env.LH_HEADLESS !== '0';
 
 if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
 
-// Dynamic imports — `lighthouse` and `puppeteer-core` aren't direct
+// Dynamic imports - `lighthouse` and `puppeteer-core` aren't direct
 // devDependencies of the repo (they're pulled in transitively by
 // @lhci/cli). The script lazy-loads them so we get a clear error
 // message if they're missing instead of an opaque ESM crash.
@@ -122,7 +122,7 @@ async function main() {
     });
 
     const flow = await startFlow(page, {
-        name: 'CRISP — v4 capture flow',
+        name: 'CRISP - v4 capture flow',
         config: FLOW_CONFIG,
     });
 

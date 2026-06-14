@@ -7,20 +7,20 @@ services:
       - .env.production
     environment:
       APP_ENV: production
-      # Apr 2026 — single-admin dashboard lockdown. /auth/register returns 410.
+      # Apr 2026 - single-admin dashboard lockdown. /auth/register returns 410.
       ALLOW_REGISTRATION: "false"
-      # Apr 2026 — JWT access-token TTL bumped from default 30 min to 24 h
+      # Apr 2026 - JWT access-token TTL bumped from default 30 min to 24 h
       # (1440 min) for the UNDP submission window. Reasoning: judges may
       # leave the dashboard open for hours during evaluation; a 30-min
       # token forces them to re-login (with TOTP) every half hour. 24 h
-      # balances usability with security — re-login at most once per day.
+      # balances usability with security - re-login at most once per day.
       # The refresh-token flow on the dashboard is not yet wired (separate
       # follow-up). Reduce back to 60 once refresh-tokens are implemented
       # client-side.
       ACCESS_TOKEN_EXPIRE_MINUTES: "1440"
-      # May 2026 (Phase 1.8) — distributed rate-limit. See docker-
+      # May 2026 (Phase 1.8) - distributed rate-limit. See docker-
       # compose.yml comment. Empty value or missing redis service
-      # falls back to in-memory per-worker counters — accepted on
+      # falls back to in-memory per-worker counters - accepted on
       # single-worker deploys but degrades the rate-limit guarantee
       # under multi-worker.
       REDIS_URL: redis://redis:6379/0
@@ -31,7 +31,7 @@ services:
       - uploads:/app/backend/uploads
     restart: unless-stopped
     # OOM hotfix (May 2026): cap backend memory so a future processing spike
-    # (e.g. PII-blur) can only OOM-kill THIS container — which auto-restarts —
+    # (e.g. PII-blur) can only OOM-kill THIS container - which auto-restarts -
     # never the host, redis, or nginx. The May 2026 incident was a host-global
     # OOM (constraint=CONSTRAINT_NONE) that killed uvicorn repeatedly. Host is
     # 3.75 GB + 4 GB swap; a 3 GB cap leaves headroom for redis/nginx/OS, and
@@ -46,7 +46,7 @@ services:
       retries: 3
       start_period: 60s
 
-  # ── Redis (Phase 1.8 — distributed rate-limit) ──────────────
+  # ── Redis (Phase 1.8 - distributed rate-limit) ──────────────
   # Holds the atomic INCR + EXPIRE counters that gate the meta /
   # chunk / classify endpoints. See backend/app/services/rate_limit.py
   # for the algorithm + failure-mode notes. No persistence: counter

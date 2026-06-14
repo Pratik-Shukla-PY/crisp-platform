@@ -1,4 +1,4 @@
-# UNDP Appendix-1 modular form — Livelihoods impact (post-crisis follow-up).
+# UNDP Appendix-1 modular form - Livelihoods impact (post-crisis follow-up).
 #
 # This is a SAMPLE module demonstrating CRISP's YAML-driven form framework.
 # Operators author modules like this one, drop the file into
@@ -6,12 +6,12 @@
 # both the PWA and RN capture flows without any code change.
 #
 # Field types supported:
-#   single_select   — radio buttons / big tiles (mobile-friendly)
-#   multi_select    — checkbox chip row
-#   short_text      — single-line text input, 120-char cap
-#   long_text       — multi-line textarea, 2000-char cap
-#   integer         — numeric input, min/max supported
-#   yes_no          — two-button toggle (explicit, not a checkbox)
+#   single_select   - radio buttons / big tiles (mobile-friendly)
+#   multi_select    - checkbox chip row
+#   short_text      - single-line text input, 120-char cap
+#   long_text       - multi-line textarea, 2000-char cap
+#   integer         - numeric input, min/max supported
+#   yes_no          - two-button toggle (explicit, not a checkbox)
 #
 # All prompts + options are free-text; the client renders them verbatim
 # after passing through its local `t()` translator. A `labelKey` field
@@ -29,7 +29,7 @@ applies_to:
   crisis_types: ["FLOOD", "EARTHQUAKE", "CYCLONE", "TSUNAMI", "LANDSLIDE",
                  "WILDFIRE", "CONFLICT", "CIVIL_UNREST"]
   # Modules can also gate on infrastructure_type, damage_classification,
-  # or time-since-submission. Evaluator examples below — keep empty to
+  # or time-since-submission. Evaluator examples below - keep empty to
   # fire for every report.
   infrastructure_types: []
   min_hours_since_report: 0

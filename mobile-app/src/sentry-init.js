@@ -1,5 +1,5 @@
 /**
- * CRISP — Sentry initialization (May 2026 audit fix — PWA observability).
+ * CRISP - Sentry initialization (May 2026 audit fix - PWA observability).
  *
  * The May 2026 product-readiness audit flagged "no Sentry on PWA"
  * as a CRITICAL ops gap. Field reporters in disaster zones hit JS
@@ -8,7 +8,7 @@
  * production errors land in our dashboard.
  *
  * The Sentry SDK itself is VENDORED locally (vendor/sentry.min.js)
- * — no third-party CDN dependency, consistent with the Sprint 2
+ * - no third-party CDN dependency, consistent with the Sprint 2
  * "self-host everything" directive.
  *
  * DSN configuration:
@@ -17,12 +17,12 @@
  *   stays inert by default; the deploy pipeline patches the
  *   content with the real DSN value before serving from PROD.
  *   To enable Sentry locally, edit the meta tag's content
- *   attribute (DSN is a public-safe identifier — write-only key,
+ *   attribute (DSN is a public-safe identifier - write-only key,
  *   no secrets exposed).
  *
  * Why a meta tag (vs env var, vs inline script):
  *   · No build step needed (PWA is vanilla JS).
- *   · Plain HTML edit at deploy time — no JS templating.
+ *   · Plain HTML edit at deploy time - no JS templating.
  *   · Stays out of CSP `unsafe-inline` territory.
  *   · Same pattern works for the dashboard (parallel file there).
  *
@@ -43,17 +43,17 @@
     if (!dsn) {
         // No DSN configured (dev environment, or operator hasn't patched
         // the meta tag yet). Stay inert; don't init Sentry. This is
-        // intentional — we don't want to fire events at a placeholder
+        // intentional - we don't want to fire events at a placeholder
         // endpoint AND don't want to fetch the SDK at all when it'd
         // be a no-op.
         return;
     }
 
-    // May 2026 (perf Sprint A.2) — defer the entire Sentry SDK to
+    // May 2026 (perf Sprint A.2) - defer the entire Sentry SDK to
     // browser idle so it never blocks first paint, first input, or
     // the home-stage critical path. Previously the SDK loaded
     // synchronously via `<script defer src="vendor/sentry.min.js">`
-    // in the head and Sentry.init ran inside this IIFE — adding
+    // in the head and Sentry.init ran inside this IIFE - adding
     // ~80 ms TBT and ~25 KB to the critical-render network bill.
     //
     // New flow:
@@ -65,7 +65,7 @@
     //      after the SDK's onload fires.
     //
     // Cost of delay: errors fired in the first ~2 seconds aren't
-    // captured. Acceptable — most JS errors surface after user
+    // captured. Acceptable - most JS errors surface after user
     // interaction, which is well past idle.
     function _idle(cb) {
         if (typeof requestIdleCallback === 'function') {
@@ -86,7 +86,7 @@
         s.src = 'vendor/sentry.min.js?v=8.30.0';
         s.async = true;
         s.onload = _initSentry;
-        s.onerror = function () { /* ad-blocker / network — silent no-op */ };
+        s.onerror = function () { /* ad-blocker / network - silent no-op */ };
         document.head.appendChild(s);
     });
 
@@ -112,7 +112,7 @@
             dsn,
             release,
             environment: env,
-            // Low sample rate by default — disaster zones have spotty
+            // Low sample rate by default - disaster zones have spotty
             // bandwidth and we don't want Sentry traces eating user data.
             // The deploy pipeline can override via `?sentry_trace=1.0`
             // for canary investigations.
@@ -123,7 +123,7 @@
             replaysSessionSampleRate: 0,
             replaysOnErrorSampleRate: 0,
 
-            // Privacy filter — strip user-input + GPS coords from the
+            // Privacy filter - strip user-input + GPS coords from the
             // event payload before transmit. UNDP §2.9 says the server
             // never receives raw faces; we extend that to never let
             // a stack trace's extra-context leak the description or
@@ -199,12 +199,12 @@
         window.Sentry.setTag('display_mode', displayMode);
         window.Sentry.setTag('surface', 'pwa');
 
-        // Phase 3.2 (May 2026) — additional tags for triage:
-        //   * `locale` — which UI language was active when the error
+        // Phase 3.2 (May 2026) - additional tags for triage:
+        //   * `locale` - which UI language was active when the error
         //     fired. Crucial for RTL-specific bugs (Arabic).
-        //   * `online` — was the user online? (offline-queue bugs
+        //   * `online` - was the user online? (offline-queue bugs
         //     look very different from live-network bugs.)
-        //   * `network` — Connection API hint (4g / 3g / 2g / slow-2g).
+        //   * `network` - Connection API hint (4g / 3g / 2g / slow-2g).
         //     Disaster-zone bandwidth is the typical CRISP failure
         //     mode; tagging the connection type lets us filter
         //     "errors from spotty links" specifically.
@@ -240,7 +240,7 @@
             });
         });
 
-        // Phase 3.2 — breadcrumb on every offline ↔ online flip.
+        // Phase 3.2 - breadcrumb on every offline ↔ online flip.
         // Critical context for diagnosing the offline-queue retry
         // bugs that hit disaster-zone reporters.
         for (const evt of ['online', 'offline']) {

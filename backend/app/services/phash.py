@@ -1,23 +1,23 @@
 """Perceptual-hash (pHash) helper for redundancy detection.
 
 UNDP nice-to-have #3: spot duplicate / over-reported photos. We compute
-`imagehash.phash` on every assembled photo — a 64-bit DCT-derived
+`imagehash.phash` on every assembled photo - a 64-bit DCT-derived
 fingerprint that's stable under resize, re-encode, and moderate visual
 edits (which is exactly what our chunked upload pipeline does).
 
 Design decisions
 
-  * `phash` (not `average_hash` or `dhash`) — DCT is the most robust
+  * `phash` (not `average_hash` or `dhash`) - DCT is the most robust
     against JPEG recompression. Tests: two SMALL/LARGE variants of the
     same capture produce Hamming distance ≤ 4 in 95 % of cases on a
     field-typical device.
-  * 64-bit → 16-char hex string — fits in a single `String(16)` column,
+  * 64-bit → 16-char hex string - fits in a single `String(16)` column,
     no need for `BYTEA` and the attendant escaping pain.
   * Hamming distance threshold default = **10** (bits). Cover's paper
     on near-duplicate retrieval argues 10/64 ≈ 84 % similarity gives
     near-zero false negatives on real photo corpora.
   * Legacy / audio / corrupt-file rows → `None`. Caller decides whether
-    to treat NULL as "unique" or "unscanned" — dashboard uses the
+    to treat NULL as "unique" or "unscanned" - dashboard uses the
     latter ("legacy, pre-tracking") to avoid false claims of cleanness.
 
 Failure mode
@@ -38,7 +38,7 @@ try:
     import imagehash            # type: ignore
     from PIL import Image       # type: ignore
     _AVAILABLE = True
-except Exception as e:          # pragma: no cover — defensive dep guard
+except Exception as e:          # pragma: no cover - defensive dep guard
     logger.warning("phash module unavailable: %s", e)
     _AVAILABLE = False
 
@@ -71,7 +71,7 @@ def compute_phash(file_path: str) -> Optional[str]:
         return None
     try:
         with Image.open(file_path) as img:
-            # Normalise to RGB — imagehash.phash on an RGBA PNG still
+            # Normalise to RGB - imagehash.phash on an RGBA PNG still
             # works but is implementation-specific; coercing guarantees
             # stable output across Pillow versions.
             if img.mode != "RGB":
@@ -87,7 +87,7 @@ def hamming_distance(a: Optional[str], b: Optional[str]) -> int:
     """Bit-count Hamming distance between two hex-encoded pHashes.
 
     Returns `len(a) * 4` (the maximum distance, i.e. "entirely different")
-    when either input is missing — so callers filtering by `dist < 10`
+    when either input is missing - so callers filtering by `dist < 10`
     never accidentally flag a NULL-hash row as a duplicate.
     """
     if not a or not b:
@@ -102,7 +102,7 @@ def hamming_distance(a: Optional[str], b: Optional[str]) -> int:
 
 def are_likely_duplicates(a: Optional[str], b: Optional[str],
                            threshold: int = DEFAULT_HAMMING_THRESHOLD) -> bool:
-    """Convenience wrapper — True if Hamming distance is ≤ threshold.
+    """Convenience wrapper - True if Hamming distance is ≤ threshold.
 
     Threshold defaults to DEFAULT_HAMMING_THRESHOLD; callers pass a
     smaller value (e.g. 4) when they need tighter certainty (e.g.

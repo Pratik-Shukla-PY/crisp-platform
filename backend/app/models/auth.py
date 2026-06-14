@@ -1,5 +1,5 @@
 """
-Auth Models — User, Organization, OTP, Session, AuditLog
+Auth Models - User, Organization, OTP, Session, AuditLog
 Enterprise-grade identity system with RBAC, multi-tenant, GDPR compliance.
 """
 import uuid
@@ -79,24 +79,24 @@ class Organization(Base):
 class User(Base):
     """Individual or enterprise user with RBAC.
 
-    Phase 1 (Apr 2026 — Optional reporter login) adds phone-only support:
+    Phase 1 (Apr 2026 - Optional reporter login) adds phone-only support:
     - `email` is now nullable (phone-only reporters have no email).
     - `phone_number` is the E.164 contact (e.g. "+91987654321").
     - `phone_verified` flips True after OTP verification on the phone channel.
     - `primary_auth_channel` remembers which channel the reporter picked
       first so the Settings screen defaults the re-auth prompt correctly.
     DB-level: a CHECK constraint ensures at least ONE of (email, phone_number)
-    is populated — added in migration `0010_auth`, not duplicated here
+    is populated - added in migration `0010_auth`, not duplicated here
     because SQLAlchemy's declarative model doesn't need to know.
     """
     __tablename__ = "users"
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
-    email = Column(String(255), unique=True, nullable=True, index=True)   # now nullable — phone-only OK
+    email = Column(String(255), unique=True, nullable=True, index=True)   # now nullable - phone-only OK
     # E.164 international phone.
     phone_number = Column(String(32), unique=True, nullable=True, index=True)
     phone_verified = Column(Boolean, default=False, nullable=False)
-    # EMAIL | PHONE — the channel the user most recently verified.
+    # EMAIL | PHONE - the channel the user most recently verified.
     primary_auth_channel = Column(String(10), nullable=True)
     password_hash = Column(String(255), nullable=True)   # Nullable for OTP-only users
     full_name = Column(String(255), nullable=True)
@@ -134,7 +134,7 @@ class User(Base):
 class OTPRecord(Base):
     """OTP codes for signup, login, MFA, password reset.
 
-    Phase 1 (Apr 2026 — Optional reporter login) generalised to a
+    Phase 1 (Apr 2026 - Optional reporter login) generalised to a
     `destination` + `channel` shape so phone-OTP verification uses the
     same table as email. The legacy `email` column stays populated for
     EMAIL rows (audit trail) but is now nullable so a PHONE-only row
@@ -145,7 +145,7 @@ class OTPRecord(Base):
     id = Column(String(36), primary_key=True, default=gen_uuid)
     # Generalised contact point: holds the email OR E.164 phone. The
     # `channel` column disambiguates. Every hot-path query (`verify`)
-    # now uses `(destination, purpose, used, expires_at)` — see the
+    # now uses `(destination, purpose, used, expires_at)` - see the
     # `ix_otp_verify_hotpath` compound index from migration 0010.
     destination = Column(String(255), nullable=False, index=True)
     channel = Column(String(10), nullable=False, default="EMAIL")   # EMAIL | PHONE
@@ -192,7 +192,7 @@ class AuthAuditLog(Base):
     details = Column(JSON, nullable=True)                # Extra context
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # UI v2.1 — time-range scans (30-day retention purge,
+    # UI v2.1 - time-range scans (30-day retention purge,
     # forensic queries) need an index on created_at. Mirrors 0008.
     __table_args__ = (
         Index("ix_auth_audit_log_created_at", "created_at"),
@@ -202,14 +202,14 @@ class AuthAuditLog(Base):
 class UserDeviceLink(Base):
     """Join table binding a user to every device they've authenticated on.
 
-    Phase 1 (Apr 2026 — Optional reporter login) — a reporter may submit
+    Phase 1 (Apr 2026 - Optional reporter login) - a reporter may submit
     from a phone, then check status on a laptop PWA, and we want both
     devices to surface the same "My Reports" feed. Each row is an
     `(user_id, device_hash)` pair; `(user_id)` fetch returns every
     device, `(device_hash)` fetch tells us which user (if any) claims
     a device.
 
-    On a GDPR account deletion the CASCADE drops these rows — the
+    On a GDPR account deletion the CASCADE drops these rows - the
     reports themselves revert to anonymous via the `reports.user_id`
     ON DELETE SET NULL in migration 0009/0010 (user answer 3).
     """

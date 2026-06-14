@@ -12,7 +12,7 @@ in many target languages).
 **Filter logic:**
 - Brand names (Instagram, LinkedIn, WhatsApp, Telegram, CRISP, UNDP, …) are excluded
 - Universal scientific/technical terms (Tsunami, Crisis, Audio, GPS, API, …) are excluded
-- Punctuation- or placeholder-only values (`—`, `{km} km`, `{n}`) are excluded
+- Punctuation- or placeholder-only values (`-`, `{km} km`, `{n}`) are excluded
 - Anything ≤ 2 characters is excluded
 
 ## Per-locale residual drift
@@ -45,61 +45,61 @@ in many target languages).
 
 ## Detail per locale (real gaps only)
 
-### `ar` — Arabic
+### `ar` - Arabic
 
 ✓ No real translation gaps.
 
-### `bn` — Bengali
+### `bn` - Bengali
 
 ✓ No real translation gaps.
 
-### `es` — Spanish
+### `es` - Spanish
 
 ✓ No real translation gaps.
 
-### `fr` — French (1 gaps)
+### `fr` - French (1 gaps)
 
 - `nearby_sheet_incidents` → `INCIDENTS`
 
-### `gu` — Gujarati
+### `gu` - Gujarati
 
 ✓ No real translation gaps.
 
-### `hi` — Hindi
+### `hi` - Hindi
 
 ✓ No real translation gaps.
 
-### `id` — Indonesian (3 gaps)
+### `id` - Indonesian (3 gaps)
 
 - `summary_edit` → `✏️ Edit`
 - `version_label_build` → `Build {n}`
 - `version_label_detail` → `Build {n} · API {api}`
 
-### `ja` — Japanese
+### `ja` - Japanese
 
 ✓ No real translation gaps.
 
-### `kn` — Kannada
+### `kn` - Kannada
 
 ✓ No real translation gaps.
 
-### `ko` — Korean
+### `ko` - Korean
 
 ✓ No real translation gaps.
 
-### `ml` — Malayalam
+### `ml` - Malayalam
 
 ✓ No real translation gaps.
 
-### `mr` — Marathi
+### `mr` - Marathi
 
 ✓ No real translation gaps.
 
-### `pa` — Punjabi
+### `pa` - Punjabi
 
 ✓ No real translation gaps.
 
-### `pt` — Portuguese (7 gaps)
+### `pt` - Portuguese (7 gaps)
 
 - `aria_online_status` → `Online`
 - `status_pill_online` → `Online`
@@ -109,31 +109,31 @@ in many target languages).
 - `version_label_build` → `Build {n}`
 - `version_label_detail` → `Build {n} · API {api}`
 
-### `ru` — Russian
+### `ru` - Russian
 
 ✓ No real translation gaps.
 
-### `ta` — Tamil
+### `ta` - Tamil
 
 ✓ No real translation gaps.
 
-### `te` — Telugu
+### `te` - Telugu
 
 ✓ No real translation gaps.
 
-### `tr` — Turkish
+### `tr` - Turkish
 
 ✓ No real translation gaps.
 
-### `ur` — Urdu
+### `ur` - Urdu
 
 ✓ No real translation gaps.
 
-### `vi` — Vietnamese
+### `vi` - Vietnamese
 
 ✓ No real translation gaps.
 
-### `zh` — Chinese
+### `zh` - Chinese
 
 ✓ No real translation gaps.
 

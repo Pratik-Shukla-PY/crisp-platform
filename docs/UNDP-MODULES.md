@@ -4,7 +4,7 @@
 
 The UNDP RAPIDA problem statement's Appendix-1 specifies a modular set
 of assessment fields. This document is the canonical mapping between
-those modules and CRISP storage columns / enum values — written so a
+those modules and CRISP storage columns / enum values - written so a
 UNDP evaluator can verify coverage without reading source code.
 
 A judge can cross-reference this table against the JSON payload of any
@@ -36,12 +36,12 @@ Communication · Community · Public Spaces / Recreation · Other.
 |-----------------------------|--------------------------------------------|-------------------|
 | Residential                 | `RESIDENTIAL`                              | `HOUSE` |
 | Commercial                  | `COMMERCIAL`                               | `MARKET`, `SHOP`, `OFFICE` |
-| Government                  | `GOVERNMENT`                               | — |
+| Government                  | `GOVERNMENT`                               | - |
 | Utility                     | `UTILITY`                                  | `POWER`, `WATER`, `TELECOM` |
 | Transport & Communication   | `TRANSPORT_COMMUNICATION`                  | `ROAD` |
 | Community                   | `COMMUNITY`                                | `HOSPITAL`, `SCHOOL` |
 | Public Spaces / Recreation  | `PUBLIC_SPACES`                            | `PARK`, `RELIGIOUS` |
-| Other                       | `OTHER`                                    | — |
+| Other                       | `OTHER`                                    | - |
 
 The original fine-grained chip the reporter tapped is preserved in
 `infrastructure_sub_type` for drill-down analytics. The backend
@@ -67,7 +67,7 @@ backward compatibility:
 
   * `HURRICANE` bundles under `NATURAL` (UNDP treats hurricane =
     cyclone in a different basin).
-  * `WILDFIRE` falls through to `OTHER` — UNDP has no distinct bucket
+  * `WILDFIRE` falls through to `OTHER` - UNDP has no distinct bucket
     for it.
 
 ## 4 · Service status (modular per-infrastructure)
@@ -117,14 +117,14 @@ Same 4-level mapping as Water above.
 | Unknown                  | `UNKNOWN`                 |
 
 The legacy 3-level shorthand (`OPERATIONAL` / `DISRUPTED` /
-`DESTROYED`) continues to validate — the PWA simply emits a single
+`DESTROYED`) continues to validate - the PWA simply emits a single
 appropriate value, and a UNDP-compliant client can choose the finer
 grain.
 
 ## 5 · Pressing needs (9 options)
 
 UNDP Appendix-1 lists nine pressing-needs categories. CRISP stores
-them as a JSON array in `needs` — multi-select.
+them as a JSON array in `needs` - multi-select.
 
 | UNDP need label    | CRISP value (i18n key)  |
 |--------------------|-------------------------|
@@ -145,12 +145,12 @@ class chips if field data shows frequent use.
 
 ## 6 · Debris clearing
 
-Boolean `debris_clearing_needed` — a derived flag, not in Appendix-1
+Boolean `debris_clearing_needed` - a derived flag, not in Appendix-1
 verbatim, but used by response teams to dispatch clearance equipment.
 
 ## 7 · Building identification
 
-`building_id` — preserved across multiple reports about the same
+`building_id` - preserved across multiple reports about the same
 structure. Allows a dashboard analyst to version a building's damage
 trajectory ("reported partial 09:00, reported complete 14:00 after
 aftershock"). Linked to the building-footprint selector
@@ -158,7 +158,7 @@ aftershock"). Linked to the building-footprint selector
 
 ## 8 · Infrastructure name
 
-`infrastructure_name` — free-text string. Optional, rarely populated,
+`infrastructure_name` - free-text string. Optional, rarely populated,
 but useful when a specific well-known landmark is damaged
 ("Kalyan Bridge", "City Hospital"). Not in the UNDP column list but
 preserved for analyst context.
@@ -171,9 +171,9 @@ CRISP ships **alignment** today: every Appendix-1 field has a storage
 column and a legal value set. CRISP does not yet ship a **framework**
 where a UNDP deployment team can drop in a new crisis type with its
 own required module set without deploying new code. That framework is
-on the roadmap as `docs/ROADMAP.md §modular-forms` — it is a deferred
+on the roadmap as `docs/ROADMAP.md §modular-forms` - it is a deferred
 scope item flagged in the April-2026 gap analysis
-(`.claude/plans/swirling-forging-raccoon.md` §3.6). This document +
+(the design plan §3.6). This document +
 the taxonomy hook + the enum expansion above close the
 compliance-critical leg of the gap; the framework leg is post-June
 unless pull-forward is explicitly authorised.

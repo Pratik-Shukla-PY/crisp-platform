@@ -4,7 +4,7 @@ Revision ID: 0006_bh
 Revises: 0005_pii
 Create Date: 2026-04-22
 
-Phase-1 progressive-upload stack. Adds `Report.blurhash` — a compact
+Phase-1 progressive-upload stack. Adds `Report.blurhash` - a compact
 ~28–32-char string encoding a 4x3 DCT of the main photo. Dashboard
 decodes it to a blurred colour impression the instant the meta POST
 lands, BEFORE any media chunk arrives; closes the
@@ -14,7 +14,7 @@ See:
   * `app/models/report.py::Report.blurhash`
   * `app/schemas/report.py::ReportMetaCreate.blurhash`
 
-Idempotent — same pattern as prior revisions (0002/0003/0004/0005).
+Idempotent - same pattern as prior revisions (0002/0003/0004/0005).
 Safe to rerun on databases that already have the column.
 """
 from typing import Sequence, Union
@@ -46,7 +46,7 @@ def upgrade() -> None:
                 sa.Column("blurhash", sa.String(length=96), nullable=True)
             )
     # No backfill: pre-Phase-1 reports simply render without a placeholder
-    # (dashboard handles NULL blurhash gracefully — falls back to the
+    # (dashboard handles NULL blurhash gracefully - falls back to the
     # existing "awaiting media" icon). A backfill would require re-encoding
     # every archived photo; too expensive + no user-facing value.
 

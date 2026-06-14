@@ -5,7 +5,7 @@ PWA building-picker map (`mobile-app/src/app.js:12337,13010`,
 `building-select.js:465`) both use **free public tile servers**.
 That's fine for a single-location pilot, but every tier has a quota
 and the May 2026 operator HAR captured 41 × 400-class responses from
-Carto — proof the dashboard is one busy demo away from a visibly
+Carto - proof the dashboard is one busy demo away from a visibly
 broken map.
 
 This doc is the operator runbook for picking + wiring a mitigation
@@ -16,7 +16,7 @@ when pilot traffic justifies it.
 | Surface | Provider | URL pattern | Free quota |
 |---|---|---|---|
 | Dashboard | Carto basemaps CDN | `https://{s}.basemaps.cartocdn.com/dark_{nolabels,only_labels}/{z}/{x}/{y}{r}.png` | ~75,000 tiles/day/IP |
-| PWA capture map | OpenStreetMap public tiles | `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png` | ~2 req/s/IP (no daily total — short-burst rate limit) |
+| PWA capture map | OpenStreetMap public tiles | `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png` | ~2 req/s/IP (no daily total - short-burst rate limit) |
 
 The PWA's OSM hit is normally bounded (one user, one capture session,
 a few dozen tiles). The risk is the dashboard side: every reviewer
@@ -34,9 +34,9 @@ afternoon can blow through 75k tiles.
   2 req/s window).
 - **Console logs**: `Failed to load resource: 400` from `*.cartocdn.com`.
 
-## Mitigation options — ranked low → high effort
+## Mitigation options - ranked low → high effort
 
-### Option 1 — Switch dashboard to Stadia Maps free tier
+### Option 1 - Switch dashboard to Stadia Maps free tier
 
 **Effort:** ~15 minutes. **Cost:** $0. **Risk:** very low.
 
@@ -64,12 +64,12 @@ const baseLayer = L.tileLayer(
 ```
 
 Caveats:
-- Stadia requires `Origin` header verification — won't work from
+- Stadia requires `Origin` header verification - won't work from
   `null` origin (file:// or some headless test harnesses).
 - Daily 50k is *lower* than Carto's 75k. Switching only helps if the
   problem is Carto specifically, not raw volume.
 
-### Option 2 — Get a paid Carto API key
+### Option 2 - Get a paid Carto API key
 
 **Effort:** ~30 minutes. **Cost:** Carto Lite plan starts at ~$20/month.
 **Risk:** low (vendor lock-in to Carto).
@@ -94,10 +94,10 @@ const baseLayer = L.tileLayer(
 );
 ```
 
-Quota at the Lite tier is ~250k tiles/day — comfortable for a single
+Quota at the Lite tier is ~250k tiles/day - comfortable for a single
 busy region.
 
-### Option 3 — Server-side tile proxy with LRU cache
+### Option 3 - Server-side tile proxy with LRU cache
 
 **Effort:** ~1-2 days. **Cost:** $0 (backend runs on existing EC2).
 **Risk:** medium (new code path, new cache management surface).
@@ -136,8 +136,8 @@ Pros:
 - Quota becomes per-server (one CRISP IP hitting Carto), not per-user.
   100 dashboard users × Carto = 100 quotas; 100 dashboard users × proxy
   = 1 quota.
-- Tiles are cached for 24h — second pan over the same area is free.
-- We control the network — can fail over between providers.
+- Tiles are cached for 24h - second pan over the same area is free.
+- We control the network - can fail over between providers.
 
 Cons:
 - Adds latency (one extra hop per tile).
@@ -146,7 +146,7 @@ Cons:
 - Defeats the CDN's geo-distribution; tiles are now served from a
   single AWS region.
 
-### Option 4 — Self-host the OSM tile pyramid for the pilot region
+### Option 4 - Self-host the OSM tile pyramid for the pilot region
 
 **Effort:** ~1 week. **Cost:** ~50 GB disk for a country-scale pyramid;
 ~1 week of operator time to set up.
@@ -166,9 +166,9 @@ expansion phase.
 
 | Pilot scale | Recommended option |
 |---|---|
-| Single location, < 1k reports/day, < 5 dashboard reviewers | None — free tier holds |
-| Single location, > 1k reports/day OR > 10 reviewers | Option 1 (Stadia) — 15 min |
-| 2-3 locations, regional UN deployment | Option 2 (paid Carto) — $20/month |
+| Single location, < 1k reports/day, < 5 dashboard reviewers | None - free tier holds |
+| Single location, > 1k reports/day OR > 10 reviewers | Option 1 (Stadia) - 15 min |
+| 2-3 locations, regional UN deployment | Option 2 (paid Carto) - $20/month |
 | Full-scale regional ops, > 50k reports/day | Option 3 (server proxy) → Option 4 (self-host) |
 
 For the FIRST pilot deployment: **do nothing**, monitor the Carto error
@@ -177,9 +177,9 @@ rate against SLO § 5. If the budget is breached, jump to Option 1.
 ## Decision log
 
 When you pick a mitigation, append here with the date + rationale.
-Keep the chronology — future operators can read the trade-offs the
+Keep the chronology - future operators can read the trade-offs the
 project has already worked through.
 
-- 2026-05-28 — Sprint 2C-3 — No mitigation implemented yet. Pilot is
+- 2026-05-28 - Sprint 2C-3 - No mitigation implemented yet. Pilot is
   single-location, traffic projected < 1k reports/day; free tier should
   hold. Re-evaluate after 7-day soak with real telemetry.

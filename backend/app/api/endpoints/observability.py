@@ -1,7 +1,7 @@
 """
 Admin observability endpoints for the Nearby Reports pipeline.
 
-Phase 2 (May 2026, docs §7 + §13) — exposes the operational view of
+Phase 2 (May 2026, docs §7 + §13) - exposes the operational view of
 the nearby aggregation state for the dashboard's triage queue and
 the "Cluster history" public timeline.
 
@@ -14,12 +14,12 @@ Current endpoints:
       Drives the dashboard's Phase 4 "Acute alerts" tray.
 
   GET /api/v1/admin/observability/nearby/events?group_id=...
-      Returns the lifecycle event timeline for a given group_id —
+      Returns the lifecycle event timeline for a given group_id -
       promote / downgrade / acute_on / fading / resolved / created /
       removed. Backs the dashboard's "Cluster history" view.
 
 Both endpoints are ADMIN-gated (require_admin). The data they
-expose is the SAME aggregator output citizens get — just without
+expose is the SAME aggregator output citizens get - just without
 the citizen-tier suppression + privacy projection. Privacy
 invariants in docs §10 still hold (no PII / no per-report data).
 """

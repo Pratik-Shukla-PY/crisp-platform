@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────
-// CRISP — Always-on home screen.
+// CRISP - Always-on home screen.
 //
 // Replaces landing.js. The first-visit-only landing
-// overlay is gone — every visit lands on the same merged home page that
+// overlay is gone - every visit lands on the same merged home page that
 // surfaces:
 //   • PWA "Start Reporting" (primary CTA, anonymous default)
 //   • Live impact metrics (Lives Saved + Reports Verified)
@@ -14,7 +14,7 @@
 //   • My Reports + Login / Sign-up secondary actions
 //
 // All this lives inside `#stage-home` (not an overlay), so tapping back /
-// returning to the app always shows the same surface — no first-visit
+// returning to the app always shows the same surface - no first-visit
 // hide-once magic.
 //
 // Channel handles can be operator-overridden via `window.CRISP_CHANNELS`
@@ -28,7 +28,7 @@
 //     consent persists in localStorage and the row hides on subsequent
 //     loads.
 //   • The existing app.js btn-start click handler (and v4-flow's capture-
-//     phase intercept) stays untouched — we just preempt clicks when
+//     phase intercept) stays untouched - we just preempt clicks when
 //     consent isn't checked.
 //   • applyI18n is called after channel buttons are inserted so every
 //     [data-i18n] picks up the active locale.
@@ -57,13 +57,13 @@
         // their backends are actually wired. Operators can override any
         // of these via `window.CRISP_CHANNELS = { ... }` before this
         // script loads.
-        ivr_phone: '+16626768896',                              // LIVE — operator-confirmed
+        ivr_phone: '+16626768896',                              // LIVE - operator-confirmed
         sms_phone: '',                                          // Coming soon
-        telegram_bot: 'crisp_crisis_bot',                       // LIVE — https://t.me/crisp_crisis_bot
+        telegram_bot: 'crisp_crisis_bot',                       // LIVE - https://t.me/crisp_crisis_bot
         whatsapp_phone: '',                                     // Coming soon
         ios_app_url: '',                                        // Coming soon
         android_app_url: '',                                    // Coming soon
-        expo_go_url: 'exp://exp.host/@crispundp/crisp-mobile',  // LIVE — testers / UNDP judges
+        expo_go_url: 'exp://exp.host/@crispundp/crisp-mobile',  // LIVE - testers / UNDP judges
     };
     const CHANNELS = Object.assign({}, DEFAULT_CHANNELS, window.CRISP_CHANNELS || {});
 
@@ -89,7 +89,7 @@
         return `https://wa.me/${cleaned}${q}`;
     }
 
-    // ── Phase 23 — Telegram deep-link with PWA device-hash token ────────
+    // ── Phase 23 - Telegram deep-link with PWA device-hash token ────────
     //
     // The cleanest onboarding flow is: tap tile → Telegram app opens
     // directly in the bot chat → `/start <hash>` is already sent →
@@ -98,7 +98,7 @@
     //
     // PWA device-hash format: `PWA-` + 32 lowercase hex chars
     // (generated in app.js around line 6340 via SHA-256). Telegram's
-    // `start` parameter allows `[A-Za-z0-9_-]` 1-64 chars — the bare
+    // `start` parameter allows `[A-Za-z0-9_-]` 1-64 chars - the bare
     // 32-hex part already qualifies, no encoding needed.
     function _buildTelegramStartToken() {
         try {
@@ -120,9 +120,9 @@
         const tok = encodeURIComponent(startToken || 'crisp_web');
         const botEnc = encodeURIComponent(bot);
         return {
-            // Native scheme — opens the installed Telegram app directly.
+            // Native scheme - opens the installed Telegram app directly.
             native:  `tg://resolve?domain=${botEnc}&start=${tok}`,
-            // Web URL with the same payload — handles desktop and the
+            // Web URL with the same payload - handles desktop and the
             // "Telegram not installed on mobile" case by showing the
             // contact page with a Launch button.
             web:     `https://t.me/${bot}?start=${tok}`,
@@ -154,7 +154,7 @@
     // unreliable on iOS 16+: when the OS shows the system "Open in
     // Telegram?" confirmation sheet, the page technically stays
     // visible, so visibilitychange doesn't fire within our 1.2 s
-    // window and we wrongly redirect to the App Store — even when
+    // window and we wrongly redirect to the App Store - even when
     // Telegram IS installed. Real-user impact: tapping the tile on
     // an iPhone with Telegram installed routed straight to the App
     // Store. The universal-link form below sidesteps that entirely:
@@ -211,7 +211,7 @@
     // tap. The strip is the only surface visible on the home stage; the
     // sheet contains the full channel cards (icon + label + status text
     // + tap-to-launch) and is lazily painted on first open. See
-    // docs/NEARBY_REPORTS_PIPELINE.md sibling sheet pattern + CLAUDE.md
+    // docs/NEARBY_REPORTS_PIPELINE.md sibling sheet pattern + the project invariants
     // "NO vertical scroll on home stage" invariant.
 
     /**
@@ -220,7 +220,7 @@
      * list so adding a new channel only requires one edit.
      */
     // Inline SVG icons for the 6 channels.
-    // May 2026 (perf Sprint B.2) — these used to render as FontAwesome
+    // May 2026 (perf Sprint B.2) - these used to render as FontAwesome
     // `<i class="fa-brands fa-...">` glyphs, requiring the ~117 KB
     // fa-brands.woff2 file to be fetched on cold-load just for the
     // channels strip. Inlining these 6 SVGs eliminates that fetch
@@ -233,27 +233,27 @@
     // intact via the cdnjs FontAwesome stylesheet already loaded for
     // V4 capture stages.
     const _CHANNEL_SVGS = {
-        // Telegram — Simple Icons paper-plane outline, filled.
+        // Telegram - Simple Icons paper-plane outline, filled.
         telegram: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
                   '<path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/>' +
                   '</svg>',
-        // WhatsApp — Simple Icons phone in speech-bubble.
+        // WhatsApp - Simple Icons phone in speech-bubble.
         whatsapp: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
                   '<path d="M17.472 14.382c-.297-.149-1.758-.867-2.030-.967-.272-.099-.470-.149-.669.150-.197.297-.767.966-.940 1.164-.173.199-.347.223-.644.075-.297-.150-1.255-.463-2.39-1.475-.883-.788-1.480-1.761-1.653-2.059-.173-.297-.018-.458.130-.606.134-.133.297-.347.446-.520.149-.174.198-.298.298-.497.099-.198.050-.371-.025-.520-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.500-.669-.510-.173-.008-.371-.010-.570-.010-.198 0-.520.074-.792.371-.272.297-1.040 1.016-1.040 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.200 5.077 4.487.710.306 1.263.489 1.694.625.712.227 1.360.195 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.570-.347zM12.000 21.785h-.005c-1.937-.001-3.852-.520-5.523-1.502l-.396-.235-4.110 1.078 1.097-4.005-.258-.411c-1.080-1.717-1.650-3.703-1.650-5.749 0-5.946 4.842-10.788 10.792-10.788 2.881.001 5.589 1.124 7.624 3.16 2.034 2.039 3.155 4.749 3.153 7.633-.003 5.946-4.844 10.789-10.785 10.789zm9.180-19.973c-2.452-2.452-5.715-3.802-9.182-3.804-7.143 0-12.954 5.811-12.957 12.953-.001 2.283.596 4.51 1.731 6.474l-1.840 6.715 6.870-1.802c1.892 1.031 4.022 1.576 6.190 1.577h.005c7.142 0 12.953-5.811 12.956-12.954.002-3.466-1.349-6.726-3.802-9.179z"/>' +
                   '</svg>',
-        // SMS — Lucide message-square.
+        // SMS - Lucide message-square.
         sms: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
              '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>' +
              '</svg>',
-        // IVR / phone — Lucide phone (slightly stylised handset).
+        // IVR / phone - Lucide phone (slightly stylised handset).
         ivr: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
              '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>' +
              '</svg>',
-        // Android — Simple Icons android robot head.
+        // Android - Simple Icons android robot head.
         android: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
                  '<path d="M17.523 15.341c-.5523 0-1-.4477-1-1s.4477-1 1-1 1 .4477 1 1-.4477 1-1 1m-11.046 0c-.5523 0-1-.4477-1-1s.4477-1 1-1 1 .4477 1 1-.4477 1-1 1m11.405-6.027 1.997-3.46a.416.416 0 0 0-.152-.568.416.416 0 0 0-.568.152l-2.022 3.503A12.572 12.572 0 0 0 12 7.5c-1.886 0-3.679.353-5.137 1.041L4.842 5.038a.416.416 0 0 0-.568-.152.416.416 0 0 0-.152.568l1.997 3.46C2.7 11.115.527 14.158.072 17.62h23.856c-.455-3.462-2.628-6.505-6.046-8.306z"/>' +
                  '</svg>',
-        // iOS / Apple — Simple Icons apple silhouette.
+        // iOS / Apple - Simple Icons apple silhouette.
         ios: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
              '<path d="M17.05 20.28c-.98.95-2.05.88-3.08.43-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.44C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>' +
              '</svg>',
@@ -271,7 +271,7 @@
                 live: !!CHANNELS.telegram_bot,
                 href: '',
                 // Telegram uses a JS deep-link handler instead of a
-                // raw anchor — see _wireChannelsSheetTelemetry.
+                // raw anchor - see _wireChannelsSheetTelemetry.
                 dataAction: CHANNELS.telegram_bot ? 'telegram-deeplink' : '',
                 status: CHANNELS.telegram_bot ? stLive : stSoon,
             },
@@ -316,7 +316,7 @@
     }
 
     /**
-     * Paint the home-stage strip — 6 icon spans, no labels, status
+     * Paint the home-stage strip - 6 icon spans, no labels, status
      * dots only on active channels. The whole strip is one click
      * target that opens the bottom sheet (operator decision: a single
      * predictable target is easier than per-icon launches).
@@ -330,7 +330,7 @@
             const colorStyle = i.color ? ` style="--c: var(${i.color});"` : '';
             return `<span class="hcs-icon ${stateClass} hcs-icon--${i.key}"${colorStyle} aria-hidden="true">${i.iconSvg}</span>`;
         }).join('');
-        // Bind once — re-rendering the strip shouldn't multiply listeners.
+        // Bind once - re-rendering the strip shouldn't multiply listeners.
         strip.onclick = (e) => {
             e.preventDefault();
             _openChannelsSheet();
@@ -372,7 +372,7 @@
             return `
                 <button type="button" class="channels-sheet-row ${stateClass}"
                         data-channel="${safeKey}"
-                        aria-label="${safeLabel} — ${safeStatus}"
+                        aria-label="${safeLabel} - ${safeStatus}"
                         aria-disabled="${o.live ? 'false' : 'true'}">${body}</button>
             `;
         }
@@ -411,7 +411,7 @@
         }
         sheet.hidden = false;
         // requestAnimationFrame so the [hidden] removal lands before
-        // .is-open kicks the translateY transition — otherwise the
+        // .is-open kicks the translateY transition - otherwise the
         // browser collapses the change to a single paint with no
         // animation. Same trick as the nearby sheet.
         requestAnimationFrame(() => sheet.classList.add('is-open'));
@@ -455,7 +455,7 @@
         }
     }
 
-    // AUDIT 2026-05-23 (HC3) — Reporter-ID explainer sheet.
+    // AUDIT 2026-05-23 (HC3) - Reporter-ID explainer sheet.
     // Open / close / copy / Esc / backdrop wiring mirrors the channels
     // sheet pattern above. The sheet is populated from the canonical
     // #home-devid-text span which the existing devid painter keeps
@@ -588,7 +588,7 @@
     function _renderChannels() {
         _renderChannelsStrip();
         _wireChannelsSheet();
-        // AUDIT 2026-05-23 (HC3) — wire the Reporter-ID sheet on the same
+        // AUDIT 2026-05-23 (HC3) - wire the Reporter-ID sheet on the same
         // boot tick. Idempotent; safe to call multiple times.
         _wireDevidSheet();
         // #home-apps is the legacy 2nd-row container; remains hidden.
@@ -642,11 +642,11 @@
         const policyLink = document.getElementById('consent-onboarding-policy-link');
         if (!overlay || !acceptBtn) return;
 
-        // Returning user — the head IIFE already added `crisp-consented`
+        // Returning user - the head IIFE already added `crisp-consented`
         // to <html>, so the modal is `display: none`. Nothing more to do.
         if (_hasConsented()) return;
 
-        // First-time visitor — modal is visible; wire interactions.
+        // First-time visitor - modal is visible; wire interactions.
         const _accept = () => {
             _markConsent();
             try { document.documentElement.classList.add('crisp-consented'); } catch (_) {}
@@ -703,7 +703,7 @@
             if (canInstall) {
                 installBlock.style.display = '';
                 if (installLabel) {
-                    // P1 (i18n audit, May 23) — was hard-coded EN.
+                    // P1 (i18n audit, May 23) - was hard-coded EN.
                     const t = (typeof window.t === 'function') ? window.t : (k => null);
                     installLabel.textContent = platform === 'ios'
                         ? (t('landing_install_pwa_ios') || 'How to install on iPhone')
@@ -731,7 +731,7 @@
      *   `appinstalled` event fires) so returning installed-PWA users
      *   never see a stale "Add to Homescreen" CTA.
      *
-     * Click → window.InstallPrompt.show() — Android fires the native
+     * Click → window.InstallPrompt.show() - Android fires the native
      * `beforeinstallprompt`-cached prompt; iOS Safari opens the
      * "How to install on iPhone" sheet from the existing module.
      */
@@ -771,7 +771,7 @@
     // accidental anchor default; stopPropagation isolates the click
     // from the form / consent listeners.
     function _wireChannelTelemetry() {
-        // Phase 5.1 (May 2026, NO-SCROLL pass) — the home-stage strip
+        // Phase 5.1 (May 2026, NO-SCROLL pass) - the home-stage strip
         // is a single click target that opens the bottom sheet, so
         // there's no per-channel data-channel handler to attach
         // there. The per-channel routing now lives in
@@ -799,7 +799,7 @@
                             _openTelegram(CHANNELS.telegram_bot);
                         } catch (err) {
                             console.warn('[home] telegram deep-link failed:', err);
-                            // Last-ditch fallback — open the web URL.
+                            // Last-ditch fallback - open the web URL.
                             const fallback = _telegramLink(CHANNELS.telegram_bot);
                             if (fallback) window.open(fallback, '_blank', 'noopener');
                         }
@@ -810,7 +810,7 @@
             });
     }
 
-    // ── Phase 15 — Identity bar + account dropdown + device-ID badge ────
+    // ── Phase 15 - Identity bar + account dropdown + device-ID badge ────
     //
     // The home identity bar has two slots: anonymous users see a
     // device-ID badge (CRISP-XXXX-XXXX with copy + info buttons);
@@ -827,7 +827,7 @@
     function _hasSeenDevidTip() {
         try {
             return !!(localStorage.getItem(TIP_SEEN_KEY) || localStorage.getItem(LEGACY_WELCOME_KEY));
-        } catch { return true; }      // pessimistic — don't auto-popup if storage broken
+        } catch { return true; }      // pessimistic - don't auto-popup if storage broken
     }
     function _markDevidTipSeen() {
         try { localStorage.setItem(TIP_SEEN_KEY, '1'); } catch {}
@@ -861,7 +861,7 @@
 
         _paintDevidBadge();
 
-        // Shared copy routine — used by both the icon button (when
+        // Shared copy routine - used by both the icon button (when
         // visible) and the whole-pill tap path below.
         async function _copyDevidToClipboard() {
             const txt = (document.getElementById('home-devid-text') || {}).textContent || '';
@@ -885,7 +885,7 @@
             });
         }
 
-        // v2 footer pass (May 2026) — when the badge sits in the
+        // v2 footer pass (May 2026) - when the badge sits in the
         // bottom footer-row, the copy + info icon buttons are hidden
         // by CSS (`.home-footer-row .home-devid-badge button { display:none }`)
         // to match the operator's reference screenshot. The whole
@@ -942,7 +942,7 @@
                 // identity slot) or if the tip was meanwhile dismissed.
                 if (!_isLoggedIn() && tip && tip.hasAttribute('hidden')) {
                     _showTip();
-                    // Auto-dismiss after 8s — flag as seen.
+                    // Auto-dismiss after 8s - flag as seen.
                     setTimeout(() => {
                         if (!tip.hasAttribute('hidden')) _hideTip();
                     }, 8000);
@@ -989,7 +989,7 @@
             _toggle();
         });
         if (pill) pill.addEventListener('click', (e) => {
-            // Only the pill body — the gear has its own handler above.
+            // Only the pill body - the gear has its own handler above.
             if (e.target.closest('#btn-account-settings')) return;
             _toggle();
         });
@@ -1030,7 +1030,7 @@
         const acctName = document.getElementById('account-name');
         const subEl = document.getElementById('home-title-sub');
         const recentBlock = document.getElementById('home-recent');
-        // May 2026 (landing-icon cleanup pass) — the legacy full-width
+        // May 2026 (landing-icon cleanup pass) - the legacy full-width
         // #btn-login row + #btn-my-reports hide-on-login dance is GONE.
         // My Reports + Rewards stay visible in every auth state (the
         // dropdown menu's My Reports entry is a redundant fast-path
@@ -1052,7 +1052,7 @@
             try {
                 const u = window.AuthStore.getUser && window.AuthStore.getUser();
                 if (u && acctName) {
-                    acctName.textContent = u.displayName || u.id || '—';
+                    acctName.textContent = u.displayName || u.id || '-';
                 }
             } catch (_) {}
             // supratext above the CTA reads "Welcome back, {name}."
@@ -1063,7 +1063,7 @@
                 subEl.textContent = name ? tmpl.replace('{name}', name) : '';
                 if (name) subEl.removeAttribute('hidden'); else subEl.setAttribute('hidden', '');
             }
-            // Recolour the login icon — GREEN dot, mint-tinted pill,
+            // Recolour the login icon - GREEN dot, mint-tinted pill,
             // "Account" aria-label so screen-readers announce the
             // correct intent (tap → open account menu).
             if (loginIcon) {
@@ -1083,7 +1083,7 @@
             acctWrap.setAttribute('hidden', '');
             devidWrap.removeAttribute('hidden');
             if (subEl) subEl.setAttribute('hidden', '');
-            // Recolour the login icon — RED dot, default pill,
+            // Recolour the login icon - RED dot, default pill,
             // "Sign in" aria-label.
             if (loginIcon) {
                 loginIcon.setAttribute('data-state', 'anonymous');
@@ -1104,7 +1104,7 @@
         try { _wireRewardsNav(); } catch (_) {}
     }
 
-    // ── Login icon — toggle account menu when signed in, route to
+    // ── Login icon - toggle account menu when signed in, route to
     //    stage-login when anonymous. Wired once at boot; the
     //    icon's data-state attribute is the source of truth.
     function _wireLoginIcon() {
@@ -1139,18 +1139,18 @@
         // Outside-click dismisses the menu (already handled by
         // _wireAccountMenu but the login icon button isn't part of
         // home-account-wrap, so its click must not trigger the
-        // existing handler's outside-click dismiss — hence the
+        // existing handler's outside-click dismiss - hence the
         // e.stopPropagation above).
     }
 
-    // ── Phase 18 — badge chip + My Reports count + voice + install ────
+    // ── Phase 18 - badge chip + My Reports count + voice + install ────
     //
-    // Badge chip — May 2026 second-pass rewrite to the 4-tier
+    // Badge chip - May 2026 second-pass rewrite to the 4-tier
     // identity-forward ladder driven by /reports/profile/<hash>:
-    //   T1 SCOUT       🌱 — default (0 reports)
-    //   T2 SIGNAL      📣 — ≥1 report submitted
-    //   T3 CHANGEMAKER ⚡ — ≥1 report dispatched (RESPONDING/RESOLVED)
-    //   T4 LIFEKEEPER  🦸 — ≥1 life saved (analyst-set lives_impacted)
+    //   T1 SCOUT       🌱 - default (0 reports)
+    //   T2 SIGNAL      📣 - ≥1 report submitted
+    //   T3 CHANGEMAKER ⚡ - ≥1 report dispatched (RESPONDING/RESOLVED)
+    //   T4 LIFEKEEPER  🦸 - ≥1 life saved (analyst-set lives_impacted)
     //
     // Pre-fix the map carried 5 legacy tier names (NEWCOMER / HELPER /
     // GUARDIAN / CHAMPION / HERO) that the backend stopped emitting in
@@ -1185,7 +1185,7 @@
         'tier_progress_first_report': 'Submit your first report to level up',
         'tier_progress_verified_1':   'Get 1 report verified by an analyst',
         'tier_progress_lives_1':      'Help save 1 life through your reports',
-        'tier_progress_top_share':    'Top tier reached — tap to share your badge',
+        'tier_progress_top_share':    'Top tier reached - tap to share your badge',
     };
     const BADGE_CACHE_KEY = 'crisp_home_badge_v2'; // bumped v1→v2 for new shape
     function _readBadgeCache() {
@@ -1254,10 +1254,10 @@
         const def = BADGE_LEVELS[level] || BADGE_LEVELS.T1_SCOUT;
         emojiEl.textContent = def.emoji;
         labelEl.textContent = _tString(def.i18nKey) || 'Scout';
-        // Progress sub-line — May 2026 declutter pass. For T4 the
-        // previous "Top tier reached — tap to share your badge" was
+        // Progress sub-line - May 2026 declutter pass. For T4 the
+        // previous "Top tier reached - tap to share your badge" was
         // both verbose AND misleading (the chip became decorative-
-        // only when the dedicated Rewards page shipped — tapping does
+        // only when the dedicated Rewards page shipped - tapping does
         // nothing). T4 now shows the actual impact stat ("8 lives
         // saved"); other tiers keep their progress hint. The sub-line
         // element may be absent on cached shells without the v145
@@ -1280,12 +1280,12 @@
         Object.values(BADGE_LEVELS).forEach((d) => chip.classList.remove(d.cls));
         chip.classList.add(def.cls);
         chip.dataset.tier = level;
-        // Top tier unlocks Badge Studio — surface this via a tappable
+        // Top tier unlocks Badge Studio - surface this via a tappable
         // hint class so styles.css can render the chip slightly larger
         // / with a subtle "tap me" cue.
         chip.classList.toggle('chip-unlocked', level === 'T3_CHANGEMAKER' || level === 'T4_LIFEKEEPER');
         _applyBodyTierClass(level);
-        // AUDIT 2026-05-23 (HC29 — operator reversal of Batch 3.4).
+        // AUDIT 2026-05-23 (HC29 - operator reversal of Batch 3.4).
         // The Batch 3.4 retime hid the chip until the user submitted
         // their first report, on the rationale that the "Submit your
         // first report to level up" copy felt tone-mismatched for a
@@ -1293,7 +1293,7 @@
         // hiding the chip made the gamification ladder invisible
         // and reduced motivation / emotional engagement / progression
         // awareness for first-time and returning users alike. The
-        // chip now ALWAYS shows; the existing default copy ("Scout —
+        // chip now ALWAYS shows; the existing default copy ("Scout -
         // Submit your first report to level up") functions as the
         // meaningful empty state operators asked for. Returning
         // users get their actual tier + progress as before.
@@ -1302,11 +1302,11 @@
     async function _renderBadgeChip() {
         const chip = document.getElementById('home-badge-chip');
         if (!chip) return;
-        // Phase 2.8 (May 2026) — chip is now a <button>; wire a one-
+        // Phase 2.8 (May 2026) - chip is now a <button>; wire a one-
         // time click handler that navigates to the dedicated Rewards
         // page (#stage-rewards). The dataset flag prevents duplicate
         // listeners across re-renders (the chip can re-paint several
-        // times per page load — every status-since refresh).
+        // times per page load - every status-since refresh).
         if (!chip.dataset.navBound) {
             chip.dataset.navBound = '1';
             chip.addEventListener('click', () => {
@@ -1319,7 +1319,7 @@
                 try {
                     _openRewardsStage();
                 } catch (_) {
-                    // Fallback if open-rewards isn't ready yet — at least
+                    // Fallback if open-rewards isn't ready yet - at least
                     // transition the stage so the user lands somewhere.
                     try {
                         if (typeof window.goToStage === 'function') {
@@ -1329,7 +1329,7 @@
                 }
             });
         }
-        // Optimistic paint from cache (legacy v1 cache also accepted —
+        // Optimistic paint from cache (legacy v1 cache also accepted -
         // _paintBadgeChip normalizes both shapes).
         const cached = _readBadgeCache();
         if (cached) _paintBadgeChip(cached);
@@ -1341,13 +1341,13 @@
                 || localStorage.getItem('crisp_device_id') || '';
         } catch (_) {}
         if (!hash) {
-            // No device hash yet — default to T1_SCOUT so the chip
+            // No device hash yet - default to T1_SCOUT so the chip
             // still shows something meaningful on first paint.
             if (!cached) _paintBadgeChip('T1_SCOUT');
             return;
         }
         try {
-            // HC27 — require window.API_BASE explicitly (set by the
+            // HC27 - require window.API_BASE explicitly (set by the
             // head-inline IIFE in index.html). The previous
             // `|| '/api/v1'` fallback silently resolved to the
             // static-server origin on :8080 and 404'd; per the May
@@ -1360,7 +1360,7 @@
             }
             const res = await fetch(`${apiBase}/reports/profile/${encodeURIComponent(hash)}`);
             if (!res.ok) {
-                // Backend error (4xx / 5xx) — keep the existing cached
+                // Backend error (4xx / 5xx) - keep the existing cached
                 // paint if we have one, otherwise fall back to T1_SCOUT
                 // so the chip never stays hidden. Returning early
                 // without a fallback was the pre-fix behaviour and
@@ -1379,19 +1379,19 @@
             _paintBadgeChip(payload);
             _writeBadgeCache(payload);
         } catch (_) {
-            // Network error — fall back to cached or T1_SCOUT. Never
+            // Network error - fall back to cached or T1_SCOUT. Never
             // hide the chip; "Scout" is the honest default.
             if (!cached) _paintBadgeChip('T1_SCOUT');
         }
     }
 
-    // ── Rewards page (stage-rewards) — May 2026 second-pass UX ──
+    // ── Rewards page (stage-rewards) - May 2026 second-pass UX ──
     // Renders the user's current tier + the 4-tier ladder + the
     // Badge Studio entry CTA. Reads sessionStorage `crisp_home_badge_v2`
     // (warm cache from _renderBadgeChip) for instant paint, then
     // re-fetches /profile in the background to refresh.
     //
-    // Phase 2.1 (May 2026) — tier metadata sourced from the shared
+    // Phase 2.1 (May 2026) - tier metadata sourced from the shared
     // canonical config exposed at `window.CRISP_TIERS{,BY_ID}`. The
     // hard-coded fallback is the SAME data, kept in source so this
     // file still works if the script tag for tier-config.js doesn't
@@ -1404,7 +1404,7 @@
     const TIER_UNLOCKED = new Set(['T3_CHANGEMAKER', 'T4_LIFEKEEPER']);
 
     function _resolveLevelFromAny(raw) {
-        // Mirror of _renderBadgeChip's _resolveLevel — separate copy
+        // Mirror of _renderBadgeChip's _resolveLevel - separate copy
         // so the rewards page can hydrate without touching the chip's
         // closure. Recognises both 4-tier identifiers and legacy
         // 3-tier names.
@@ -1448,12 +1448,12 @@
                 tier_progress_first_report: 'Submit your first report to level up',
                 tier_progress_verified_1:   'Get 1 report verified by an analyst',
                 tier_progress_lives_1:      'Help save 1 life through your reports',
-                tier_progress_top_share:    'Top tier reached — tap to share your badge',
+                tier_progress_top_share:    'Top tier reached - tap to share your badge',
             })[pk] || '';
             progEl.textContent = tString(pk, fbProg);
         }
 
-        // Ladder — each card carries .is-done / .is-current / .is-locked.
+        // Ladder - each card carries .is-done / .is-current / .is-locked.
         const currentIdx = TIER_ORDER.indexOf(level);
         TIER_ORDER.forEach((tier, idx) => {
             const card = document.querySelector(`.rt-card[data-tier="${tier}"]`);
@@ -1463,7 +1463,7 @@
             card.classList.toggle('is-locked', idx > currentIdx);
         });
 
-        // Share CTA — copy + state depend on whether Badge Studio is
+        // Share CTA - copy + state depend on whether Badge Studio is
         // unlocked at the user's current tier.
         const hintEl = document.getElementById('rewards-share-hint');
         const btnEl  = document.getElementById('btn-rewards-open-studio');
@@ -1491,7 +1491,7 @@
         } catch (_) {}
         if (!hash) return;
         try {
-            // HC27 — require window.API_BASE (head-IIFE in index.html).
+            // HC27 - require window.API_BASE (head-IIFE in index.html).
             const apiBase = window.API_BASE;
             if (!apiBase) return;
             const res = await fetch(`${apiBase}/reports/profile/${encodeURIComponent(hash)}`);
@@ -1519,7 +1519,7 @@
         try {
             if (typeof window.goToStage === 'function') window.goToStage('stage-rewards');
         } catch (_) {}
-        // Background refresh — no await; the cache paint is good enough.
+        // Background refresh - no await; the cache paint is good enough.
         _refreshRewardsFromServer();
     }
 
@@ -1538,7 +1538,7 @@
                 try { if (typeof window.goToStage === 'function') window.goToStage('stage-home'); } catch (_) {}
             });
         }
-        // Rewards page "Open Badge Studio" button — gated on tier.
+        // Rewards page "Open Badge Studio" button - gated on tier.
         const openStudio = document.getElementById('btn-rewards-open-studio');
         if (openStudio && !openStudio.__wired) {
             openStudio.__wired = true;
@@ -1551,7 +1551,7 @@
         }
     }
 
-    // My Reports (X) count — counts local cache + in-flight queue.
+    // My Reports (X) count - counts local cache + in-flight queue.
     function _renderMyReportsCount() {
         const span = document.getElementById('mr-count');
         if (!span) return;
@@ -1564,17 +1564,17 @@
             }
         } catch (_) {}
         // May 2026 (home redesign v6, ask #6): operator wants the
-        // count visible by default — "show the default number of
+        // count visible by default - "show the default number of
         // reports submitted ... to make reporting history more visible".
         // The chip used to hide when count===0; now it always paints
-        // the raw number (no parentheses — the chip's mint pill chrome
+        // the raw number (no parentheses - the chip's mint pill chrome
         // is enough framing). Painter is idempotent so re-renders on
         // every submission flip the count without flicker.
         span.textContent = String(count);
         span.removeAttribute('hidden');
     }
 
-    // May 21 2026 (audit Item 4) — prime the count on home boot.
+    // May 21 2026 (audit Item 4) - prime the count on home boot.
     // Pre-fix `_renderMyReportsCount()` was called from home init while
     // `window._submittedCache` was still the empty array initialised
     // by app.js at module-load time. The cache only got populated when
@@ -1586,7 +1586,7 @@
     // My Reports uses) populates the cache + repaints the count
     // immediately on boot. Non-blocking: if the device is offline or
     // the fetch fails, we silently keep the current count (which is
-    // 0 for fresh devices — accurate).
+    // 0 for fresh devices - accurate).
     async function _primeMyReportsCount() {
         let hash = '';
         try {
@@ -1596,12 +1596,12 @@
                    || localStorage.getItem('crisp_device_id')
                    || '')
                 : '';
-        } catch (_) { /* private-mode throws — leave hash empty */ }
+        } catch (_) { /* private-mode throws - leave hash empty */ }
         if (!hash) {
             try { _renderMyReportsCount(); } catch (_) {}
             return;
         }
-        // HC27 — require window.API_BASE (head-IIFE in index.html);
+        // HC27 - require window.API_BASE (head-IIFE in index.html);
         // bail rather than fall back to relative '/api/v1' which used
         // to hit the static server on :8080 and 404.
         const base = (typeof window.API_BASE === 'string' && window.API_BASE) ? window.API_BASE : null;
@@ -1612,28 +1612,28 @@
             if (!res.ok) return;
             const arr = await res.json();
             if (Array.isArray(arr)) {
-                // Replace the cache rather than merge — fresh fetch is
+                // Replace the cache rather than merge - fresh fetch is
                 // canonical. The submitted-render path uses the same
                 // semantics when the user opens My Reports.
                 window._submittedCache = arr;
                 try { _renderMyReportsCount(); } catch (_) {}
             }
-        } catch (_) { /* offline / DNS / abort — silent */ }
+        } catch (_) { /* offline / DNS / abort - silent */ }
     }
 
-    // PWA install icon — always visible until `display-mode: standalone`
+    // PWA install icon - always visible until `display-mode: standalone`
     // matches (i.e. the app has been added to home screen).
     function _wireInstallIcon() {
         const btn = document.getElementById('btn-home-install-icon');
         if (!btn) return;
         function refresh() {
-            // May 2026 (home redesign v6, ask #3) — the install
+            // May 2026 (home redesign v6, ask #3) - the install
             // affordance was moved out of the action-tiles row into
             // the new yellow "+ Add to Homescreen" chip below the
             // footer (see _wireAddToHomescreenChip). The legacy tile
             // shell is kept in the DOM for any Playwright spec that
             // still selects #btn-home-install-icon, but it must stay
-            // permanently hidden — both inline display:none AND the
+            // permanently hidden - both inline display:none AND the
             // [hidden] attribute so the CSS visibility-only treatment
             // can't resurrect it.
             btn.setAttribute('hidden', '');
@@ -1661,7 +1661,7 @@
         });
     }
 
-    // Voice readout — top-bar 🔊 button. Reads aloud the current
+    // Voice readout - top-bar 🔊 button. Reads aloud the current
     // home content in the active language. UNDP rubric Q3.
     function _wireHomeVoice() {
         const btn = document.getElementById('btn-home-voice');
@@ -1691,7 +1691,7 @@
     }
 
     // Utility-footer + safety-hint navigation.
-    // HC47 (May 23, operator) — Privacy + Help no longer navigate to
+    // HC47 (May 23, operator) - Privacy + Help no longer navigate to
     // the stage-privacy route. They open in-place bottom-sheet
     // modals (#home-privacy-sheet / #home-help-sheet) so users
     // don't lose home-stage context for what should be a quick
@@ -1746,7 +1746,7 @@
         if (back) back.addEventListener('click', () => {
             if (typeof window.goToStage === 'function') window.goToStage('stage-home');
         });
-        // May 21 2026 (audit Item 6) — paint the version pill in the
+        // May 21 2026 (audit Item 6) - paint the version pill in the
         // utility footer. Shows pwaRelease (from the <meta> tag) and
         // backendVersion (from /health on first paint). Cached for the
         // session so deploys reflect immediately without thrashing the
@@ -1761,7 +1761,7 @@
         try { _paintSyncChip(); _wireSyncChip(); } catch (_) {}
     }
 
-    // AUDIT 2026-05-23 (HC16) — connection status popover. Replaces
+    // AUDIT 2026-05-23 (HC16) - connection status popover. Replaces
     // the standalone .home-status-pill (HC4) which duplicated the
     // existing connectivity-dot on the CRISP wordmark. The brand
     // cluster (.home-brand) is now the tappable surface; tapping
@@ -1826,7 +1826,7 @@
         } catch (_) {}
 
         // Derive state. Weak/intermittent is set by an external hint
-        // (window.__crispConnectivityWeak — set by adaptive-bandwidth
+        // (window.__crispConnectivityWeak - set by adaptive-bandwidth
         // tier when probe latency degrades but we're still online).
         let state;
         if (!online) state = 'offline';
@@ -1835,7 +1835,7 @@
         else state = 'online';
         sheet.setAttribute('data-state', state);
 
-        // Mirror the state onto the brand-mark chip (HC42 — the
+        // Mirror the state onto the brand-mark chip (HC42 - the
         // 8 px dot became an inline labelled chip). Keep the label
         // text in sync with the class so green reads "Online", red
         // reads "Offline", amber reads "Weak". For syncing-but-
@@ -1870,7 +1870,7 @@
         })[state];
         if (stateEl) stateEl.textContent = (t(stateKey) || stateFallback);
 
-        // Queue row — only render when > 0.
+        // Queue row - only render when > 0.
         if (queueRow && queueVal) {
             if (queueCount > 0) {
                 queueRow.hidden = false;
@@ -1880,7 +1880,7 @@
             }
         }
 
-        // Last sync — humanise or fall back to "no reports sent yet".
+        // Last sync - humanise or fall back to "no reports sent yet".
         if (lastSync) {
             const ago = _humaniseAgo(_readLastSyncTs());
             lastSync.textContent = ago || (t('status_sheet_last_sync_never') || 'No reports sent yet');
@@ -1948,7 +1948,7 @@
 
         // When connectivity / queue / language changes, repaint the
         // sheet if it's currently open (otherwise it stays stale until
-        // next open — which is fine; opener re-paints).
+        // next open - which is fine; opener re-paints).
         const repaintIfOpen = () => {
             if (sheet.classList.contains('is-open')) {
                 try { _paintStatusSheet(); } catch (_) {}
@@ -1960,24 +1960,24 @@
         try { document.addEventListener('crisp:lang-changed', repaintIfOpen); } catch (_) {}
     }
 
-    // AUDIT 2026-05-23 (HC30 → HC33) — badge-area sync chip.
+    // AUDIT 2026-05-23 (HC30 → HC33) - badge-area sync chip.
     // Sibling to the badge chip inside #home-reward-hero. HC30 wired
     // it as an always-on connectivity indicator (green dot when
     // online, red when offline, amber when weak). Operator review
     // (May 23) noted that the always-on green dot above the
     // Report-an-Incident CTA on iPhone SE / Galaxy small (where the
-    // label collapses) read as noise — the brand-mark connectivity
+    // label collapses) read as noise - the brand-mark connectivity
     // dot already covers the at-a-glance online/offline cue.
     //
     // HC33: narrow the chip's job to QUEUE-PRESENCE INDICATOR. The
-    // chip only appears when queueCount > 0 — i.e. when the user has
+    // chip only appears when queueCount > 0 - i.e. when the user has
     // actually submitted reports that haven't yet reached the server.
     // States surfaced:
     //   syncing  amber pulse  · "Syncing N"          (online + queue)
     //   offline  red          · "Offline · N queued" (offline + queue)
     //   weak     amber        · "Syncing N · weak"   (weak + queue)
     // When queueCount === 0 the chip is hidden (no draw, no slot
-    // reserved — JS sets the hidden attribute). The popover still
+    // reserved - JS sets the hidden attribute). The popover still
     // opens via the brand-mark dot for users who want the full
     // status sheet at any time.
     //
@@ -1993,13 +1993,13 @@
             if (typeof window.getAllQueued === 'function') {
                 const all = await window.getAllQueued();
                 queueCount = Array.isArray(all) ? all.length : 0;
-                // Resilience #4 — surface the calm flaky-backend escalation
+                // Resilience #4 - surface the calm flaky-backend escalation
                 // on the home sync chip too (soft flag set after ≥3 HC90
                 // pause cycles with no progress).
                 needsAttention = Array.isArray(all) && all.some(i => i && i._needsAttention === true);
             }
         } catch (_) {}
-        // HC33 — empty-queue → hide the chip entirely. No "Online"
+        // HC33 - empty-queue → hide the chip entirely. No "Online"
         // copy when there's nothing to communicate.
         if (queueCount <= 0) {
             chip.setAttribute('hidden', '');
@@ -2014,7 +2014,7 @@
             state = 'offline';
             text = (t('status_pill_offline_n') || 'Offline · {n} queued').replace('{n}', String(queueCount));
         } else if (needsAttention) {
-            // Resilience #4 — calm escalation after ≥3 HC90 pause cycles
+            // Resilience #4 - calm escalation after ≥3 HC90 pause cycles
             // with no progress. Delivery still continues in the
             // background; this is a soft nudge, never a failure state.
             // Tapping opens the status sheet for the full detail.
@@ -2022,7 +2022,7 @@
             text = (t('sync_needs_attention') || 'Needs attention');
         } else if (window.__crispConnectivityWeak === true) {
             state = 'weak';
-            // Weak signal AND queue present — communicate that we're
+            // Weak signal AND queue present - communicate that we're
             // trying to sync on a flaky link. The N-count keeps the
             // user grounded in progress.
             text = (t('status_pill_syncing') || 'Syncing {n}').replace('{n}', String(queueCount));
@@ -2052,27 +2052,27 @@
         try { document.addEventListener('crisp:lang-changed', repaint); } catch (_) {}
     }
 
-    // May 21 2026 (audit Item 6) — version visibility.
+    // May 21 2026 (audit Item 6) - version visibility.
     //
     // Pre-fix the `#home-utility-version` element existed in markup
     // as a stub ("v0.7.44") but was hidden and never wired. Operators
     // had no in-UI way to confirm "which PWA build am I on?" or
-    // "which backend version is this hitting?" — they had to dig into
+    // "which backend version is this hitting?" - they had to dig into
     // the meta tag in DevTools or hit /health by hand.
     //
     // Fix: read the PWA release from the <meta name="crisp-release">
     // tag and the backend version from a one-shot GET /health. Cache
     // the backend version in sessionStorage so subsequent home boots
     // don't re-fetch (the value is stable across the session and only
-    // changes on backend deploy — when the cache is naturally
+    // changes on backend deploy - when the cache is naturally
     // invalidated by sessionStorage's per-tab lifetime).
-    // HC25 → HC36 (May 23, 2026) — consumer-grade version label.
+    // HC25 → HC36 (May 23, 2026) - consumer-grade version label.
     // HC25 rendered the build number as "Build 259" inside the
     // Privacy/Help/Open-source nav with a click-to-expand
     // "Build 259 · API 1.0.0" affordance. Operator review (HC36)
     // prefers the semver-style "CRISP vX.Y.Z" format on a dedicated
     // bottom-row meta line (.home-footer-meta), with NO click
-    // expansion — the full API/build detail surfaces via the HC16
+    // expansion - the full API/build detail surfaces via the HC16
     // status sheet on the brand cluster, and via the native long-
     // press tooltip on the title attribute. The element keeps the
     // legacy #home-utility-version id so back-compat dashboard /
@@ -2088,14 +2088,14 @@
             return match ? match[1] : null;
         } catch (_) { return null; }
     }
-    // HC36 — derive a semver-style "vX.Y.Z" string from the
+    // HC36 - derive a semver-style "vX.Y.Z" string from the
     // monotonic build number by splitting it into per-digit
     // major/minor/patch. e.g. Build 266 → "2.6.6" → "CRISP v2.6.6".
     // Builds ≥ 1000 wrap the leading group: 1234 → "12.3.4".
     // Builds < 100 pad to keep the X.Y.Z shape: 42 → "0.4.2".
-    // Degenerate fallback when the build can't be resolved: "CRISP v—".
+    // Degenerate fallback when the build can't be resolved: "CRISP v-".
     function _formatVersion(build) {
-        if (!build) return 'CRISP v—';
+        if (!build) return 'CRISP v-';
         const s = String(build);
         let major, minor, patch;
         if (s.length >= 3) {
@@ -2111,7 +2111,7 @@
         return `CRISP v${major}.${minor}.${patch}`;
     }
     async function _paintVersionPill() {
-        // HC36 — canonical visible surface is the
+        // HC36 - canonical visible surface is the
         // #home-utility-version <span> inside .home-footer-meta
         // (left side of the bottom row, with the install button on
         // the right). Repaint the legacy #home-version-row sibling
@@ -2145,7 +2145,7 @@
         // subsequent paints. Non-blocking; fails silent if offline.
         if (!backendVer) {
             try {
-                // HC27 — require window.API_BASE (head-IIFE in
+                // HC27 - require window.API_BASE (head-IIFE in
                 // index.html). The fallback to '/api/v1' silently
                 // hit the static server on :8080 in dev, producing
                 // 404 SimpleHTTP responses; bail instead.
@@ -2166,7 +2166,7 @@
                         }
                     }
                 }
-            } catch (_) { /* offline — keep the Build-only title */ }
+            } catch (_) { /* offline - keep the Build-only title */ }
         }
     }
 
@@ -2187,7 +2187,7 @@
         try { sessionStorage.setItem(RECENT_CACHE_KEY, JSON.stringify(arr)); } catch {}
     }
     async function _fetchRecentReports() {
-        // Logged-in path — meReports.
+        // Logged-in path - meReports.
         if (_isLoggedIn() && window.AuthStore && window.AuthStore.meReports) {
             try {
                 const r = await window.AuthStore.meReports();
@@ -2204,10 +2204,10 @@
                 } catch { return ''; }
             })();
             if (!hash) return [];
-            // HC27 — require window.API_BASE (head-IIFE in index.html).
+            // HC27 - require window.API_BASE (head-IIFE in index.html).
             const apiBase = window.API_BASE;
             if (!apiBase) return [];
-            // HAR-driven dedupe (May 2026) — see _singleFlightFetch
+            // HAR-driven dedupe (May 2026) - see _singleFlightFetch
             // helper in app.js. Home-screen.js init races app.js's own
             // status-since fetch (and the My Reports panel's later fetch);
             // the helper coalesces all three to one network call within
@@ -2246,7 +2246,7 @@
                 }
                 return '';
             })();
-            // P1 (i18n audit, May 23) — was rendered as the raw
+            // P1 (i18n audit, May 23) - was rendered as the raw
             // enum literal in lowercase ("pending", "verified",
             // …) in every locale. Now resolved via the
             // report_status_<value> i18n key with EN fallback.
@@ -2276,7 +2276,7 @@
                 <div class="home-recent-thumb">${thumb}</div>
                 <div class="home-recent-body">
                     <div class="home-recent-title-row">
-                        <span class="home-recent-loc">${escape(loc) || '—'}</span>
+                        <span class="home-recent-loc">${escape(loc) || '-'}</span>
                         <span class="home-recent-when">${escape(when)}</span>
                     </div>
                     <span class="home-recent-status">${escape(status)}</span>
@@ -2321,7 +2321,7 @@
         _wireLoginIcon();
         _wireUtilityFooter();
         _paintIdentityBar();
-        // v6 (May 2026, ask #3) — Add-to-Homescreen yellow chip below
+        // v6 (May 2026, ask #3) - Add-to-Homescreen yellow chip below
         // the footer. Wires the InstallPrompt module to the new
         // #btn-home-add2hs chip; idempotent if init runs twice.
         try { _wireAddToHomescreenChip(); } catch (_) {}
@@ -2335,7 +2335,7 @@
         document.addEventListener('auth-ready', _paintIdentityBar);
         document.addEventListener('auth-changed', _paintIdentityBar);
         document.addEventListener('crisp-i18n-applied', _paintIdentityBar);
-        // Re-apply i18n after we built the channel buttons — every
+        // Re-apply i18n after we built the channel buttons - every
         // channel anchor carries `data-i18n` on its label, and applyI18n()
         // walks the whole tree.
         if (typeof window.applyI18n === 'function') {
@@ -2346,13 +2346,13 @@
             document.dispatchEvent(new CustomEvent('crisp-home-rendered'));
         } catch (_) {}
 
-        // May 21 2026 (audit Item 4) — prime the My Reports count
+        // May 21 2026 (audit Item 4) - prime the My Reports count
         // from a non-blocking status-since fetch. Without this the
         // tile shows "0" on every cold boot until the user opens
         // My Reports for the first time.
         try { _primeMyReportsCount(); } catch (_) {}
 
-        // "Verified Reports Nearby" intel module — fires AFTER the
+        // "Verified Reports Nearby" intel module - fires AFTER the
         // main home paint so it doesn't block first-paint. Module is
         // self-hiding when offline / no cached GPS / API down (see
         // nearby.js for the behaviour matrix).
@@ -2385,7 +2385,7 @@
         paintIdentityBar: _paintIdentityBar,
         paintDevidBadge: _paintDevidBadge,
         renderRecentReports: _renderRecentReports,
-        // HC79 — app.js triggers the same devid bottom-sheet from
+        // HC79 - app.js triggers the same devid bottom-sheet from
         // the success stage's devid pill. Exposing the function
         // avoids duplicating the sheet-open logic across files.
         openDevidSheet: _openDevidSheet,
@@ -2419,7 +2419,7 @@
     });
 
     // ── Crisis-zone home banner (B1) ──────────────────────────────────────
-    // If the reporter's LAST-KNOWN location (cached GPS — no fresh prompt on
+    // If the reporter's LAST-KNOWN location (cached GPS - no fresh prompt on
     // home load) falls inside an active crisis zone, surface a calm banner so
     // they know their report will use a crisis-specific form. Driven by the
     // same public /crisis-forms/active endpoint the capture-stage geo-gate uses.

@@ -15,7 +15,7 @@ B. Original (HIGH-tier) photo never surfaces on the dashboard. Telegram-
 
 C. Taxonomy parity with the PWA + UNDP rubric: the bot offered LANDSLIDE
    and PANDEMIC as crisis chips, but the backend's
-   `_enforce_undp_taxonomy` validator rejects them with 422 (CLAUDE.md
+   `_enforce_undp_taxonomy` validator rejects them with 422 (the project invariants
    must-have #5 names the canonical list and LANDSLIDE/PANDEMIC are not
    on it). Tapping either chip used to fail submission silently.
 

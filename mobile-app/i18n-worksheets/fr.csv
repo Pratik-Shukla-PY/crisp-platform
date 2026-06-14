@@ -11,7 +11,7 @@ explosion,Explosion,Explosion,,General UI string. Match tone of surrounding scre
 hurricane,Cyclone,Cyclone,,General UI string. Match tone of surrounding screen.,
 need_protection,Protection,Protection,,General UI string. Match tone of surrounding screen.,
 summary_incident,Incident,Incident,,General UI string. Match tone of surrounding screen.,
-summary_none,—,—,,General UI string. Match tone of surrounding screen.,
+summary_none,-,-,,General UI string. Match tone of surrounding screen.,
 login_or_signup,Login / Sign up,Login / Sign up,,General UI string. Match tone of surrounding screen.,
 login_title,Login or Sign up,Login or Sign up,,General UI string. Match tone of surrounding screen.,
 login_sub,Track your reports across devices,Track your reports across devices,,General UI string. Match tone of surrounding screen.,

@@ -1,4 +1,4 @@
-# CRISP — CI/CD Pipeline
+# CRISP - CI/CD Pipeline
 
 **Status**: Production
 **Last updated**: 2026-04-25
@@ -54,7 +54,7 @@ runs on `main` only (or any branch via `workflow_dispatch`).
 | `PWA + Dashboard JS syntax` | `node --check` on every shipped `.js` | Hard fail |
 | `Shell scripts` | `bash -n` on every `scripts/*.sh` | Hard fail |
 | `No secrets in tracked files` | refuses commits that include `.env` | Hard fail |
-| `i18n — locale parity + template-var preservation` | runs `validate-i18n.mjs` over all 6 UN locales | Hard fail |
+| `i18n - locale parity + template-var preservation` | runs `validate-i18n.mjs` over all 6 UN locales | Hard fail |
 | `Python dep vulnerability scan (pip-audit)` | scans `backend/requirements.txt` against OSV | **Soft fail** (logged, doesn't block) |
 | `Secrets scan (gitleaks)` | scans full git history for leaked credentials | Hard fail |
 | `Shellcheck (deploy + ops scripts)` | `shellcheck -x` on every `scripts/*.sh` | Hard fail |
@@ -62,7 +62,7 @@ runs on `main` only (or any branch via `workflow_dispatch`).
 **Why `pip-audit` is soft-fail**: advisories often land before upstream
 patches are available. Hard-failing CI on a transitive `urllib3` advisory
 that has no fix yet would block all merges. The job runs and the result
-is visible in the run log — promote it to hard-fail once you have a
+is visible in the run log - promote it to hard-fail once you have a
 triage cadence.
 
 ---
@@ -79,15 +79,15 @@ triage cadence.
 
 ### Concurrency
 
-Only **one deploy at a time** — concurrent pushes are queued, not
+Only **one deploy at a time** - concurrent pushes are queued, not
 cancelled (cancelling mid-migration would leave the schema in an
 unknown state).
 
 ### Pre-flight check
 
 Before SSHing to EC2, the workflow verifies the latest CI run on the
-target SHA was successful. This is belt-and-suspenders — branch
-protection should already be enforcing this — but a manual
+target SHA was successful. This is belt-and-suspenders - branch
+protection should already be enforcing this - but a manual
 `workflow_dispatch` deploy that skips CI surfaces a warning.
 
 ### What `deploy.sh` does on the EC2
@@ -97,7 +97,7 @@ protection should already be enforcing this — but a manual
 3. Detect whether `backend/`, `Dockerfile`, or `requirements.txt`
    changed. If yes, rebuild the backend image. Otherwise reuse the
    existing image (frontend, dashboard, PWA changes are static-volume
-   mounts — no rebuild needed).
+   mounts - no rebuild needed).
 4. `docker compose down`.
 5. Run `alembic upgrade head` in a one-shot `--rm` container with
    `APP_ENV=migrate` (skips production guards during migration).
@@ -131,14 +131,14 @@ You'll need to do this once per repository / EC2 instance.
 separate key dedicated to CI deploys so you can rotate it independently.
 
 ```bash
-# On the EC2 (or any local machine — the key just needs the public half on EC2)
+# On the EC2 (or any local machine - the key just needs the public half on EC2)
 ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/crisp-deploy -N ""
 
 # Add the public key to ec2-user's authorized_keys
 cat ~/.ssh/crisp-deploy.pub >> ~/.ssh/authorized_keys
 chmod 600 ~/.ssh/authorized_keys
 
-# Print the PRIVATE key — copy this entire output (incl. BEGIN/END lines)
+# Print the PRIVATE key - copy this entire output (incl. BEGIN/END lines)
 cat ~/.ssh/crisp-deploy
 ```
 
@@ -154,8 +154,8 @@ repository secret. Add:
 | Name | Value | Notes |
 |---|---|---|
 | `EC2_DEPLOY_KEY` | The PRIVATE key contents from 4.1 (entire file, incl. BEGIN/END) | Used by `deploy.yml` to SSH |
-| `EC2_HOST` | `65.0.245.228` (your EIP) — or `undp.crisplabs.tech` once DNS settles | Where to SSH |
-| `EC2_USER` | `ec2-user` | Optional — defaults to `ec2-user` |
+| `EC2_HOST` | `65.0.245.228` (your EIP) - or `undp.crisplabs.tech` once DNS settles | Where to SSH |
+| `EC2_USER` | `ec2-user` | Optional - defaults to `ec2-user` |
 
 ### 4.3 Configure the production environment
 
@@ -169,7 +169,7 @@ Recommended settings:
   manual click before they actually run. For UNDP submission week,
   toggle this off so emergency hotfixes auto-deploy.
 - **Deployment branches**: restrict to `main` only.
-- **Environment secrets**: not needed — repository secrets cover us.
+- **Environment secrets**: not needed - repository secrets cover us.
 
 ### 4.4 Set branch protection on `main`
 
@@ -179,7 +179,7 @@ GitHub → Settings → Branches → Add rule for `main`:
 - ✅ Require status checks to pass before merging
   - Required: `Backend (pytest + import check)`
   - Required: `PWA + Dashboard JS syntax`
-  - Required: `i18n — locale parity + template-var preservation`
+  - Required: `i18n - locale parity + template-var preservation`
   - Required: `Secrets scan (gitleaks)`
 - ✅ Require conversation resolution before merging
 - ✅ Do not allow bypassing the above settings (even for admins)
@@ -189,12 +189,12 @@ must pass CI first.
 
 ### 4.5 Enable Dependabot
 
-`.github/dependabot.yml` is committed to the repo — Dependabot picks
+`.github/dependabot.yml` is committed to the repo - Dependabot picks
 it up automatically. First scan happens on the next Monday at 06:00
 IST. To trigger an immediate scan:
 
 GitHub → Settings → Code security and analysis → Dependabot version
-updates → "Last checked: …" — click the link, then "Check for
+updates → "Last checked: …" - click the link, then "Check for
 updates".
 
 ---

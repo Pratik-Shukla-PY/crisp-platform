@@ -1,9 +1,9 @@
-# Sentry — Operator Setup
+# Sentry - Operator Setup
 
 CRISP wires the official Sentry browser SDK on both the PWA and the
 Dashboard. The SDK itself is **vendored** at
 `mobile-app/src/vendor/sentry.min.js` + `web-dashboard/src/vendor/sentry.min.js`
-— no third-party CDN load at runtime, consistent with the rest of the
+- no third-party CDN load at runtime, consistent with the rest of the
 "self-host everything" posture.
 
 DSN configuration is done **at deploy time**, not at build time, so
@@ -15,7 +15,7 @@ the source tree never carries a DSN in git.
 
 - Sign in to https://sentry.io
 - Create a new project: platform = `JavaScript / Browser`
-- Capture the project's **DSN** — it looks like
+- Capture the project's **DSN** - it looks like
   `https://<32-hex-key>@o<orgid>.ingest.us.sentry.io/<projectid>`
 - The DSN is a public-safe ingest key (write-only, no read access).
   Safe to ship to the browser. Documented in `docs/SECURITY.md`.
@@ -56,7 +56,7 @@ the same project):
 - `web-dashboard/src/login.html`
 - `web-dashboard/src/evidence.html`
 
-Idempotent — re-running with the same DSN is a no-op; re-running
+Idempotent - re-running with the same DSN is a no-op; re-running
 with empty string un-wires Sentry.
 
 ### 4. Verify
@@ -76,7 +76,7 @@ For automated verification, the deploy pipeline can call:
 SENTRY_DSN="$DSN_VALUE" node scripts/patch-sentry-dsn.mjs --check
 ```
 
-Exit code 1 if any HTML file's DSN doesn't match `$SENTRY_DSN` —
+Exit code 1 if any HTML file's DSN doesn't match `$SENTRY_DSN` -
 catches the "forgot to patch" failure mode at deploy time.
 
 ## What the SDK captures
@@ -99,10 +99,10 @@ configure:
 ## What it does NOT capture
 
 - Sentry stays **inert** when DSN is empty. No network requests at
-  all — won't fire events at any endpoint until a valid DSN lands.
+  all - won't fire events at any endpoint until a valid DSN lands.
 - Pre-init errors (first ~2 seconds of page life): the SDK is
   lazy-loaded on `requestIdleCallback` (perf Sprint A.2) so errors
-  before idle aren't captured. Acceptable trade-off — most JS errors
+  before idle aren't captured. Acceptable trade-off - most JS errors
   surface after user interaction.
 - Source maps: PWA ships unminified, so stack traces are already
   symbolicated. If we ever minify, wire `sentry-cli sourcemaps upload`

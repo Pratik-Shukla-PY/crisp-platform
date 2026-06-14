@@ -1,5 +1,5 @@
 /**
- * blur-worker-pool.js — main-thread manager for the blur Web Worker
+ * blur-worker-pool.js - main-thread manager for the blur Web Worker
  * pool. Created May 2026 (Batch B-D of the Forensic Blur Audit).
  *
  * Public API (on window.BlurWorkerPool):
@@ -19,7 +19,7 @@
  *     Rejects ONLY on a worker-init failure (the pool then marks
  *     itself unavailable; subsequent callers fall back). Per-photo
  *     errors resolve with a structured result containing the
- *     original blob + error message + empty boxes — callers must
+ *     original blob + error message + empty boxes - callers must
  *     upload the original and rely on the server-side blur safety
  *     net.
  *
@@ -36,10 +36,10 @@
  *   - Pool size = min(2, navigator.hardwareConcurrency). Capped at
  *     2 on every device to bound memory (iOS WebView caps memory
  *     tightly; 2 × ~30 MB peak per worker = ~60 MB headroom is OK).
- *   - Workers are CREATED LAZILY on first job — pages that never
+ *   - Workers are CREATED LAZILY on first job - pages that never
  *     touch the camera path pay zero overhead.
  *   - FIFO queue. Each worker pulls the next job when free. No
- *     priority scheduling — capture order = upload order in
+ *     priority scheduling - capture order = upload order in
  *     practice.
  *   - jobId is a monotonic counter scoped to the pool instance.
  *     Used to route worker → main thread responses back to the
@@ -72,7 +72,7 @@
 
     function _spawnOne() {
         try {
-            // Same-origin static URL — works under the existing CSP
+            // Same-origin static URL - works under the existing CSP
             // (worker-src 'self' blob: in CSP). The worker itself
             // imports TF.js + BlazeFace from CDNs at boot.
             const w = new Worker('/mobile-app/src/blur-worker.js');
@@ -123,7 +123,7 @@
                         ms: msg.ms || 0,
                     });
                 } else {
-                    // Error path — resolve with the ORIGINAL blob +
+                    // Error path - resolve with the ORIGINAL blob +
                     // empty boxes so the caller can still upload.
                     // Server-side blur is the authoritative safety net.
                     job.resolve({
@@ -143,7 +143,7 @@
                 _drain();
             }
         } else if (msg.type === 'ready') {
-            // Preload response — informational only.
+            // Preload response - informational only.
             console.log('[BlurPool] worker preload ready');
         }
     }

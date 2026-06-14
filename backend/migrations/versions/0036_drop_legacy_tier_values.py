@@ -1,4 +1,4 @@
-"""drop_legacy_tier_values — Phase L L.1b cleanup
+"""drop_legacy_tier_values - Phase L L.1b cleanup
 
 Revision ID: 0036_drop_legacy_tier_values
 Revises: 0035_resolution_tier_canonical
@@ -9,7 +9,7 @@ enum type. Pre-Phase-L vocabulary was LOW/MEDIUM/HIGH/ORIGINAL; alembic
 0035 added SMALL + backfilled rows (LOW → SMALL, HIGH → ORIGINAL). This
 migration finalises the cleanup by dropping the unused legacy values
 from the enum type so the application layer's vocabulary == DB layer's
-vocabulary (SMALL / MEDIUM / ORIGINAL — three values, no aliases).
+vocabulary (SMALL / MEDIUM / ORIGINAL - three values, no aliases).
 
 Postgres doesn't support ``ALTER TYPE … DROP VALUE``. Standard recipe:
 
@@ -27,7 +27,7 @@ and crisp_test resets per-test.
 
 If a row referencing LOW or HIGH somehow survived 0035 (e.g. an
 in-flight insert during deploy), the ALTER COLUMN cast at step 3
-will fail loudly and the migration aborts — operator must investigate
+will fail loudly and the migration aborts - operator must investigate
 + either re-run 0035 or hand-patch the row before retrying.
 """
 from alembic import op
@@ -91,7 +91,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Adding LOW + HIGH back to the enum is mechanically possible
-    # (ALTER TYPE … ADD VALUE) but pointless — the rows that previously
+    # (ALTER TYPE … ADD VALUE) but pointless - the rows that previously
     # held those values have already been backfilled to SMALL/ORIGINAL
     # by 0035, so a downgrade can't restore the original data. Restore
     # from backup if you need to revert further than 0035.

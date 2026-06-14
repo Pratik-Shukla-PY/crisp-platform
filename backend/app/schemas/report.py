@@ -8,10 +8,10 @@ from app.models.report import (
 )
 
 
-# P2.9 — All backend datetimes are UTC (see models: DateTime(timezone=True) on
+# P2.9 - All backend datetimes are UTC (see models: DateTime(timezone=True) on
 # every column). SQLite, however, round-trips them as naive. Pydantic's
 # default ISO serialization then emits "2026-04-18T10:00:00" without a Z,
-# and browsers parse that as LOCAL time — dashboards see reports off by
+# and browsers parse that as LOCAL time - dashboards see reports off by
 # hours. This helper stamps naive datetimes as UTC before they leave the
 # backend, guaranteeing every wire value ends in Z. tz-aware values pass
 # through unchanged (covering Postgres + future migrations).
@@ -61,7 +61,7 @@ class MediaChunkPayload(BaseModel):
     media_id: str
     type: MediaTypeEnum
     seq_num: int = Field(..., ge=0, le=10_000)
-    # P1.7 — cap total_chunks at 10,000. At 512 KB max per chunk that allows
+    # P1.7 - cap total_chunks at 10,000. At 512 KB max per chunk that allows
     # a ~5 GB upload; well beyond any legitimate mobile capture. Previously
     # an attacker could submit total_chunks=999_999_999 to force premature
     # assembly after one chunk or exhaust DB storage with empty MediaChunk
@@ -73,23 +73,23 @@ class MediaChunkPayload(BaseModel):
     # variant it's building (SMALL=LOW, MEDIUM=MEDIUM, LARGE=HIGH) and a
     # shared photo_group_id linking the three variants of one captured photo.
     # Both default such that legacy single-variant clients keep working
-    # (the chunk handler used to hard-code `MEDIUM` on new media rows — we
+    # (the chunk handler used to hard-code `MEDIUM` on new media rows - we
     # drop that hard-coding and trust this field instead).
     resolution_tier: ResolutionEnum = ResolutionEnum.SMALL
     photo_group_id: Optional[str] = Field(None, max_length=36)
     # : when `true`, the client has already run its PII blur (face
     # redaction via BlazeFace on PWA / similar on RN) against the original
     # image before chunking. The server-side blur_pii() pass is then skipped
-    # on assembly — avoiding a second lossy pass over already-redacted bytes.
+    # on assembly - avoiding a second lossy pass over already-redacted bytes.
     # Default false so legacy clients continue to get server-side blur.
     client_blur_applied: bool = False
-    # Phase C.1 (May 2026) — whole-asset djb2 checksum the PWA computes
+    # Phase C.1 (May 2026) - whole-asset djb2 checksum the PWA computes
     # over the full original bytes BEFORE chunking. Sent on chunk 0 only;
     # the backend persists it on the Media row and re-verifies after
     # assembly. NULL / absent on later chunks (only chunk 0 carries it)
     # and on legacy clients (we just skip the check, preserving back-compat).
     full_asset_checksum: Optional[str] = Field(None, max_length=16)
-    # R2.a (May 2026) — upload epoch / generation echoed back by the
+    # R2.a (May 2026) - upload epoch / generation echoed back by the
     # client on every chunk. Server rejects mismatches with 409 Conflict.
     # Default 1; legacy clients that don't know about this field send no
     # value (Pydantic uses the default), which matches every Media row's
@@ -122,10 +122,10 @@ class ReportCreate(BaseModel):
     debris_clearing_needed: Optional[bool] = None
     service_status: Optional[Any] = None
 
-# Lightweight metadata-only payload (Stage 1 — tiny, instant)
+# Lightweight metadata-only payload (Stage 1 - tiny, instant)
 class ReportMetaCreate(BaseModel):
     device_hash: str = Field(..., max_length=255)
-    # See ReportCreate.client_report_id comment — match the DB's
+    # See ReportCreate.client_report_id comment - match the DB's
     # VARCHAR(36) so over-length values are rejected as 422, not 500.
     client_report_id: str = Field(..., max_length=36)
     source: SourceEnum = SourceEnum.APP
@@ -136,7 +136,7 @@ class ReportMetaCreate(BaseModel):
     client_created_at: Optional[datetime] = None
     location: Optional[LocationBase] = None
     expected_media: int = Field(0, ge=0, le=50)
-    # UNDP required fields — P2.10 validation: accept only canonical enum
+    # UNDP required fields - P2.10 validation: accept only canonical enum
     # values. Clients that still send stringly-typed legacy values get a clear
     # 422 now instead of silently writing garbage to the DB.
     damage_classification: Optional[DamageClassEnum] = None
@@ -147,16 +147,16 @@ class ReportMetaCreate(BaseModel):
     # `infrastructure_name` from the OSM building the reporter tapped. False
     # = the reporter typed the name as free text in their native language
     # (because the map was unavailable). The dashboard uses this in combination
-    # with `building_id IS NULL` to flag rows that need manual mapping —
+    # with `building_id IS NULL` to flag rows that need manual mapping -
     # see `needs_manual_mapping` in the ReportResponse. Defaults to False so
     # pre-v3 clients (which never set the field) behave like explicit
-    # free-text — the safe "needs mapping" bucket.
+    # free-text - the safe "needs mapping" bucket.
     infrastructure_name_from_osm: Optional[bool] = False
     debris_clearing_needed: Optional[bool] = None
     service_status: Optional[Any] = None
     # Building-footprint selection (UNDP Appendix). Client submits the
     # composite OSM identifier it rendered from (e.g. ``osm:way:123456``)
-    # — the auto-assign logic in `_auto_assign_building_id` runs first
+    # - the auto-assign logic in `_auto_assign_building_id` runs first
     # but an explicit pick overrides the coarse match.
     building_id: Optional[str] = Field(None, max_length=64)
     # Phase 1 progressive-upload stack. Blurhash encodes a
@@ -167,11 +167,11 @@ class ReportMetaCreate(BaseModel):
     # ~2 s (first SMALL chunk) down to ~200 ms (meta RTT). The string is
     # tiny enough to fit comfortably in the meta body even on a 2 Kbps
     # link (25 bytes ≈ 100 ms at 2 Kbps).
-    # Length cap is generous — blurhash can go up to ~9x9 DCT (≈ 83
+    # Length cap is generous - blurhash can go up to ~9x9 DCT (≈ 83
     # chars) but our encoder uses 4x3, which yields ~30 chars.
     blurhash: Optional[str] = Field(None, max_length=96)
 
-    # Dynamic Crisis Forms — set ONLY when a report was captured inside an active
+    # Dynamic Crisis Forms - set ONLY when a report was captured inside an active
     # crisis zone (the geo-gated Stage 2/3 pack). All optional → default
     # submissions omit them and the report behaves exactly as before (#1 parity).
     # form_data carries the curated pack's answers; the server re-validates them
@@ -181,11 +181,11 @@ class ReportMetaCreate(BaseModel):
     form_pack_version: Optional[int] = None
     form_data: Optional[Any] = None
 
-    # UNDP taxonomy guards — applied AFTER field-level enum coercion so
+    # UNDP taxonomy guards - applied AFTER field-level enum coercion so
     # we see the post-Pydantic values. Three checks in one pass:
     #   1) HURRICANE → CYCLONE normalisation (UNDP lists them as one
     #      category; CYCLONE is the canonical name in the codebase).
-    #   2) Reject LANDSLIDE / PANDEMIC — historical extras that are not
+    #   2) Reject LANDSLIDE / PANDEMIC - historical extras that are not
     #      on the UNDP Problem Statement spec (page 8).
     #   3) When infrastructure_type == OTHER, infrastructure_name must
     #      be non-empty (UNDP "Other, please specify" requirement).
@@ -215,7 +215,7 @@ class ReportMetaCreate(BaseModel):
         return self
 
 
-# Single media attachment (Stage 2/3 — one file at a time)
+# Single media attachment (Stage 2/3 - one file at a time)
 class MediaAttach(BaseModel):
     type: MediaTypeEnum
     resolution_tier: ResolutionEnum = ResolutionEnum.SMALL
@@ -226,7 +226,7 @@ class MediaUpload(BaseModel):
     report_id: str
     media_data: MediaBase  # For progressive upload sync
 
-# Single text update (Stage 2 — description/transcript)
+# Single text update (Stage 2 - description/transcript)
 class ReportDescriptionUpdate(BaseModel):
     description: str
 
@@ -245,12 +245,12 @@ class MediaResponse(MediaBase):
     # best-available complete variant (LARGE > MEDIUM > SMALL > partial).
     photo_group_id: Optional[str] = None
     # server-side PII-blur outcome. Dashboard MUST warn/flag
-    # any row where this is 'skipped' or 'failed' — the file is on disk
+    # any row where this is 'skipped' or 'failed' - the file is on disk
     # and may contain unredacted PII. 'not_needed' = client handled it,
     # 'complete' = server-side pass succeeded, 'pending' = blur
     # in flight, NULL = legacy row (pre-tracking).
     pii_blur_status: Optional[str] = None
-    # UI v2.1 — perceptual-hash fingerprint of the assembled
+    # UI v2.1 - perceptual-hash fingerprint of the assembled
     # photo for redundancy detection (UNDP nice-to-have #3). 16-char
     # hex string; NULL for audio / legacy / not-yet-scanned rows. The
     # dashboard groups media with near-identical hashes (Hamming
@@ -267,7 +267,7 @@ class MediaResponse(MediaBase):
     # reached terminal failure.
     abandoned_at: Optional[datetime] = None
     abandon_reason: Optional[str] = None
-    # R1 (May 2026) — recovery audit-trail completion timestamp. NULL on:
+    # R1 (May 2026) - recovery audit-trail completion timestamp. NULL on:
     #   (a) rows never abandoned (the common case)
     #   (b) abandoned + not yet resumed
     # Set when the assembly worker completes a previously-abandoned row.
@@ -275,7 +275,7 @@ class MediaResponse(MediaBase):
     # `abandon_reason && !recovered_at` so successfully-resumed uploads
     # stop rendering as "abandoned" after recovery.
     recovered_at: Optional[datetime] = None
-    # R2.a (May 2026) — epoch / generation. Default 1. Bumped on each
+    # R2.a (May 2026) - epoch / generation. Default 1. Bumped on each
     # soft-abandon revival; clients echo it on every chunk POST. Server
     # rejects mismatches with 409 Conflict.
     upload_generation: int = 1
@@ -295,9 +295,9 @@ class MediaResponse(MediaBase):
     # BACKEND_HOST, and ends up GETting `https://undp/.../s3://abc.m4a`
     # → 404. Same shape applies to image fast-preview thumbnails set
     # by /reports/{id}/media/thumbnail. Pydantic v2's field_serializer
-    # accepts a tuple of field names — one decorator covers both.
+    # accepts a tuple of field names - one decorator covers both.
     #
-    # (HAR-driven rewrite) — previously this returned a freshly
+    # (HAR-driven rewrite) - previously this returned a freshly
     # generated S3 presigned URL on EVERY serialization. The dashboard
     # polls /api/v1/reports/ every 1.2-4s; each poll generated a new
     # X-Amz-Signature on the same media bytes; the browser saw a new
@@ -381,7 +381,7 @@ class VerificationResponse(BaseModel):
     scored_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
-    # .2 — emit Z-suffixed UTC for `scored_at` so the dashboard's
+    # .2 - emit Z-suffixed UTC for `scored_at` so the dashboard's
     # `timeAgo()` parses it correctly. Same pattern as ReportResponse.
     @field_serializer("scored_at", when_used="json")
     def _serialize_scored_at(self, v: Optional[datetime]) -> Optional[str]:
@@ -396,7 +396,7 @@ class VerificationResponse(BaseModel):
         satellite_images directly on the instance) and for fresh DB reads
         (GET /verification, which only has the JSON column).
 
-        Idempotent — if `satellite_images` is already populated, leave
+        Idempotent - if `satellite_images` is already populated, leave
         it alone. Decoder is forgiving: malformed JSON yields an empty
         list rather than blowing up the whole response.
         """
@@ -425,7 +425,7 @@ class VerificationResponse(BaseModel):
     # pass-through for `/static/...` (legacy local-disk paths)
     # and plain http(s) URLs.
     #
-    # (HAR-driven rewrite, mirrors MediaResponse Phase 1) —
+    # (HAR-driven rewrite, mirrors MediaResponse Phase 1) -
     # previously this generated a fresh S3 presigned URL on every
     # serialization. The dashboard polls /api/v1/reports/ every 1.2-4s,
     # which means each of the 4 satellite cells in the multi-provider
@@ -434,18 +434,18 @@ class VerificationResponse(BaseModel):
     # analyst-shift.
     #
     # Worse, the dashboard hard-coded `${BACKEND_HOST}${v.satellite_image_url}`
-    # at 11 render sites — when the serializer returned a signed
+    # at 11 render sites - when the serializer returned a signed
     # `https://s3.../...` URL, the dashboard prepended BACKEND_HOST and
     # produced `https://undp/.../https://s3.../...` → 404 / 403
     # SignatureDoesNotMatch on every PROD load.
     #
-    # Fix — emit a STABLE `/api/v1/reports/{report_id}/satellite/<slot>`
+    # Fix - emit a STABLE `/api/v1/reports/{report_id}/satellite/<slot>`
     # URL. The endpoint resolves to a fresh presigned URL on demand via
     # a 302 redirect (cached for 1 h via Cache-Control). The dashboard
     # `getMediaUrl()` helper handles relative URLs correctly already.
     #
     # Field-name disambiguation via `SerializationInfo.field_name`
-    # — same trick as MediaResponse — distinguishes `satellite_image_url`
+    # - same trick as MediaResponse - distinguishes `satellite_image_url`
     # (→ /satellite/primary) from `satellite_image_url_alt`
     # (→ /satellite/alt) without a second decorator method.
     @field_serializer("satellite_image_url", "satellite_image_url_alt", when_used="json")
@@ -483,13 +483,13 @@ class ReportResponse(BaseModel):
     id: str
     client_report_id: Optional[str] = None
     # device_id is Optional[str] because the Report table's FK to
-    # devices has ON DELETE SET NULL — a GDPR / right-to-erasure
+    # devices has ON DELETE SET NULL - a GDPR / right-to-erasure
     # device-purge sets all that device's prior reports' device_id
     # to NULL while preserving the reports for crisis analytics.
     # Declaring this as required-str caused FastAPI to ResponseValidation-
     # error on legacy / purged rows whenever the test DB (or PROD)
     # had such a row in the listing window. May 2026 (Phase 5.1
-    # follow-up — CI red on commit 877df9d through adb9b9f).
+    # follow-up - CI red on commit 877df9d through adb9b9f).
     device_id: Optional[str] = None
     source: SourceEnum
     status: ReportStatusEnum
@@ -505,7 +505,7 @@ class ReportResponse(BaseModel):
     server_created_at: datetime
     deletion_requested_at: Optional[datetime] = None
     lives_impacted: Optional[int] = None
-    # K.2.e (May 2026, Phase K) — surface the "lost attribution" flag so the
+    # K.2.e (May 2026, Phase K) - surface the "lost attribution" flag so the
     # dashboard's K.5.a chip row can render "🔓 Attribution lost". Pre-fix
     # the column existed in the DB (migration 0033) + the chip code existed
     # in web-dashboard/src/app.js, but this field was missing from the
@@ -515,7 +515,7 @@ class ReportResponse(BaseModel):
 
     @field_serializer("server_created_at", "deletion_requested_at", when_used="json")
     def _serialize_dt(self, v: Optional[datetime]) -> Optional[str]:
-        # P2.9 — emit UTC-with-Z so dashboard JS `new Date(...)` parses it correctly.
+        # P2.9 - emit UTC-with-Z so dashboard JS `new Date(...)` parses it correctly.
         return _utc_iso(v)
 
     # UNDP required fields
@@ -527,26 +527,26 @@ class ReportResponse(BaseModel):
     # NULL on anonymous submissions. Dashboard treats NULL == anonymous.
     # PII fields (email/phone) are never embedded in this response; the
     # dashboard calls `/auth/users/{user_id}` separately when an operator
-    # with ADMIN role needs to see them (user answer 5 — ANALYST sees a
+    # with ADMIN role needs to see them (user answer 5 - ANALYST sees a
     # masked "User abc1234" badge via the derived field below; ADMIN can
     # open the detail).
     user_id: Optional[str] = None
     is_anonymous: Optional[bool] = None
-    # Derived at read time (ReportResponse._compute_identity_badge) —
+    # Derived at read time (ReportResponse._compute_identity_badge) -
     # masked for the default feed; operators with ADMIN role can call
     # /auth/users/{user_id} to see PII.
     reporter_badge: Optional[str] = None
-    # Phase 1.6 (May 2026) — Dashboard V4 field parity. Surfaces the
+    # Phase 1.6 (May 2026) - Dashboard V4 field parity. Surfaces the
     # reporter's current gamification tier (T1_SCOUT / T2_SIGNAL /
     # T3_CHANGEMAKER / T4_LIFEKEEPER) so the dashboard can render a
     # trust signal next to the masked badge. Populated by
     # ReportsResponseBuilder via a bulk JOIN against ReporterProfile
-    # keyed on Device.device_hash (NOT user_id — the profile follows
+    # keyed on Device.device_hash (NOT user_id - the profile follows
     # the device because anonymous submissions still earn tier credit
     # per INCENTIVES.md). NULL when:
     #   * the report has no linked device (legacy / channel imports)
     #   * the device has no reporter_profile row yet (pre-gamification)
-    # The dashboard treats NULL as "no tier badge to render" — never
+    # The dashboard treats NULL as "no tier badge to render" - never
     # implies T1_SCOUT to avoid visual confusion with genuine T1s.
     reporter_tier: Optional[str] = None
     infrastructure_name: Optional[str] = None
@@ -561,14 +561,14 @@ class ReportResponse(BaseModel):
     infrastructure_name_from_osm: Optional[bool] = None
     # Dashboard-friendly derived flag: True iff the reporter left a building
     # name but no OSM match, so an operator needs to resolve it manually.
-    # Computed at read time; not a column — keeps the responsibility on the
+    # Computed at read time; not a column - keeps the responsibility on the
     # backend rather than asking every dashboard client to re-implement the
     # rule. See ReportsResponseBuilder._needs_manual_mapping.
     needs_manual_mapping: Optional[bool] = None
     debris_clearing_needed: Optional[bool] = None
     service_status: Optional[Any] = None
     building_id: Optional[str] = None
-    # Phase F.5.c (May 2026) — UNDP must-have #8 building versioning.
+    # Phase F.5.c (May 2026) - UNDP must-have #8 building versioning.
     # Populated by the `_apply_building_versioning` SQLAlchemy hook in
     # app/models/report.py on insert. Ordinal is 1-indexed (1 = first
     # report on this building); is_latest is true on exactly one row
@@ -577,7 +577,7 @@ class ReportResponse(BaseModel):
     # · Latest" chip in the detail panel.
     building_version_ordinal: Optional[int] = None
     building_is_latest: Optional[bool] = None
-    # Blurhash placeholder — see ReportMetaCreate.blurhash for design. The
+    # Blurhash placeholder - see ReportMetaCreate.blurhash for design. The
     # dashboard renders this via the blurhash-decode path while waiting for
     # the first SMALL variant to arrive. Nullable because legacy reports
     # submitted before Phase-1 won't have one.
@@ -587,14 +587,14 @@ class ReportResponse(BaseModel):
     # default/legacy reports leave all four NULL, so must-have #1 parity is
     # preserved by construction. The dashboard renders the curated pack answers
     # when present, falling back to the standard field chips otherwise.
-    # `form_data` carries ONLY the non-mapped pack answers — fields bound to a
+    # `form_data` carries ONLY the non-mapped pack answers - fields bound to a
     # first-class column (damage_classification / crisis_type / severity / …)
     # are routed to those columns server-side, never duplicated here.
     crisis_event_id: Optional[str] = None
     # Operation NAME the report belongs to (denormalised read-only; NULL = the
     # report is global / not tied to any operation). Populated on the dashboard
     # listing by reports._attach_operation_name so the new-report notification can
-    # name its operation. Not a captured column — derived at read time.
+    # name its operation. Not a captured column - derived at read time.
     crisis_event_name: Optional[str] = None
     form_pack_id: Optional[str] = None
     form_pack_version: Optional[int] = None
@@ -622,7 +622,7 @@ class ReportResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    # : use model_validator(mode='after') — the previous
+    # : use model_validator(mode='after') - the previous
     # `model_validate` classmethod override fired on direct calls but was
     # skipped by FastAPI's list-response serialisation path (which uses a
     # TypeAdapter under the hood). `model_validator(after)` runs on EVERY
@@ -631,7 +631,7 @@ class ReportResponse(BaseModel):
     @model_validator(mode='after')
     def _compute_response_time(self):
         """Compute `response_time_seconds` from the reviewer + responder
-        timestamps. Derived, not stored — avoids two-source-of-truth drift."""
+        timestamps. Derived, not stored - avoids two-source-of-truth drift."""
         if self.reviewed_at and (self.help_arrived_at or self.help_dispatched_at):
             end = self.help_arrived_at or self.help_dispatched_at
             try:
@@ -662,22 +662,22 @@ class ReportResponse(BaseModel):
             self.is_anonymous = True
         return self
 
-    # Phase 1.6 (May 2026) — Dashboard V4 field parity. Reads the
+    # Phase 1.6 (May 2026) - Dashboard V4 field parity. Reads the
     # `reporter_tier` transient attribute that the listing endpoint
     # stamps via `_attach_reporter_tier` (bulk join). With
     # `from_attributes=True` Pydantic auto-extracts the value
-    # straight off the Report ORM instance — no explicit
+    # straight off the Report ORM instance - no explicit
     # model_validator needed. When the attribute is absent (e.g.
     # single-report responses that don't pre-stamp the tier, or
     # legacy reports whose device has no ReporterProfile row), the
     # field defaults to None and the dashboard treats NULL as "no
-    # tier badge to render" (never falls back to T1_SCOUT — that
+    # tier badge to render" (never falls back to T1_SCOUT - that
     # would be misleading).
 
     # derive the dashboard-friendly
     # `needs_manual_mapping` flag from the three source columns
     # (`infrastructure_name`, `building_id`, `infrastructure_name_from_osm`).
-    # Computed here — not stored — so the rule stays in one place and every
+    # Computed here - not stored - so the rule stays in one place and every
     # response path (list, single, dashboard bulk) sees the same value.
     @model_validator(mode='after')
     def _compute_needs_manual_mapping(self):
@@ -688,7 +688,7 @@ class ReportResponse(BaseModel):
             self.needs_manual_mapping = False
             return self
         if self.infrastructure_name_from_osm is None:
-            # Pre-v3 row — we can't infer. Leave None so the dashboard shows
+            # Pre-v3 row - we can't infer. Leave None so the dashboard shows
             # no badge (neither green ✓ nor red "needs mapping").
             self.needs_manual_mapping = None
             return self
@@ -709,7 +709,7 @@ class ClusterResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ── "Verified Reports Nearby" — May 2026 ──────────────────────────────
+# ── "Verified Reports Nearby" - May 2026 ──────────────────────────────
 #
 # Strict privacy-projected schema for the /api/v1/reports/nearby
 # endpoint that drives the PWA + RN home-stage intelligence module.
@@ -724,8 +724,8 @@ class ClusterResponse(BaseModel):
 class ReportNearbyGroup(BaseModel):
     """One aggregate row in the nearby intel response. Each group is
     tagged to either a shared building footprint (`kind=building`),
-    a crisis-type grid cell (`kind=crisis_cluster`), or — Phase 1
-    (May 2026) — a recently-resolved cluster (`kind=resolved_recent`)
+    a crisis-type grid cell (`kind=crisis_cluster`), or - Phase 1
+    (May 2026) - a recently-resolved cluster (`kind=resolved_recent`)
     surfaced for the "Recently Resolved" subtotal.
 
     Phase 1 added: `tier`, `is_burst`, `is_acute`, `acute_grade`,
@@ -735,13 +735,13 @@ class ReportNearbyGroup(BaseModel):
     id: str
     kind: str                        # "building" | "block" | "area" | "crisis_cluster" | "resolved_recent"
     label: str                       # building name OR "Near {lat,lng}" fallback
-    summary: str                     # English fallback — "Flooded" / "Bridge Collapsed"
+    summary: str                     # English fallback - "Flooded" / "Bridge Collapsed"
     summary_key: str                 # i18n key for client-side localization
     count: int                       # device-deduped report count
     verified_count: int
     pending_count: int
-    responding_count: int = 0        # NEW (Phase 1) — RESPONDING reports surfaced
-    resolved_count: int = 0          # NEW (Phase 1) — RESOLVED reports within 24-h retention
+    responding_count: int = 0        # NEW (Phase 1) - RESPONDING reports surfaced
+    resolved_count: int = 0          # NEW (Phase 1) - RESOLVED reports within 24-h retention
     approx_distance_km: float        # caller → centroid, 2dp
     centroid_lat: float              # group centroid (mean of bucket), 4dp
     centroid_lng: float              # group centroid (mean of bucket), 4dp
@@ -755,8 +755,8 @@ class ReportNearbyGroup(BaseModel):
     is_burst: bool = False                 # ≥ T3 reports inside BURST_WINDOW_MIN (docs §3.5)
     is_acute: bool = False                 # ≥ ACUTE_REPORTS_THRESHOLD inside ACUTE_WINDOW_MIN
     acute_grade: Optional[str] = None      # 'high' | 'low' | None (Phase 2 trust-grades it)
-    crisis_ttl_hours: int = 24             # CRISIS_RULES[crisis].t3_max_hours — UI lifetime hint
-    coarse_crisis_category: str = 'OTHER'  # 'FLOOD'|'FIRE'|'INFRASTRUCTURE'|'OTHER' — T1 privacy
+    crisis_ttl_hours: int = 24             # CRISIS_RULES[crisis].t3_max_hours - UI lifetime hint
+    coarse_crisis_category: str = 'OTHER'  # 'FLOOD'|'FIRE'|'INFRASTRUCTURE'|'OTHER' - T1 privacy
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -767,20 +767,20 @@ class ReportNearbyResponse(BaseModel):
     the response for the right query (defends against a misaligned
     cache returning stale data for a different bucket).
 
-    Phase 1 (May 2026) added `recently_resolved_groups` —
+    Phase 1 (May 2026) added `recently_resolved_groups` -
     RESOLVED clusters within RESOLVED_RECENT_RETENTION_HOURS are
     returned SEPARATELY from `groups` so the client renders them in a
     standalone "Recently Resolved" subtotal line instead of inflating
     the active-incident count (docs §3.6, §4.1). The
     `citizen_t1_visibility` field echoes the deployment-config so the
     client can suppress T1 rendering when this flag is `false`."""
-    user_location: dict              # {lat: float, lng: float} — echoed
+    user_location: dict              # {lat: float, lng: float} - echoed
     radius_km: float
     as_of: datetime                  # server clock at query time
     groups: List[ReportNearbyGroup]                          # ACTIVE clusters (T1/T2/T3)
-    recently_resolved_groups: List[ReportNearbyGroup] = []   # NEW (Phase 1) — kind='resolved_recent'
+    recently_resolved_groups: List[ReportNearbyGroup] = []   # NEW (Phase 1) - kind='resolved_recent'
     total_groups: int                # active groups before `limit` truncation
-    total_resolved_recent: int = 0   # NEW (Phase 1) — count of recently_resolved_groups
+    total_resolved_recent: int = 0   # NEW (Phase 1) - count of recently_resolved_groups
     total_reports: int               # all reports inside bbox+radius+age (active + resolved-recent)
-    citizen_t1_visibility: bool = True  # NEW (Phase 1) — echoed deployment flag (docs §14)
-    density_mode: str = "normal"     # NEW (Phase 4) — "normal" or "disaster" (docs §3.8)
+    citizen_t1_visibility: bool = True  # NEW (Phase 1) - echoed deployment flag (docs §14)
+    density_mode: str = "normal"     # NEW (Phase 4) - "normal" or "disaster" (docs §3.8)

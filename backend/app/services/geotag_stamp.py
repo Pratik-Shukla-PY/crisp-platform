@@ -2,21 +2,21 @@
 
 Burns a compact, legible caption (lat/long + accuracy, building, capture time)
 into the image pixels AND writes GPS EXIF, so the capture location travels with
-every downloaded / exported / shared copy — not just the dashboard overlay.
+every downloaded / exported / shared copy - not just the dashboard overlay.
 
 Runs server-side inside the PII-blur worker AFTER blur (so the caption is never
-blurred) and only on the MEDIUM/ORIGINAL tiers (SMALL is a thumbnail — text
+blurred) and only on the MEDIUM/ORIGINAL tiers (SMALL is a thumbnail - text
 would be illegible). The stored image is re-encoded at q95 (near-lossless) so we
 don't regress capture quality; a pristine un-stamped original is archived
 separately by the caller.
 
-Rendering uses **cv2** (Hershey font) so there is NO font-file dependency — it
+Rendering uses **cv2** (Hershey font) so there is NO font-file dependency - it
 works in the headless Docker image with zero extra assets. Limitation: cv2's
 Hershey fonts are ASCII-only, so a non-Latin building name (Arabic / CJK) can't
-be drawn — `_ascii_safe` strips it and the building line is omitted if nothing
+be drawn - `_ascii_safe` strips it and the building line is omitted if nothing
 printable remains. Coordinates + accuracy + time are always ASCII and always
 render. (A future upgrade to PIL + a bundled Noto font would render full
-Unicode building names — deferred.)
+Unicode building names - deferred.)
 
 GPS EXIF is written via **piexif** AFTER the cv2 re-encode (cv2.imwrite emits a
 fresh JPEG with no EXIF, so the GPS IFD must be inserted last).
@@ -34,13 +34,13 @@ try:
 except Exception as _e:  # pragma: no cover - import guard
     piexif = None
     _PIEXIF_OK = False
-    logger.warning("piexif unavailable — GPS EXIF embedding disabled: %s", _e)
+    logger.warning("piexif unavailable - GPS EXIF embedding disabled: %s", _e)
 
 # Tiers that receive the visible burn-in. SMALL is a preview thumbnail; a legible
 # caption would dominate it, so it's skipped (it still gets GPS EXIF if enabled).
 WATERMARK_TIERS = {"MEDIUM", "HIGH", "ORIGINAL"}
 
-_JPEG_QUALITY = 95  # near-lossless — must NOT regress the capture quality fix
+_JPEG_QUALITY = 95  # near-lossless - must NOT regress the capture quality fix
 
 
 def _ascii_safe(s, max_len=46):
@@ -77,7 +77,7 @@ def stamp_image(path, lat=None, lng=None, accuracy_m=None, building=None, time_s
     """Burn a geotag caption band onto the JPEG at ``path`` in place (q95).
 
     Returns True if a caption was drawn, False otherwise (unreadable image or no
-    data to show). Never raises — geotagging is best-effort, never blocks the
+    data to show). Never raises - geotagging is best-effort, never blocks the
     upload.
     """
     try:

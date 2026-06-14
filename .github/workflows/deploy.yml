@@ -1,7 +1,7 @@
 name: Deploy to Production
 
 # Auto-deploy on push to main is DISABLED. Per the operator's
-# deploy-discipline rule (see CLAUDE.md "Deploy discipline"), every
+# deploy-discipline rule (see the project invariants "Deploy discipline"), every
 # PROD deploy must be gated by an explicit in-chat confirmation.
 # Use the "Run workflow" button on the GitHub Actions page
 # (workflow_dispatch) to ship to PROD; pick a branch in the UI.
@@ -34,8 +34,8 @@ on:
         default: false
         type: boolean
 
-# Concurrency lock — only one deploy can run at a time. New pushes
-# during an in-flight deploy are queued (NOT cancelled — cancelling
+# Concurrency lock - only one deploy can run at a time. New pushes
+# during an in-flight deploy are queued (NOT cancelled - cancelling
 # mid-deploy would corrupt the migration step).
 concurrency:
   group: deploy-production
@@ -43,7 +43,7 @@ concurrency:
 
 permissions:
   contents: read
-  # checks: read — preflight calls /repos/{owner}/{repo}/commits/{sha}/check-runs
+  # checks: read - preflight calls /repos/{owner}/{repo}/commits/{sha}/check-runs
   # to verify CI was green on the deploy commit. Without this permission the
   # API returns 403 "Resource not accessible by integration", and the
   # error JSON gets misread as a non-success status.
@@ -71,14 +71,14 @@ jobs:
           # stdout with a JSON error body that we'd then misinterpret as a
           # status string. If the API call fails, treat as "unknown" and
           # let the deploy proceed (the deploy itself is the next layer of
-          # safety — it won't damage prod if the new code can't boot).
+          # safety - it won't damage prod if the new code can't boot).
           set +e
           API_OUT=$(gh api --silent "repos/${{ github.repository }}/commits/${{ github.sha }}/check-runs" 2>&1)
           API_RC=$?
           set -e
           if [ "$API_RC" -ne 0 ]; then
             echo "::warning::check-runs API call failed (rc=$API_RC). Output: $API_OUT"
-            echo "Treating preflight as PASS — deploy step's health-check + auto-rollback is the next safety net."
+            echo "Treating preflight as PASS - deploy step's health-check + auto-rollback is the next safety net."
             exit 0
           fi
           STATUS=$(printf '%s' "$API_OUT" | jq -r '.check_runs[] | select(.name == "Backend (pytest + import check)") | .conclusion' | head -1)
@@ -93,7 +93,7 @@ jobs:
             *)
               ;;
           esac
-          # May 2026 — Lighthouse QA gate (Phase 2). Same shape as the
+          # May 2026 - Lighthouse QA gate (Phase 2). Same shape as the
           # backend gate: hard-fail only when Lighthouse explicitly
           # concluded as failure. Missing/in-flight passes through (so
           # deploys triggered before Lighthouse finishes don't deadlock).
@@ -150,7 +150,7 @@ jobs:
             exit 1
           fi
           mkdir -p ~/.ssh
-          # Apr 2026 — accept either RAW PEM or BASE64-encoded PEM. GitHub's
+          # Apr 2026 - accept either RAW PEM or BASE64-encoded PEM. GitHub's
           # secret UI sometimes squashes multi-line values into a single line
           # depending on how the user pasted (terminal-wrapping, browser
           # scratchpad, CRLF line endings), which corrupts an OpenSSH ed25519
@@ -168,13 +168,13 @@ jobs:
             echo "[deploy-ssh] key parsed as raw PEM"
           fi
           chmod 600 ~/.ssh/deploy_key
-          # Validate before we try to use it — ssh-keygen -l prints fingerprint
+          # Validate before we try to use it - ssh-keygen -l prints fingerprint
           # if the key parses, errors otherwise. Clear failure message if the
           # secret value is malformed.
           if ! ssh-keygen -lf ~/.ssh/deploy_key >/dev/null 2>&1; then
             echo "::error::EC2_DEPLOY_KEY is not a valid OpenSSH private key."
             echo "::error::Re-set the secret. Either paste the raw PEM (line breaks preserved) or paste a base64-encoded copy:"
-            echo "::error::    base64 -w0 ~/.ssh/crisp-deploy            # on the EC2 — copy the single line"
+            echo "::error::    base64 -w0 ~/.ssh/crisp-deploy            # on the EC2 - copy the single line"
             exit 1
           fi
           echo "[deploy-ssh] fingerprint: $(ssh-keygen -lf ~/.ssh/deploy_key)"
@@ -200,7 +200,7 @@ jobs:
           # script that doesn't exist, so the SSH preamble does the
           # minimum git fetch + checkout + ff-pull to bring the script
           # into existence. Once deploy.sh is in place, IT does its OWN
-          # full pull/rebuild/migrate/health flow (idempotent — the
+          # full pull/rebuild/migrate/health flow (idempotent - the
           # second pull here is a no-op).
           ssh -i ~/.ssh/deploy_key \
               -o BatchMode=yes \
@@ -220,7 +220,7 @@ jobs:
 
       - name: Post-deploy smoke (from runner, end-to-end)
         run: |
-          # Hit the public URL from outside AWS — proves the full path
+          # Hit the public URL from outside AWS - proves the full path
           # is alive (Route 53 → ALB → EC2 → nginx → static or proxied API).
           # `/health` is only exposed on the backend's :8000 port, not via
           # nginx. We probe public-reachable URLs instead:
@@ -246,7 +246,7 @@ jobs:
     needs: deploy
     runs-on: ubuntu-latest
     timeout-minutes: 8
-    # Don't run on workflow_dispatch with a non-main branch — the CSP /
+    # Don't run on workflow_dispatch with a non-main branch - the CSP /
     # asset state in prod hasn't been updated yet for that branch.
     # (The auto-deploy on push to main IS the case we want to gate.)
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.branch == 'main')
@@ -263,7 +263,7 @@ jobs:
       # Playwright version bump invalidates correctly. Cache v3
       # qualifier added when prod-smoke dropped WebKit (May 2026) so
       # the stale v2 cache (which held both chromium + webkit dirs)
-      # gets flushed on the next run — saves ~250 MB of cache storage.
+      # gets flushed on the next run - saves ~250 MB of cache storage.
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache@v5
@@ -277,7 +277,7 @@ jobs:
           PLAYWRIGHT_CACHE_HIT: ${{ steps.playwright-cache.outputs.cache-hit }}
         run: |
           npm ci --prefer-offline --no-audit --no-fund
-          # WEBKIT REMOVED May 2026 — prod-smoke runs only on
+          # WEBKIT REMOVED May 2026 - prod-smoke runs only on
           # mobile-chromium now (see playwright.prod.config.ts for the
           # full reasoning). The previous `install-deps chromium webkit`
           # apt-get took 6-8 min for WebKit's ~100 multimedia system
@@ -292,10 +292,10 @@ jobs:
           # Belt-and-suspenders: even on cache hit, verify the actual
           # chromium binary exists. If it's missing (cache drift after
           # a Playwright bump) we re-run the install. ~10s if fine;
-          # ~1 min if we need to download — far better than an
+          # ~1 min if we need to download - far better than an
           # auto-rollback.
           if ! npx playwright install --dry-run chromium | grep -q 'is already installed'; then
-            echo "::warning::Playwright chromium binary missing from cache — installing"
+            echo "::warning::Playwright chromium binary missing from cache - installing"
             npx playwright install chromium
           fi
 
@@ -303,7 +303,7 @@ jobs:
         working-directory: e2e
         env:
           CRISP_PROD_BASE_URL: https://undp.crisplabs.tech
-          # Apr 2026 — demo-account creds for the end-to-end submission
+          # Apr 2026 - demo-account creds for the end-to-end submission
           # smoke. These secrets were configured in repo settings during
           # UNDP submission week. Test skips silently if any are unset
           # (so local dev / fork PRs don't fail on missing secrets).
@@ -328,7 +328,7 @@ jobs:
     permissions:
       contents: write    # publish reports to lighthouse-history branch
     # Only run when prod-smoke passed (no point auditing if the basic
-    # smoke already failed — auto-rollback will fire on smoke). Also
+    # smoke already failed - auto-rollback will fire on smoke). Also
     # only on real prod deploys (push to main); manual workflow_dispatch
     # against non-main branches doesn't update prod CSP / assets.
     if: |
@@ -352,13 +352,13 @@ jobs:
       - name: Audit PROD URLs (3 runs each, mobile throttle)
         # `lhci.config.prod.cjs` is a separate config that inherits the
         # threshold matrix from the dev config but points the URL list
-        # at the live PROD domain. No staticDistDir — LHCI audits the
+        # at the live PROD domain. No staticDistDir - LHCI audits the
         # external URLs directly.
         run: lhci collect --config=./lhci.config.prod.cjs
       - name: Assert thresholds (PROD audit must clear the floor)
         # If PROD score drops below the deployed code's pre-deploy
         # baseline (which already passed assert), there's a real
-        # regression — block + trigger rollback. Same threshold matrix
+        # regression - block + trigger rollback. Same threshold matrix
         # as the PR audit; if it passed pre-deploy, it MUST pass on
         # PROD too. Drift > 15% indicates infra-level regression
         # (bad nginx config, broken CDN, etc.).
@@ -391,11 +391,11 @@ jobs:
     # Fires ONLY when:
     #   - deploy succeeded (containers cycled, new code live), AND
     #   - either prod-smoke OR prod-lighthouse-audit failed (browser-level
-    #     regression — CSP, asset 404, JS error, OR Lighthouse score
+    #     regression - CSP, asset 404, JS error, OR Lighthouse score
     #     dropped below the threshold floor on PROD)
     # Doesn't run when prod-smoke just couldn't START (job-level failure
-    # like Playwright install hanging) — that's caught by the always-skip
-    # condition. Doesn't run when deploy itself failed — deploy.sh already
+    # like Playwright install hanging) - that's caught by the always-skip
+    # condition. Doesn't run when deploy itself failed - deploy.sh already
     # auto-rolled-back inside the EC2 in that case.
     if: |
       failure() &&
@@ -406,7 +406,7 @@ jobs:
       url: https://undp.crisplabs.tech/web-dashboard/src/
 
     steps:
-      # Bug fix (May 2026, operator-reported) — post-rollback smoke
+      # Bug fix (May 2026, operator-reported) - post-rollback smoke
       # step below declares `working-directory: e2e` but the runner
       # had no repo checkout, so the step errored with "No such file
       # or directory" before npm could even start. Adding checkout
@@ -435,7 +435,7 @@ jobs:
         run: |
           # rollback.sh --yes resets to the previous main commit, rebuilds
           # the backend, restarts the stack, and waits for /health.
-          # `HEAD~1` is the safe default for the solo-dev cadence — one
+          # `HEAD~1` is the safe default for the solo-dev cadence - one
           # bad commit per deploy, the prior commit is the last good
           # version. Operators can run rollback.sh with a specific SHA
           # manually if a deeper revert is needed (e.g. multiple bad
@@ -452,10 +452,10 @@ jobs:
         # broken external CDN) that no amount of rolling back fixes.
         # `--force` on the install so ANY cache-state inconsistency
         # (incl. partial download from a killed prior job) gets blown
-        # away. The rollback job is the last line of defence — it
+        # away. The rollback job is the last line of defence - it
         # must not silently fail to launch a browser.
         #
-        # May 2026 — WebKit dropped here too (prod-smoke runs only on
+        # May 2026 - WebKit dropped here too (prod-smoke runs only on
         # mobile-chromium per playwright.prod.config.ts). Saves the
         # 6-8 min apt-get install for WebKit's multimedia deps inside
         # the rollback path, where we want fast verification.
@@ -466,7 +466,7 @@ jobs:
           npm ci --prefer-offline --no-audit --no-fund
           npx playwright install --with-deps --force chromium
           # Smoke against the now-rolled-back prod.
-          npm run check:prod || echo "::error::Rollback smoke also failed — manual intervention required"
+          npm run check:prod || echo "::error::Rollback smoke also failed - manual intervention required"
 
       - name: Tear down SSH artifacts
         if: always()

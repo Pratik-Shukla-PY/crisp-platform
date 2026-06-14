@@ -1,5 +1,5 @@
 """
-AI Extractor — Uses Claude to extract structured incident data from
+AI Extractor - Uses Claude to extract structured incident data from
 unstructured text (SMS, IVR transcription, user descriptions).
 
 Extracts: location name, infrastructure type, severity, and key details.
@@ -25,7 +25,7 @@ async def extract_and_update_report(report_id: str, text: str):
         return
 
     if not ANTHROPIC_API_KEY:
-        logger.warning("ANTHROPIC_API_KEY not set — skipping AI extraction")
+        logger.warning("ANTHROPIC_API_KEY not set - skipping AI extraction")
         # Fall back to keyword-based extraction
         await _keyword_extract_and_update(report_id, text)
         return
@@ -90,12 +90,12 @@ Return JSON with these fields:
 
 
 async def _apply_extraction(report_id: str, extracted: dict, original_text: str):
-    """Apply AI-extracted data to the report — geocode location, update classification, store AI summary."""
+    """Apply AI-extracted data to the report - geocode location, update classification, store AI summary."""
     from messaging_bot.sms.geocoder import geocode_text
 
     location_name = extracted.get("location_name", "")
 
-    # Phase F.3.a (May 2026, audit Finding E.1) — chat-channel
+    # Phase F.3.a (May 2026, audit Finding E.1) - chat-channel
     # AI-extraction infrastructure_type was previously defaulting to
     # "OTHER" whenever Claude couldn't confidently categorise. Since
     # SMS / Telegram / WhatsApp / IVR submissions all run through this
@@ -105,7 +105,7 @@ async def _apply_extraction(report_id: str, extracted: dict, original_text: str)
     # rows. The dashboard then surfaced those rows under "OTHER" /
     # "Transport & Communication" (after the backend's _apply_taxonomy
     # legacy-chip migration), even though the reporter never selected
-    # a category — breaking multi-channel parity (UNDP must-have #1).
+    # a category - breaking multi-channel parity (UNDP must-have #1).
     #
     # New behaviour: only include `infrastructure_type` in the PATCH
     # payload when Claude returned a confident value AND it validates.
@@ -115,7 +115,7 @@ async def _apply_extraction(report_id: str, extracted: dict, original_text: str)
     # then distinguish "user selected OTHER" from "no signal yet" via
     # the F.3.b infrastructure_type_source enum (next commit).
     #
-    # Same logic applies to crisis_type — both fields now stay NULL
+    # Same logic applies to crisis_type - both fields now stay NULL
     # in the AI extraction path when Claude is uncertain rather than
     # being silently coerced to OTHER.
     infra_type_raw = extracted.get("infrastructure_type")
@@ -123,7 +123,7 @@ async def _apply_extraction(report_id: str, extracted: dict, original_text: str)
     summary = extracted.get("summary", "")
     user_said = extracted.get("user_said", "")
 
-    # Validate infrastructure type — None if Claude was uncertain OR
+    # Validate infrastructure type - None if Claude was uncertain OR
     # returned an unknown enum. Legacy chips (ROAD / HOSPITAL / ...)
     # are still accepted here; the backend's _apply_taxonomy hook
     # normalises them to the current UNDP taxonomy on insert.
@@ -143,13 +143,13 @@ async def _apply_extraction(report_id: str, extracted: dict, original_text: str)
     if damage_class not in valid_damage:
         damage_class = ""
 
-    # UNDP core question — accept only a real boolean from Claude; treat a
+    # UNDP core question - accept only a real boolean from Claude; treat a
     # missing field, null, or a string like "null"/"unknown" as "not stated"
     # (None) so we never PATCH a fabricated False onto the report.
     debris_raw = extracted.get("debris_clearing_needed")
     debris_clearing_needed = debris_raw if isinstance(debris_raw, bool) else None
 
-    # Update classification — keep raw transcription in description for
+    # Update classification - keep raw transcription in description for
     # audit trail. infrastructure_type + crisis_type are now conditionally
     # included ONLY when Claude returned a confident value (the previous
     # default-to-OTHER behaviour caused the "everything is Transport &
@@ -196,7 +196,7 @@ async def _apply_extraction(report_id: str, extracted: dict, original_text: str)
     if location_name:
         geo = await geocode_text(location_name)
         if geo.get("latitude"):
-            # We need to update location — use a direct DB approach or create the location
+            # We need to update location - use a direct DB approach or create the location
             # Since the report may not have a location yet, we update via description endpoint
             # which triggers the backend to store it
             logger.info(f"AI geocoded '{location_name}' → {geo['latitude']:.4f},{geo['longitude']:.4f} ({geo.get('location_name','')})")
@@ -234,7 +234,7 @@ async def _keyword_extract_and_update(report_id: str, text: str):
         update_payload["infrastructure_type"] = parsed["infrastructure_type"]
     if parsed["severity"] != "MODERATE":
         update_payload["severity"] = parsed["severity"]
-    # UNDP core question — parse_sms returns True on a debris signal, else
+    # UNDP core question - parse_sms returns True on a debris signal, else
     # None. Patch only a positive signal; never a fabricated False.
     if parsed.get("debris_clearing_needed") is not None:
         update_payload["debris_clearing_needed"] = parsed["debris_clearing_needed"]

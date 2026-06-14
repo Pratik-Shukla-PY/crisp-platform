@@ -1,13 +1,13 @@
 /**
- * Memory benchmark — base64-dataUrl vs retained-Blob for the ORIGINAL tier.
+ * Memory benchmark - base64-dataUrl vs retained-Blob for the ORIGINAL tier.
  *
  * Why deterministic, not a live-memory probe: V8's JS-heap counters
  * (performance.memory AND CDP JSHeapUsedSize) EXCLUDE large strings/ArrayBuffers
- * (large-object space) — a held 50 MB string reads as ~0. And macOS RSS is
+ * (large-object space) - a held 50 MB string reads as ~0. And macOS RSS is
  * confounded by memory compression (a 50 MB run of one byte compresses to ~KB).
  * So we measure the EXACT, reproducible quantity that matters: the byte length
  * of the base64 data URL that the OLD `_encodeVariants` materialized on the JS
- * heap AND wrote to IndexedDB for the ORIGINAL tier — vs the Blob the NEW path
+ * heap AND wrote to IndexedDB for the ORIGINAL tier - vs the Blob the NEW path
  * keeps (off-heap; ~0 JS-heap cost). base64 is ASCII ⇒ V8 stores it as a
  * one-byte string, so its char length == its JS-heap byte cost.
  *

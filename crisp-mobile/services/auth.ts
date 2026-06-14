@@ -1,9 +1,9 @@
 /**
- * AuthStore — Phase 1 (Apr 2026) Optional reporter login for RN.
+ * AuthStore - Phase 1 (Apr 2026) Optional reporter login for RN.
  *
  * Parity with PWA's `auth.js`:
  *   - Tokens live in expo-secure-store (Keychain / EncryptedSharedPreferences).
- *   - User profile blob in AsyncStorage (non-sensitive — displayName only).
+ *   - User profile blob in AsyncStorage (non-sensitive - displayName only).
  *   - `fetchWithAuth` adds Bearer header + refreshes on 401.
  *   - `isLoggedIn` stays true through a 30-day offline-grace window so
  *     reporting never blocks when the user is offline past token expiry.
@@ -59,7 +59,7 @@ let _inFlightRefresh: Promise<string | null> | null = null;
 async function _readSecure(key: string): Promise<string | null> {
   if (!SecureStore) {
     // Fallback to AsyncStorage when secure-store isn't available. Not as
-    // secure, but preserves function — we prefer an imperfect experience
+    // secure, but preserves function - we prefer an imperfect experience
     // over a hard crash.
     return await AsyncStorage.getItem(key);
   }
@@ -85,7 +85,7 @@ export async function init(): Promise<void> {
     if (blob) _profile = { ...EMPTY, ...JSON.parse(blob) };
     _accessToken = await _readSecure(SS_KEY_ACCESS);
     _refreshToken = await _readSecure(SS_KEY_REFRESH);
-  } catch { /* ignore — cold start path */ }
+  } catch { /* ignore - cold start path */ }
 }
 
 export function isLoggedIn(): boolean {

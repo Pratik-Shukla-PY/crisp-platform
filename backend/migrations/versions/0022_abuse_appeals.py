@@ -4,7 +4,7 @@ Revision ID: 0022_abuse_appeals
 Revises: 0021_device_trust_columns
 Create Date: 2026-05-16
 
-Phase 4 (docs/NEARBY_REPORTS_PIPELINE.md §6.4 + §7.5) — CRISP-hosted
+Phase 4 (docs/NEARBY_REPORTS_PIPELINE.md §6.4 + §7.5) - CRISP-hosted
 moderation + appeal framework. UNDP and deployment partners can
 optionally integrate via outbound webhooks; the framework itself
 stays platform-scalable + reusable across deployments.
@@ -20,14 +20,14 @@ Two tables:
 
   appeal_events (id, appeal_id, event_kind, actor_admin_id, payload,
                  occurred_at)
-    Append-only event log per appeal — open / comment / status_change
+    Append-only event log per appeal - open / comment / status_change
     / webhook_sent. Powers the "appeal history" view in the admin UI.
 
 Indexed for the two hot access patterns:
   • Appeals by device (lookup current open appeal for a device)
   • Appeals by status (admin queue: 'open' / 'under_review')
 
-Idempotent — inspector guard pattern from prior migrations.
+Idempotent - inspector guard pattern from prior migrations.
 """
 from alembic import op
 import sqlalchemy as sa
@@ -63,7 +63,7 @@ def upgrade() -> None:
             # opened on behalf of the reporter).
             sa.Column("claim_text", sa.Text(), nullable=True),
             # The spam_signals that were present on the device at the
-            # time the appeal was opened. Snapshot — the live
+            # time the appeal was opened. Snapshot - the live
             # devices.spam_signals can change post-appeal.
             sa.Column("original_signals",
                       postgresql.JSONB(astext_type=sa.Text()),

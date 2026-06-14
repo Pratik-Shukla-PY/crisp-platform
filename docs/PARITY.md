@@ -1,6 +1,6 @@
-# CRISP — PWA ↔ RN Parity Checklist
+# CRISP - PWA ↔ RN Parity Checklist
 
-**Purpose** — this is the canonical field order, labels, icons, and enum values
+**Purpose** - this is the canonical field order, labels, icons, and enum values
 for the Review & Submit flow. PWA (`mobile-app/src`) and RN (`crisp-mobile`)
 MUST match this document exactly. Any future PR that changes a field must
 update this file and the other client in the same commit.
@@ -12,7 +12,7 @@ Last reconciled: Voice-page cleanup (PR 4) + Landing polish (PR 3), Apr 2026.
 ## Audio capture screen (stage-audio / screen === 'audio')
 
 Rewritten Apr 2026 for low-literacy / crisis users. Must stay byte-identical
-across PWA and RN — the same title, bullets, example, mic hint, placeholder,
+across PWA and RN - the same title, bullets, example, mic hint, placeholder,
 and button label in every locale.
 
 | Element | i18n key | English source |
@@ -34,7 +34,7 @@ fallback). The textarea placeholder carries the instruction now.
 
 **Dropped (PR 4, Apr 2026):** the "Type instead" skip link
 (`#audio-skip-link` / `skip_audio` i18n key). Mic and textarea coexist on
-the same screen — the toggle only added cognitive load without hiding
+the same screen - the toggle only added cognitive load without hiding
 anything. Users who prefer typing just tap the textarea and continue.
 RN never had this element, so removing it restores PWA ↔ RN parity.
 
@@ -44,24 +44,24 @@ RN never had this element, so removing it restores PWA ↔ RN parity.
 
 Rewritten Apr 2026 for low-literacy crisis users. The old mental model ("4
 easy steps") was conveyed by a 2×2 roadmap grid that looked clickable but
-wasn't — confusing to first-time users under stress. That grid is gone.
+wasn't - confusing to first-time users under stress. That grid is gone.
 
 | Element | Required | Notes |
 |---|---|---|
 | CRISP × UNDP badge | yes | Unchanged |
-| Hero title (`home_title`) | yes | "Report an Incident" — simpler than before |
-| Subtitle (`home_sub`) | no | **Removed (PR 3, Apr 2026)** — the big CTA speaks for itself, no step-count promise needed |
+| Hero title (`home_title`) | yes | "Report an Incident" - simpler than before |
+| Subtitle (`home_sub`) | no | **Removed (PR 3, Apr 2026)** - the big CTA speaks for itself, no step-count promise needed |
 | Language switcher | yes | Now hosts the 🟢/🔴 connectivity dot as its first child (inside the switcher, not overlapping the viewport right edge at 320 px) |
-| Connectivity dot (`#connectivity-dot` / inline RN view) | yes | 🟢 online / 🔴 offline — listens to `online`/`offline` events on PWA, NetInfo on RN. Visible on every stage |
+| Connectivity dot (`#connectivity-dot` / inline RN view) | yes | 🟢 online / 🔴 offline - listens to `online`/`offline` events on PWA, NetInfo on RN. Visible on every stage |
 | Impact metrics card | conditional | Shows **Lives Saved** (❤️ green-glow, heart-pulse animation) + **Reports Submitted** when numbers > 0. Lives Saved is the first cell (more emotionally salient); `prefers-reduced-motion` disables the pulse |
-| Primary CTA (`start_btn` / `welcome_start`) | yes | **"Start Reporting"** — one and only one primary action |
-| Secondary entry (`my_reports`) | yes | "My Reports" — opens history screen. Includes delete-all at the footer (was a separate link on home before) |
+| Primary CTA (`start_btn` / `welcome_start`) | yes | **"Start Reporting"** - one and only one primary action |
+| Secondary entry (`my_reports`) | yes | "My Reports" - opens history screen. Includes delete-all at the footer (was a separate link on home before) |
 | Offline hint (`.home-offline-hint` / `home_offline_hint`) | yes | Subtle small-text line at the bottom: "📡 Works offline and in low internet connectivity." Home-stage only (capture flow stays minimal) |
 | Gamification badge | optional | Demoted below the primary actions (RN only; PWA shows badge on success screen) |
 
 **Removed:** 4-card roadmap (`.roadmap`), separate `Delete My Data` link
 on home (moved to history screen footer), `home_sub` paragraph
-(PR 3, Apr 2026 — "Tap the button when you're ready" dropped).
+(PR 3, Apr 2026 - "Tap the button when you're ready" dropped).
 
 ---
 
@@ -71,7 +71,7 @@ Apr 2026: replaces the per-screen step-dots / "1/4 2/4 3/4 4/4" text labels
 with ONE color-coded progress bar shown throughout the capture journey.
 
 ```
- [ Photo ] —— [ Details ] —— [ Review ] —— [ Send ]
+ [ Photo ] -- [ Details ] -- [ Review ] -- [ Send ]
 ```
 
 ### State grammar (identical PWA + RN)
@@ -81,7 +81,7 @@ with ONE color-coded progress bar shown throughout the capture journey.
 | `done` | green 🟢 | ✓ | Past step, required data captured |
 | `active` | accent 🟠 | ● | Currently on this step |
 | `missing` | red 🔴 | ! | Past step but required data missing |
-| `upcoming` | grey ⚪ | — | Future step |
+| `upcoming` | grey ⚪ | - | Future step |
 
 ### Stage → step mapping
 
@@ -114,7 +114,7 @@ stage-photo and the review screen.
 ### PWA behaviour
 | Entry point | Behaviour |
 |---|---|
-| **Browse** (`#btn-browse-photo` → `#file-browse`) | `<input type="file" multiple>` — user selects any number; first fills primary (if empty), rest go to extras. |
+| **Browse** (`#btn-browse-photo` → `#file-browse`) | `<input type="file" multiple>` - user selects any number; first fills primary (if empty), rest go to extras. |
 | **Camera modal** (`#btn-open-camera`) | Live `getUserMedia` viewfinder stays open across snaps. Each tap of the shutter captures a frame without tearing down the stream. Thumbnails appear in a mini-gallery inside the modal. A green ✓ "Done" button (enabled after first snap) confirms + returns to stage-photo with all snaps attached. X cancels the modal; photos already captured remain in state. |
 | **iOS camera fallback** (`#file-camera`) | Single-shot per invocation (Safari's native camera picker doesn't support multi-capture). Tapping the camera chip again adds another. |
 | **"Add more photos" (+)** (`#btn-add-more-photo` → `#file-extra`) | Single-file picker; entry appended to extras. Pre-dates PR 5 and kept as-is. |
@@ -122,26 +122,26 @@ stage-photo and the review screen.
 ### RN behaviour
 | Entry point | Behaviour |
 |---|---|
-| **Camera** (`takePhoto`) | expo-image-picker's `launchCameraAsync` returns one asset per launch. After each successful capture we show `Alert "Photo added ✓ — Take another?" [Yes / Done]` and loop the picker until Done. First capture fills primary, rest become extras. |
+| **Camera** (`takePhoto`) | expo-image-picker's `launchCameraAsync` returns one asset per launch. After each successful capture we show `Alert "Photo added ✓ - Take another?" [Yes / Done]` and loop the picker until Done. First capture fills primary, rest become extras. |
 | **Library** (`pickImage`) | `launchImageLibraryAsync({ allowsMultipleSelection: true, selectionLimit: 10 })`. First asset fills primary (if empty), rest become extras. |
 | **"Add more photos" (+)** (`pickExtraImage`) | Same multi-select; every asset lands in extras. |
 
-### Known asymmetry — camera multi-capture
+### Known asymmetry - camera multi-capture
 
 PWA uses the browser's live `getUserMedia` viewfinder so the camera stream
 can stay alive across snaps and multi-capture feels like a native burst.
-expo-image-picker in RN does NOT expose this — each `launchCameraAsync`
+expo-image-picker in RN does NOT expose this - each `launchCameraAsync`
 call opens a new native picker, captures exactly one frame, and returns.
 The "Alert → Yes → picker re-opens" loop is the closest approximation.
 
 A proper fix would require migrating to `expo-camera` (custom in-app
-viewfinder component) — **explicitly out of scope** per the PR 5 plan.
+viewfinder component) - **explicitly out of scope** per the PR 5 plan.
 
 ### Blur-pending pipeline (bug fixed in PR 5)
 
 Both platforms track in-flight variant/blur generation in a structure that
 `submitReport()` awaits before reading blob state. Before PR 5:
-- PWA used `state.photoBlurPending` as a single-slot promise — later
+- PWA used `state.photoBlurPending` as a single-slot promise - later
   captures clobbered earlier ones, so rapid multi-capture could submit
   before some blur/variants completed.
 - RN used `blurPromiseRef` similarly (single slot).
@@ -170,7 +170,7 @@ each other during multi-select ingestion.
 
 ## Review page (PR 6, Apr 2026)
 
-The capture-flow review form was restructured to reduce cognitive load —
+The capture-flow review form was restructured to reduce cognitive load -
 the old linear list ("What is damaged? → Type of Crisis → Damage Level →
 Building name → Debris → Service status") became a tighter two-question
 layout with inline sub-selection.
@@ -186,7 +186,7 @@ layout with inline sub-selection.
 | 4 | **What caused damage?** | Renamed from "Type of Crisis". Same 9-chip grid. |
 | 5 | Location | GPS-resolved, user-editable (unchanged) |
 | 6 | **Optional: Service status** (collapsible `<details>`) | Electricity / Water / Health dropdowns + Pressing Needs chips (unchanged content; summary relabelled). |
-| 7 | Severity | How serious? (Minor / Moderate / Severe) — unchanged. |
+| 7 | Severity | How serious? (Minor / Moderate / Severe) - unchanged. |
 
 ### Removed blocks
 
@@ -231,8 +231,8 @@ just-submitted one).
 | Sub (`sent_sub`) | "Your report can help save lives. We will keep you posted." |
 | Report ID pill (`#report-id-text`) | First 8 chars of the client UUID (still useful for support-ops lookups). |
 | Gamification badge | Unchanged; rendered below the ID pill when earned. |
-| Primary CTA — **[+ Add another report]** | `#btn-new-report` / `<TouchableOpacity>` with `+`. Calls `resetApp()` (PWA) / `resetReport(); setScreen('home')` (RN). |
-| Secondary CTA — **[Track your report]** | `#btn-track-report` / `<TouchableOpacity>`. PWA calls `openReportDetail(_lastSubmittedClientId)`; RN calls `setSelectedReport(synth); setScreen('report_detail')`. |
+| Primary CTA - **[+ Add another report]** | `#btn-new-report` / `<TouchableOpacity>` with `+`. Calls `resetApp()` (PWA) / `resetReport(); setScreen('home')` (RN). |
+| Secondary CTA - **[Track your report]** | `#btn-track-report` / `<TouchableOpacity>`. PWA calls `openReportDetail(_lastSubmittedClientId)`; RN calls `setSelectedReport(synth); setScreen('report_detail')`. |
 
 ### Just-submitted cache synthesis
 
@@ -244,7 +244,7 @@ button has something to show:
 - PWA: `_synthesizeSubmittedReport(clientReportId, {})` in
   `mobile-app/src/app.js`. Testability hook:
   `window.__crispSynthesizeSubmittedReport`.
-- RN: inline synthesis in the Track `onPress` handler —
+- RN: inline synthesis in the Track `onPress` handler -
   `setSelectedReport({ client_report_id: reportId, infrastructure_type,
   crisis_type, severity, damage_classification, ... })`.
 
@@ -261,7 +261,7 @@ them with the server-authoritative view.
 
 ---
 
-## My Reports — individual report management (Apr 2026)
+## My Reports - individual report management (Apr 2026)
 
 Full redesign per the "My Reports & Individual Report Management" spec.
 PWA `stage-history` + `stage-report-detail` mirror RN `screen === 'history'` +
@@ -272,7 +272,7 @@ information architecture, field order, and interaction model.
 
 Two backend fields collapse into one user-facing state per the table below.
 Implementation: `_mapReportStatus(r)` in `mobile-app/src/app.js` and
-`mapReportStatus(r)` in `crisp-mobile/App.tsx` — MUST stay in lockstep.
+`mapReportStatus(r)` in `crisp-mobile/App.tsx` - MUST stay in lockstep.
 
 | state          | color  | icon | selector                                                                |
 |----------------|--------|------|-------------------------------------------------------------------------|
@@ -291,7 +291,7 @@ Implementation: `_mapReportStatus(r)` in `mobile-app/src/app.js` and
 | Meta row 2 | "🕒 Will be deleted when connected" (only when offline-delete queued) |
 | Right chip | 4-state status chip (icon + label, colored per table above) |
 
-Cards are tappable buttons — full-width hit target. Tap opens the detail view.
+Cards are tappable buttons - full-width hit target. Tap opens the detail view.
 
 ### Detail view (both platforms)
 
@@ -313,14 +313,14 @@ Cards are tappable buttons — full-width hit target. Tap opens the detail view.
 ```
 if r.help_arrived_at          → ["Help arrived on scene"]
 elif r.help_dispatched_at     → ["Help dispatched"]
-elif verdict === "ACCEPTED"   → ["Accepted — awaiting dispatch"]
+elif verdict === "ACCEPTED"   → ["Accepted - awaiting dispatch"]
 else                          → []
 
 if verdict === "ACCEPTED" and action_taken.trim()
     → append action_taken
 ```
 
-### Delete flow — tri-state
+### Delete flow - tri-state
 
 | UI state | When | What user sees |
 |---|---|---|
@@ -330,13 +330,13 @@ if verdict === "ACCEPTED" and action_taken.trim()
 
 ### Offline delete queue
 
-- PWA key: `localStorage['crisp_report_delete_queue_v1']` — array of `{id, clientReportId, queuedAt}`
-- RN key: `AsyncStorage['crisp_report_delete_queue_v1']` — array of IDs
+- PWA key: `localStorage['crisp_report_delete_queue_v1']` - array of `{id, clientReportId, queuedAt}`
+- RN key: `AsyncStorage['crisp_report_delete_queue_v1']` - array of IDs
 - Flushed on every `online` event + on app boot (2-second delay so the rest of init completes first)
 - Retry semantics: HTTP 200/204/404 all dequeue; any other response leaves the entry to retry
-- Deduplicated on `id` — safe to enqueue the same ID twice
+- Deduplicated on `id` - safe to enqueue the same ID twice
 
-### Bulk delete — hidden by default
+### Bulk delete - hidden by default
 
 "Delete all my reports" + its 24-hour note live inside a collapsed
 `<details class="history-advanced">` (PWA) / `TouchableOpacity`-toggled
@@ -354,10 +354,10 @@ serves the dashboard's live poll.
 
 ---
 
-## Flow — 2 steps, both platforms
+## Flow - 2 steps, both platforms
 
-1. **Step 1 — Details** (single scrollable screen)
-2. **Step 2 — Confirm** (read-only summary + Submit)
+1. **Step 1 - Details** (single scrollable screen)
+2. **Step 2 - Confirm** (read-only summary + Submit)
 
 Prior to Phase 3, PWA had 3 pages (Incident / Details / Confirm) and RN had
 3 screens (`review_incident` / `review_details` / `review_confirm`). Both
@@ -367,7 +367,7 @@ Target: ≤ 4 taps from "Start Report" to "Submitted" with photo + audio.
 
 ---
 
-## Step 1 — Details (field order)
+## Step 1 - Details (field order)
 
 Field order on the Details screen is identical on both platforms. A single
 vertical ScrollView (RN) / scrollable stage (PWA) contains, top-to-bottom:
@@ -389,21 +389,21 @@ vertical ScrollView (RN) / scrollable stage (PWA) contains, top-to-bottom:
 
 ---
 
-## Step 2 — Confirm
+## Step 2 - Confirm
 
 Two summary cards:
 
-1. **Incident** card — `🌪 crisis · 📸 N photos · 🎤 ✅/❌ · 📝 description · 📍 location`
-2. **Details** card — `📋 infra · ⚠ severity · 🏗 damage · 🏛 name (if any) · 🚛 debris (if any) · ⚡ 💧 🏥 service status · 🆘 needs`
+1. **Incident** card - `🌪 crisis · 📸 N photos · 🎤 ✅/❌ · 📝 description · 📍 location`
+2. **Details** card - `📋 infra · ⚠ severity · 🏗 damage · 🏛 name (if any) · 🚛 debris (if any) · ⚡ 💧 🏥 service status · 🆘 needs`
 
 Both cards have an ✏️ Edit link that returns to **Step 1 (Details)**. There
-is no second step to edit into — the two cards are mirrors of the one screen.
+is no second step to edit into - the two cards are mirrors of the one screen.
 
 Submit button at the bottom.
 
 ---
 
-## Crisis types (9 values — order locked)
+## Crisis types (9 values - order locked)
 
 | Icon | Enum | Label | PWA | RN |
 |---|---|---|---|---|
@@ -421,7 +421,7 @@ RN is missing CYCLONE; add in Phase 3.
 
 ---
 
-## Infrastructure types (9 values — order locked)
+## Infrastructure types (9 values - order locked)
 
 | Icon | Enum | Label | PWA | RN |
 |---|---|---|---|---|
@@ -432,10 +432,10 @@ RN is missing CYCLONE; add in Phase 3.
 | 💧 | `WATER` | Water | ✅ | ✅ |
 | 🏫 | `SCHOOL` | School | ✅ | ✅ |
 | 📡 | `TELECOM` | Telecom | ✅ | ✅ |
-| 🏛 | `GOVERNMENT` | Gov. Building | ✅ | ✅ (label "Gov." — update to "Gov. Building") |
+| 🏛 | `GOVERNMENT` | Gov. Building | ✅ | ✅ (label "Gov." - update to "Gov. Building") |
 | ❓ | `OTHER` | Other | ✅ | ✅ |
 
-RN label for `GOVERNMENT` is currently `Gov.` — update to `Gov. Building` for
+RN label for `GOVERNMENT` is currently `Gov.` - update to `Gov. Building` for
 parity. The PWA uses full `Gov. Building` in the chip.
 
 ---
@@ -464,25 +464,25 @@ Both platforms match.
 
 ---
 
-## Service status (per service — **parity bug fixed in Phase 3**)
+## Service status (per service - **parity bug fixed in Phase 3**)
 
 Backend enum: `OPERATIONAL / DISRUPTED / DESTROYED / UNKNOWN`
 (`backend/app/models/report.py:57–61`).
 
 | Icon | Enum | PWA label | RN label |
 |---|---|---|---|
-| — | `UNKNOWN` | Unknown | Unknown |
+| - | `UNKNOWN` | Unknown | Unknown |
 | ✅ | `OPERATIONAL` | Working | Working |
 | ⚠ | `DISRUPTED` | Disrupted | Disrupted |
 | ❌ | `DESTROYED` | Destroyed | Destroyed |
 
-**Parity bug:** RN currently writes `NORMAL / DEGRADED / DOWN` — those values
+**Parity bug:** RN currently writes `NORMAL / DEGRADED / DOWN` - those values
 are NOT in the backend enum. This drops service-status data on every RN
 submission. Phase 3 changes RN to use the canonical enum.
 
 ---
 
-## Pressing needs (5 values — lowercase canonical)
+## Pressing needs (5 values - lowercase canonical)
 
 Backend stores as JSON array of strings. Canonical form: **lowercase**.
 
@@ -505,7 +505,7 @@ backend JSON convention.
 | Role | Copy | Notes |
 |---|---|---|
 | Primary advance | `Next →` | Step 1 → Step 2 |
-| Submit | `Submit` (PWA) / `Send` (RN today — unify to `Submit`) | Step 2 terminal |
+| Submit | `Submit` (PWA) / `Send` (RN today - unify to `Submit`) | Step 2 terminal |
 | Back | `← Back` | Step 2 → Step 1 |
 | Edit (summary card) | `✏️ Edit` | Both cards → Step 1 |
 

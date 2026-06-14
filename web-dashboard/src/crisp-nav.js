@@ -1,5 +1,5 @@
 /**
- * crisp-nav.js — the ONE incident-navigation helper for the whole dashboard.
+ * crisp-nav.js - the ONE incident-navigation helper for the whole dashboard.
  *
  * THE BUG it fixes: clicking an incident from any surface (home, map, cards,
  * recent activity, notifications, operations lists/dashboards, search, …) used
@@ -8,7 +8,7 @@
  * THE CONTRACT: window.CrispNav.openIncident(incidentId, { operationId }) always
  *   1. routes to the correct context (the incident's OPERATION if it has one,
  *      else GLOBAL),
- *   2. writes a deep-linkable URL — #/operations/{opId}?incident={id} (operation)
+ *   2. writes a deep-linkable URL - #/operations/{opId}?incident={id} (operation)
  *      or #/incidents?incident={id} (global),
  *   3. auto-opens the incident detail panel,
  *   4. highlights + scrolls the incident's row in the list,
@@ -41,7 +41,7 @@
     return (r && r.crisis_event_id) || null;
   }
 
-  // ── THE entry point — every incident click anywhere calls this ───────────────
+  // ── THE entry point - every incident click anywhere calls this ───────────────
   function openIncident(incidentId, opts) {
     if (!incidentId) return;
     opts = opts || {};
@@ -53,7 +53,7 @@
       return;
     }
     // Already in the target context? Open WITHOUT a full re-dispatch (no overlay
-    // teardown / re-fetch / flicker) — set the deep-link seg + open + highlight
+    // teardown / re-fetch / flicker) - set the deep-link seg + open + highlight
     // directly. Otherwise switch context via navigate → dispatch → restoreFromHash.
     const p = router.parseHash ? router.parseHash() : null;
     const onTarget = !!p && (
@@ -88,7 +88,7 @@
   }
 
   let _restoreToken = 0;
-  // Called by router.dispatch() AFTER the route's context renders — the single
+  // Called by router.dispatch() AFTER the route's context renders - the single
   // path for click + refresh + Back/Forward.
   async function restoreFromHash(parsed) {
     const incidentId = parsed && parsed.query && parsed.query.incident;
@@ -132,7 +132,7 @@
     } catch (_e) {}
   }
 
-  // Strip ?incident= WITHOUT a new history entry — the ✕-close → clean URL path.
+  // Strip ?incident= WITHOUT a new history entry - the ✕-close → clean URL path.
   function clearIncidentSeg() {
     try {
       const h = (location.hash || '');

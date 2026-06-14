@@ -4,7 +4,7 @@ Revision ID: 0009_ifno
 Revises: 0008_perf
 Create Date: 2026-04-22
 
-Phase B2 (Apr 2026 UI v3) — distinguisher between building-names auto-
+Phase B2 (Apr 2026 UI v3) - distinguisher between building-names auto-
 filled from an OSM tap vs names typed as free text by a reporter whose
 device couldn't load the Overpass footprint overlay (offline, proxy-
 blocked, or pre-cache empty on first-run). Combined with `building_id
@@ -13,13 +13,13 @@ operators can resolve free-text entries to real OSM footprints later.
 
 Design notes:
   * Nullable by design. Pre-v3 clients (PWA bundle < 850, RN < 2026-04-22)
-    never set the field — the column stays NULL for their rows. The
+    never set the field - the column stays NULL for their rows. The
     dashboard treats NULL as "unknown" and displays neither the green
     ✓ nor the red "needs mapping" pip. Only explicit `False` + a
     non-null `infrastructure_name` + `building_id IS NULL` triggers
     the badge.
   * No backfill: we explicitly cannot distinguish OSM-picked from
-    user-typed on legacy rows — no flag exists to recover that signal.
+    user-typed on legacy rows - no flag exists to recover that signal.
     Leaving NULL is the correct + honest posture.
   * No index. The column is not a filter axis on any hot query path;
     the dashboard does one JOIN-less `WHERE building_id IS NULL AND
@@ -27,7 +27,7 @@ Design notes:
     IS NOT TRUE` scan that's bounded by the existing `server_created_at`
     index (we use a time-window sidebar on the dashboard).
 
-Idempotent — safe to rerun.
+Idempotent - safe to rerun.
 """
 from typing import Sequence, Union
 

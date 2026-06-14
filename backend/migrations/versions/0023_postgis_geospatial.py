@@ -4,19 +4,19 @@ Revision ID: 0023_postgis_geospatial
 Revises: 0022_abuse_appeals
 Create Date: 2026-05-16
 
-Phase 5 (docs/NEARBY_REPORTS_PIPELINE.md §9.2) — geospatial scaling
+Phase 5 (docs/NEARBY_REPORTS_PIPELINE.md §9.2) - geospatial scaling
 roadmap step G2. Adds:
 
   • The PostGIS extension (idempotent CREATE EXTENSION IF NOT EXISTS).
     Step G1 of the roadmap.
-  • locations.geom (GEOGRAPHY(Point, 4326)) — populated via trigger
+  • locations.geom (GEOGRAPHY(Point, 4326)) - populated via trigger
     from existing latitude / longitude. Step G2 of the roadmap.
   • A GiST index on the geom column so ST_DWithin queries are
     index-backed.
 
 WHEN DOES THE AGGREGATOR USE THIS?
 
-  Not yet — the aggregator still uses bbox + Python haversine on
+  Not yet - the aggregator still uses bbox + Python haversine on
   the Float lat/lng columns. This migration ships the SCHEMA + the
   POPULATED COLUMN so a follow-up commit (Phase 5.1) can flip the
   aggregator to ST_DWithin without any data migration. Decoupling
@@ -26,7 +26,7 @@ WHEN DOES THE AGGREGATOR USE THIS?
 WHY GEOGRAPHY NOT GEOMETRY?
 
   Geography type stores lat/lng in degrees + does all distance
-  math in metres on the WGS84 ellipsoid — so `ST_DWithin(geom,
+  math in metres on the WGS84 ellipsoid - so `ST_DWithin(geom,
   ..., 5000)` is "within 5000 metres" without unit-conversion
   bugs. The roadmap's 500 k-reports-per-crisis scale target wants
   the planner to use the GiST index without per-query coordinate
@@ -34,7 +34,7 @@ WHY GEOGRAPHY NOT GEOMETRY?
 
 If the PostGIS extension is not installable on this Postgres
 cluster (some hosted setups disallow CREATE EXTENSION without a
-superuser), the migration logs + skips the geom + index steps —
+superuser), the migration logs + skips the geom + index steps -
 the system continues to function on the bbox + haversine path.
 Phase 5.1 is gated on this migration succeeding.
 """
@@ -57,7 +57,7 @@ _TRG_FN = "locations_sync_geom_fn"
 def upgrade() -> None:
     bind = op.get_bind()
 
-    # Step G1 — check whether postgis is even available on this
+    # Step G1 - check whether postgis is even available on this
     # cluster before attempting to install. CREATE EXTENSION inside
     # the alembic transaction would abort the txn if the extension
     # binary isn't present, leaving us unable to mark the migration
@@ -73,7 +73,7 @@ def upgrade() -> None:
         # stays on the bbox + haversine path. Migration is a recorded
         # no-op so alembic's version table advances cleanly.
         print(
-            "[migration 0023] postgis extension not available — "
+            "[migration 0023] postgis extension not available - "
             "skipping geom column + GiST index. Aggregator stays on "
             "the bbox + haversine path (Phase 5.1 detects + degrades)."
         )

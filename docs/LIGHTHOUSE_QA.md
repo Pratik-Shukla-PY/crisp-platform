@@ -1,9 +1,9 @@
-# Lighthouse QA Pipeline — Operator Runbook
+# Lighthouse QA Pipeline - Operator Runbook
 
 CRISP runs Google Lighthouse against the PWA + Dashboard on every PR
 and every production deploy. **Threshold violations block the merge**
 and (on PROD) trigger auto-rollback. Optional deeper analysis happens
-interactively in whichever code-review LLM the maintainer prefers —
+interactively in whichever code-review LLM the maintainer prefers -
 not in CI. Zero AI cost in CI.
 
 ---
@@ -21,11 +21,11 @@ not in CI. Zero AI cost in CI.
 ## What's audited
 
 Two URLs, mobile form factor, Slow 4G + 4× CPU slowdown (matches
-realistic worst-case CRISP user — low-end Android in disaster zone):
+realistic worst-case CRISP user - low-end Android in disaster zone):
 
 | Page key    | URL                          | Why |
 |-------------|------------------------------|---|
-| `pwa-home`  | `/mobile-app/src/`           | First impression — landing page |
+| `pwa-home`  | `/mobile-app/src/`           | First impression - landing page |
 | `dashboard` | `/web-dashboard/src/`        | Analyst ops surface |
 
 3 runs per URL × 2 URLs = 6 Lighthouse audits per CI run. Median is
@@ -35,7 +35,7 @@ branch on every main-branch push.
 
 ---
 
-## Threshold gate — current FLOOR values
+## Threshold gate - current FLOOR values
 
 These are the **floor**, not the target. They block PR merge if the
 audit drops below them.
@@ -83,10 +83,10 @@ A good prompt will produce:
 2. A read of the relevant `<sha>/summary.json` files (and the median
    LHR JSONs when needed for deeper drilling).
 3. A prioritisation by user impact, weighted toward:
-   * 4× — accessibility / low-literacy UX
-   * 3× — offline-first reliability / low-bandwidth
-   * 2× — mobile responsiveness
-   * 1× — desktop / SEO
+   * 4× - accessibility / low-literacy UX
+   * 3× - offline-first reliability / low-bandwidth
+   * 2× - mobile responsiveness
+   * 1× - desktop / SEO
 4. A Critical / High / Medium / Low list with file paths + specific fixes.
 5. A confirmation step before implementing.
 
@@ -108,7 +108,7 @@ fix), use the override label:
    commit: `git commit --allow-empty -m "trigger lighthouse re-run"`.)
 3. The status check turns yellow ("BLOCKERS PRESENT, OVERRIDDEN") and
    merge is allowed.
-4. Document the reason in the merge commit — auditors will look here.
+4. Document the reason in the merge commit - auditors will look here.
 
 **The override is logged.** The PR comment shows who applied the label
 and when. Don't override silently.
@@ -118,7 +118,7 @@ and when. Don't override silently.
 ## How to read a Lighthouse PR comment
 
 ```
-## 🚦 Lighthouse — `5a3752b`
+## 🚦 Lighthouse - `5a3752b`
 
 | Page         | Performance | Accessibility | Best-practices | Pwa | Seo |
 |--------------|------------:|--------------:|---------------:|----:|----:|
@@ -130,7 +130,7 @@ Status: 🟢 PASS
 ```
 
 * Each cell shows `current` `arrow` `(delta-from-baseline)`.
-* 🟢 / ↗ / · / ↘ / 🔴 — visual cue from "+5 better" to "−5 worse".
+* 🟢 / ↗ / · / ↘ / 🔴 - visual cue from "+5 better" to "−5 worse".
 * The bottom block is the verdict. 🟢 PASS = mergeable. 🔴 BLOCK = not
   mergeable without override.
 
@@ -138,7 +138,7 @@ Status: 🟢 PASS
 
 ## How to view the full HTML report
 
-Every audit publishes a full Lighthouse HTML report (interactive — you
+Every audit publishes a full Lighthouse HTML report (interactive - you
 can drill into individual audits, see network waterfalls, etc.) to
 the `lighthouse-history` branch. The PR comment links to it:
 
@@ -146,15 +146,15 @@ the `lighthouse-history` branch. The PR comment links to it:
 
 Clicking that takes you to the GitHub tree view. Open
 `<sha>/<page>/median.html` and click **Raw** (or use the browser's
-"View raw" link) — GitHub will serve the HTML.
+"View raw" link) - GitHub will serve the HTML.
 
 Local: `git fetch origin lighthouse-history && open lighthouse-history/<sha>/<page>/median.html`.
 
 ---
 
-## Local development — running Lighthouse manually
+## Local development - running Lighthouse manually
 
-You don't need to run Lighthouse locally for routine work — CI does
+You don't need to run Lighthouse locally for routine work - CI does
 it. But for debugging:
 
 ```bash
@@ -180,7 +180,7 @@ collect step.
 
 ---
 
-## Architecture — what runs when
+## Architecture - what runs when
 
 ```
 PR opened/updated
@@ -199,7 +199,7 @@ Push to main triggers .github/workflows/deploy.yml:
   1. preflight checks Lighthouse status was green on this SHA
   2. deploy-to-EC2 (existing logic)
   3. post-deploy-smoke (existing Playwright prod-smoke)
-  4. prod-lighthouse-audit (NEW — audits PROD URL)
+  4. prod-lighthouse-audit (NEW - audits PROD URL)
   5. auto-rollback fires if EITHER prod-smoke OR prod-lighthouse-audit failed
 ```
 
@@ -251,17 +251,17 @@ npx playwright test 42-visual  # visual regression only
 Apply the `lighthouse-approved` label. Document the reason in the
 merge commit. Open a separate follow-up issue to recover the score.
 
-### "Lighthouse is flaky — I get different scores on the same code"
+### "Lighthouse is flaky - I get different scores on the same code"
 
 Lighthouse has natural noise of ±3-5 points. We run 3 audits per URL
 and pick the median. If you're still seeing flakiness:
 
-1. Check the CI runner load — overloaded GH Actions runners can
+1. Check the CI runner load - overloaded GH Actions runners can
    cause perf scores to swing. Re-run.
 2. Check for upstream CDN flakiness (Mapbox, FontAwesome, Google
    Fonts) in the Network tab of the LH HTML report.
 3. Ask your code-review LLM to *"compare the last 5 main-branch
-   Lighthouse reports for variance"* — it can spot patterns.
+   Lighthouse reports for variance"* - it can spot patterns.
 
 ### "I want to add a new URL to audit"
 
@@ -296,7 +296,7 @@ fired auto-rollback at sha=abc1234, what regressed?"*.
 
 * **CI minutes**: ~12 minutes per run (3 URLs × 3 runs at ~80 sec
   each + setup overhead). Free-tier GitHub Actions covers it easily.
-* **AI assistant API**: $0 — the deeper analysis path is interactive
+* **AI assistant API**: $0 - the deeper analysis path is interactive
   in a local LLM assistant; no background API calls.
 * **Storage**: `lighthouse-history` orphan branch ≈ 50 KB / commit ×
   ~1000 commits/year ≈ 50 MB/year of repo bloat. Squash to last 12

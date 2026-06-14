@@ -3,12 +3,12 @@
 #
 # Catches the four classes of bug that hit us in the May deploy night
 # BEFORE they leave the developer's laptop. Each check exits non-zero
-# on failure — no soft warnings, no bypass without explicit
-# `--no-verify` (which we discourage; see CLAUDE.md).
+# on failure - no soft warnings, no bypass without explicit
+# `--no-verify` (which we discourage; see the project invariants).
 #
 # Order matters: lockfile drift first (cheapest, blocks `npm ci`),
 # then shellcheck (sub-second), then node --check (sub-second), then
-# actionlint (requires a local install — falls through to a warn
+# actionlint (requires a local install - falls through to a warn
 # if missing; CI catches it as a hard gate anyway).
 
 set -e
@@ -68,10 +68,10 @@ fi
 # language-flash bug for the affected locale.
 #
 # Two layers:
-#   (a) generate-home-i18n-inline.mjs --check  — hard gate on drift
+#   (a) generate-home-i18n-inline.mjs --check  - hard gate on drift
 #       between the inline 22-locale block in index.html and the source
 #       JSONs. Single source of truth (it knows the build rule).
-#   (b) validate-home-i18n-packs.mjs            — pack-content integrity
+#   (b) validate-home-i18n-packs.mjs            - pack-content integrity
 #       (checksums match payload, all 22 locales present, no broken JSON).
 i18n_staged=$(git diff --cached --name-only --diff-filter=ACM | \
               grep -E '^(mobile-app/src/i18n/[a-z]{2,3}\.json|mobile-app/src/index\.html)$' || true)
@@ -94,7 +94,7 @@ fi
 
 # ── 5b. crisis-pack curated-option i18n coverage ────────────────────
 # Every stock crisis-pack question + select option must have a
-# cp_/cpopt_ key in en.json — the PWA pack renderer localizes the
+# cp_/cpopt_ key in en.json - the PWA pack renderer localizes the
 # (English-only) stock packs via those keys. Fires when a locale file
 # OR the stock-pack source (cc-crisis.js) changes, so adding a question
 # without a translation key fails the commit. validate-i18n.mjs then
@@ -105,7 +105,7 @@ if [ -n "$cp_i18n_staged" ]; then
     if command -v node >/dev/null 2>&1; then
         if ! node scripts/validate-crisis-pack-i18n.mjs; then
             echo ""
-            echo "✗ Crisis-pack i18n coverage failed — a stock question/option lacks a cp_/cpopt_ key."
+            echo "✗ Crisis-pack i18n coverage failed - a stock question/option lacks a cp_/cpopt_ key."
             echo "  Add the key(s) to all 22 mobile-app/src/i18n/*.json files."
             exit 1
         fi
@@ -113,12 +113,12 @@ if [ -n "$cp_i18n_staged" ]; then
 fi
 
 # ── 6. SW asset manifest drift ──────────────────────────────────────
-# Sprint 1A (May 2026, post-HC88) — catches the silent-drift bug class
+# Sprint 1A (May 2026, post-HC88) - catches the silent-drift bug class
 # that hit us in HC84/85: a developer edits any precached file (locale
 # JSON, app.js, styles.css, etc.) but forgets to re-run
 # scripts/generate-sw-manifest.mjs. The manifest hashes in sw.js then
 # drift behind actual content, defeating the per-asset migration in
-# the install handler — returning users re-download the full ~1.2 MB
+# the install handler - returning users re-download the full ~1.2 MB
 # shell instead of taking the per-file delta. No correctness break,
 # but the bandwidth optimization is silently bypassed.
 #

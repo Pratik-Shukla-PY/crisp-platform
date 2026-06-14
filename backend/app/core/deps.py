@@ -1,5 +1,5 @@
 """
-Auth Dependencies — FastAPI Depends() for JWT validation and RBAC.
+Auth Dependencies - FastAPI Depends() for JWT validation and RBAC.
 Zero-trust: every protected endpoint validates token + role.
 """
 import logging
@@ -15,7 +15,7 @@ from jwt import PyJWTError as JWTError  # May 2026: jose → PyJWT (CVE closure)
 
 logger = logging.getLogger(__name__)
 
-# OAuth2 scheme — extracts Bearer token from Authorization header
+# OAuth2 scheme - extracts Bearer token from Authorization header
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=True)
 oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 

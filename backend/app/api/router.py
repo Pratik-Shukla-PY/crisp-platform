@@ -6,33 +6,33 @@ api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(reports.router, prefix="/reports", tags=["reports"])
 api_router.include_router(exports.router, prefix="/exports", tags=["exports"])
 api_router.include_router(predictions.router, prefix="/predictions", tags=["predictions"])
-# UI v2.1 (W7) — UNDP RAPIDA integration stub. Server-to-server
+# UI v2.1 (W7) - UNDP RAPIDA integration stub. Server-to-server
 # ingestion endpoint + JSON-Schema + field-mapping reference so UNOSAT
 # / RAPIDA tooling can build adapters against a stable contract.
 # ADMIN-gated; 300 events/min rate limit per auth subject.
 api_router.include_router(integrations.router, prefix="/integrations", tags=["integrations"])
-# UI v2.1 (W8) — precomputed analytics endpoints for the
+# UI v2.1 (W8) - precomputed analytics endpoints for the
 # dashboard home tiles: top-10 crisis clusters in a lookback window
 # + 24-bucket hourly damage-rate sparkline. Read-only, unauthenticated.
 api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
-# UI v2.1 (W6) — YAML-driven modular form framework. Operators
+# UI v2.1 (W6) - YAML-driven modular form framework. Operators
 # drop a module file into `backend/app/modules/*.yaml` and capture
 # clients render it without a code change. Public read; ADMIN endpoint
 # for authoring can be added later.
 api_router.include_router(modules.router, prefix="/modules", tags=["modules"])
 # Web Push reporter feedback channel.
 # Public: GET /api/v1/push/vapid-public (the VAPID public key, safe to expose).
-# Public-ish: POST /api/v1/push/{subscribe,unsubscribe} — JWT optional,
+# Public-ish: POST /api/v1/push/{subscribe,unsubscribe} - JWT optional,
 # attaches user_id when present; anonymous reporters subscribe via
 # device_hash only. The endpoint URL itself is the per-subscription
 # secret (provider-issued, hard to guess).
 api_router.include_router(push.router, prefix="/push", tags=["push"])
-# Badge Studio share-page (Phase D.6 of swirling-forging-raccoon plan).
+# Badge Studio share-page (Phase D.6 of the design plan).
 # Mints + serves signed share tokens used by LinkedIn's share dialog
 # (which scrapes OG meta from a URL rather than accepting an image
-# attachment). Public, no auth — the token signature is the only state.
+# attachment). Public, no auth - the token signature is the only state.
 api_router.include_router(share.router, prefix="", tags=["share"])
-# Public deployment-config endpoint — small, cacheable, no auth.
+# Public deployment-config endpoint - small, cacheable, no auth.
 # See backend/app/api/endpoints/config.py for what's exposed.
 api_router.include_router(config.router, prefix="/config", tags=["config"])
 # Admin observability for the Nearby Reports pipeline (Phase 2+).
@@ -40,25 +40,25 @@ api_router.include_router(config.router, prefix="/config", tags=["config"])
 api_router.include_router(observability.router,
                           prefix="/admin/observability",
                           tags=["observability"])
-# Phase 4 (Nearby Pipeline §6.4) — admin moderation + appeal framework.
+# Phase 4 (Nearby Pipeline §6.4) - admin moderation + appeal framework.
 # CRISP hosts the core; deployment partners integrate via webhooks.
 api_router.include_router(appeals.router,
                           prefix="/admin/appeals",
                           tags=["appeals"])
-# Phase 5.1 (Nearby Pipeline §6.2) — auth-free device telemetry capture
+# Phase 5.1 (Nearby Pipeline §6.2) - auth-free device telemetry capture
 # for real emulator fingerprinting. The Phase-5 scaffold detector
 # falls back to its UA-substring check when no telemetry is posted.
 api_router.include_router(devices.router,
                           prefix="/devices",
                           tags=["devices"])
-# Phase 5.1 (Nearby Pipeline §9.5) — admin CRUD + refresh for
+# Phase 5.1 (Nearby Pipeline §9.5) - admin CRUD + refresh for
 # materialised per-region /nearby snapshots. Read consumption is gated
 # by CRISP_NEARBY_HOT_REGIONS=1; CRUD endpoints stay usable regardless
 # so operators can seed regions before flipping the flag.
 api_router.include_router(hot_regions.router,
                           prefix="/admin/nearby/hot-regions",
                           tags=["hot-regions"])
-# Phase H.1.c (May 2026) — Building Intelligence & Response Coordination.
+# Phase H.1.c (May 2026) - Building Intelligence & Response Coordination.
 # First-class building entity (alembic 0028 + Building model + scoring
 # hook in app/models/report.py). Read endpoints under /buildings/* serve
 # the Building Intelligence Console; state-transition / monitor /
@@ -66,13 +66,13 @@ api_router.include_router(hot_regions.router,
 api_router.include_router(buildings.router,
                           prefix="/buildings",
                           tags=["buildings"])
-# Dynamic Crisis Forms — geo-scoped Stage 2/3 question packs.
+# Dynamic Crisis Forms - geo-scoped Stage 2/3 question packs.
 # Public read at /api/v1/crisis-forms/active?lat=&lng= (cacheable, unauthenticated):
 # clients ask "is a crisis pack active at my location?" after the Stage-1 location
 # fix and fall back to the default flow when not. Admin CRUD + pack publish/rollback
 # at /api/v1/admin/crisis-forms/* (JWT + require_admin).
 api_router.include_router(crisis_forms.public_router, prefix="/crisis-forms", tags=["crisis-forms"])
 api_router.include_router(crisis_forms.admin_router, prefix="/admin/crisis-forms", tags=["crisis-forms"])
-# Operations rollup — operator-facing (require_viewer): the operations rail/list
+# Operations rollup - operator-facing (require_viewer): the operations rail/list
 # reads /api/v1/operations for per-event Critical·New·Total counts in one query.
 api_router.include_router(crisis_forms.operations_router, prefix="/operations", tags=["operations"])

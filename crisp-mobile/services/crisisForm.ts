@@ -1,9 +1,9 @@
 /**
- * crisisForm.ts — pure assembly of the Dynamic Crisis Forms submit payload.
+ * crisisForm.ts - pure assembly of the Dynamic Crisis Forms submit payload.
  *
  * Mirror of the PWA's form_data assembly (mobile-app/src/app.js, _submitReportInner):
  * when a geo-gated crisis pack is active, build form_data by walking the pack
- * schema's fields — each maps_to field (damage/infra/crisis/severity) is sourced
+ * schema's fields - each maps_to field (damage/infra/crisis/severity) is sourced
  * from the canonical state the default chips already captured; every other field
  * comes from the user's pack answers. Returns all-null on the default flow (no
  * pack, or no answered fields) so the report is byte-identical to a standard one
@@ -24,7 +24,7 @@ export interface CrisisFormResult {
   form_data: Record<string, any> | null;
 }
 
-// maps_to values captured by the hardcoded classify chips — sourced from
+// maps_to values captured by the hardcoded classify chips - sourced from
 // canonical state, not the pack answers. Matches the PWA's _DEFAULT_CAPTURED.
 const DEFAULT_CAPTURED: Record<string, boolean> = {
   damage_classification: true,
@@ -35,8 +35,8 @@ const DEFAULT_CAPTURED: Record<string, boolean> = {
 
 const EMPTY: CrisisFormResult = { form_pack_id: null, form_pack_version: null, form_data: null };
 
-// Base field types the renderer can draw (special types — photo/audio/location/
-// building/severity — are captured elsewhere). Matches the PWA's _CP_BASE_TYPES.
+// Base field types the renderer can draw (special types - photo/audio/location/
+// building/severity - are captured elsewhere). Matches the PWA's _CP_BASE_TYPES.
 const BASE_TYPES: Record<string, boolean> = {
   yes_no: true, single_select: true, multi_select: true, short_text: true, long_text: true, integer: true,
 };
@@ -58,7 +58,7 @@ export function crisisPackRenderableFields(crisisPack: CrisisPack | null | undef
 }
 
 // Canonical CrisisTypeEnum values (must-have #5). When the active zone's pack
-// carries one of these as crisis_type, the chip 'crisis' sub-step is skipped —
+// carries one of these as crisis_type, the chip 'crisis' sub-step is skipped -
 // the event already knows the type. Mirror of the PWA's _classifyOrder gate.
 const CANON_CRISIS_TYPES: Record<string, boolean> = {
   EARTHQUAKE: true, FLOOD: true, TSUNAMI: true, CYCLONE: true, WILDFIRE: true,
@@ -69,7 +69,7 @@ const CANON_CRISIS_TYPES: Record<string, boolean> = {
  *  (mobile-app/src/v4-flow.js). Default ['damage','infra','crisis']; with an
  *  active pack → drop 'crisis' when the zone auto-set a canonical crisis_type,
  *  and append 'crisispack' when the pack has questions the chips don't already
- *  capture. Pure — drives V4ClassifyScreen's `order`. */
+ *  capture. Pure - drives V4ClassifyScreen's `order`. */
 export function crisisPackClassifyOrder(crisisPack: CrisisPack | null | undefined): string[] {
   if (!crisisPack || !crisisPack.schema) return ['damage', 'infra', 'crisis'];
   const order: string[] = ['damage', 'infra'];
@@ -97,7 +97,7 @@ export interface CrisisPackSwap {
   clearAnswers: boolean;
   /** crisis_type action: apply the zone type, clear it, or leave it untouched. */
   crisisTypeAction: 'set' | 'clear' | 'keep';
-  /** crisis_type to apply — meaningful only when crisisTypeAction === 'set'. */
+  /** crisis_type to apply - meaningful only when crisisTypeAction === 'set'. */
   crisisType: string | null;
   /** Next value for the "crisis_type was zone-AUTO-applied" flag. */
   auto: boolean;
@@ -112,7 +112,7 @@ export interface CrisisPackSwap {
  * already picked the smallest-radius zone; here we (a) swap or clear the pack,
  * (b) drop the previous zone's stock answers when the pack id changes, and
  * (c) clear a zone-AUTO crisis_type once it no longer applies WITHOUT ever
- * clobbering a HAND-PICKED one (tracked by `wasAuto`). Pure — no React, no I/O.
+ * clobbering a HAND-PICKED one (tracked by `wasAuto`). Pure - no React, no I/O.
  */
 export function resolveCrisisPackSwap(
   data: CrisisActiveResponse | null | undefined,
@@ -144,7 +144,7 @@ export function resolveCrisisPackSwap(
   return { pack: null, clearAnswers: false, crisisTypeAction: 'keep', crisisType: null, auto: false, packId: null };
 }
 
-/** True when every REQUIRED renderable field has a usable answer — gates the
+/** True when every REQUIRED renderable field has a usable answer - gates the
  *  crisispack sub-step's Continue. Mirror of the PWA's _canAdvanceFrom('crisispack'). */
 export function crisisPackRequiredAnswered(fields: any[], answers: Record<string, any> | null | undefined): boolean {
   const ans = answers || {};

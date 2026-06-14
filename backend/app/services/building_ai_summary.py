@@ -1,4 +1,4 @@
-"""AI building summary — Phase H.6.
+"""AI building summary - Phase H.6.
 
 Claude-Haiku generates an operator-facing brief for a Building based on
 its joined view of constituent reports + responder activity + operator
@@ -19,7 +19,7 @@ Output JSON shape (matches the existing AISummaryPayload schema):
 
 When ANTHROPIC_API_KEY is missing or the call times out / fails to
 parse the service raises a SummaryUnavailable exception with the
-reason. The endpoint surfaces that as a 503 — the cache stays
+reason. The endpoint surfaces that as a 503 - the cache stays
 unmodified so the next call retries cleanly.
 """
 from __future__ import annotations
@@ -62,9 +62,9 @@ def is_configured() -> bool:
 
 
 def compute_trend_signals(b: Building, reports: List[Report]) -> dict:
-    """Phase H.9 — deterministic trend detection BEFORE the Claude call.
+    """Phase H.9 - deterministic trend detection BEFORE the Claude call.
 
-    Cheaper than asking Claude to derive trends from noisy data — these
+    Cheaper than asking Claude to derive trends from noisy data - these
     are computed from server-side timestamps + score thresholds, and
     injected into the prompt as ground truth so Claude's analysis is
     grounded rather than confabulated.
@@ -74,7 +74,7 @@ def compute_trend_signals(b: Building, reports: List[Report]) -> dict:
       activity_trend  ∈ {INCREASING, STABLE, DECREASING, UNKNOWN}
       response_state  ∈ {NO_RESPONSE, ASSESSING, ON_SITE, CLEARED}
     """
-    # Severity trend — compare the latest 5 reports' severity rank
+    # Severity trend - compare the latest 5 reports' severity rank
     # to the 5 reports before them. Need ≥6 reports for a signal.
     severity_rank = {
         "CRITICAL": 4, "SEVERE": 3, "MODERATE": 2, "MINOR": 1, "UNKNOWN": 0
@@ -101,7 +101,7 @@ def compute_trend_signals(b: Building, reports: List[Report]) -> dict:
             else:
                 severity_trend = "STABLE"
 
-    # Activity trend — compare last-6h report count vs the 6h before that.
+    # Activity trend - compare last-6h report count vs the 6h before that.
     now = datetime.now(timezone.utc)
     cutoff_recent = now - timedelta(hours=6)
     cutoff_prior = now - timedelta(hours=12)
@@ -125,7 +125,7 @@ def compute_trend_signals(b: Building, reports: List[Report]) -> dict:
     elif recent_n + prior_n > 0:
         activity_trend = "STABLE"
 
-    # Response state — derived from BuildingResponder lifecycle on the
+    # Response state - derived from BuildingResponder lifecycle on the
     # caller's responder roster (we don't re-query here; the caller
     # passes the bucket). Default to roll-up if not provided.
     if (b.resolved_report_count or 0) > 0 and (b.resolved_report_count or 0) >= (b.report_count or 0):
@@ -154,7 +154,7 @@ async def generate_building_summary(db: Session, b: Building) -> dict:
     if not is_configured():
         raise SummaryUnavailable("ANTHROPIC_API_KEY not configured")
 
-    # Snapshot the building's joined view. Bounded queries — at most
+    # Snapshot the building's joined view. Bounded queries - at most
     # ~50 reports, ~20 events, ~10 notes for a typical building.
     reports = (
         db.query(Report)
@@ -191,7 +191,7 @@ async def generate_building_summary(db: Session, b: Building) -> dict:
         .all()
     )
 
-    # Phase H.9 — derive deterministic trend signals from the raw
+    # Phase H.9 - derive deterministic trend signals from the raw
     # report stream + roll-ups, then feed them into the prompt as
     # ground truth so Claude's narrative is grounded rather than
     # invented.
@@ -225,12 +225,12 @@ async def generate_building_summary(db: Session, b: Building) -> dict:
     if not parsed:
         raise SummaryUnavailable(f"Could not parse JSON from Claude response (got {len(raw)}b)")
 
-    # Coerce shape — be tolerant about missing keys, strict about types.
+    # Coerce shape - be tolerant about missing keys, strict about types.
     summary = (parsed.get("summary") or "").strip()
     if not summary:
         raise SummaryUnavailable("Claude response missing 'summary' field")
 
-    # Phase H.9 — coerce + clamp the new structured fields.
+    # Phase H.9 - coerce + clamp the new structured fields.
     recommended_types = _coerce_str_list(
         parsed.get("recommended_responder_types"), max_items=5, max_len=40
     )
@@ -248,7 +248,7 @@ async def generate_building_summary(db: Session, b: Building) -> dict:
         "key_findings": _coerce_str_list(parsed.get("key_findings"), max_items=8, max_len=200),
         "conflicting_signals": _coerce_str_list(parsed.get("conflicting_signals"), max_items=6, max_len=200),
         "responder_recommendation": (parsed.get("responder_recommendation") or "").strip()[:600],
-        # Phase H.9 — structured fields for the dashboard's trend
+        # Phase H.9 - structured fields for the dashboard's trend
         # chips + responder-type badge. Trends are deterministic
         # (server-computed, not Claude-derived); the structured
         # responder types are Claude-classified into a bounded set.
@@ -270,21 +270,21 @@ Rules:
   - Output VALID JSON only. No markdown fences, no prose around it.
   - Keys: summary, key_findings, conflicting_signals,
     responder_recommendation, recommended_responder_types. All required.
-  - `summary` — 2-3 short sentences. State current situation, severity
+  - `summary` - 2-3 short sentences. State current situation, severity
     posture, what's been done. Cite specifics (counts, times,
-    responder presence) — not vibes. INCORPORATE the trend signals
+    responder presence) - not vibes. INCORPORATE the trend signals
     provided in the prompt so the brief reflects whether things
     are escalating, stable, or de-escalating.
-  - `key_findings` — 3-6 short bullet strings. Each is a single
+  - `key_findings` - 3-6 short bullet strings. Each is a single
     factual observation an operator can act on.
-  - `conflicting_signals` — array of strings (may be empty). Note when
+  - `conflicting_signals` - array of strings (may be empty). Note when
     different reports disagree on severity / damage class / crisis
     type, or when a responder reported "on-site" but a fresh report
     contradicts it.
-  - `responder_recommendation` — one short paragraph. What kind of
+  - `responder_recommendation` - one short paragraph. What kind of
     responder type / count is needed next, or "stand down" if signals
     suggest resolution.
-  - `recommended_responder_types` — array (1-3) of UPPERCASE codes
+  - `recommended_responder_types` - array (1-3) of UPPERCASE codes
     drawn ONLY from this bounded set:
       MEDICAL, FIRE, SEARCH_RESCUE, ENGINEERING, POLICE,
       LOGISTICS, EVACUATION, ASSESSMENT, STAND_DOWN
@@ -305,7 +305,7 @@ def _compose_prompt(
 ) -> str:
     """Pack the building's joined view into a single user message."""
     lines: List[str] = []
-    # Phase H.9 — server-computed trend signals go FIRST so Claude
+    # Phase H.9 - server-computed trend signals go FIRST so Claude
     # frames the narrative around them rather than re-deriving from
     # the raw stream.
     if trends:
@@ -420,7 +420,7 @@ def _compose_prompt(
 
     lines.append("")
     lines.append(
-        "Produce the JSON summary now. Output JSON only — no explanation, "
+        "Produce the JSON summary now. Output JSON only - no explanation, "
         "no markdown code fence, no prefix."
     )
     return "\n".join(lines)
@@ -428,7 +428,7 @@ def _compose_prompt(
 
 # ─── Helpers ──────────────────────────────────────────────────────────
 def _parse_json(raw: str) -> Optional[dict]:
-    """Tolerant JSON extractor — strips ```json fences, looks for the
+    """Tolerant JSON extractor - strips ```json fences, looks for the
     first top-level { … }. Defensive: Claude occasionally returns the
     JSON wrapped in markdown even when told not to."""
     if not raw:
@@ -446,7 +446,7 @@ def _parse_json(raw: str) -> Optional[dict]:
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
-        # Try a tail-trim — sometimes there's a trailing prose paragraph.
+        # Try a tail-trim - sometimes there's a trailing prose paragraph.
         last = raw.rfind("}")
         if last > 0:
             try:

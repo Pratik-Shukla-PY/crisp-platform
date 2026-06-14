@@ -1,11 +1,11 @@
 """Single-org identity / branding configuration.
 
-CRISP is a SINGLE-organisation platform — there is no tenant concept. This is
+CRISP is a SINGLE-organisation platform - there is no tenant concept. This is
 the one deploying organisation's settings (name, branding, contact), editable by
 an admin via the dashboard's Organisation Settings module.
 
 Persisted as a JSON blob through the storage abstraction's internal store
-(``save_internal``/``read_internal``) — NO database table, NO migration. The
+(``save_internal``/``read_internal``) - NO database table, NO migration. The
 logo rides the same internal store and is served back through a dedicated
 backend route (never a presigned/public URL). Works identically on local disk
 and S3.
@@ -38,7 +38,7 @@ _PUBLIC_KEYS = set(_DEFAULTS.keys())
 
 
 def read_org_config() -> Dict[str, Any]:
-    """Stored config merged over defaults. Never raises — falls back to defaults
+    """Stored config merged over defaults. Never raises - falls back to defaults
     so the public GET /config can never 500 on a missing/corrupt blob."""
     cfg = dict(_DEFAULTS)
     try:
@@ -48,8 +48,8 @@ def read_org_config() -> Dict[str, Any]:
             if isinstance(stored, dict):
                 cfg.update(stored)
     except FileNotFoundError:
-        pass  # first run — no blob saved yet
-    except Exception as exc:  # noqa: BLE001 — fail-safe to defaults
+        pass  # first run - no blob saved yet
+    except Exception as exc:  # noqa: BLE001 - fail-safe to defaults
         logger.warning("org_config read failed, using defaults: %s", exc)
     return cfg
 

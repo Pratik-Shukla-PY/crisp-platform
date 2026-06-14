@@ -20,7 +20,7 @@ mediapipe>=0.10.0
 easyocr>=1.7.0
 pyshp>=2.3.0
 simplekml>=1.3.0
-# PDF export — UNDP-aligned per-report dossier + batch export.
+# PDF export - UNDP-aligned per-report dossier + batch export.
 reportlab>=4.0.0
 # JWT: migrated May 2026 from python-jose → PyJWT. python-jose has
 # unfixed CVE-2024-33663 (algorithm-confusion) + CVE-2024-33664 (DoS
@@ -32,7 +32,7 @@ reportlab>=4.0.0
 pyjwt>=2.10.0
 # Password hashing: migrated May 2026 OFF passlib (last release 2020;
 # self-test breaks on bcrypt 5.x; imports the removed-in-Python-3.13
-# `crypt` stdlib module). We call bcrypt directly — same wire format
+# `crypt` stdlib module). We call bcrypt directly - same wire format
 # (`$2b$12$...`) so historical hashes verify unchanged. See
 # backend/app/core/security.py for usage + back-compat test in
 # backend/tests/test_security.py::TestPasswordHashing::test_legacy_passlib_hash_verifies.
@@ -40,12 +40,12 @@ pyjwt>=2.10.0
 # Pin still says <5.0 for now because bcrypt 5.x changes truncation
 # semantics (raises ValueError on >72-byte passwords instead of silently
 # truncating). Our security.py already truncates explicitly at the
-# encode call, so bumping to 5.x should be a one-line move — but we
+# encode call, so bumping to 5.x should be a one-line move - but we
 # defer that change to post-submission to avoid mixing two risk
 # vectors in the same deploy.
 bcrypt>=4.0,<5.0
 email-validator>=2.0.0
-# Required by FastAPI for multipart/form-data parsing — used by the
+# Required by FastAPI for multipart/form-data parsing - used by the
 # binary chunk endpoint (POST /reports/{id}/media/chunk-bin) and every
 # file-upload route. Import-time check happens when FastAPI builds
 # routes, so missing it fails the app at startup (and pytest collection).
@@ -56,21 +56,21 @@ structlog>=24.0.0
 prometheus-client>=0.20.0
 sentry-sdk[fastapi]>=2.0.0
 
-# TOTP authenticator-app MFA (Apr 2026 — single-admin dashboard lockdown).
+# TOTP authenticator-app MFA (Apr 2026 - single-admin dashboard lockdown).
 # pyotp implements RFC 6238 (the TOTP standard Google Authenticator/Authy
 # /1Password use). qrcode renders the otpauth:// URI as a QR image during
 # admin provisioning. Both are tiny pure-Python deps.
 pyotp>=2.9.0
 qrcode[pil]>=7.4.2
 
-# Web Push for reporter feedback (Apr 2026 — UNDP scalability story:
+# Web Push for reporter feedback (Apr 2026 - UNDP scalability story:
 # closes the report→response loop without N reporters polling). pywebpush
 # implements RFC 8030 (Generic Event Delivery), RFC 8291 (Message
 # Encryption), and RFC 8292 (VAPID). Provider clouds (APNs / FCM /
-# Mozilla autopush) handle the actual fan-out — we just sign + POST.
+# Mozilla autopush) handle the actual fan-out - we just sign + POST.
 pywebpush>=2.0.0
 
-# AWS S3 client (Apr 2026 — UNDP scaling story: media off EC2 disk).
+# AWS S3 client (Apr 2026 - UNDP scaling story: media off EC2 disk).
 # The instance-profile path means we don't ship static creds; boto3
 # picks up the EC2 role automatically. botocore comes along as a
 # transitive dep. moto used in tests to mock S3 without real AWS calls.
@@ -79,31 +79,31 @@ boto3>=1.34.0
 # PDF text-extraction for export-content tests (Phase 2.1, May 2026).
 # Used only in `tests/test_api_exports.py::test_pdf_dossier_renders_v4_fields`
 # to decode ReportLab-Flate-compressed content streams. Not used at
-# runtime — production code only depends on reportlab for PDF
+# runtime - production code only depends on reportlab for PDF
 # generation. Pinning at the loose `>=5.0` band keeps us on the
 # current major (5.x is the AGPL-fork-fixed mainline).
 pypdf>=5.0
 
-# Distributed rate-limit (May 2026 — Phase 1.8, audit critical-finding
+# Distributed rate-limit (May 2026 - Phase 1.8, audit critical-finding
 # #4: in-memory counters are per-WORKER, so under N uvicorn workers an
 # attacker effectively gets Nx the nominal rate). When REDIS_URL is set,
 # rate_limit.py switches to atomic INCR + EXPIRE counters shared across
 # every worker + instance. When unset (dev, CI, first-deploy), the
-# legacy in-memory fallback kicks in — same semantics as pre-Phase-1.8.
+# legacy in-memory fallback kicks in - same semantics as pre-Phase-1.8.
 # UNDP must-have #12 (500k reports per crisis) hinges on this being
 # correct under multi-worker deploys.
 redis>=5.0.0
 
 # Uber's H3 hexagonal hierarchical spatial index (Apache-2.0). May 2026
-# Phase 5.1 — docs/NEARBY_REPORTS_PIPELINE.md §9.4. Used by the optional
+# Phase 5.1 - docs/NEARBY_REPORTS_PIPELINE.md §9.4. Used by the optional
 # CRISP_NEARBY_H3_MODE path on the /nearby query: hex-cell containment
 # replaces the bbox + haversine pre-filter for 500k+-reports-per-crisis
 # scale (UNDP must-have #12). Helper module gracefully degrades when the
-# wheel can't be installed on the target arch — the env flag stays off
+# wheel can't be installed on the target arch - the env flag stays off
 # by default, and import failure is a no-op rather than a crash.
 h3>=4.0.0
 
-# HC55 (May 2026) — async rate-limiter for the geocoder cascade.
+# HC55 (May 2026) - async rate-limiter for the geocoder cascade.
 # Nominatim's usage policy caps third-party apps at ≤ 1 req/s globally.
 # Without a worker-shared token bucket, each FastAPI worker would
 # happily fire its own RPS budget at Nominatim's CDN and earn the whole
@@ -113,7 +113,7 @@ h3>=4.0.0
 # layer if/when Mapbox isn't enough).
 aiolimiter>=1.1.0
 
-# HC55 — in-memory LRU cache shim for the reverse-geocode hot path.
+# HC55 - in-memory LRU cache shim for the reverse-geocode hot path.
 # First 1 000 most-recent rounded-coord keys served without a Postgres
 # round-trip (~0.3 ms vs ~3 ms). Async-aware so we can decorate the
 # upstream-call helpers, not just the DB lookup.

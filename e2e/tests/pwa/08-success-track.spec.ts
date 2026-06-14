@@ -118,7 +118,7 @@ test.describe('PWA success screen (PR 7, realigned to v323 redesign)', () => {
     });
     expect(cleared.photoDataUrl).toBeNull();
     expect(cleared.description).toBe('');
-    // v6.7 reporter-blocking-fix (CLAUDE.md "Classifier-state field
+    // v6.7 reporter-blocking-fix (the project invariants "Classifier-state field
     // naming") — reset is null-only for BOTH the snake_case v4 field
     // and the legacy camelCase fallback. Never a hardcoded 'FLOOD'-
     // style default (that was the root cause of misclassification on

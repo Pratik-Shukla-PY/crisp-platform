@@ -1,21 +1,21 @@
-"""SMS sender abstraction — Twilio production, stub for dev.
+"""SMS sender abstraction - Twilio production, stub for dev.
 
-Phase 1 (Apr 2026 — Optional reporter login) adds phone OTP as a first-
+Phase 1 (Apr 2026 - Optional reporter login) adds phone OTP as a first-
 class channel alongside email. Delivery is pluggable via the
 `SMS_PROVIDER` env var:
 
-    stub      (default in dev) — logs the code to stdout; no network.
-    twilio    — uses TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM.
+    stub      (default in dev) - logs the code to stdout; no network.
+    twilio    - uses TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM.
 
 Production-grade resilience:
 
   * Rate-limit layer sits ABOVE this (in the /auth/otp/request endpoint)
     so Twilio bills don't blow up on abuse.
   * All failures raise SMSSendError; endpoint translates to a generic
-    "could not send code" response — we never surface provider details
+    "could not send code" response - we never surface provider details
     to the client (PII + cost leakage surface).
   * The stub path keeps tests hermetic (no Twilio key needed in CI).
-  * E.164 validation is done at this layer — anything else raises
+  * E.164 validation is done at this layer - anything else raises
     ValueError before a single byte hits the provider.
 
 Never log the OTP code at INFO or higher in production; stub-mode DOES
@@ -65,7 +65,7 @@ def send_sms(to_e164: str, body: str) -> None:
     prov = _provider()
 
     if prov == "stub":
-        # Dev / CI — log the body including the code so devs can drive
+        # Dev / CI - log the body including the code so devs can drive
         # the flow end-to-end without a carrier. Prefixed so the grep is
         # obvious in mixed logs.
         logger.info("[SMS stub] → %s: %s", to_e164, body)
@@ -73,12 +73,12 @@ def send_sms(to_e164: str, body: str) -> None:
 
     if prov == "twilio":
         try:
-            # Lazy import — we don't want the `twilio` package to be a
+            # Lazy import - we don't want the `twilio` package to be a
             # hard runtime dep on deployments that only use email OTP.
             from twilio.rest import Client  # type: ignore
         except ImportError as e:
             raise SMSSendError(
-                "twilio package not installed — pip install twilio or "
+                "twilio package not installed - pip install twilio or "
                 "set SMS_PROVIDER=stub for dev"
             ) from e
         sid = os.environ.get("TWILIO_ACCOUNT_SID")
@@ -101,7 +101,7 @@ def send_sms(to_e164: str, body: str) -> None:
 
 
 def send_otp_sms(to_e164: str, code: str, app_name: str = "CRISP") -> None:
-    """Convenience wrapper — formats the OTP body + sends.
+    """Convenience wrapper - formats the OTP body + sends.
 
     Body is short, provider-friendly, free of localisation strings (the
     client-side app picks the language; this channel is delivery-only)."""

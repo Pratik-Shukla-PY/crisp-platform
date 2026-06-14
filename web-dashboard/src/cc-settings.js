@@ -1,10 +1,10 @@
-/* cc-settings.js — Account + Organisation Settings (self-contained).
+/* cc-settings.js - Account + Organisation Settings (self-contained).
  *
  * Two admin/user settings modules in one file, each launched from the existing
  * user-menu and rendered in a shared overlay shell:
- *   • Account  (window.openAccountSettings) — Profile · Security · Sessions ·
+ *   • Account  (window.openAccountSettings) - Profile · Security · Sessions ·
  *     Audit (admin) · Users (admin). Wires to existing /api/v1/auth endpoints.
- *   • Organisation (window.openOrgSettings) — Branding (name/contact/colour/
+ *   • Organisation (window.openOrgSettings) - Branding (name/contact/colour/
  *     logo) · Channels (read-only). Single-org config via /api/v1/config/org
  *     (config-blob backed; NO tenant concept, NO migration).
  *
@@ -12,7 +12,7 @@
  *   • app.js and styles.css are NOT touched (this file + two <script> tags).
  *   • All ids / classes are cc-st- prefixed; CSS injected once.
  *   • Auth + backend-host derivation mirror app.js / cc-crisis.js.
- *   • Boots defensively — any failure here must never break the dashboard.
+ *   • Boots defensively - any failure here must never break the dashboard.
  */
 (function () {
   'use strict';
@@ -44,14 +44,14 @@
   }
   const el = (id) => document.getElementById(id);
   function fmtDate(s) {
-    if (!s) return '—';
+    if (!s) return '-';
     // Shared dashboard format (app.js __ccFmtDateTime: "11 Jun 2026,
     // 2:45 PM", operator-local, ensureUTC-hardened parse). Fallback keeps
     // the old rendering if app.js hasn't exposed the helper yet.
     const shared = window.__ccFmtDateTime;
-    if (shared) { const out = shared(s); return out || '—'; }
+    if (shared) { const out = shared(s); return out || '-'; }
     const d = new Date(s);
-    return isNaN(d.getTime()) ? '—' : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    return isNaN(d.getTime()) ? '-' : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   }
   async function api(method, path, body, base) {
     const opts = { method, headers: { Authorization: `Bearer ${token() || ''}` } };
@@ -294,12 +294,12 @@
         <p class="cc-st-hint">Member since ${fmtDate(m.created_at)} · ${m.login_count || 0} logins · last ${fmtDate(m.last_login_at)}.</p>
         <div class="cc-st-row" style="margin-top:12px">
           <button class="cc-st-btn" id="cc-st-gdpr-export"
-                  title="Download everything CRISP stores about your account (profile, sessions, audit trail, linked reports) as JSON — your data-access right.">
+                  title="Download everything CRISP stores about your account (profile, sessions, audit trail, linked reports) as JSON - your data-access right.">
             ⬇ Download my account data</button>
           <div class="cc-st-spacer"></div>
           <button class="cc-st-btn primary" id="cc-st-save-profile">Save changes</button></div>
       </div>`;
-    // Data-subject access right (UNDP Privacy Policy Annex 2 (f)) — the
+    // Data-subject access right (UNDP Privacy Policy Annex 2 (f)) - the
     // backend /auth/me/data-export endpoint previously had NO UI consumer
     // anywhere (export audit finding). JSON blob download, same pattern as
     // the PWA's "Export my data".
@@ -375,7 +375,7 @@
     S.sessions = Array.isArray(rows) ? rows : [];
     const list = S.sessions.length ? S.sessions.map((s) => `<tr>
         <td>${esc(s.device || 'Unknown device')}</td>
-        <td class="cc-st-meta">${esc(s.ip || '—')}</td>
+        <td class="cc-st-meta">${esc(s.ip || '-')}</td>
         <td class="cc-st-meta">${fmtDate(s.created_at)}</td>
         <td class="cc-st-meta">${fmtDate(s.expires_at)}</td>
         <td><button class="cc-st-btn sm danger" data-revoke="${esc(s.id)}">Revoke</button></td>
@@ -423,10 +423,10 @@
     if (!list.length) return `<tr><td colspan="5"><div class="cc-st-empty">No audit events.</div></td></tr>`;
     return list.map((l) => `<tr>
       <td class="cc-st-meta">${fmtDate(l.created_at)}</td>
-      <td class="cc-st-meta">${esc(l.user_email || '—')}</td>
-      <td><span class="cc-st-pill role">${esc(l.action || '—')}</span></td>
-      <td class="cc-st-meta">${esc([l.resource_type, l.resource_id].filter(Boolean).join(' · ') || '—')}</td>
-      <td class="cc-st-meta">${esc(l.ip_address || '—')}</td>
+      <td class="cc-st-meta">${esc(l.user_email || '-')}</td>
+      <td><span class="cc-st-pill role">${esc(l.action || '-')}</span></td>
+      <td class="cc-st-meta">${esc([l.resource_type, l.resource_id].filter(Boolean).join(' · ') || '-')}</td>
+      <td class="cc-st-meta">${esc(l.ip_address || '-')}</td>
     </tr>`).join('');
   }
 
@@ -441,7 +441,7 @@
     const list = S.users.map((u) => {
       const self = u.id === myId;
       return `<tr>
-        <td><div style="font-weight:600">${esc(u.full_name || '—')}</div><div class="cc-st-meta">${esc(u.email)}</div></td>
+        <td><div style="font-weight:600">${esc(u.full_name || '-')}</div><div class="cc-st-meta">${esc(u.email)}</div></td>
         <td><select class="cc-st-select cc-st-role" data-id="${esc(u.id)}" ${self ? 'disabled title="You cannot change your own role"' : ''} style="width:auto;padding:5px 8px">
           ${ROLES.map((r) => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r}</option>`).join('')}</select></td>
         <td><span class="cc-st-pill ${u.is_active ? 'ok' : 'off'}">${u.is_active ? 'Active' : 'Disabled'}</span></td>
@@ -570,12 +570,12 @@
     } catch (_) {}
     const tw = !!(twilio && twilio.twilio_configured);
     const CH = [
-      { n: 'PWA / Web', d: 'Progressive web app — the primary citizen reporting surface.', on: true },
+      { n: 'PWA / Web', d: 'Progressive web app - the primary citizen reporting surface.', on: true },
       { n: 'Android (RN)', d: 'Native React-Native build sharing the same report pipeline.', on: true },
       { n: 'Telegram', d: 'Conversational bot ingestion.', on: true },
       { n: 'WhatsApp', d: 'Twilio WhatsApp Business inbound.', on: tw },
       { n: 'SMS', d: 'Twilio SMS inbound/outbound.', on: tw },
-      { n: 'IVR', d: 'Twilio voice — phone-call reporting.', on: tw },
+      { n: 'IVR', d: 'Twilio voice - phone-call reporting.', on: tw },
     ];
     body.innerHTML = `
       <div class="cc-st-card">

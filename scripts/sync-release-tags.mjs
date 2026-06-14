@@ -2,7 +2,7 @@
 /**
  * Sync Sentry `crisp-release` meta tags to the SW cache name.
  *
- * Phase 3.2 (May 2026) — Sentry release tagging keeps errors
+ * Phase 3.2 (May 2026) - Sentry release tagging keeps errors
  * bisectable: every event has a release ID that matches the deployed
  * build. The PWA's service worker already carries the canonical
  * build name (`CACHE_NAME = 'crisp-v198'`); the Sentry init reads
@@ -11,7 +11,7 @@
  * incorrectly.
  *
  * This script reads both versions and keeps the meta tag in sync.
- * Idempotent — re-running with no changes exits 0 and emits no
+ * Idempotent - re-running with no changes exits 0 and emits no
  * diff.
  *
  *   node scripts/sync-release-tags.mjs           # update in place
@@ -112,18 +112,18 @@ console.log("");
 if (problems) {
     if (CHECK_ONLY) {
         console.error(
-            `${RED}FAIL${RESET} — ${problems} release-tag(s) out of sync. ` +
+            `${RED}FAIL${RESET} - ${problems} release-tag(s) out of sync. ` +
             `Run without --check to fix.`,
         );
     } else {
-        console.error(`${RED}FAIL${RESET} — ${problems} problem(s).`);
+        console.error(`${RED}FAIL${RESET} - ${problems} problem(s).`);
     }
     process.exit(1);
 }
 if (CHECK_ONLY) {
-    console.log(`${GREEN}PASS${RESET} — all release tags in sync.`);
+    console.log(`${GREEN}PASS${RESET} - all release tags in sync.`);
 } else if (updates > 0) {
-    console.log(`${GREEN}DONE${RESET} — updated ${updates} file(s).`);
+    console.log(`${GREEN}DONE${RESET} - updated ${updates} file(s).`);
 } else {
-    console.log(`${GREEN}PASS${RESET} — already in sync, nothing to do.`);
+    console.log(`${GREEN}PASS${RESET} - already in sync, nothing to do.`);
 }

@@ -1,11 +1,11 @@
-/* cc-crisis.js — Dynamic Crisis Forms admin panel (self-contained).
+/* cc-crisis.js - Dynamic Crisis Forms admin panel (self-contained).
  *
  * Productionises the approved /tmp/crisis-forms-admin-mockup.html into real
  * CRUD against the backend's crisis-forms API. Deliberately self-contained:
  *   • app.js and styles.css are NOT touched (this file + ONE <script> tag).
  *   • All DOM ids / classes are cc-cf- prefixed; CSS is injected once.
  *   • Auth + backend-host derivation mirror app.js exactly.
- *   • Boots defensively — any failure here must never break the dashboard.
+ *   • Boots defensively - any failure here must never break the dashboard.
  *
  * Feature model (operator-refined): the default report flow stays UNCHANGED
  * everywhere. Admins activate a crisis-specific Stage 2/3 question pack for a
@@ -67,7 +67,7 @@
   };
   const opt = (pairs) => pairs.map(([value, label]) => ({ value, label }));
   // crisis types offered when creating an EVENT (free-form display/analytics on the
-  // event row — NOT enum-guarded; LANDSLIDE is intentionally available here only).
+  // event row - NOT enum-guarded; LANDSLIDE is intentionally available here only).
   const EVENT_CRISIS_TYPES = [
     ['WILDFIRE', '🔥 Wildfire / Forest fire'], ['FLOOD', '🌊 Flood'], ['EARTHQUAKE', '🏚 Earthquake'],
     ['CYCLONE', '🌀 Cyclone'], ['TSUNAMI', '🌊 Tsunami'], ['LANDSLIDE', '⛰ Landslide'],
@@ -78,7 +78,7 @@
   // ── curated block library (faithful to the approved mockup; each block carries
   //    a full, VALID schema field). `stage` (2 = classify, 3 = details) groups the
   //    field into the published schema's sections. `locked` blocks can't be toggled
-  //    off (taxonomy anchors). Photo / audio are NOT here — they are Stage-1 capture,
+  //    off (taxonomy anchors). Photo / audio are NOT here - they are Stage-1 capture,
   //    which the crisis feature never touches (shown as the green lock banner). ────
   function mkBlock(id, icon, title, tyLabel, stage, field, extra) {
     return Object.assign({ id, icon, title, ty: tyLabel, stage, field, on: true, desc: '', locked: false }, extra || {});
@@ -169,7 +169,7 @@
 
   // Expose the curated form-kit DATA (read-only constants; consumers clone before
   // mutating) so the Start-New-Operation wizard (cc-wizard.js) reuses the SAME
-  // block library + stock packs instead of duplicating them. Pure data — no
+  // block library + stock packs instead of duplicating them. Pure data - no
   // behaviour change to this module.
   window.CrispFormKit = { ENUM, CORE_BLOCKS, STOCK_PACKS, CRISIS_TO_STOCK, EVENT_CRISIS_TYPES };
 
@@ -222,9 +222,9 @@
     return data;
   }
   function fmtDate(iso) {
-    if (!iso) return '—';
+    if (!iso) return '-';
     const d = new Date(iso);
-    if (isNaN(d.getTime())) return '—';
+    if (isNaN(d.getTime())) return '-';
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   }
   function eventStatus(ev) {
@@ -439,7 +439,7 @@
           <div class="cc-cf-logo">C</div>
           <div>
             <h2>Crisis Forms</h2>
-            <div class="cc-cf-sub">Activate a crisis-specific Stage 2 / 3 question pack for a geographic zone — the default flow stays everywhere else.</div>
+            <div class="cc-cf-sub">Activate a crisis-specific Stage 2 / 3 question pack for a geographic zone - the default flow stays everywhere else.</div>
           </div>
           <button class="cc-cf-x" id="cc-cf-close" title="Close" aria-label="Close">✕</button>
         </div>
@@ -520,7 +520,7 @@
     const live = ev.filter((e) => eventStatus(e).k === 'live').length;
     const sched = ev.filter((e) => eventStatus(e).k === 'sched').length;
     const exp = ev.filter((e) => eventStatus(e).k === 'exp').length;
-    const packTitle = (id) => { const p = S.packs.find((x) => x.id === id); return p ? p.title : (id ? '— missing —' : '— none —'); };
+    const packTitle = (id) => { const p = S.packs.find((x) => x.id === id); return p ? p.title : (id ? '- missing -' : '- none -'); };
     let rows = '';
     if (!ev.length) {
       rows = `<tr><td colspan="6"><div class="cc-cf-empty">No crisis events yet. Create one to activate a curated pack for a zone.</div></td></tr>`;
@@ -532,7 +532,7 @@
         const creator = creatorName(e);
         return `<tr>
           <td><div style="font-weight:600">${esc(e.name)}</div><div style="color:var(--text-dim,#6b7689);font-size:11.5px">${esc(packTitle(e.form_pack_id))}</div>${creator ? `<div style="color:var(--text-dim,#6b7689);font-size:11px;margin-top:1px">Created by ${esc(creator)}</div>` : ''}</td>
-          <td>${esc(e.crisis_type || '—')}</td>
+          <td>${esc(e.crisis_type || '-')}</td>
           <td>${esc(zone)}</td>
           <td>${esc(win)}</td>
           <td><span class="cc-cf-pill ${st.k}">${st.label}</span></td>
@@ -575,7 +575,7 @@
     if (act === 'toggle') {
       try {
         await api('PATCH', `/events/${id}`, { is_active: !e.is_active });
-        toast(e.is_active ? 'Event deactivated — zone reverted to default flow.' : 'Event activated.', 'ok');
+        toast(e.is_active ? 'Event deactivated - zone reverted to default flow.' : 'Event activated.', 'ok');
         refreshAll();
       } catch (err) { toast('Update failed: ' + err.message, 'err'); }
       return;
@@ -593,7 +593,7 @@
     const isNew = !e.id;
     const radius = e.radius_km != null ? e.radius_km : 30;
     const typeOpts = EVENT_CRISIS_TYPES.map(([v, l]) => `<option value="${v}" ${e.crisis_type === v ? 'selected' : ''}>${esc(l)}</option>`).join('');
-    const packOpts = ['<option value="">— none (configure later) —</option>']
+    const packOpts = ['<option value="">- none (configure later) -</option>']
       .concat(S.packs.map((p) => `<option value="${esc(p.id)}" ${e.form_pack_id === p.id ? 'selected' : ''}>${esc(p.title)} ${p.active_version ? '(v' + p.active_version + ')' : '(no published version)'}</option>`)).join('');
     const radii = [5, 10, 30, 50, 100].map((r) => `<button type="button" class="cc-cf-chip ${r === radius ? 'on' : ''}" data-r="${r}">${r}</button>`).join('');
     body.innerHTML = `
@@ -602,7 +602,7 @@
           <div class="cc-cf-spacer"></div><button class="cc-cf-btn ghost sm" id="cc-cf-ev-back">← Back</button></div>
         <div class="cc-cf-grid2" style="margin-top:12px">
           <div>
-            <div class="cc-cf-fld"><label class="cc-cf-lbl">Crisis name</label><input class="cc-cf-input" id="cc-ev-name" value="${esc(e.name || '')}" placeholder="Forest Fire — Bandipur"></div>
+            <div class="cc-cf-fld"><label class="cc-cf-lbl">Crisis name</label><input class="cc-cf-input" id="cc-ev-name" value="${esc(e.name || '')}" placeholder="Forest Fire - Bandipur"></div>
             <div class="cc-cf-fld"><label class="cc-cf-lbl">Crisis type</label><select class="cc-cf-select" id="cc-ev-type">${typeOpts}</select></div>
             <div class="cc-cf-fld"><label class="cc-cf-lbl">Starts</label>
               <div class="cc-cf-dt">
@@ -665,7 +665,7 @@
           el('cc-ev-lat').value = Number(r.latitude).toFixed(6);
           el('cc-ev-lng').value = Number(r.longitude).toFixed(6);
           showGeoRes(r);
-        } else { toast('Could not resolve that place — enter coordinates manually.', 'err'); }
+        } else { toast('Could not resolve that place - enter coordinates manually.', 'err'); }
       } catch (err) { toast('Lookup failed: ' + err.message, 'err'); }
       finally { btn.textContent = old; btn.disabled = false; }
     }
@@ -723,12 +723,12 @@
   function renderPacks(body) {
     let rows = '';
     if (!S.packs.length) {
-      rows = `<tr><td colspan="5"><div class="cc-cf-empty">No question packs yet. Create one, curate its blocks, then publish — and bind it to a crisis event.</div></td></tr>`;
+      rows = `<tr><td colspan="5"><div class="cc-cf-empty">No question packs yet. Create one, curate its blocks, then publish - and bind it to a crisis event.</div></td></tr>`;
     } else {
       rows = S.packs.map((p) => `<tr>
         <td><div style="font-weight:600">${esc(p.title)}</div><div style="color:var(--text-dim,#6b7689);font-size:11.5px">${esc(p.key)}</div></td>
-        <td>${esc(p.crisis_type || '—')}</td>
-        <td>${p.active_version ? 'v' + p.active_version : '—'}</td>
+        <td>${esc(p.crisis_type || '-')}</td>
+        <td>${p.active_version ? 'v' + p.active_version : '-'}</td>
         <td>${p.is_archived ? '<span class="cc-cf-pill archived">Archived</span>' : (p.active_version ? '<span class="cc-cf-pill published">Published</span>' : '<span class="cc-cf-pill draft">Draft</span>')}</td>
         <td><div class="cc-cf-row" style="gap:6px;flex-wrap:nowrap">
           <button class="cc-cf-btn sm" data-pact="build" data-id="${esc(p.id)}">Build &amp; publish</button>
@@ -751,14 +751,14 @@
   }
 
   async function newPack() {
-    const title = window.prompt('Pack title (e.g. "Forest Fire — rapid assessment"):');
+    const title = window.prompt('Pack title (e.g. "Forest Fire - rapid assessment"):');
     if (!title || !title.trim()) return;
     // derive a stable key from the title; ensure uniqueness with a short suffix
     const base = title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'pack';
     const key = `${base}-${Math.abs(hashStr(base + S.packs.length + title)).toString(36).slice(0, 4)}`;
     try {
       const pack = await api('POST', '/packs', { key, title: title.trim() });
-      toast('Pack created — curate its blocks below.', 'ok');
+      toast('Pack created - curate its blocks below.', 'ok');
       S.packs.unshift(pack);
       openBuilder(pack.id);
     } catch (err) { toast('Create failed: ' + err.message, 'err'); }
@@ -811,7 +811,7 @@
     const known = new Set();
     S.builderBlocks.core.forEach((b) => { known.add(b.field.key); if (!b.locked) b.on = keys.has(b.field.key); });
     S.builderBlocks.stock.forEach((b) => { known.add(b.field.key); b.on = keys.has(b.field.key); });
-    // any field key the curated UI doesn't recognise (hand-authored) — flag, don't clobber
+    // any field key the curated UI doesn't recognise (hand-authored) - flag, don't clobber
     S.builderUnknownFields = [...keys].filter((k) => !known.has(k));
   }
 
@@ -837,12 +837,12 @@
       // Publish a draft/archived version (demotes the prior published one).
       const showPublish = v.status !== 'published';
       // Re-activate an EARLIER published version (rollback repoints active_version
-      // without re-linting) — only valid on an already-published, non-active version.
+      // without re-linting) - only valid on an already-published, non-active version.
       const showRollback = v.status === 'published' && !isActive;
       return `<tr>
         <td>v${v.version}</td>
         <td><span class="cc-cf-pill ${v.status}">${esc(v.status)}</span>${isActive ? ' <span class="cc-cf-pill live" style="margin-left:6px">active</span>' : ''}</td>
-        <td>${v.published_at ? fmtDate(v.published_at) : (v.created_at ? fmtDate(v.created_at) : '—')}</td>
+        <td>${v.published_at ? fmtDate(v.published_at) : (v.created_at ? fmtDate(v.created_at) : '-')}</td>
         <td><div class="cc-cf-row" style="gap:6px;flex-wrap:nowrap">
           ${showPublish ? `<button class="cc-cf-btn sm primary" data-vact="publish" data-v="${v.version}">Publish</button>` : ''}
           ${showRollback ? `<button class="cc-cf-btn sm" data-vact="rollback" data-v="${v.version}">Make active</button>` : ''}
@@ -852,14 +852,14 @@
 
     body.innerHTML = `
       <div class="cc-cf-card">
-        <div class="cc-cf-row"><h3 style="margin:0">Build pack — ${esc(pack.title || '')}</h3>
+        <div class="cc-cf-row"><h3 style="margin:0">Build pack - ${esc(pack.title || '')}</h3>
           <span style="color:var(--text-dim,#6b7689);font-size:12px">${esc(pack.key || '')}</span>
           <div class="cc-cf-spacer"></div><button class="cc-cf-btn ghost sm" id="cc-cf-b-back">← Back to packs</button></div>
         ${S.builderUnknownFields.length ? `<div class="cc-cf-warn">⚠ The latest version has ${S.builderUnknownFields.length} field(s) this curated builder doesn't manage (${esc(S.builderUnknownFields.join(', '))}). Saving a new version here will replace them with the curated selection below.</div>` : ''}
         <div id="cc-cf-errbox"></div>
         <div class="cc-cf-build">
           <div>
-            <div class="cc-cf-lock">🔒 Stage 1 (photo · audio · location) — unchanged, shared by every crisis. Packs only curate Stage 2 / 3.</div>
+            <div class="cc-cf-lock">🔒 Stage 1 (photo · audio · location) - unchanged, shared by every crisis. Packs only curate Stage 2 / 3.</div>
             <div class="cc-cf-fld"><label class="cc-cf-lbl">Crisis stock questions</label>
               <select class="cc-cf-select" id="cc-cf-stock">${stockSel}</select></div>
             <div class="cc-cf-blocks">
@@ -868,7 +868,7 @@
             </div>
           </div>
           <div>
-            <h3>Preview — as the reporter sees it</h3>
+            <h3>Preview - as the reporter sees it</h3>
             <div class="cc-cf-chtabs">
               <button data-ch="pwa" class="${S.previewCh === 'pwa' ? 'on' : ''}">📱 PWA</button>
               <button data-ch="rn" class="${S.previewCh === 'rn' ? 'on' : ''}">🤖 RN</button>
@@ -936,14 +936,14 @@
     if (!allFields.length) { mount.innerHTML = `<div class="cc-cf-pv-head">▾ inside the active crisis zone ▾</div><div class="cc-cf-empty" style="padding:30px">No questions selected.</div>`; return; }
     let html = `<div class="cc-cf-pv-head">▾ inside the active crisis zone ▾</div>`;
     if (ch === 'tg') {
-      html += `<div class="cc-cf-stage-lbl">TELEGRAM — crisis pack as button steps</div><div class="cc-cf-tg">`;
+      html += `<div class="cc-cf-stage-lbl">TELEGRAM - crisis pack as button steps</div><div class="cc-cf-tg">`;
       allFields.slice(0, 6).forEach(({ f }) => {
         html += `<div class="bub">${esc(f.label || f.key)}</div>`;
         html += tgControl(f);
       });
       html += `</div>`;
     } else {
-      html += `<div class="cc-cf-stage-lbl">STAGE 2 · 3 — ${ch === 'pwa' ? 'PWA' : 'React Native'} (crisis pack)</div>`;
+      html += `<div class="cc-cf-stage-lbl">STAGE 2 · 3 - ${ch === 'pwa' ? 'PWA' : 'React Native'} (crisis pack)</div>`;
       allFields.forEach(({ f }) => {
         html += `<div class="cc-cf-q"><div class="qt">${esc(f.label || f.key)}</div>${appControl(f)}</div>`;
       });
@@ -962,7 +962,7 @@
     if (f.type === 'photo') return `<div class="cc-cf-stub">📸 Add a photo</div>`;
     if (f.type === 'audio') return `<div class="cc-cf-stub">🎤 Voice note</div>`;
     if (f.type === 'severity') return `<span class="cc-cf-opt">Minor</span><span class="cc-cf-opt sel">Moderate</span><span class="cc-cf-opt">Severe</span>`;
-    return `<div class="cc-cf-stub">—</div>`;
+    return `<div class="cc-cf-stub">-</div>`;
   }
   function tgControl(f) {
     if (f.type === 'yes_no') return `<button class="tgbtn">✅ Yes</button><button class="tgbtn">❌ No</button>`;
@@ -1067,7 +1067,7 @@
         if (b) b.style.display = isAdmin() ? '' : 'none';
         else mountLauncher();
       }, 1500);
-    } catch (_e) { /* swallow — additive module must not break boot */ }
+    } catch (_e) { /* swallow - additive module must not break boot */ }
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);
@@ -1076,7 +1076,7 @@
   // expose a tiny hook for manual open (debug / future deep-link)
   window.openCrisisForms = openOverlay;
 
-  // Debug/test hook (mirrors the app.js window.__crisp* convention) — lets the
+  // Debug/test hook (mirrors the app.js window.__crisp* convention) - lets the
   // schema contract be verified headlessly without a browser session. Pure: it
   // assembles a schema from the block library exactly as the builder would.
   window.__ccCrisis = {

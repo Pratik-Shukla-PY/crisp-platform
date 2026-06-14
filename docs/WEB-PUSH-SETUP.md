@@ -4,7 +4,7 @@ The CRISP backend ships with the Web Push code paths in place but the
 push-delivery feature is **gated on three env vars being set**. Until
 those vars land in the production environment, `GET /api/v1/push/vapid-public`
 returns `{ enabled: false, key: "" }` and the PWA silently skips the
-permission prompt — i.e., everything degrades gracefully and nothing
+permission prompt - i.e., everything degrades gracefully and nothing
 breaks. The platform stays healthy even with zero VAPID config.
 
 This runbook walks through enabling push end-to-end.
@@ -51,7 +51,7 @@ the secret store the deploy uses) and create three keys:
 | `VAPID_CONTACT_EMAIL` | a real on-call mailbox | safe |
 
 Even though the public key is "safe to expose," put it in Secrets
-Manager too — that's where the rest of the deploy reads from, and you
+Manager too - that's where the rest of the deploy reads from, and you
 don't want this drifting between environments.
 
 ## 2 · Wire the secrets into the running container
@@ -105,7 +105,7 @@ docker compose -f docker-compose.prod.yml exec -T db psql -U crisp -c \
 | `vapid-public` returns `enabled: false` after step 2 | Secrets aren't reaching the container. | Check `docker compose -f docker-compose.prod.yml exec backend env \| grep VAPID`. |
 | Permission prompt doesn't appear | `Notification.permission` is already `denied`, OR you're on iOS Safari without home-screen install, OR the user already accepted/declined once. | Reset site notifications in browser settings, then refresh. |
 | PWA logs `PushManager.subscribe failed` | Public key is malformed (likely paste error). | Re-run step 1 fresh, re-paste in Secrets Manager. |
-| No notification arrives despite a 200 from `/dispatch` | Provider returned 410 (subscription died) — see `failure_count` and missing rows in `push_subscriptions`. | Re-subscribe from the device. |
+| No notification arrives despite a 200 from `/dispatch` | Provider returned 410 (subscription died) - see `failure_count` and missing rows in `push_subscriptions`. | Re-subscribe from the device. |
 | Backend logs `[push] AUTH FAILURE (status=401)` | Wrong VAPID private key, OR system clock skew (provider rejects expired claims). | Verify `VAPID_PRIVATE_KEY` matches the public, check `chronyc tracking`. |
 
 ## 5 · Rotation
@@ -119,12 +119,12 @@ gh workflow run "Deploy to Production" --ref main
 ```
 
 After the new keys are live, **every existing subscription becomes
-invalid** — the public key embedded in each subscription endpoint URL
+invalid** - the public key embedded in each subscription endpoint URL
 no longer matches the new VAPID identity. Tell users to re-subscribe
 (reload the PWA; the subscription flow will re-fire automatically).
 
 The backend will start receiving 410s from providers for the old
-subscriptions and GC them on the fly — no manual cleanup needed.
+subscriptions and GC them on the fly - no manual cleanup needed.
 
 ## 6 · Why this is gated behind a manual step
 
