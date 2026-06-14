@@ -81,6 +81,7 @@ class OperationSummaryResponse(BaseModel):
     form_name: Optional[str] = None
     critical: int = 0
     new_24h: int = 0
+    new_prev_24h: int = 0                        # [48h,24h) window — for the card's trend arrow
     total: int = 0
     verified: int = 0                           # all-time verified reports in this op
     last_activity: Optional[datetime] = None

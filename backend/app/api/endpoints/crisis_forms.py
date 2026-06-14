@@ -173,6 +173,7 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
     /admin/crisis-forms/events routes."""
     now = datetime.now(timezone.utc)
     new_cut = now - timedelta(hours=24)
+    prev_cut = now - timedelta(hours=48)   # [48h, 24h) window — trend delta vs new_24h
     # Report rollup per op — ONE grouped query. The report-only Phase-3 health
     # inputs (unattended_critical, sla_breaches, needs_review) fold in as SUM(CASE)
     # columns; escalation + responders need their own joins (below) — joining them
@@ -196,6 +197,9 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
                 case((Report.reviewer_verdict == ReviewerVerdictEnum.ACCEPTED.value, 1), else_=0)), 0).label("verified"),
             sa_func.coalesce(sa_func.sum(
                 case((Report.server_created_at >= new_cut, 1), else_=0)), 0).label("new_24h"),
+            sa_func.coalesce(sa_func.sum(case((and_(
+                Report.server_created_at >= prev_cut,
+                Report.server_created_at < new_cut), 1), else_=0)), 0).label("new_prev_24h"),
             sa_func.max(Report.server_created_at).label("last_activity"),
             # unattended critical = CRITICAL, open, not yet dispatched (report-level "attended" signal).
             sa_func.coalesce(sa_func.sum(case((and_(
@@ -260,7 +264,8 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
             radius_km=r.radius_km, place_name=r.place_name,
             started_at=r.started_at, ended_at=r.ended_at,
             form_pack_id=r.form_pack_id, form_name=r.form_name,
-            critical=int(r.critical or 0), new_24h=int(r.new_24h or 0), total=int(r.total or 0),
+            critical=int(r.critical or 0), new_24h=int(r.new_24h or 0),
+            new_prev_24h=int(r.new_prev_24h or 0), total=int(r.total or 0),
             verified=int(r.verified or 0),
             last_activity=r.last_activity, is_cluster=False,
             health=health, health_reason=reason,

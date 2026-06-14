@@ -157,9 +157,11 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         await page.evaluate(() => { location.hash = '#/operations'; });
         const row = page.locator('#cco-list [data-op="op-a"]');
         await expect(row).toBeVisible({ timeout: 6000 });
-        const dot = row.locator('.opc-health');     // unified card health dot
+        // Redesigned card: the backend health drives the situation PILL (coloured
+        // dot + R/A/G label) — the "why" is the pill's title (health_reason).
+        const dot = row.locator('.opc-pill-dot');
         await expect(dot).toHaveCSS('background-color', 'rgb(248, 113, 113)');   // RED
-        await expect(dot).toHaveAttribute('title', /unattended critical/);
+        await expect(row.locator('.opc-pill')).toHaveAttribute('title', /unattended critical/);
     });
 
     test('Phase 3 — cluster CTA launches a real operation (auto-claim) and opens it', async ({ page }) => {

@@ -111,35 +111,102 @@
     _injectCss() {
       if (el('crisp-opcard-styles')) return;
       const css = `
-      .opc{display:flex;align-items:center;gap:13px;padding:12px 14px;background:#101a2e;
-        border:1px solid #233149;border-radius:12px;cursor:pointer;transition:border-color .12s,background .12s}
+      /* === Operation card — full-width 3-col grid: identity | KPI strip(grows) | situation === */
+      .opc{display:grid;grid-template-columns:minmax(196px,1.05fr) minmax(0,2.4fr) auto;
+        align-items:center;gap:16px;padding:11px 14px;background:#101a2e;border:1px solid #233149;
+        border-radius:12px;cursor:pointer;position:relative;overflow:hidden;transition:border-color .12s,background .12s}
       .opc:hover{border-color:#418FDE;background:#13203a}
       .opc:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
-      .opc-mm{width:58px;height:58px;flex:0 0 auto;display:block}
-      .opc-mm-alert{width:58px;height:58px;flex:0 0 auto;display:grid;place-items:center;font-size:24px;
-        border-radius:9px;background:#1b1113;border:1px solid #7f1d1d}
-      .opc-main{flex:1;min-width:0}
-      .opc-hd{display:flex;align-items:center;gap:8px;min-width:0}
+      /* unattended / inactive accent — inset shadow keeps border-radius valid */
+      .opc-attn{box-shadow:inset 3px 0 0 0 #fbbf24}
+      .opc-unatt{box-shadow:inset 3px 0 0 0 #f87171;border-color:#5a1f1f}
+      .opc-unatt:hover{border-color:#f87171;background:#16100f}
+      .opc-inact{border-color:#5a4410}
+      .opc-inact:hover{border-color:#fbbf24}
+      /* LEFT — identity */
+      .opc-id{min-width:0;display:flex;flex-direction:column;gap:3px}
+      .opc-id-r1{display:flex;align-items:center;gap:7px;min-width:0}
       .opc-ic{font-size:15px;flex:0 0 auto}
-      .opc-name{font-size:14.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+      .opc-name{font-size:14.5px;font-weight:700;color:#e6edf7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
       .opc-badge{font-size:9.5px;font-weight:800;letter-spacing:.05em;padding:1px 7px;border-radius:999px;
         border:1px solid #33476a;background:rgba(255,255,255,.03);flex:0 0 auto}
-      .opc-health{width:10px;height:10px;border-radius:50%;flex:0 0 auto;margin-left:auto;
-        box-shadow:0 0 0 3px rgba(255,255,255,.05)}
-      .opc-meta{font-size:11.5px;color:#8aa0bf;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .opc-stats{display:flex;flex-wrap:wrap;gap:13px;margin-top:7px}
-      .opc-st{font-size:11px;color:#8aa0bf;font-variant-numeric:tabular-nums}
-      .opc-st b{font-size:13.5px;font-weight:800;color:#dce6f5;margin-right:3px}
-      .opc-st.crit b{color:#f87171}
+      .opc-age{font-size:8.5px;font-weight:800;letter-spacing:.04em;padding:1px 6px;border-radius:999px;border:1px solid;flex:0 0 auto;white-space:nowrap}
+      .opc-meta{font-size:11px;color:#8aa0bf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .opc-flag{font-weight:600}
+      .opc-flag.flag-att{color:#f87171}
+      .opc-flag.flag-idle{color:#fb923c}
+      /* CENTER — equal-width KPI chip strip that grows to fill the row */
+      .opc-kpis{display:flex;gap:7px;min-width:0;flex-wrap:nowrap}
+      .opc-kpis-empty{visibility:hidden}
+      .opc-chip{flex:1 1 0;min-width:46px;display:flex;flex-direction:column;align-items:center;
+        padding:5px 4px;background:#0d1626;border:1px solid #1f2c44;border-radius:9px;font-variant-numeric:tabular-nums}
+      .opc-chip b{font-size:15px;font-weight:800;line-height:1;color:#dce6f5}
+      .opc-chip span{font-size:8.5px;letter-spacing:.03em;text-transform:uppercase;color:#7d8ba3;margin-top:3px;white-space:nowrap}
+      .opc-chip.crit{background:#1d1113;border-color:#7f1d1d}
+      .opc-chip.crit b{color:#f87171}
+      .opc-chip.crit.zero{background:#0d1626;border-color:#1f2c44}
+      .opc-chip.crit.zero b{color:#5b6b86}
+      .opc-chip.new b{color:#fbbf24}
+      .opc-chip.ver b{color:#34D399}
+      .opc-chip.resp b{color:#7db8ef}
+      .opc-chip.resp.unattended{background:#1d1113;border-color:#7f1d1d}
+      .opc-chip.resp.unattended b{color:#f87171}
+      /* RIGHT — situation: health pill · trend · mini-map(desktop) · arrow */
+      .opc-sit{display:flex;align-items:center;gap:12px;flex:0 0 auto}
+      .opc-pill{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:800;letter-spacing:.05em;
+        padding:3px 9px;border-radius:999px;color:var(--hc,#4ade80);background:rgba(255,255,255,.04);border:1px solid var(--hc,#4ade80);white-space:nowrap}
+      .opc-pill-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+      .opc-trend{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:800}
+      .opc-trend-l{font-size:8px;letter-spacing:.03em;text-transform:uppercase;font-weight:700}
+      .opc-mm{width:50px;height:50px;flex:0 0 auto;display:block}
       .opc-ar{color:#5b6b86;font-size:18px;flex:0 0 auto}
+      /* cluster + start-new keep the SAME grid + height */
+      .opc-mm-inline{width:34px;height:34px;font-size:18px;border-radius:8px}
+      .opc-mm-alert{display:grid;place-items:center;background:#1b1113;border:1px solid #7f1d1d}
       .opc-cluster{border-style:dashed;border-color:#7f1d1d;background:#1b1113}
       .opc-cluster:hover{border-color:#f87171;background:#241416}
       .opc-cluster .opc-name{color:#fca5a5}
-      /* "Start New Operation" entry card */
       .opc-newop{border-style:dashed;border-color:#33476a;background:#0e1726}
       .opc-newop:hover{border-color:#418FDE;background:#13203a}
-      .opc-newop-ic{width:58px;height:58px;flex:0 0 auto;display:grid;place-items:center;font-size:30px;
-        font-weight:300;color:#7fa9d8;border-radius:9px;background:#13203a;border:1px dashed #33476a}
+      .opc-newop-ic{width:34px;height:34px;flex:0 0 auto;display:grid;place-items:center;font-size:22px;
+        font-weight:300;color:#7fa9d8;border-radius:8px;background:#13203a;border:1px dashed #33476a}
+      /* ── responsive: desktop 3-col → laptop compress → tablet stack → mobile compact ── */
+      @media (max-width:1440px){
+        .opc{gap:13px}
+        .opc-mm{display:none}
+        .opc-kpis{gap:6px}
+        .opc-chip{min-width:42px;padding:5px 3px}
+        .opc-chip b{font-size:14px}
+        .opc-chip span{font-size:8px}
+        .opc-trend-l{display:none}
+        .opc-pill-l{display:none}
+        .opc-pill{padding:4px;gap:0}
+        .opc-sit{gap:10px}
+      }
+      @media (max-width:1100px){
+        .opc{grid-template-columns:minmax(150px,.9fr) minmax(0,2.6fr) auto}
+        .opc-chip b{font-size:13.5px}
+      }
+      @media (max-width:900px){
+        .opc{grid-template-columns:1fr auto;grid-template-areas:'id sit' 'kpis kpis';row-gap:10px;column-gap:12px}
+        .opc-id{grid-area:id}
+        .opc-sit{grid-area:sit;gap:10px}
+        .opc-kpis{grid-area:kpis;gap:7px}
+        .opc-pill-l,.opc-trend-l{display:inline}
+        .opc-pill{padding:3px 9px;gap:6px}
+        .opc-chip{min-width:0;padding:6px 4px}
+        .opc-chip b{font-size:14.5px}
+        .opc-chip span{font-size:8.5px}
+      }
+      @media (max-width:640px){
+        .opc{grid-template-columns:1fr auto;grid-template-areas:'id sit';gap:11px;align-items:center}
+        .opc-id{grid-area:id}
+        .opc-kpis{display:none}
+        .opc-sit{grid-area:sit;gap:8px}
+        .opc-sit .opc-mm{display:none}
+        .opc-pill-l,.opc-trend-l{display:none}
+        .opc-trend{font-size:13px}
+      }
       /* LIVE / ENDED group headers + collapsed ENDED section */
       .opc-grp-t{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8aa0bf;margin:14px 2px 8px}
       .opc-grp-sum{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;user-select:none}
@@ -189,47 +256,100 @@
       const dates = (st || en) ? ('Started ' + (st || '—') + (en ? ' · Ended ' + en : ' · Open')) : '';
       return [form, place ? '📍 ' + place : '', dates].filter(Boolean).join('  ·  ');
     },
+    // ── pure client-side helpers (no network) for the redesigned card ──────────
+    _opAge(o) {
+      if (!o || !o.started_at) return null;
+      const t = new Date((window.__ccEnsureUTC || ((x) => x))(o.started_at)).getTime();
+      if (isNaN(t)) return null;
+      return 'Day ' + (Math.floor((Date.now() - t) / 86400000) + 1);   // first calendar day = Day 1
+    },
+    _trend(o) {
+      const curr = Number(o && o.new_24h) || 0;
+      const prev = o && o.new_prev_24h;                 // absent until the backend field ships
+      if (prev == null || !isFinite(Number(prev))) return { gly: '·', col: '#5b6b86', label: '—' };
+      const p = Number(prev);
+      if (curr === 0 && p === 0) return { gly: '·', col: '#5b6b86', label: '—' };
+      if (curr > p * 1.1)        return { gly: '▲', col: '#f87171', label: 'Rising' };
+      if (curr < p * 0.9)        return { gly: '▼', col: '#4ade80', label: 'Falling' };
+      return { gly: '▬', col: '#9fb3d1', label: 'Stable' };
+    },
+    _flags(o) {
+      // Unattended: backend-authoritative unattended_critical (CRITICAL + open + not
+      // yet dispatched), with a client derive as fallback when the field is absent.
+      const ua = (o && o.unattended_critical != null)
+        ? Number(o.unattended_critical) > 0
+        : ((Number(o && o.critical) || 0) > 0 && (Number(o && o.responders_active) || 0) === 0);
+      let hrs = null;
+      if (o && o.last_activity) {
+        const t = new Date((window.__ccEnsureUTC || ((x) => x))(o.last_activity)).getTime();
+        if (!isNaN(t)) hrs = (Date.now() - t) / 3600000;
+      }
+      return { unattended: ua, inactive: hrs != null && hrs >= 4, sinceTxt: (o && o.last_activity) ? timeAgo(o.last_activity) : '' };
+    },
+    // Redesigned card: LEFT identity | CENTER KPI strip (grows) | RIGHT situation.
     card(o) {
       if (o.is_cluster) {
         return `<div class="opc opc-cluster" data-cluster="1" role="link" tabindex="0"
             aria-label="Launch an operation for ${fmtNum(o.critical)} unassigned critical reports">
-          <div class="opc-mm-alert">🚨</div>
-          <div class="opc-main">
-            <div class="opc-hd"><span class="opc-name">${fmtNum(o.critical)} critical reports, no operation</span></div>
-            <div class="opc-meta">Launch an operation here to coordinate response →</div>
-            <div class="opc-stats"><span class="opc-st crit"><b>${fmtNum(o.critical)}</b> Critical</span></div>
-          </div>
-          <div class="opc-ar">›</div></div>`;
+          <div class="opc-id"><div class="opc-id-r1"><span class="opc-mm-alert opc-mm-inline">🚨</span>
+            <span class="opc-name">${fmtNum(o.critical)} critical reports, no operation</span></div>
+            <div class="opc-meta">Launch an operation here to coordinate response →</div></div>
+          <div class="opc-kpis"><span class="opc-chip crit"><b>${fmtNum(o.critical)}</b><span>Critical</span></span></div>
+          <div class="opc-sit"><span class="opc-ar">›</span></div></div>`;
       }
       const hc = healthColor(o);
-      return `<div class="opc" data-op="${esc(o.id)}" role="link" tabindex="0" aria-label="${esc(o.name)} — open operation">
-        ${this.miniMap(o)}
-        <div class="opc-main">
-          <div class="opc-hd">
-            <span class="opc-ic">${this.typeIcon(o)}</span>
-            <span class="opc-name">${esc(o.name)}</span>
-            ${this.statusBadge(o)}
-            <span class="opc-health" style="background:${hc}" title="${esc(o.health_reason || o.health || '')}"></span>
-          </div>
+      const tr = this._trend(o);
+      const fl = this._flags(o);
+      const age = this._opAge(o);
+      const isLive = String(o && o.status || '').toUpperCase() === 'LIVE';
+      const total = Number(o && o.total) || 0, ver = Number(o && o.verified) || 0;
+      const unver = Math.max(0, total - ver);                 // client math — no backend
+      const unatt = isLive && fl.unattended;                  // never flag ENDED ops
+      const inactive = isLive && fl.inactive;
+      const attn = unatt || inactive;
+      const ageCol = age === 'Day 1' ? '#fbbf24' : '#8aa0bf';
+      // Identity line 3 — unattended > inactive > last-activity (precedence).
+      let line3 = '';
+      if (unatt) line3 = `<div class="opc-meta opc-flag flag-att">⚠ Unattended${fl.sinceTxt ? ' · ' + esc(fl.sinceTxt) : ''}</div>`;
+      else if (inactive) line3 = `<div class="opc-meta opc-flag flag-idle">◷ Inactive · ${esc(fl.sinceTxt)}</div>`;
+      else if (fl.sinceTxt) line3 = `<div class="opc-meta">Active ${esc(fl.sinceTxt)}</div>`;
+      const ageBadge = age ? `<span class="opc-age" style="color:${ageCol};border-color:${ageCol}40;background:${ageCol}14">${esc(age)}</span>` : '';
+      const chip = (cls, val, label) => `<span class="opc-chip ${cls}"><b>${fmtNum(val)}</b><span>${label}</span></span>`;
+      const critChip = `<span class="opc-chip crit${(Number(o.critical) || 0) === 0 ? ' zero' : ''}"><b>${fmtNum(o.critical)}</b><span>Critical</span></span>`;
+      const respChip = `<span class="opc-chip resp${unatt ? ' unattended' : ''}"><b>${fmtNum(o.responders_active)}</b><span>Resp</span></span>`;
+      return `<div class="opc${attn ? ' opc-attn' : ''}${unatt ? ' opc-unatt' : (inactive ? ' opc-inact' : '')}"
+          data-op="${esc(o.id)}" role="link" tabindex="0"
+          aria-label="${esc(o.name)} — ${esc(o.health || '')} health, ${fmtNum(o.critical)} critical, ${fmtNum(o.responders_active)} responders${unatt ? ', unattended critical' : ''} — open operation">
+        <div class="opc-id">
+          <div class="opc-id-r1"><span class="opc-ic">${this.typeIcon(o)}</span>
+            <span class="opc-name">${esc(o.name)}</span>${this.statusBadge(o)}${ageBadge}</div>
           <div class="opc-meta">${this._placeLine(o) || '—'}</div>
-          <div class="opc-stats">
-            <span class="opc-st crit"><b>${fmtNum(o.critical)}</b> Critical</span>
-            <span class="opc-st"><b>${fmtNum(o.new_24h)}</b> New 24h</span>
-            <span class="opc-st"><b>${fmtNum(o.total)}</b> Total</span>
-            <span class="opc-st"><b>${fmtNum(o.verified)}</b> Verified</span>
-            <span class="opc-st"><b>${fmtNum(o.responders_active)}</b> Responders</span>
-          </div>
+          ${line3}
         </div>
-        <div class="opc-ar">›</div></div>`;
+        <div class="opc-kpis" role="group" aria-label="report metrics">
+          ${critChip}
+          ${chip('new', o.new_24h, 'New 24h')}
+          ${chip('', total, 'Total')}
+          ${chip('ver', ver, 'Verified')}
+          ${chip('', unver, 'Unver')}
+          ${respChip}
+        </div>
+        <div class="opc-sit">
+          <span class="opc-pill" style="--hc:${hc}" title="${esc(o.health_reason || o.health || '')}"><span class="opc-pill-dot" style="background:${hc}"></span><span class="opc-pill-l">${esc(o.health || 'GREEN')}</span></span>
+          <span class="opc-trend" style="color:${tr.col}" title="24h trend vs prior 24h">${tr.gly}<span class="opc-trend-l">${esc(tr.label)}</span></span>
+          ${this.miniMap(o)}
+          <span class="opc-ar">›</span>
+        </div>
+      </div>`;
     },
-    // The "Start New Operation" entry card (redesign v2). Distinct from a real
-    // op row and from the orphan-critical cluster row. Click → the wizard (P2).
+    // The "Start New Operation" entry card (redesign v2) — reskinned onto the grid.
     _startNewCard() {
       return `<div class="opc opc-newop" data-new="1" role="button" tabindex="0" aria-label="Start a new operation">`
-        + `<div class="opc-newop-ic" aria-hidden="true">+</div>`
-        + `<div class="opc-main"><div class="opc-hd"><span class="opc-name">Start New Operation</span></div>`
+        + `<div class="opc-id"><div class="opc-id-r1"><span class="opc-newop-ic" aria-hidden="true">+</span>`
+        + `<span class="opc-name">Start New Operation</span></div>`
         + `<div class="opc-meta">Create and launch a new operation</div></div>`
-        + `<div class="opc-ar">›</div></div>`;
+        + `<div class="opc-kpis opc-kpis-empty" aria-hidden="true"></div>`
+        + `<div class="opc-sit"><span class="opc-ar">›</span></div></div>`;
     },
     // Render + wire a whole list/rail into `host`. Shared by both surfaces.
     // opts: { empty, grouped (default true), liveHeader, startNew }
