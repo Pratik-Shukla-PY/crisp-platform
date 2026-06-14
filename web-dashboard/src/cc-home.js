@@ -447,7 +447,13 @@
     // render the SAME card. Fallback to a minimal inline row if that module hasn't
     // loaded (defensive; both ship in index.html).
     if (window.CrispOpCard && typeof window.CrispOpCard.renderInto === 'function') {
-      window.CrispOpCard.renderInto(box, ops, { empty: 'No active operations. Active crisis events appear here.' });
+      // Active Response zone: Start-New card first, LIVE ops, then a collapsed
+      // ENDED group. No "LIVE OPERATIONS" sub-header — the zone band already
+      // reads "⚡ Active Response".
+      window.CrispOpCard.renderInto(box, ops, {
+        empty: 'No active operations. Start one to coordinate a response.',
+        grouped: true, liveHeader: false, startNew: true,
+      });
       return;
     }
     const sorted = (ops || []).slice().sort(_opWorst);

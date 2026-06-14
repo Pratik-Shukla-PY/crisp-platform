@@ -134,6 +134,19 @@
       .opc-cluster{border-style:dashed;border-color:#7f1d1d;background:#1b1113}
       .opc-cluster:hover{border-color:#f87171;background:#241416}
       .opc-cluster .opc-name{color:#fca5a5}
+      /* "Start New Operation" entry card */
+      .opc-newop{border-style:dashed;border-color:#33476a;background:#0e1726}
+      .opc-newop:hover{border-color:#418FDE;background:#13203a}
+      .opc-newop-ic{width:58px;height:58px;flex:0 0 auto;display:grid;place-items:center;font-size:30px;
+        font-weight:300;color:#7fa9d8;border-radius:9px;background:#13203a;border:1px dashed #33476a}
+      /* LIVE / ENDED group headers + collapsed ENDED section */
+      .opc-grp-t{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8aa0bf;margin:14px 2px 8px}
+      .opc-grp-sum{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;user-select:none}
+      .opc-grp-sum::-webkit-details-marker{display:none}
+      .opc-grp-sum::before{content:'▸';font-size:10px;color:#5b6b86;transition:transform .12s}
+      details[open] .opc-grp-sum::before{transform:rotate(90deg)}
+      .opc-grp-n{font-weight:700;color:#6b7d99;background:#1b2942;border-radius:999px;padding:0 7px;font-size:10px}
+      .opc-ended-body{display:flex;flex-direction:column;gap:8px;margin-top:8px}
       `;
       const st = document.createElement('style');
       st.id = 'crisp-opcard-styles';
@@ -208,16 +221,54 @@
         </div>
         <div class="opc-ar">›</div></div>`;
     },
+    // The "Start New Operation" entry card (redesign v2). Distinct from a real
+    // op row and from the orphan-critical cluster row. Click → the wizard (P2).
+    _startNewCard() {
+      return `<div class="opc opc-newop" data-new="1" role="button" tabindex="0" aria-label="Start a new operation">`
+        + `<div class="opc-newop-ic" aria-hidden="true">+</div>`
+        + `<div class="opc-main"><div class="opc-hd"><span class="opc-name">Start New Operation</span></div>`
+        + `<div class="opc-meta">Create and launch a new operation</div></div>`
+        + `<div class="opc-ar">›</div></div>`;
+    },
     // Render + wire a whole list/rail into `host`. Shared by both surfaces.
+    // opts: { empty, grouped (default true), liveHeader, startNew }
+    //   grouped   → split LIVE (first) vs ENDED (collapsed <details>)
+    //   liveHeader→ show the "LIVE OPERATIONS" header (the /operations page; the
+    //               home rail's zone header already says "Active Response")
+    //   startNew  → prepend the "Start New Operation" card
     renderInto(host, ops, opts) {
       if (!host) return;
       this._injectCss();
-      const sorted = (ops || []).slice().sort(worstFirst);
-      if (!sorted.length) {
-        host.innerHTML = `<div class="cco-empty">${esc((opts && opts.empty) || 'No operations yet. Active crisis events appear here.')}</div>`;
+      opts = opts || {};
+      const grouped = opts.grouped !== false;
+      const all = (ops || []).slice();
+      const _utc = window.__ccEnsureUTC || ((x) => x);
+      const isEnded = (o) => !o.is_cluster && String(o && o.status || '').toUpperCase() === 'ENDED';
+      const live = all.filter((o) => !isEnded(o)).sort(worstFirst);                 // cluster + LIVE
+      const ended = all.filter(isEnded)
+        .sort((a, b) => new Date(_utc(b.ended_at || 0)) - new Date(_utc(a.ended_at || 0)));
+
+      if (!all.length && !opts.startNew) {
+        host.innerHTML = `<div class="cco-empty">${esc(opts.empty || 'No operations yet. Active crisis events appear here.')}</div>`;
         return;
       }
-      host.innerHTML = sorted.map((o) => this.card(o)).join('');
+
+      let html = '';
+      if (opts.startNew) html += this._startNewCard();
+      if (grouped) {
+        if (opts.liveHeader) html += `<div class="opc-grp-t">LIVE OPERATIONS</div>`;
+        html += live.map((o) => this.card(o)).join('');
+        if (!live.length && !opts.startNew) html += `<div class="cco-empty">${esc(opts.empty || 'No live operations.')}</div>`;
+        if (ended.length) {
+          html += `<details class="opc-ended"><summary class="opc-grp-t opc-grp-sum">ENDED OPERATIONS`
+            + ` <span class="opc-grp-n">${ended.length}</span></summary>`
+            + `<div class="opc-ended-body">${ended.map((o) => this.card(o)).join('')}</div></details>`;
+        }
+      } else {
+        html += live.concat(ended).map((o) => this.card(o)).join('');
+      }
+      host.innerHTML = html;
+
       host.querySelectorAll('[data-op]').forEach((row) => {
         const open = () => go('#/operations/' + encodeURIComponent(row.getAttribute('data-op')));
         row.addEventListener('click', open);
@@ -227,6 +278,11 @@
         const launch = () => { try { (window.launchOperationFromCluster || function () {})(); } catch (_e) {} };
         row.addEventListener('click', launch);
         row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); launch(); } });
+      });
+      host.querySelectorAll('[data-new]').forEach((row) => {
+        const start = () => { try { (window.openOperationWizard || function () { console.warn('[ops] operation wizard not loaded yet'); })(); } catch (_e) {} };
+        row.addEventListener('click', start);
+        row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); start(); } });
       });
     },
   };
@@ -356,8 +412,8 @@
   async function renderList() {
     const wrap = el('cco-wrap');
     if (!wrap) return;
-    wrap.innerHTML = '<h1 class="cco-h">Active Operations</h1>'
-      + '<p class="cco-sub">Every operation, worst-first. Select one to open its worklist.</p>'
+    wrap.innerHTML = '<h1 class="cco-h">Operations</h1>'
+      + '<p class="cco-sub">Live operations first, worst-first. Ended operations are collapsed below.</p>'
       + '<div class="cco-list" id="cco-list"><div class="cco-empty">Loading operations…</div></div>';
     let ops = [];
     try { ops = await jget('/operations'); } catch (_e) {
@@ -368,9 +424,13 @@
   }
 
   // Thin wrapper over the shared card (CrispOpCard) — the list + the home rail
-  // render the SAME card now (was a separate, drifted implementation).
+  // render the SAME card now (was a separate, drifted implementation). The
+  // /operations page shows the LIVE header + the Start-New card.
   function renderRows(host, ops) {
-    CrispOpCard.renderInto(host, ops, { empty: 'No operations yet. Active crisis events appear here.' });
+    CrispOpCard.renderInto(host, ops, {
+      empty: 'No operations yet. Start one to coordinate a response.',
+      grouped: true, liveHeader: true, startNew: true,
+    });
   }
 
   // ── DETAIL view ──────────────────────────────────────────────────────────────
