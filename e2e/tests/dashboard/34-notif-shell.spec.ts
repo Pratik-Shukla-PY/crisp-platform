@@ -135,4 +135,28 @@ test.describe('Dashboard — unified notification shell', () => {
     await expect(page).toHaveURL(/queue=verification/);
     await expect(page.locator('#view-incidents')).toBeVisible();
   });
+
+  // Operations redesign v2 — every incident notification names its operation
+  // (or "Global"), on the center-screen card AND in the bell panel.
+  test('@smoke a new incident names its operation on the card + in the bell', async ({ page }) => {
+    await boot(page);
+    reportsBody = JSON.stringify([
+      { ...reportRow('notif-op-1', 'CRITICAL'), crisis_event_id: 'op-x', crisis_event_name: 'Bihar Floods' },
+    ]);
+    total = '1';
+    // the on-screen incident card names the operation
+    await expect(page.locator('#notif-stack .notif-flash-op')).toContainText('Bihar Floods', { timeout: 12000 });
+    // and it persists in the bell panel
+    await page.locator('#crisp-globalnav #notif-bell').click();
+    await expect(page.locator('#notif-panel .notif-card .notif-op')).toContainText('Bihar Floods');
+  });
+
+  test('@smoke a global incident (no operation) is labelled Global', async ({ page }) => {
+    await boot(page);
+    reportsBody = JSON.stringify([
+      { ...reportRow('notif-glob-1', 'MODERATE'), crisis_event_id: null, crisis_event_name: null },
+    ]);
+    total = '1';
+    await expect(page.locator('#notif-stack .notif-flash-op.global')).toContainText('Global', { timeout: 12000 });
+  });
 });

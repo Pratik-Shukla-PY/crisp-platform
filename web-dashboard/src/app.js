@@ -1369,6 +1369,9 @@ function _addNotification(r) {
         timestamp: r.server_created_at,
         addedAt: now,
         coalescedCount: 1,
+        // Operation this incident belongs to (denormalised crisis_event_name).
+        // null = global (not tied to any operation). Shown on the card + bell.
+        operation: r.crisis_event_name || null,
     };
 
     // ── DEDUP-FIRST. Nothing touches state until we know this is a
@@ -1505,10 +1508,14 @@ function _buildStackCardInner(n) {
               <i class="fa-solid fa-arrow-up"></i> ${escapeHtml(n._upgradeReason || 'updated')}
            </div>` : '';
     const hintTail = _notificationStack.length === 1 ? ' &middot; Auto-dismiss in 6s' : '';
+    const opChip = n.operation
+        ? `<div class="notif-flash-op" title="Operation"><i class="fa-solid fa-folder-tree"></i> ${escapeHtml(n.operation)}</div>`
+        : `<div class="notif-flash-op global" title="Not tied to any operation"><i class="fa-solid fa-earth-americas"></i> Global</div>`;
     return `
         ${upgradeChip}
         <div class="notif-flash-icon" style="color:${n.sevColor};">🚨</div>
         <div class="notif-flash-title">${n.coalescedCount > 1 ? `${n.coalescedCount}× reports — same building` : 'NEW INCIDENT REPORTED'}</div>
+        ${opChip}
         <div class="notif-flash-detail">
             <span class="notif-sev" style="background:${n.sevColor}25;color:${n.sevColor};font-size:13px;padding:4px 10px;">${n.severity}</span>
             <span style="font-size:16px;font-weight:700;color:#e2e8f0;">${escapeHtml(n.type)}</span>
@@ -1742,6 +1749,7 @@ function _renderNotifications() {
                 <i class="${n.srcBrand} ${n.srcIcon}" style="color:#64748b;font-size:11px;" title="${n.source}"></i>
             </div>
             <div class="notif-loc"><i class="fa-solid fa-location-dot" style="color:${sevColor};"></i> ${escapeHtml(n.location)}</div>
+            <div class="notif-op ${n.operation ? '' : 'global'}"><i class="fa-solid ${n.operation ? 'fa-folder-tree' : 'fa-earth-americas'}"></i> ${n.operation ? escapeHtml(n.operation) : 'Global'}</div>
             <div class="notif-time">${timeAgo(n.timestamp)}</div>
         </div>`;
     }).join('');

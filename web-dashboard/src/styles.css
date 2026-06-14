@@ -2766,6 +2766,16 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
 .notif-flash-source { font-size: 11px; color: #64748b; margin-bottom: 8px; }
 .notif-flash-source i { margin-right: 3px; }
 .notif-flash-hint { font-size: 10px; color: #475569; }
+/* Operation chip on the center-screen incident card (redesign v2) */
+.notif-flash-op { display: inline-flex; align-items: center; gap: 6px; margin: 0 auto 8px; padding: 3px 11px;
+  border-radius: 999px; font-size: 12px; font-weight: 700; color: #93c5fd;
+  background: rgba(59,130,246,.14); border: 1px solid rgba(59,130,246,.35); max-width: 90%; }
+.notif-flash-op i { font-size: 11px; }
+.notif-flash-op.global { color: #94a3b8; background: rgba(148,163,184,.12); border-color: rgba(148,163,184,.3); }
+/* Operation line on the bell-panel card */
+.notif-op { font-size: 11px; color: #93c5fd; display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+.notif-op i { font-size: 10px; }
+.notif-op.global { color: #64748b; }
 @keyframes flash-text { 0%,100%{ opacity:1; } 50%{ opacity:0.5; } }
 
 /* ══ Phase J.4 (May 2026) — Notification card-stack ══════════════
@@ -2778,7 +2788,10 @@ svg.leaflet-cluster-spider-leg { stroke: rgba(255,255,255,0.3) !important; strok
     position: fixed;
     top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    z-index: 10001;
+    /* Above the Control Center overlays (cc-home / cc-operations = 99990) and the
+       launch wizard (99995) so a new-incident notification is ALWAYS visible,
+       whatever screen the operator is on — not buried behind the active surface. */
+    z-index: 100050;
     width: 380px;
     pointer-events: none;
     display: none;

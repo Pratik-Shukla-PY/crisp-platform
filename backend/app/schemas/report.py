@@ -591,6 +591,11 @@ class ReportResponse(BaseModel):
     # first-class column (damage_classification / crisis_type / severity / …)
     # are routed to those columns server-side, never duplicated here.
     crisis_event_id: Optional[str] = None
+    # Operation NAME the report belongs to (denormalised read-only; NULL = the
+    # report is global / not tied to any operation). Populated on the dashboard
+    # listing by reports._attach_operation_name so the new-report notification can
+    # name its operation. Not a captured column — derived at read time.
+    crisis_event_name: Optional[str] = None
     form_pack_id: Optional[str] = None
     form_pack_version: Optional[int] = None
     form_data: Optional[Any] = None

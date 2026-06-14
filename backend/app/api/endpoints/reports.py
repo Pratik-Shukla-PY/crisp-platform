@@ -1860,6 +1860,32 @@ def _attach_reporter_tier(db: Session, reports: list) -> None:
         return
 
 
+def _attach_operation_name(db: Session, reports: list) -> None:
+    """Operations redesign v2 — bulk-attach each report's operation NAME as a
+    transient ``crisis_event_name`` attribute so the dashboard's new-report
+    notification can show which operation an incident belongs to (or "Global"
+    when it belongs to none). Same shape as ``_attach_reporter_tier``: ONE query
+    for the page's distinct crisis_event_ids → name map, in-memory lookup per
+    report (no N+1). Pydantic's ``from_attributes=True`` picks the attribute up
+    by name. Best-effort — any error leaves it unset (Optional → "Global")."""
+    if not reports:
+        return
+    try:
+        from app.models.report import CrisisEvent
+        ids = {r.crisis_event_id for r in reports if getattr(r, "crisis_event_id", None)}
+        if not ids:
+            return
+        name_by_id = dict(
+            db.query(CrisisEvent.id, CrisisEvent.name).filter(CrisisEvent.id.in_(ids)).all())
+        for r in reports:
+            cid = getattr(r, "crisis_event_id", None)
+            if cid and cid in name_by_id:
+                r.crisis_event_name = name_by_id[cid]  # type: ignore[attr-defined]
+    except Exception:
+        logger.exception("Failed to attach crisis_event_name to reports list")
+        return
+
+
 @router.get("/device/{device_hash}", response_model=List[ReportResponse])
 def get_device_reports(device_hash: str, db: Session = Depends(get_db)):
     """List all reports submitted by a specific device (for privacy/deletion UI).
@@ -5456,6 +5482,7 @@ def get_reports(
     # the endpoint where the session is live, and the projection
     # logic in the schema where the rest of the derived fields live.
     _attach_reporter_tier(db, reports)
+    _attach_operation_name(db, reports)
 
     # ETag / If-None-Match.
     # Cheap fingerprint: include each report's id+updated_at AND each
