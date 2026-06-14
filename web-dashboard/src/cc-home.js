@@ -173,27 +173,65 @@
       padding:5px 10px;background:rgba(11,18,32,.82);border:1px solid rgba(255,255,255,.08);border-radius:8px;
       backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);pointer-events:none}
     #cc-map-card #cc-map-geo:empty{display:none}
-    /* attention — 5 action rows, height-matched to the map card (#cc-map=430px),
-       no scroll. On narrow widths the body stacks single-column and rows take
-       their natural height. */
-    /* 448 = the map card's border-box: #cc-map(430) + 8+8 padding + 1+1 border.
-       Matching it makes the two cards align exactly (height-mismatch fix). */
-    /* Demoted to a full-width "Global Attention" block — responsive grid of the
-       5 action rows (no longer height-matched to the map, which moved columns). */
-    #cc-att{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px}
-    .cc-att-row{flex:1;min-height:56px;display:flex;align-items:center;gap:11px;padding:0 13px;cursor:pointer;
-      background:#121A2A;border:1px solid #243149;border-radius:11px}
-    .cc-att-row:hover{border-color:#418FDE;background:#16213a}
-    .cc-att-row:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
+    /* ── SPLIT DECISION SURFACE — map (left) + Global Attention panel (right) ──
+       Equal-height: the LEFT map card's fixed #cc-map (430px → 448px border-box)
+       is the tallest item in the single grid row, so the row resolves to ~448px.
+       grid default align-items:stretch forces the RIGHT panel to that exact
+       height; its 5 cards (flex:1 1 0) then divide it into equal slices with one
+       uniform gap — no blank tail, no uneven gutters, regardless of count strings.
+       The map height is content-independent → it never re-tiles/jumps on poll. */
+    .cc-split{display:grid;grid-template-columns:1.6fr 1fr;gap:14px;align-items:stretch;margin-bottom:6px}
+    .cc-split-map{min-width:0}
+    .cc-split-att{min-width:0;display:flex;flex-direction:column}
+    .cc-att-hd{margin:0 0 10px}
+    .cc-att-col{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:8px}
+    /* attention CARD — .opc parity: 12px radius, #101a2e bg, #233149 border, hover #418FDE */
+    .cc-att-card{flex:1 1 0;min-height:0;display:flex;flex-direction:column;justify-content:center;
+      background:#101a2e;border:1px solid #233149;border-radius:12px;cursor:pointer;
+      overflow:hidden;position:relative;transition:border-color .12s,background .12s}
+    .cc-att-card:hover{border-color:#418FDE;background:#13203a}
+    .cc-att-card:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
+    .cc-att-card.zero{opacity:.88}
+    .cc-att-main{display:flex;align-items:center;gap:12px;padding:0 14px}
     .cc-att-ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-size:15px;flex:none}
     .cc-att-row .lab{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.2}
-    .cc-att-row .lab .l1{font-size:14px;font-weight:600;color:#E6EDF7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .cc-att-row .lab .l1{font-size:14px;font-weight:700;color:#E6EDF7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .cc-att-row .lab .l2{font-size:11.5px;color:#8A99B5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .cc-att-row .cnt-wrap{flex:none;text-align:right;display:flex;flex-direction:column;line-height:1.1;min-width:48px}
     .cc-att-row .cnt{font-size:21px;font-weight:800;font-variant-numeric:tabular-nums}
     .cc-att-row .cnt.ok{color:#34D399;font-size:19px}
     .cc-att-row .cnt2{font-size:10.5px;color:#7d89a3;margin-top:1px}
     .cc-att-row .ar{color:#5C6B85;font-size:15px;flex:none}
+    .cc-att-card:hover .ar{color:#418FDE}
+    /* CRITICAL emphasis — filled-red command strip (absolute → adds no height) +
+       red border accent + larger count, so the 5 cards stay equal-height. */
+    .cc-att-crit{border-color:#5a1f1f}
+    .cc-att-crit:hover{border-color:#f87171;background:#16100f}
+    .cc-att-crit:hover .ar{color:#f87171}
+    .cc-att-crit .cc-att-main{padding-top:20px}
+    .cc-att-crit .cnt{font-size:24px}
+    .cc-att-strip{position:absolute;top:0;left:0;right:0;height:18px;
+      background:linear-gradient(90deg,#dc2626,#ef4444);color:#fff;
+      font-size:9px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+      display:flex;align-items:center;gap:6px;padding:0 14px}
+    .cc-att-strip::before{content:"";width:5px;height:5px;border-radius:50%;background:#fff;
+      box-shadow:0 0 0 3px rgba(255,255,255,.28);flex:none}
+    /* responsive: desktop side-by-side · laptop narrower panel · tablet stack · mobile */
+    @media(max-width:1280px){
+      .cc-split{grid-template-columns:1.75fr 1fr;gap:12px}
+      .cc-att-main{padding:0 12px;gap:11px}
+      .cc-att-row .lab .l2{font-size:11px}
+    }
+    @media(max-width:900px){
+      .cc-split{grid-template-columns:1fr;gap:12px;align-items:start}
+      .cc-att-col{flex:none}
+      .cc-att-card{flex:none;min-height:60px}
+    }
+    @media(max-width:560px){
+      .cc-att-card{flex:none;min-height:56px}
+      .cc-att-main{padding:0 12px;gap:10px}
+      .cc-att-crit .cnt{font-size:22px}
+    }
     /* ops intel grid */
     .cc-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
     @media(max-width:980px){.cc-grid3{grid-template-columns:1fr}}
@@ -305,13 +343,20 @@
         </div>
 
         <div class="cc-zone cc-zone-monitor">
-          <div class="cc-sec-t cc-band">🌐 Global Monitoring <span class="cc-band-sub">— all incidents worldwide</span></div>
-          <div class="cc-card" id="cc-map-card" style="padding:8px">
-            <div id="cc-map"></div><div id="cc-map-geo" class="cc-geo"></div>
+          <div class="cc-sec-t cc-band">🌐 Global Monitoring <span class="cc-band-sub">— where it's happening · what needs you</span></div>
+          <!-- SPLIT DECISION SURFACE: map (left) + Global-Attention panel (right).
+               Equal-height: the map's fixed 430px child sets the row height; the
+               panel stretches to it (grid align-items:stretch) and its 5 cards
+               flex:1 1 0 divide that height into equal slices — no blank tail. -->
+          <div class="cc-split">
+            <div class="cc-card cc-split-map" id="cc-map-card" style="padding:8px">
+              <div id="cc-map"></div><div id="cc-map-geo" class="cc-geo"></div>
+            </div>
+            <div class="cc-split-att">
+              <div class="cc-sec-t cc-att-hd">Global Attention</div>
+              <div id="cc-att" class="cc-att-col"><div class="cc-empty">Loading…</div></div>
+            </div>
           </div>
-
-          <div class="cc-sec-t">Global Attention</div>
-          <div class="cc-card" id="cc-att" style="padding:8px"><div class="cc-empty">Loading…</div></div>
 
           <div class="cc-sec-t">Operational Intelligence</div>
           <div class="cc-grid3">
@@ -378,24 +423,31 @@
     const c = b.counts || {};
     const num = (v) => (v == null ? 0 : Number(v));
     // (glyph, color, label, sublabel, primaryCount, secondaryHTML, queueKey)
-    const row = (glyph, color, label, sub, n, secondary, queue) => {
+    // (glyph, color, label, sublabel, primaryCount, secondaryHTML, queueKey, isCrit)
+    // Keeps the .cc-att-row class (the binder below targets it) + adds .cc-att-card
+    // for the .opc look + a .cc-att-main wrapper so the Critical strip (absolute,
+    // adds no stacked height) shares the flex-distributed card.
+    const row = (glyph, color, label, sub, n, secondary, queue, isCrit) => {
       const zero = !n;
-      return `<div class="cc-att-row ${zero ? 'zero' : ''}" data-queue="${queue}" role="link" tabindex="0"
+      return `<div class="cc-att-row cc-att-card${isCrit ? ' cc-att-crit' : ''}${zero ? ' zero' : ''}" data-queue="${queue}" role="link" tabindex="0"
         aria-label="${esc(label)} — ${zero ? 'all clear' : fmtNum(n) + ', open queue'}">
-        <div class="cc-att-ic" style="background:${color}22;color:${color}">${glyph}</div>
-        <div class="lab"><span class="l1">${esc(label)}</span><span class="l2">${esc(sub)}</span></div>
-        <div class="cnt-wrap">
-          ${zero
-            ? `<span class="cnt ok">✓</span><span class="cnt2" style="color:#34D399">all clear</span>`
-            : `<span class="cnt cc-num" style="color:${color}">${fmtNum(n)}</span>${secondary ? `<span class="cnt2">${secondary}</span>` : ''}`}
-        </div>
-        <div class="ar">›</div></div>`;
+        ${isCrit && !zero ? `<div class="cc-att-strip" aria-hidden="true">Command priority</div>` : ''}
+        <div class="cc-att-main">
+          <div class="cc-att-ic" style="background:${color}22;color:${color}">${glyph}</div>
+          <div class="lab"><span class="l1">${esc(label)}</span><span class="l2">${esc(sub)}</span></div>
+          <div class="cnt-wrap">
+            ${zero
+              ? `<span class="cnt ok">✓</span><span class="cnt2" style="color:#34D399">all clear</span>`
+              : `<span class="cnt cc-num" style="color:${color}">${fmtNum(n)}</span>${secondary ? `<span class="cnt2">${secondary}</span>` : ''}`}
+          </div>
+          <div class="ar">›</div>
+        </div></div>`;
     };
     const overdue = num(c.sla_at_risk);
     const rows = [
       row('🔴', SEV_COLOR.CRITICAL, 'Critical incidents', 'Command attention',
           num(c.critical_incidents != null ? c.critical_incidents : c.critical),
-          `${fmtNum(num(c.critical))} reports`, 'critical'),
+          `${fmtNum(num(c.critical))} reports`, 'critical', true),
       row('🔍', '#418FDE', 'Needs review', 'Triage & verdict',
           num(c.needs_review != null ? c.needs_review : c.awaiting_triage),
           overdue ? `<span style="color:#f87171">${fmtNum(overdue)} overdue</span>` : '', 'needs-review'),
