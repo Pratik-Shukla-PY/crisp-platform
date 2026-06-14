@@ -111,6 +111,34 @@ class OperationLaunchResponse(BaseModel):
     merged_into_existing: bool = False
 
 
+class OperationLaunchWithFormRequest(BaseModel):
+    """Atomic "Start New Operation" publish (redesign v2 wizard, Step 4). Creates a
+    crisis-form pack + a published version + a LIVE CrisisEvent in ONE transaction —
+    nothing persists unless the whole thing succeeds (the no-draft-persistence rule).
+    The server fills schema_json['key'/'title'] from the pack it creates, so the
+    wizard only has to supply the sections + a human title."""
+    name: str = Field(..., max_length=200)
+    crisis_type: Optional[str] = None
+    center_lat: float
+    center_lng: float
+    radius_km: float = 30.0
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
+    place_name: Optional[str] = None
+    form_title: Optional[str] = None              # pack title; defaults to the operation name
+    schema_json: Dict[str, Any]                   # the built form (sections + fields)
+    from_cluster: bool = False                    # also claim the orphan-critical reports
+
+
+class OperationFormTemplate(BaseModel):
+    """Lean template row for the wizard's Step 1 (analyst-scoped, no admin needed)."""
+    id: str
+    key: str
+    title: str
+    crisis_type: Optional[str] = None
+    schema_json: Optional[Dict[str, Any]] = None
+
+
 class CrisisEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str

@@ -49,7 +49,9 @@ from app.schemas.crisis_form import (
     PublishRequest, SchemaLintRequest, SchemaLintResponse,
     ActiveCrisisFormResponse, OperationSummaryResponse,
     OperationLaunchRequest, OperationLaunchResponse,
+    OperationLaunchWithFormRequest, OperationFormTemplate,
 )
+import re as _re
 from app.schemas.building import ResponderCreate, ResponderResponse, ResponderUpdate
 
 logger = logging.getLogger(__name__)
@@ -455,6 +457,114 @@ def launch_operation(payload: OperationLaunchRequest, db: Session = Depends(get_
         operation_id=target.id, operation_name=target.name,
         claimed_count=int(claimed or 0), skipped_count=len(ids) - int(claimed or 0),
         merged_into_existing=merged)
+
+
+def _slugify(text: str) -> str:
+    s = _re.sub(r"[^a-z0-9]+", "-", (text or "").strip().lower()).strip("-")
+    return s[:48] or "operation-form"
+
+
+@operations_router.get("/form-templates", response_model=List[OperationFormTemplate],
+                       summary="List published form templates (analyst-scoped) for the launch wizard")
+def list_form_templates(db: Session = Depends(get_db), _user=Depends(require_analyst)):
+    """Published packs the wizard's Step 1 can start from. Analyst-scoped so the
+    admin pack-management routes stay require_admin — returns only each pack's active
+    published schema, nothing operator-private."""
+    packs = (db.query(CrisisFormPack)
+             .filter(CrisisFormPack.is_archived == False,            # noqa: E712
+                     CrisisFormPack.active_version.isnot(None))
+             .order_by(CrisisFormPack.created_at.desc()).all())
+    out = []
+    for p in packs:
+        ver = (db.query(CrisisFormPackVersion)
+               .filter(CrisisFormPackVersion.pack_id == p.id,
+                       CrisisFormPackVersion.version == p.active_version)
+               .first())
+        out.append(OperationFormTemplate(
+            id=p.id, key=p.key, title=p.title, crisis_type=p.crisis_type,
+            schema_json=(ver.schema_json if ver else None)))
+    return out
+
+
+@operations_router.post("/launch-with-form", response_model=OperationLaunchResponse,
+                        status_code=status.HTTP_201_CREATED,
+                        summary="Atomically create a form pack + a LIVE operation (wizard publish)")
+def launch_with_form(payload: OperationLaunchWithFormRequest, db: Session = Depends(get_db),
+                     user=Depends(require_analyst)):
+    """The wizard's Step-4 publish. Creates pack → published version → LIVE CrisisEvent
+    (optionally claiming the orphan-critical cluster) in ONE transaction; any failure
+    rolls the whole thing back so nothing half-built ever persists (no-draft-persistence).
+    Each operation gets its own pack — operation-scoped forms never couple to another op."""
+    title = (payload.form_title or payload.name or "Operation form").strip()
+    # Unique pack key derived from the title (operation forms are pack-scoped per op).
+    base = _slugify(title)
+    key, n = base, 1
+    while db.query(CrisisFormPack).filter(CrisisFormPack.key == key).first():
+        n += 1
+        key = f"{base}-{n}"
+    # The server owns key/title inside the schema so the linter always has them.
+    schema = dict(payload.schema_json or {})
+    schema["key"], schema["title"] = key, title
+    errs = validate_pack_schema(schema)
+    if errs:
+        raise HTTPException(status_code=400, detail={"schema_errors": errs})
+
+    try:
+        pack = CrisisFormPack(key=key, title=title, crisis_type=payload.crisis_type,
+                              created_by=getattr(user, "id", None))
+        db.add(pack); db.flush()
+        ver = CrisisFormPackVersion(
+            pack_id=pack.id, version=1, schema_json=schema, status="published",
+            published_at=datetime.now(timezone.utc), created_by=getattr(user, "id", None))
+        db.add(ver); db.flush()
+        pack.active_version = 1
+        pack.is_archived = False
+
+        ev = CrisisEvent(
+            name=payload.name, crisis_type=payload.crisis_type,
+            status="LIVE", is_active=True,
+            center_lat=payload.center_lat, center_lng=payload.center_lng,
+            radius_km=payload.radius_km, started_at=payload.started_at,
+            ended_at=payload.ended_at, place_name=payload.place_name,
+            form_pack_id=pack.id, created_by=getattr(user, "id", None))
+        db.add(ev); db.flush()
+
+        claimed, ids = 0, []
+        if payload.from_cluster:
+            orphans = (db.query(Report)
+                       .filter(Report.deletion_requested_at.is_(None),
+                               Report.crisis_event_id.is_(None),
+                               Report.severity == SeverityEnum.CRITICAL,
+                               Report.status.notin_(_OPEN_REPORT_STATUSES_EXCLUDED))
+                       .with_for_update(skip_locked=True).all())
+            ids = [r.id for r in orphans]
+            if ids:
+                claimed = (db.query(Report)
+                           .filter(Report.id.in_(ids), Report.crisis_event_id.is_(None))
+                           .update({Report.crisis_event_id: ev.id}, synchronize_session=False))
+                db.add(OperationClaimLog(
+                    operation_id=ev.id, event_kind="CLAIMED",
+                    report_ids=ids, report_count=len(ids),
+                    actor_user_id=getattr(user, "id", None)))
+        db.commit()
+    except HTTPException:
+        db.rollback(); raise
+    except Exception:
+        db.rollback()
+        logger.exception("[Operation] launch-with-form failed; rolled back (no rows persisted)")
+        raise HTTPException(status_code=500, detail="Could not launch the operation")
+
+    db.refresh(ev)
+    if not ev.place_name and (ev.center_lat or ev.center_lng):
+        pn = _resolve_place_name(ev.center_lat, ev.center_lng, db)
+        if pn:
+            ev.place_name = pn
+            db.commit()
+    logger.info(f"[Operation] launch-with-form op={ev.id[:8]} pack={key!r} claimed={claimed}")
+    return OperationLaunchResponse(
+        operation_id=ev.id, operation_name=ev.name,
+        claimed_count=int(claimed or 0), skipped_count=len(ids) - int(claimed or 0),
+        merged_into_existing=False)
 
 
 @operations_router.post("/{event_id}/unclaim", response_model=OperationLaunchResponse,
