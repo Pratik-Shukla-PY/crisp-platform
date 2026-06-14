@@ -167,6 +167,12 @@
     CONFLICT: 'CONFLICT', CIVIL_UNREST: 'CONFLICT',
   };
 
+  // Expose the curated form-kit DATA (read-only constants; consumers clone before
+  // mutating) so the Start-New-Operation wizard (cc-wizard.js) reuses the SAME
+  // block library + stock packs instead of duplicating them. Pure data — no
+  // behaviour change to this module.
+  window.CrispFormKit = { ENUM, CORE_BLOCKS, STOCK_PACKS, CRISIS_TO_STOCK, EVENT_CRISIS_TYPES };
+
   // ── tiny DOM + format helpers ──────────────────────────────────────────────
   function esc(s) {
     return String(s == null ? '' : s)

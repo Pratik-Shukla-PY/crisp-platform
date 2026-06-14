@@ -695,6 +695,9 @@
 <!-- Operations workspace: #/operations list + #/operations/{id} worklist dashboard
      (self-contained overlay; defines window.openOperations before the router runs). -->
 <script src="cc-operations.js?v=2"></script>
+<!-- Start-New-Operation wizard (redesign v2): 4-step modal; defines
+     window.openOperationWizard, reuses window.CrispFormKit from cc-crisis.js. -->
+<script src="cc-wizard.js?v=1"></script>
 <!-- Navigation hub: mandatory Control Center root + hash router (loaded last). -->
 <script src="router.js?v=2"></script>
 <!-- Unified Command Center shell: one persistent global nav bar on every
