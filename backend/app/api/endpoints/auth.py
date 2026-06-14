@@ -61,6 +61,10 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: Optional[str] = None
     full_name: Optional[str] = Field(None, max_length=255)
+    # Accepted but IGNORED in production self-registration (new accounts are
+    # always VIEWER there). Only honored when _REGISTER_HONORS_ROLE is on
+    # (CRISP_TESTING + non-prod) so the e2e harness can mint an ANALYST/ADMIN.
+    role: Optional[str] = None
 
 
 # OTP schemas generalised
