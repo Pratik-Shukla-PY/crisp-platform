@@ -152,3 +152,58 @@ def test_rollback_repoints_active_version(client, admin_token):
     rb = client.post(f"/api/v1/admin/crisis-forms/packs/{pid}/rollback",
                      json={"version": 1}, headers=_h(admin_token))
     assert rb.status_code == 200 and rb.json()["active_version"] == 1
+
+
+# ── Operations redesign v2 — atomic launch-with-form (wizard publish) ──────────
+def _wizard_schema():
+    """A valid schema_json as the Start-New-Operation wizard's buildSchema emits it
+    (the server fills key/title)."""
+    return {"schema_version": 1, "sections": [
+        {"id": "classify", "stage": 2, "title": "Assessment", "fields": [
+            {"key": "crisis_type", "type": "single_select", "label": "What caused it?",
+             "required": True, "maps_to": "crisis_type", "options": [{"value": "FLOOD", "label": "Flood"}]},
+            {"key": "water_rising", "type": "yes_no", "label": "Is the water still rising?", "required": False}]}]}
+
+
+def test_launch_with_form_creates_live_op_and_published_pack(client, admin_token):
+    r = client.post("/api/v1/operations/launch-with-form", headers=_h(admin_token), json={
+        "name": "Atomic Launch Op", "crisis_type": "FLOOD",
+        "center_lat": 19.0, "center_lng": 72.8, "radius_km": 15,
+        "form_title": "Atomic test form", "schema_json": _wizard_schema(), "from_cluster": False})
+    assert r.status_code == 201, r.text
+    op_id = r.json()["operation_id"]
+    try:
+        # The operation is LIVE + active (so it matches reporters).
+        ops = client.get("/api/v1/operations", headers=_h(admin_token)).json()
+        op = next(o for o in ops if o.get("id") == op_id)
+        assert op["status"] == "LIVE" and op["is_active"] is True
+        # A pack was created AND published in the same call.
+        packs = client.get("/api/v1/admin/crisis-forms/packs", headers=_h(admin_token)).json()
+        pk = next(p for p in packs if p["title"] == "Atomic test form")
+        assert pk["active_version"] == 1
+    finally:
+        client.delete(f"/api/v1/admin/crisis-forms/events/{op_id}", headers=_h(admin_token))
+
+
+def test_launch_with_form_bad_schema_persists_nothing(client, admin_token):
+    """No-draft-persistence: a rejected publish must leave ZERO pack/version/event
+    rows — the whole thing is one transaction."""
+    packs_before = len(client.get("/api/v1/admin/crisis-forms/packs", headers=_h(admin_token)).json())
+    ops_before = len(client.get("/api/v1/operations", headers=_h(admin_token)).json())
+    # single_select with no options → the schema linter rejects it.
+    bad = {"schema_version": 1, "sections": [{"id": "classify", "stage": 2, "title": "x", "fields": [
+        {"key": "q", "type": "single_select", "label": "Q?", "required": False}]}]}
+    r = client.post("/api/v1/operations/launch-with-form", headers=_h(admin_token), json={
+        "name": "Should Not Persist", "center_lat": 1.0, "center_lng": 1.0, "radius_km": 10,
+        "schema_json": bad, "from_cluster": False})
+    assert r.status_code == 400, r.text
+    assert len(client.get("/api/v1/admin/crisis-forms/packs", headers=_h(admin_token)).json()) == packs_before
+    assert len(client.get("/api/v1/operations", headers=_h(admin_token)).json()) == ops_before
+
+
+def test_form_templates_returns_published_with_schema(client, admin_token):
+    _publish_pack(client, admin_token, key="tpl-listed")
+    tpls = client.get("/api/v1/operations/form-templates", headers=_h(admin_token)).json()
+    row = next((t for t in tpls if t["key"] == "tpl-listed"), None)
+    assert row is not None, "published pack missing from /operations/form-templates"
+    assert row.get("schema_json"), "template must carry its active published schema"
