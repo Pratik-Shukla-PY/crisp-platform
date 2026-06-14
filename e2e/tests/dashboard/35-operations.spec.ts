@@ -5,11 +5,12 @@
  * backend call stubbed to the Phase-2a contract (/operations rollup,
  * scoped /analytics/summary, scoped /reports):
  *   • #/operations lists operations worst-first + the un-operationalised
- *     critical "Launch operation here" CTA; a card opens #/operations/{id}.
+ *     critical cluster CTA (a two-option chooser); a card opens #/operations/{id}.
  *   • #/operations/{id} is a worklist-first dashboard (banner · 4 vitals ·
  *     worklist · action bar) and lights up the triple-cue context chrome.
  *   • The operation context is ABSENT on global routes (/ and /incidents).
- *   • Nav reads "Operations" (primary) + "Incidents" (the raw global feed).
+ *   • Operations has NO nav button: it is reached from the Home "Active
+ *     Operations" rail + its Expand control + deep-links. Nav shows "Incidents".
  *
  * Self-contained: fakes the auth token + stubs all /api/v1 calls — no backend.
  */
@@ -77,13 +78,32 @@ async function boot(page) {
 }
 
 test.describe('Dashboard — Operations workspace (Phase 2)', () => {
-    test('nav reads Operations (primary) + Incidents (global feed)', async ({ page }) => {
+    test('Operations has NO nav button; Incidents stays; the route is still reachable', async ({ page }) => {
         await boot(page);
         await page.goto('index.html');
         await page.waitForTimeout(600);
         const nav = page.locator('#cc-nav');
-        await expect(nav.locator('button[data-route="/operations"]')).toContainText('Operations');
+        // The standalone Operations button was removed - operations live on Home.
+        await expect(nav.locator('button[data-route="/operations"]')).toHaveCount(0);
         await expect(nav.locator('button[data-route="/incidents"]')).toContainText('Incidents');
+        // The route remains fully reachable via deep-link (zero orphaned nav path).
+        await page.evaluate(() => { location.hash = '#/operations'; });
+        await expect(page.locator('#cc-ops-overlay #cco-list')).toBeVisible({ timeout: 6000 });
+    });
+
+    test('Home "Active Operations" rail: heading renamed + Expand opens #/operations', async ({ page }) => {
+        await boot(page);
+        await page.goto('index.html');
+        await page.waitForTimeout(600);                  // let app.js boot settle
+        await page.evaluate(() => (window as any).openControlCenter && (window as any).openControlCenter());
+        // Rename: the section reads "Active Operations" (was "Active Response").
+        await expect(page.locator('.cc-zone-response')).toContainText('Active Operations');
+        // The Expand control opens the full operations management view.
+        const expand = page.locator('#cc-ops-expand');
+        await expect(expand).toBeVisible();
+        await expand.click();
+        await expect(page).toHaveURL(/#\/operations\b/);
+        await expect(page.locator('#cc-ops-overlay #cco-list')).toBeVisible({ timeout: 6000 });
     });
 
     test('#/operations lists operations worst-first + cluster CTA; a card opens the detail', async ({ page }) => {
@@ -164,17 +184,38 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         await expect(row.locator('.opc-pill')).toHaveAttribute('title', /unattended critical/);
     });
 
-    test('Phase 3 — cluster CTA launches a real operation (auto-claim) and opens it', async ({ page }) => {
+    test('cluster CTA opens a two-option chooser; "View ungrouped reports" investigates WITHOUT creating an operation', async ({ page }) => {
         await boot(page);
-        page.on('dialog', (d) => d.accept('Bihar Critical Cluster'));   // window.prompt(name)
+        // No dialog handler: clicking the cluster must NOT fire a window.prompt anymore.
         await page.goto('index.html');
         await page.waitForTimeout(400);
         await page.evaluate(() => { location.hash = '#/operations'; });
         const cta = page.locator('#cco-list [data-cluster]');
         await expect(cta).toBeVisible({ timeout: 6000 });
         await cta.click();
-        // POST /operations/launch (stubbed) → navigate to the newly created operation.
-        await expect.poll(() => page.evaluate(() => location.hash)).toContain('/operations/op-new');
+        // A deliberate chooser appears with BOTH options - creation is not forced.
+        const chooser = page.locator('#cluster-chooser[role="dialog"]');
+        await expect(chooser).toBeVisible();
+        await expect(chooser.locator('#ccx-view')).toBeVisible();
+        await expect(chooser.locator('#ccx-create')).toBeVisible();
+        // Option A: View ungrouped reports → global feed + ungrouped queue, no op created.
+        await chooser.locator('#ccx-view').click();
+        await expect(chooser).toHaveCount(0);
+        await expect.poll(() => page.evaluate(() => location.hash)).toContain('/incidents;queue=ungrouped');
+        expect(await page.evaluate(() => location.hash)).not.toContain('/operations/');
+    });
+
+    test('cluster chooser "Create new operation" opens the wizard (operation creation stays available)', async ({ page }) => {
+        await boot(page);
+        await page.goto('index.html');
+        await page.waitForTimeout(400);
+        await page.evaluate(() => { location.hash = '#/operations'; });
+        const cta = page.locator('#cco-list [data-cluster]');
+        await expect(cta).toBeVisible({ timeout: 6000 });
+        await cta.click();
+        await page.locator('#cluster-chooser #ccx-create').click();
+        // The deliberate 4-step wizard opens (fromCluster). No forced auto-claim prompt.
+        await expect(page.locator('#cc-wiz-overlay.open')).toBeVisible({ timeout: 4000 });
     });
 
     test('@smoke Export from an operation is SCOPED to that operation (crisis_event_id)', async ({ page }) => {

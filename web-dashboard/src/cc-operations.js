@@ -289,11 +289,11 @@
     // Redesigned card: LEFT identity | CENTER KPI strip (grows) | RIGHT situation.
     card(o) {
       if (o.is_cluster) {
-        return `<div class="opc opc-cluster" data-cluster="1" role="link" tabindex="0"
-            aria-label="Launch an operation for ${fmtNum(o.critical)} unassigned critical reports">
+        return `<div class="opc opc-cluster" data-cluster="1" data-critical="${Number(o.critical) || 0}" role="link" tabindex="0"
+            aria-label="${fmtNum(o.critical)} unassigned critical reports, no operation - view reports or create an operation">
           <div class="opc-id"><div class="opc-id-r1"><span class="opc-mm-alert opc-mm-inline">🚨</span>
             <span class="opc-name">${fmtNum(o.critical)} critical reports, no operation</span></div>
-            <div class="opc-meta">Launch an operation here to coordinate response →</div></div>
+            <div class="opc-meta">View reports or create an operation →</div></div>
           <div class="opc-kpis"><span class="opc-chip crit"><b>${fmtNum(o.critical)}</b><span>Critical</span></span></div>
           <div class="opc-sit"><span class="opc-ar">›</span></div></div>`;
       }
@@ -355,7 +355,7 @@
     // opts: { empty, grouped (default true), liveHeader, startNew }
     //   grouped   → split LIVE (first) vs ENDED (collapsed <details>)
     //   liveHeader→ show the "LIVE OPERATIONS" header (the /operations page; the
-    //               home rail's zone header already says "Active Response")
+    //               home rail's zone header already says "Active Operations")
     //   startNew  → prepend the "Start New Operation" card
     renderInto(host, ops, opts) {
       if (!host) return;
@@ -396,9 +396,10 @@
         row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
       });
       host.querySelectorAll('[data-cluster]').forEach((row) => {
-        const launch = () => { try { (window.launchOperationFromCluster || function () {})(); } catch (_e) {} };
-        row.addEventListener('click', launch);
-        row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); launch(); } });
+        const critical = Number(row.getAttribute('data-critical')) || 0;
+        const choose = () => { try { (window.openClusterChooser || function () {})({ critical }); } catch (_e) {} };
+        row.addEventListener('click', choose);
+        row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(); } });
       });
       host.querySelectorAll('[data-new]').forEach((row) => {
         const start = () => { try { (window.openOperationWizard || function () { console.warn('[ops] operation wizard not loaded yet'); })(); } catch (_e) {} };

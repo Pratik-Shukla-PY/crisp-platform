@@ -573,6 +573,16 @@ const QUEUES = {
             && (!!r.help_dispatched_at || r.status === 'RESPONDING'),
         sort: 'oldest',
     },
+    // Ungrouped critical - CRITICAL severity with NO operation (crisis_event_id
+    // null). Backs the cluster chooser's "View ungrouped reports" action:
+    // investigate the unassigned-critical reports WITHOUT creating an operation.
+    // Mirrors the orphan-critical count the cluster card shows.
+    'ungrouped': {
+        label: 'Ungrouped critical', icon: '🚨',
+        desc: 'Open CRITICAL reports not yet assigned to any operation - investigate, then optionally launch an operation to coordinate',
+        pass: (r) => !_QUEUE_CLOSED.includes(r.status) && !r.crisis_event_id && r.severity === 'CRITICAL',
+        sort: 'priority',
+    },
 };
 let _activeQueue = null;                 // queue key | null
 let _escalatingBuildingIds = null;       // Set<building_id> (escalating queue prefetch)
@@ -1220,27 +1230,113 @@ function showToast(msg, type = 'info') {
     setTimeout(() => toast.remove(), 3000);
 }
 
-// ── Operations Phase 3 - auto-claim write-path (launch + undo) ────────────────
-// Launch an operation from the un-operationalised critical cluster: the backend
-// creates a CrisisEvent + bulk-claims the open-critical, no-operation reports,
-// then we open it. Reversible via the operation dashboard's "Undo claim" button
-// (unclaimOperation), which un-sets crisis_event_id on exactly those reports.
-async function launchOperationFromCluster() {
-    const name = (window.prompt('Name this operation', 'Critical cluster') || '').trim();
-    if (!name) return;
-    try {
-        const res = await fetch(`${BACKEND_HOST}/api/v1/operations/launch`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name }),
-        });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) { showToast(body.detail || `Launch failed (${res.status})`, 'error'); return; }
-        const n = body.claimed_count || 0;
-        showToast(`Operation created · ${n} report${n === 1 ? '' : 's'} claimed`, 'success');
-        try { window.location.hash = '#/operations/' + encodeURIComponent(body.operation_id); } catch (_e) {}
-    } catch (_e) { showToast('Launch failed - network error', 'error'); }
+// ── Ungrouped-critical cluster chooser ───────────────────────────────────────
+// Clicking the "N critical reports, no operation" card no longer FORCES
+// operation creation. It opens a deliberate two-option chooser so the operator
+// chooses the workflow:
+//   A) View ungrouped reports - investigate the unassigned-critical reports in
+//      the global feed (#/incidents;queue=ungrouped). NO operation is created.
+//   B) Create new operation   - open the 4-step wizard (fromCluster:true); on
+//      launch the backend claims the open-critical, no-operation reports.
+// This supports both Monitor→Investigate→Act AND Monitor→Investigate→Create
+// Operation→Coordinate. Creation is a deliberate choice, never the default.
+function _injectClusterChooserStyles() {
+    if (document.getElementById('ccx-styles')) return;
+    const st = document.createElement('style');
+    st.id = 'ccx-styles';
+    st.textContent = `
+    .ccx-overlay{position:fixed;inset:0;z-index:100040;display:flex;align-items:center;justify-content:center;
+      background:rgba(5,10,20,.62);padding:20px;animation:ccxfade .12s ease}
+    @keyframes ccxfade{from{opacity:0}to{opacity:1}}
+    .ccx-box{position:relative;width:min(460px,100%);background:#101a2e;border:1px solid #2a3a55;border-radius:16px;
+      box-shadow:0 24px 60px rgba(0,0,0,.5);padding:22px 22px 20px;color:#E6EDF7;
+      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+    .ccx-x{position:absolute;top:12px;right:12px;width:28px;height:28px;border-radius:8px;border:1px solid #2a3a55;
+      background:transparent;color:#9fb2d4;cursor:pointer;font-size:13px;line-height:1}
+    .ccx-x:hover{border-color:#f87171;color:#fca5a5}
+    .ccx-hd{display:flex;gap:12px;align-items:flex-start;margin:2px 26px 18px 0}
+    .ccx-ic{font-size:22px;line-height:1.1;flex:0 0 auto}
+    .ccx-t{font-size:15px;font-weight:800;letter-spacing:.01em}
+    .ccx-s{font-size:12px;color:#9fb2d4;margin-top:4px;line-height:1.45}
+    .ccx-opts{display:flex;flex-direction:column;gap:10px}
+    .ccx-opt{display:flex;align-items:center;gap:12px;text-align:left;width:100%;cursor:pointer;background:#0d1626;
+      border:1px solid #233149;border-radius:12px;padding:13px 14px;color:#E6EDF7;
+      transition:border-color .12s,background .12s,transform .06s}
+    .ccx-opt:hover{border-color:#418FDE;background:#13203a}
+    .ccx-opt:active{transform:translateY(1px)}
+    .ccx-opt:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
+    .ccx-opt-go:hover{border-color:#34D399;background:#10241d}
+    .ccx-opt-ic{font-size:20px;flex:0 0 auto}
+    .ccx-opt-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+    .ccx-opt-txt b{font-size:13.5px;font-weight:700}
+    .ccx-opt-txt span{font-size:11.5px;color:#9fb2d4;line-height:1.4}
+    .ccx-opt-ar{font-size:18px;color:#5f7290;flex:0 0 auto}`;
+    document.head.appendChild(st);
 }
-window.launchOperationFromCluster = launchOperationFromCluster;
+function openClusterChooser(opts) {
+    opts = opts || {};
+    const critical = Number(opts.critical) || 0;
+    _injectClusterChooserStyles();
+    const prev = document.getElementById('cluster-chooser');
+    if (prev) { try { prev.remove(); } catch (_e) {} }
+
+    const n = critical
+        ? `${critical.toLocaleString()} critical report${critical === 1 ? '' : 's'}`
+        : 'Critical reports';
+    const ov = document.createElement('div');
+    ov.id = 'cluster-chooser';
+    ov.className = 'ccx-overlay';
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    ov.setAttribute('aria-label', 'Ungrouped critical reports - choose an action');
+    ov.innerHTML = `
+      <div class="ccx-box">
+        <button class="ccx-x" type="button" aria-label="Close">✕</button>
+        <div class="ccx-hd"><span class="ccx-ic" aria-hidden="true">🚨</span>
+          <div><div class="ccx-t">${escapeHtml(n)} · no operation</div>
+          <div class="ccx-s">These critical reports aren't assigned to any operation. Investigate them first, or create an operation to coordinate a response - your choice.</div></div></div>
+        <div class="ccx-opts">
+          <button class="ccx-opt" id="ccx-view" type="button">
+            <span class="ccx-opt-ic" aria-hidden="true">📋</span>
+            <span class="ccx-opt-txt"><b>View ungrouped reports</b>
+              <span>Open these reports in the global feed to investigate. No operation is created.</span></span>
+            <span class="ccx-opt-ar" aria-hidden="true">›</span></button>
+          <button class="ccx-opt ccx-opt-go" id="ccx-create" type="button">
+            <span class="ccx-opt-ic" aria-hidden="true">🚀</span>
+            <span class="ccx-opt-txt"><b>Create new operation</b>
+              <span>Launch an operation to coordinate the response and claim these reports.</span></span>
+            <span class="ccx-opt-ar" aria-hidden="true">›</span></button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+
+    const close = () => { try { ov.remove(); } catch (_e) {} document.removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+    document.addEventListener('keydown', onKey);
+    ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+    ov.querySelector('.ccx-x').addEventListener('click', close);
+    // A) Investigate - no operation created.
+    ov.querySelector('#ccx-view').addEventListener('click', () => {
+        close();
+        try { window.location.hash = '#/incidents;queue=ungrouped'; } catch (_e) {}
+    });
+    // B) Coordinate - the deliberate 4-step wizard; fromCluster claims on launch.
+    ov.querySelector('#ccx-create').addEventListener('click', () => {
+        close();
+        try {
+            if (typeof window.openOperationWizard === 'function') window.openOperationWizard({ fromCluster: true });
+            else showToast('Operation wizard is still loading - try again in a moment.', 'info');
+        } catch (_e) { showToast('Could not open the operation wizard.', 'error'); }
+    });
+    // Focus the safe/investigate action first (creation is never the default).
+    try { ov.querySelector('#ccx-view').focus(); } catch (_e) {}
+}
+window.openClusterChooser = openClusterChooser;
+
+// ── Operations Phase 3 - undo write-path ──────────────────────────────────────
+// Reverses the most recent cluster claim on an operation (un-sets
+// crisis_event_id on exactly those reports). Surfaced as the operation
+// dashboard's "Undo claim" button.
 
 async function unclaimOperation(opId) {
     if (!opId) return;

@@ -267,6 +267,15 @@
     /* quick actions */
     .cc-empty{color:#5C6B85;font-size:12.5px;padding:14px 4px;text-align:center}
     .cc-stale{font-size:10.5px;color:#7d89a3;margin-left:6px}
+    /* Expand control on the Active Operations band - right-aligned (margin-left:auto)
+       opener for the full #/operations management view. */
+    .cc-expand-btn{margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:11px;
+      font-weight:600;color:#9fb2d4;background:rgba(65,143,222,.08);border:1px solid #2a3a55;
+      border-radius:8px;padding:3px 9px;cursor:pointer;letter-spacing:.02em;text-transform:none;
+      line-height:1.4;transition:border-color .12s,background .12s,color .12s}
+    .cc-expand-btn:hover{border-color:#418FDE;background:rgba(65,143,222,.16);color:#E6EDF7}
+    .cc-expand-btn:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
+    @media (max-width:560px){.cc-expand-btn .cc-expand-l{display:none}.cc-expand-btn{padding:3px 7px}}
     `;
     const tag = document.createElement('style');
     tag.id = 'cc-home-styles';
@@ -331,14 +340,14 @@
         <h1 id="cc-home-heading" class="cc-vh">Crisis Intelligence Center</h1>
 
         <!-- TWO-ZONE Global Command Center (ICS COP vs IAP):
-             ZONE A - ACTIVE RESPONSE: the operations you are RUNNING (the single
+             ZONE A - ACTIVE OPERATIONS: the operations you are RUNNING (the single
                authoritative active-operations surface; no longer a count echoed
                on the map badge + the attention row).
              ZONE B - GLOBAL MONITORING: everything happening worldwide.
              The old side-by-side ops|map row (which conflated the two) is split:
              the rail is full-width in Zone A, the map drops full-width into Zone B. -->
         <div class="cc-zone cc-zone-response">
-          <div class="cc-sec-t cc-band">⚡ Active Response <span class="cc-band-sub">- operations you are running</span> <span class="cc-stale" id="cc-sum-stale"></span></div>
+          <div class="cc-sec-t cc-band">⚡ Active Operations <span class="cc-band-sub">- operations you are running</span> <span class="cc-stale" id="cc-sum-stale"></span><button type="button" id="cc-ops-expand" class="cc-expand-btn" title="Open the full operations view" aria-label="Expand to the full operations management view">⤢ <span class="cc-expand-l">View all</span></button></div>
           <div id="cc-ops-rail"><div class="cc-empty">Loading operations…</div></div>
         </div>
 
@@ -375,6 +384,13 @@
         </div>
       </div>`;
     ov.classList.add('cc-home-open');
+
+    // Expand → the full operations management view (#/operations). The home rail
+    // is the concise summary; /operations is the detailed list. Route + deep-
+    // linking are unchanged - this is just a discoverable entry point (it also
+    // replaces the removed standalone "Operations" nav button).
+    const expand = el('cc-ops-expand');
+    if (expand) expand.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); go('/operations'); });
 
     // Org branding + clock are rendered by the shell (crisp-shell.js) now.
     refreshAll();
@@ -499,9 +515,9 @@
     // render the SAME card. Fallback to a minimal inline row if that module hasn't
     // loaded (defensive; both ship in index.html).
     if (window.CrispOpCard && typeof window.CrispOpCard.renderInto === 'function') {
-      // Active Response zone: Start-New card first, LIVE ops, then a collapsed
+      // Active Operations zone: Start-New card first, LIVE ops, then a collapsed
       // ENDED group. No "LIVE OPERATIONS" sub-header - the zone band already
-      // reads "⚡ Active Response".
+      // reads "⚡ Active Operations".
       window.CrispOpCard.renderInto(box, ops, {
         empty: 'No active operations. Start one to coordinate a response.',
         grouped: true, liveHeader: false, startNew: true,
@@ -516,7 +532,7 @@
     box.innerHTML = sorted.map((o) => {
       const hc = o.is_cluster ? '#f87171' : (_OP_HEALTH[o.health] || _OP_HEALTH.GREEN);
       const nm = o.is_cluster ? `${fmtNum(o.critical)} critical, no operation` : esc(o.name);
-      const attr = o.is_cluster ? 'data-cluster="1"' : `data-op="${esc(o.id)}"`;
+      const attr = o.is_cluster ? `data-cluster="1" data-critical="${Number(o.critical) || 0}"` : `data-op="${esc(o.id)}"`;
       return `<div class="cc-op-row" ${attr} role="link" tabindex="0">
         <span class="cc-op-dot" style="background:${hc}"></span>
         <div class="cc-op-body"><div class="cc-op-name">${nm}</div></div>
@@ -529,9 +545,10 @@
       r.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
     });
     box.querySelectorAll('[data-cluster]').forEach((r) => {
-      const launch = () => { try { (window.launchOperationFromCluster || function () {})(); } catch (_e) {} };
-      r.addEventListener('click', launch);
-      r.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); launch(); } });
+      const critical = Number(r.getAttribute('data-critical')) || 0;
+      const choose = () => { try { (window.openClusterChooser || function () {})({ critical }); } catch (_e) {} };
+      r.addEventListener('click', choose);
+      r.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(); } });
     });
   }
 

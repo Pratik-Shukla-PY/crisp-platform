@@ -105,6 +105,11 @@
   // route → nav button that should read as the active section. Both /users
   // buttons map to /users; the Account button (no data-intent) is the primary
   // active target - "Users" is a sub-destination (the admin user-management tab).
+  // '/' (Home) and '/operations' deliberately have NO nav button - Home is the
+  // brand mark, Operations is the Home "Active Operations" rail/cards + Expand +
+  // deep-links. setActive() simply finds no matching button for these two and
+  // lights nothing; the operation context banner is the /operations "you are
+  // here" cue. The entries stay here as documentation of the route set.
   const ROUTE_LABEL = {
     '/': 'Home', '/operations': 'Operations', '/incidents': 'Incidents',
     '/exports': 'Exports',
@@ -283,11 +288,13 @@
       `<span aria-hidden="true">${glyph}</span> ${esc(label)}` +
       `${adminOnly && !admin ? '<span class="ad">admin</span>' : ''}</button>`;
     return [
-      // No "Home" item - the CRISP brand mark (left) is the Home affordance
-      // (aria-label "go to Home"); a separate Home button was redundant.
-      // Operations (the operation-centric workspace) is primary; Incidents is
-      // the raw global report feed.
-      b('/operations', '🎯', 'Operations', false),
+      // No "Home" OR "Operations" item - both are reached without a chrome
+      // button. Home: the CRISP brand mark (left, aria-label "go to Home").
+      // Operations: the Home "Active Operations" rail + its cards + the rail's
+      // Expand control + deep-links (#/operations, #/operations/{id}); the
+      // /operations route, role-gate, and context breadcrumb banner are all
+      // intact - the standalone nav button was redundant with the data-driven
+      // rail. Incidents is the raw global report feed.
       b('/incidents', '🛰', 'Incidents', false),
       b('/exports', '⬇', 'Exports', false),
       b('/reporting', '🧩', 'Crisis Forms', true),

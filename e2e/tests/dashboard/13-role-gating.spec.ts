@@ -89,8 +89,10 @@ test.describe('Dashboard — role-gated navigation (CC-IA)', () => {
       await expect(page.locator('#cc-nav button[data-route="/org"]')).toContainText(/admin/i);
       await expect(page.locator('#cc-nav button[data-route="/reporting"]')).toContainText(/admin/i);
 
-      // Operations + Account remain enabled.
-      await expect(qa(page).filter({ hasText: 'Operations' }).first()).toBeEnabled();
+      // Non-admin items (Incidents + Account) remain enabled. (Operations has no
+      // nav button anymore - the route is reached via the Home "Active Operations"
+      // rail/Expand + deep-links; role-gating for /operations is router-enforced.)
+      await expect(qa(page).filter({ hasText: 'Incidents' }).first()).toBeEnabled();
       await expect(qa(page).filter({ hasText: 'Account' }).first()).toBeEnabled();
 
       // Direct navigation to an admin module bounces back to the root.
@@ -115,7 +117,7 @@ test.describe('Dashboard — role-gated navigation (CC-IA)', () => {
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
     await expect(page.locator('#cc-nav button[data-route="/org"]')).toBeEnabled();
     await expect(page.locator('#cc-nav button[data-route="/reporting"]')).toBeEnabled();
-    await expect(qa(page).filter({ hasText: 'Operations' }).first()).toBeEnabled();
+    await expect(qa(page).filter({ hasText: 'Incidents' }).first()).toBeEnabled();
 
     // /org opens the Organisation settings overlay (cc-settings).
     await page.evaluate(() => (window as any).__crispRouter.navigate('/org'));

@@ -69,8 +69,9 @@ test.describe('Dashboard — Crisis Intelligence mandatory root', () => {
   test('@smoke Incidents → routes to #/incidents, reveals the feed, hides the root', async ({ page }) => {
     await bootAuthed(page);
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
-    // "Incidents" is the raw global feed; "Operations" (primary) is the new
-    // operations workspace (covered by 35-operations.spec.ts).
+    // "Incidents" is the raw global feed. The operations workspace has no nav
+    // button - it's reached from the Home "Active Operations" rail/Expand +
+    // deep-links (covered by 35-operations.spec.ts).
     await page.locator('#cc-nav button[data-route="/incidents"]').click();
     await expect(page).toHaveURL(/#\/incidents/);
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toHaveCount(0);
@@ -110,7 +111,7 @@ test.describe('Dashboard — Crisis Intelligence mandatory root', () => {
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
     await expect(page.locator('#cc-nav button[data-route="/org"]')).toBeDisabled();
     await expect(page.locator('#cc-nav button[data-route="/reporting"]')).toBeDisabled();
-    await expect(qa(page).filter({ hasText: 'Operations' }).first()).toBeEnabled();
+    await expect(qa(page).filter({ hasText: 'Incidents' }).first()).toBeEnabled();
     await expect(qa(page).filter({ hasText: 'Account' }).first()).toBeEnabled();
     // A direct route to an admin module bounces back to the root.
     await page.evaluate(() => (window as any).__crispRouter.navigate('/org'));
