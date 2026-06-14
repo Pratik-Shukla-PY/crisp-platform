@@ -708,6 +708,11 @@
         const mk = window.L.circleMarker(ll, { radius: 6, color: col, weight: 1.5, fillColor: col, fillOpacity: .65 });
         const what = [r.crisis_type, r.infrastructure_type].filter(Boolean).map(titleCase).join(' · ') || 'Report';
         mk.bindPopup(`<b>${esc(what)}</b><br>${esc(titleCase(sev))} · ${esc(String(r.status || ''))}<br><small>${esc(timeAgo(r.server_created_at))}</small>`);
+        // Popup on hover (preview); CLICK opens the incident detail (deep-link +
+        // operation-aware) — previously a dead-end (popup-only, no click handler).
+        mk.on('mouseover', () => { try { mk.openPopup(); } catch (_e) {} });
+        mk.on('mouseout', () => { try { mk.closePopup(); } catch (_e) {} });
+        mk.on('click', () => { try { window.openIncident && window.openIncident(r.id); } catch (_e) {} });
         _cluster.addLayer(mk);
       });
       _map.addLayer(_cluster);

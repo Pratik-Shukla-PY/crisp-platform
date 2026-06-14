@@ -55,7 +55,22 @@
 
   // ── hash parsing (route owns segment 0; state segments untouched) ───────────
   function parseHash() {
-    const raw = (location.hash || '').replace(/^#/, '');
+    let raw = (location.hash || '').replace(/^#/, '');
+    // Deep-link query (e.g. ?incident=<id>) rides at the END of the hash
+    // fragment. The router stays ;-segment based for the path; the trailing
+    // ?key=val is parsed into `query` so a click/refresh can reopen a detail.
+    const query = {};
+    const qIdx = raw.indexOf('?');
+    if (qIdx >= 0) {
+      raw.slice(qIdx + 1).split('&').forEach((kv) => {
+        if (!kv) return;
+        const eq = kv.indexOf('=');
+        const k = eq >= 0 ? kv.slice(0, eq) : kv;
+        const v = eq >= 0 ? kv.slice(eq + 1) : '';
+        try { query[decodeURIComponent(k)] = decodeURIComponent(v); } catch (_e) { query[k] = v; }
+      });
+      raw = raw.slice(0, qIdx);
+    }
     const segs = raw.split(';').filter(Boolean);
     let routeSeg = segs.find((s) => s.startsWith('/')) || '';
     if (routeSeg === '/home') routeSeg = '/';
@@ -69,10 +84,15 @@
     if (m) { baseSeg = '/operations'; params.id = decodeURIComponent(m[1]); }
     const route = ROUTE_ROLES[baseSeg] ? baseSeg : (routeSeg ? '__unknown__' : '');
     const stateSegs = segs.filter((s) => !s.startsWith('/'));
-    return { route, params, stateSegs, hasRoute: !!routeSeg };
+    return { route, params, stateSegs, query, hasRoute: !!routeSeg };
   }
-  function buildHash(route, stateSegs) {
-    return '#' + [route].concat(stateSegs || []).join(';');
+  function buildHash(route, stateSegs, query) {
+    let h = '#' + [route].concat(stateSegs || []).join(';');
+    const keys = query ? Object.keys(query).filter((k) => query[k] != null && query[k] !== '') : [];
+    if (keys.length) {
+      h += '?' + keys.map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(query[k])).join('&');
+    }
+    return h;
   }
   function navigate(route) {
     let { stateSegs } = parseHash();
@@ -80,9 +100,33 @@
     // queues). Leaving /incidents drops them so the landing/settings URLs
     // stay clean and a stale queue can't silently re-apply later.
     if (route !== '/incidents') stateSegs = stateSegs.filter((s) => !s.startsWith('queue='));
+    // navigate() builds with NO query → any ?incident= selection is cleared
+    // when moving to a fresh route (the intuitive "leave the detail" behaviour).
     const next = buildHash(route, stateSegs);
     if (location.hash !== next) location.hash = next;   // fires hashchange → dispatch
     else dispatch();                                     // same hash → force a re-render
+  }
+  // Navigate to `route` carrying a deep-linkable ?incident=<id> selection.
+  // Used by the unified CrispNav helper so every incident click is deep-linkable
+  // + survives refresh / Back / Forward. queue= preserve policy matches navigate().
+  function navigateWithIncident(route, incidentId) {
+    let { stateSegs } = parseHash();
+    if (route !== '/incidents') stateSegs = stateSegs.filter((s) => !s.startsWith('queue='));
+    const next = buildHash(route, stateSegs, incidentId ? { incident: incidentId } : null);
+    if (location.hash !== next) location.hash = next;   // → hashchange → dispatch → restore
+    else dispatch();                                     // same hash → re-dispatch (re-open)
+  }
+  // Set ?incident=<id> on the CURRENT route WITHOUT re-dispatching — used when the
+  // operator is already in the right context (e.g. clicking a worklist row inside
+  // the operation they're viewing), so opening a detail doesn't tear down +
+  // re-fetch the whole view. pushState adds a history entry so Back still closes
+  // the detail (a hash change on Back fires hashchange → dispatch → restore).
+  function setIncidentSeg(incidentId) {
+    const { route, stateSegs } = parseHash();
+    const next = buildHash(route, stateSegs, incidentId ? { incident: incidentId } : null);
+    if (('#' + (location.hash || '').replace(/^#/, '')) === next) return;
+    try { history.pushState(null, '', location.pathname + location.search + next); }
+    catch (_e) { location.hash = next; }
   }
 
   // ── view show/hide ──────────────────────────────────────────────────────────
@@ -155,6 +199,10 @@
     }
     _currentRoute = route;
     try { document.body.setAttribute('data-route', route); } catch (_e) {}
+    // Deep-link restoration: ONE code path for click + refresh + Back/Forward.
+    // If the hash carries ?incident=<id>, reopen that detail once the context's
+    // report list has loaded; if absent, close any open detail (Back contract).
+    try { window.CrispNav && window.CrispNav.restoreFromHash && window.CrispNav.restoreFromHash(parsed); } catch (_e) {}
   }
 
   // ── init: migration shim + mandatory-root (automation-aware) ────────────────
@@ -185,6 +233,6 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 
-  window.__crispRouter = { navigate, dispatch, parseHash, canRoute, ROUTE_ROLES };
+  window.__crispRouter = { navigate, navigateWithIncident, setIncidentSeg, dispatch, parseHash, canRoute, ROUTE_ROLES };
   if (typeof window.navigate !== 'function') window.navigate = navigate;
 })();

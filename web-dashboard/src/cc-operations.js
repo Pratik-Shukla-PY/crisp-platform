@@ -76,6 +76,7 @@
   }
 
   let _map = null, _cluster = null;
+  let _detailOpId = null;   // the operation whose worklist/map is showing (for op-scoped incident deep-links)
 
   function go(hash) { try { window.location.hash = hash; } catch (_e) {} }
   function navTo(route) {
@@ -435,6 +436,7 @@
 
   // ── DETAIL view ──────────────────────────────────────────────────────────────
   async function renderDetail(id) {
+    _detailOpId = id;   // every incident click in this worklist/map deep-links inside this op
     const wrap = el('cco-wrap');
     if (!wrap) return;
     wrap.innerHTML = '<div class="cco-empty">Loading operation…</div>';
@@ -587,7 +589,9 @@
         <div class="cco-ar">›</div></div>`;
     }).join('');
     host.querySelectorAll('[data-id]').forEach((row) => {
-      const open = () => { try { (window.openIncident || function () {})(row.getAttribute('data-id')); } catch (_e) {} };
+      // Pass the operation id so the incident opens INSIDE this op
+      // (#/operations/{opId}?incident={id}) and keeps the op banner.
+      const open = () => { try { (window.openIncident || function () {})(row.getAttribute('data-id'), { operationId: _detailOpId, source: 'op-worklist' }); } catch (_e) {} };
       row.addEventListener('click', open);
       row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
     });
@@ -611,7 +615,7 @@
       pts.forEach(([lat, lng, r]) => {
         const sev = String(r.severity || 'UNKNOWN').toUpperCase();
         L.circleMarker([lat, lng], { radius: 7, color: SEV_COLOR[sev] || SEV_COLOR.UNKNOWN, weight: 2, fillOpacity: .65 })
-          .on('click', () => { try { (window.openIncident || function () {})(r.id); } catch (_e) {} })
+          .on('click', () => { try { (window.openIncident || function () {})(r.id, { operationId: _detailOpId, source: 'op-map' }); } catch (_e) {} })
           .addTo(_cluster);
       });
       if (pts.length) {

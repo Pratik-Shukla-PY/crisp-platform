@@ -1372,6 +1372,9 @@ function _addNotification(r) {
         // Operation this incident belongs to (denormalised crisis_event_name).
         // null = global (not tied to any operation). Shown on the card + bell.
         operation: r.crisis_event_name || null,
+        // Operation ID — so clicking the notification opens the incident INSIDE
+        // its operation (deep-link), not just the global feed.
+        crisisEventId: r.crisis_event_id || null,
     };
 
     // ── DEDUP-FIRST. Nothing touches state until we know this is a
@@ -1763,11 +1766,14 @@ window.toggleNotifPanel = () => {
 };
 
 window.dismissNotif = (id) => {
+    // Capture the notification's operation BEFORE removing it, so the click opens
+    // the incident INSIDE its operation (deep-link) — not just the global feed.
+    const _n = _unseenReports.find(n => n.id === id);
     _unseenReports = _unseenReports.filter(n => n.id !== id);
     _seenIds.add(id);
     _persistSeenIds();  // K.5.c — LRU cap + safe persist
     _renderNotifications();
-    window.openIncident(id);   // route-aware: works from Home / any overlay, not just Operations
+    window.openIncident(id, { operationId: _n && _n.crisisEventId, source: 'notification' });
     // Close panel if empty
     if (_unseenReports.length === 0) {
         const panel = document.getElementById('notif-panel');
@@ -1791,24 +1797,23 @@ window.clearAllNotifs = () => {
 // is hidden (Home / Exports / any overlay). Route to Operations first, then
 // select once #view-incidents has mounted (brief rAF retry); if already there,
 // select immediately.
-window.openIncident = (id) => {
+// The single incident-open entry point now lives in crisp-nav.js (CrispNav).
+// This alias keeps every existing caller working AND makes them deep-link +
+// operation-aware: CrispNav.openIncident routes to the incident's operation
+// (or global), writes #…?incident=<id>, opens the detail, highlights the row,
+// and the router's restoreFromHash handles refresh / Back / Forward.
+window.openIncident = (id, opts) => {
     if (!id) return;
-    const onOps = (document.body.getAttribute('data-route') || '') === '/incidents';
-    if (onOps || !window.__crispRouter) {
-        if (typeof window.selectReport === 'function') window.selectReport(id);
-        return;
+    if (window.CrispNav && typeof window.CrispNav.openIncident === 'function') {
+        window.CrispNav.openIncident(id, opts || {});
+    } else if (typeof window.selectReport === 'function') {
+        window.selectReport(id);   // pre-boot fallback
     }
-    window.__crispRouter.navigate('/incidents');
-    let tries = 0;
-    const tick = () => {
-        const inc = document.getElementById('view-incidents');
-        if (inc && inc.style.display !== 'none' && typeof window.selectReport === 'function') {
-            window.selectReport(id);
-            return;
-        }
-        if (++tries < 30) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
+};
+// Read-only accessor onto the loaded report cache — CrispNav uses it to resolve
+// an incident's operation (crisis_event_id) and to wait for the report to land.
+window.__crispGetReport = (id) => {
+    try { return (allReports || []).find((x) => x && x.id === id) || null; } catch (_e) { return null; }
 };
 
 // Single source of truth for the shell's Home alert (unseen count + whether any
@@ -2102,7 +2107,10 @@ function renderTreeLevel(parentEl, data, levelIndex, currentPath) {
 function createIncidentRow(r) {
     const inc = document.createElement('div');
     inc.className = `tree-incident ${selectedId === r.id ? 'selected' : ''}`;
-    inc.onclick = (e) => { if (e.target.closest('.tv-act')) return; selectReport(r.id); };
+    inc.dataset.id = r.id;   // for CrispNav.markSelected highlight/scroll
+    // Route through the unified helper → deep-links + opens inside the incident's
+    // operation (or global) instead of bare selectReport.
+    inc.onclick = (e) => { if (e.target.closest('.tv-act')) return; window.openIncident(r.id); };
 
     const desc = (r.ai_analysis?.ai_summary || r.description || r.ai_analysis?.transcription || '').substring(0, 35);
     const sevColor = SEV_COLORS[r.severity] || '#64748b';
@@ -2537,11 +2545,12 @@ function createIncidentCard(r) {
     // threshold and sank the synthetic-MODERATE report below the
     // visibility horizon.
     card.dataset.reportId = r.id;
+    card.dataset.id = r.id;   // for CrispNav.markSelected highlight/scroll
     card.onclick    = (ev) => {
         // Phase G.5 — checkbox click is opt-in; clicking elsewhere on
         // the card still opens the detail panel via the existing path.
         if (ev.target && ev.target.classList && ev.target.classList.contains('qrt-bulk-check')) return;
-        selectReport(r.id);
+        window.openIncident(r.id);   // unified: deep-link + op-aware
     };
     card.onmouseenter = (e) => showIncidentPreview(r, e);
     card.onmouseleave = hideIncidentPreview;
@@ -4008,7 +4017,7 @@ function showIncidentPreview(r, event) {
         <div class="fp-actions">
             ${r.status === 'PENDING' || r.status === 'VERIFIED' ? `<button class="fp-act fp-act-dispatch" onclick="event.stopPropagation();patchReport('${r.id}','dispatch');hideIncidentPreview()"><i class="fa-solid fa-hands-helping"></i> Send Help</button>` : ''}
             ${r.status !== 'FALSE_ALARM' ? `<button class="fp-act fp-act-false" onclick="event.stopPropagation();patchReport('${r.id}','false-alarm');hideIncidentPreview()"><i class="fa-solid fa-ban"></i> False</button>` : ''}
-            <button class="fp-act fp-act-detail" onclick="event.stopPropagation();selectReport('${r.id}');hideIncidentPreview()"><i class="fa-solid fa-expand"></i></button>
+            <button class="fp-act fp-act-detail" onclick="event.stopPropagation();window.openIncident('${r.id}');hideIncidentPreview()"><i class="fa-solid fa-expand"></i></button>
         </div>
     `;
 
@@ -4057,6 +4066,10 @@ window.selectReport = (id, skipFly = false) => {
     if (!r) return;
 
     const panel = document.getElementById('detail-panel');
+    // The detail is a GLOBAL overlay — reparent it to <body> so it renders over
+    // any context (it ships nested in the incidents view, which is display:none
+    // on the operations route; a hidden ancestor would otherwise clip it).
+    if (panel.parentElement !== document.body) document.body.appendChild(panel);
     panel.style.display = 'flex';
 
     // P1.5 — fire-and-forget tier-status refresh so the tier switcher /
@@ -5237,6 +5250,12 @@ window.closeDetail = () => {
     // next time the panel opens it starts in its docked size.
     document.body.classList.remove('dp-fullscreen');
     document.getElementById('detail-panel').style.display = 'none';
+    // Deep-link: strip ?incident= from the URL so a refresh/Back doesn't reopen
+    // this just-closed detail. Suppressed when closeDetail is itself driven by
+    // the router's Back restoration (the browser already changed the hash).
+    if (!window.__crispNavSuppressHistory) {
+        try { window.CrispNav && window.CrispNav.clearIncidentSeg && window.CrispNav.clearIncidentSeg(); } catch (_e) {}
+    }
     renderFeed();
 };
 
@@ -5768,7 +5787,7 @@ function _renderBuildingConsole(b) {
                             : r.reviewer_verdict === 'REJECTED'
                                 ? '<span class="bc-r-verdict bc-r-verdict-rejected">✕</span>'
                                 : '';
-                        return `<div class="bc-report" onclick="window.selectReport('${r.id}', true)">
+                        return `<div class="bc-report" onclick="window.openIncident('${r.id}')">
                             <span class="bc-r-strip" style="background:${SEV_COLORS[sev]};"></span>
                             <div class="bc-r-body">
                                 <div class="bc-r-line1">
@@ -9604,7 +9623,7 @@ function updateMapMarkers() {
         });
         const marker = L.marker([lat, lng], { icon: markerIcon });
         marker._crispReport = r;
-        marker.on('click', () => selectReport(r.id));
+        marker.on('click', () => window.openIncident(r.id));
 
         // Tooltip on hover
         marker.bindTooltip(() => {
@@ -10254,6 +10273,14 @@ function _applyReportData(data) {
                     )) detailPanelNeedsRefresh = true;
                     if (prev.sync_status !== r.sync_status) detailPanelNeedsRefresh = true;
                 }
+            } else {
+                // Known id but absent from allReports — e.g. setOperationScope
+                // cleared allReports on an operation switch (knownIds is NOT
+                // cleared, to avoid every report looking "new"). Re-insert here
+                // WITHOUT a notification (it's a known report, not a fresh
+                // arrival); without this the report is silently dropped and
+                // selectReport / the detail deep-link can't find it.
+                allReports.push(r);
             }
         }
     });

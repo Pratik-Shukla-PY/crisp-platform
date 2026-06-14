@@ -681,7 +681,7 @@
      Defines window.CRISP_TIERS{,BY_ID,LEGACY_ALIASES}; must load BEFORE
      app.js so the reporter_tier-badge renderer can read it synchronously. -->
 <script src="tier-config.js?v=1"></script>
-<script src="app.js?v=787"></script>
+<script src="app.js?v=789"></script>
 <script src="predictions.js?v=111"></script>
 <!-- Dynamic Crisis Forms admin panel (geo-scoped Stage 2/3 question packs).
      Self-contained + additive: injects an admin-only "Crisis Forms" item into
@@ -691,15 +691,20 @@
 <script src="cc-settings.js?v=4"></script>
 <script src="cc-exports.js?v=1"></script>
 <!-- Control Center landing (self-contained additive overlay; B7). -->
-<script src="cc-home.js?v=14"></script>
+<script src="cc-home.js?v=15"></script>
 <!-- Operations workspace: #/operations list + #/operations/{id} worklist dashboard
      (self-contained overlay; defines window.openOperations before the router runs). -->
-<script src="cc-operations.js?v=3"></script>
+<script src="cc-operations.js?v=4"></script>
 <!-- Start-New-Operation wizard (redesign v2): 4-step modal; defines
      window.openOperationWizard, reuses window.CrispFormKit from cc-crisis.js. -->
 <script src="cc-wizard.js?v=1"></script>
+<!-- Unified incident-navigation helper (window.CrispNav): every incident click
+     deep-links + opens the detail inside its operation/global context. Loaded
+     AFTER app.js/cc-* (needs selectReport + __crispGetReport) and BEFORE router.js
+     (router.dispatch() calls CrispNav.restoreFromHash). -->
+<script src="crisp-nav.js?v=1"></script>
 <!-- Navigation hub: mandatory Control Center root + hash router (loaded last). -->
-<script src="router.js?v=2"></script>
+<script src="router.js?v=3"></script>
 <!-- Unified Command Center shell: one persistent global nav bar on every
      surface (brand · Home/Operations/Exports/Crisis Forms/Organisation/Users/
      Account · re-parented LIVE badge + profile menu). Loaded after router.js so
