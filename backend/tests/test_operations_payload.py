@@ -62,22 +62,31 @@ def test_operations_payload_carries_card_fields(client, db, admin_token):
         db.commit()
 
 
-def test_pause_forces_inactive(client, db, admin_token):
+def test_end_forces_inactive_and_rejects_paused(client, db, admin_token):
+    # Two-state model (redesign v2): the only legal transition off LIVE is ENDED,
+    # which forces is_active=False (the "End operation" action). PAUSED/DRAFT are
+    # removed and rejected at the API boundary (422).
     tag = uuid.uuid4().hex[:8]
-    ev = CrisisEvent(name="Pause " + tag, crisis_type="FLOOD", status="LIVE",
+    ev = CrisisEvent(name="End " + tag, crisis_type="FLOOD", status="LIVE",
                      is_active=True, center_lat=1.0, center_lng=1.0, radius_km=10.0)
     db.add(ev); db.commit(); db.refresh(ev)
     try:
+        # Removed statuses are rejected by the schema validator.
+        bad = client.patch(f"/api/v1/admin/crisis-forms/events/{ev.id}",
+                           json={"status": "PAUSED"}, headers=_h(admin_token))
+        assert bad.status_code == 422, bad.text
+
+        # Ending the operation forces it inactive.
         resp = client.patch(f"/api/v1/admin/crisis-forms/events/{ev.id}",
-                            json={"status": "PAUSED"}, headers=_h(admin_token))
+                            json={"status": "ENDED"}, headers=_h(admin_token))
         assert resp.status_code == 200, resp.text
         body = resp.json()
-        assert body["status"] == "PAUSED"
-        assert body["is_active"] is False   # the activation gate: paused ⇒ inactive
-        # And it now ships on /operations with the PAUSED status.
+        assert body["status"] == "ENDED"
+        assert body["is_active"] is False   # activation gate: ENDED ⇒ inactive
+        # And it now ships on /operations with the ENDED status.
         ops = client.get("/api/v1/operations", headers=auth_header(admin_token)).json()
         op = next(o for o in ops if o["id"] == ev.id)
-        assert op["status"] == "PAUSED" and op["is_active"] is False
+        assert op["status"] == "ENDED" and op["is_active"] is False
     finally:
         db.query(CrisisEvent).filter(CrisisEvent.id == ev.id).delete(synchronize_session=False)
         db.commit()

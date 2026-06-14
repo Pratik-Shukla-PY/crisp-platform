@@ -125,16 +125,19 @@ def test_active_etag_304(client, admin_token):
     assert r2.status_code == 304
 
 
-def test_inactive_event_not_matched_then_toggled(client, admin_token):
+def test_ended_event_not_matched_then_relaunched(client, admin_token):
+    # Two-state model (redesign v2): is_active is a strict function of status,
+    # so "not matching" means status=ENDED and "matching" means status=LIVE.
+    # The server ignores any client-supplied is_active and derives it from status.
     c = (40.0, 65.0)  # unique center, only this event covers it
     pid = _publish_pack(client, admin_token, key="wf-toggle")
-    eid = _make_event(client, admin_token, pid, center_lat=c[0], center_lng=c[1], is_active=False)
+    eid = _make_event(client, admin_token, pid, center_lat=c[0], center_lng=c[1], status="ENDED")
     r = client.get(f"/api/v1/crisis-forms/active?lat={c[0]}&lng={c[1]}")
-    assert r.json()["active"] is False  # inactive event → not matched even inside the circle
+    assert r.json()["active"] is False  # ENDED event → inactive → not matched inside the circle
     client.patch(f"/api/v1/admin/crisis-forms/events/{eid}",
-                 json={"is_active": True}, headers=_h(admin_token))
+                 json={"status": "LIVE"}, headers=_h(admin_token))  # re-launch
     r2 = client.get(f"/api/v1/crisis-forms/active?lat={c[0]}&lng={c[1]}")
-    assert r2.json()["active"] is True  # toggled on → now matched
+    assert r2.json()["active"] is True  # back to LIVE → now matched
 
 
 def test_rollback_repoints_active_version(client, admin_token):

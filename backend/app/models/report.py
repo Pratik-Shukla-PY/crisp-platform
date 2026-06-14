@@ -921,8 +921,8 @@ class CrisisEvent(Base):
     id = Column(String(36), primary_key=True, default=gen_uuid)
     name = Column(String(200), nullable=False)
     crisis_type = Column(String(30), nullable=True)         # CrisisTypeEnum value (display/analytics)
-    status = Column(String(20), nullable=False, default="DRAFT")  # DRAFT | LIVE | PAUSED | ENDED (PAUSED ⇒ is_active False)
-    is_active = Column(Boolean, nullable=False, default=False)    # admin soft toggle; gates activation
+    status = Column(String(20), nullable=False, default="LIVE")   # LIVE | ENDED only (ENDED ⇒ is_active False). DB CHECK in 0053.
+    is_active = Column(Boolean, nullable=False, default=True)     # strict function of status: LIVE ⟺ True, ENDED ⟺ False
     center_lat = Column(Float, nullable=False)
     center_lng = Column(Float, nullable=False)
     radius_km = Column(Float, nullable=False, default=30.0)

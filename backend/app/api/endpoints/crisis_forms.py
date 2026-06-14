@@ -520,8 +520,9 @@ def create_event(payload: CrisisEventCreate, db: Session = Depends(get_db), user
         if not db.query(CrisisFormPack).filter(CrisisFormPack.id == payload.form_pack_id).first():
             raise HTTPException(status_code=400, detail="form_pack_id does not exist")
     ev = CrisisEvent(**payload.model_dump(), created_by=user.id)
-    if ev.status == "PAUSED":          # paused operations never match new reports
-        ev.is_active = False
+    # Two-state invariant: is_active is a strict function of status (LIVE ⟺ active).
+    # Never trust a client-supplied is_active — derive it (ENDED ⇒ stops matching).
+    ev.is_active = (ev.status == "LIVE")
     db.add(ev); db.commit(); db.refresh(ev)
     if not ev.place_name:              # denormalise the centre's place name (best-effort)
         pn = _resolve_place_name(ev.center_lat, ev.center_lng, db)
@@ -543,10 +544,11 @@ def update_event(event_id: str, payload: CrisisEventUpdate, db: Session = Depend
             raise HTTPException(status_code=400, detail="form_pack_id does not exist")
     for k, v in data.items():
         setattr(ev, k, v)
-    # Activation gate: PAUSED ⇒ not active, so a paused operation stops matching
-    # new reports (resolve_active_event filters is_active==True).
-    if data.get("status") == "PAUSED":
-        ev.is_active = False
+    # Two-state invariant: when status changes, is_active follows it (LIVE ⟺ active).
+    # This is the "End operation" action — PATCH {status:"ENDED"} flips is_active off
+    # so the op drops out of resolve_active_event and moves to the ENDED group.
+    if "status" in data:
+        ev.is_active = (ev.status == "LIVE")
     # Re-derive place_name when the centre MOVED and the caller didn't set one.
     if ("center_lat" in data or "center_lng" in data) and "place_name" not in data:
         ev.place_name = _resolve_place_name(ev.center_lat, ev.center_lng, db) or ev.place_name

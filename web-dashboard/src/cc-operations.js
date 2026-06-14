@@ -94,9 +94,10 @@
     WILDFIRE: '🔥', EXPLOSION: '💥', CHEMICAL_INCIDENT: '☣', CHEMICAL: '☣',
     CONFLICT: '⚔', CIVIL_UNREST: '✊', CIVILUNREST: '✊', LANDSLIDE: '⛰',
   };
+  // Operations have exactly two states (redesign v2): LIVE (green) / ENDED (gray).
+  // The fallback in statusBadge() renders any stray legacy value harmlessly.
   const STATUS_STYLE = {
-    LIVE: ['LIVE', '#34D399'], DRAFT: ['DRAFT', '#9fb3d1'],
-    PAUSED: ['PAUSED', '#fbbf24'], ENDED: ['ENDED', '#7d89a3'],
+    LIVE: ['LIVE', '#34D399'], ENDED: ['ENDED', '#7d89a3'],
   };
   function _fmtDate(s) {
     if (!s) return '';
@@ -143,8 +144,13 @@
     statusBadge(o) {
       const s = String(o && o.status || '').toUpperCase();
       const sty = STATUS_STYLE[s] || [s || '—', '#9fb3d1'];
-      const inactive = (s === 'LIVE' && o && o.is_active === false) ? ' title="inactive"' : '';
-      return `<span class="opc-badge" style="color:${sty[1]};border-color:${sty[1]}66"${inactive}>${esc(sty[0])}</span>`;
+      if (!STATUS_STYLE[s] && s) console.warn('[ops] unexpected operation status:', s);
+      // A LIVE op past its ended_at window is matcher-inactive but not yet ENDED —
+      // surface that genuine state without re-introducing a third badge colour.
+      const windowClosed = (s === 'LIVE' && o && o.ended_at &&
+        new Date((window.__ccEnsureUTC || ((x) => x))(o.ended_at)) < new Date());
+      const hint = windowClosed ? ' title="window closed"' : '';
+      return `<span class="opc-badge" style="color:${sty[1]};border-color:${sty[1]}66"${hint}>${esc(sty[0])}</span>`;
     },
     // Inline-SVG schematic: centre dot + radius ring (sized by radius_km), in the
     // crisis-type colour, over a faint graticule. Honest + cheap; the human "where"

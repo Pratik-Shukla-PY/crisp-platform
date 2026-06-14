@@ -4,7 +4,23 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+# Operations have exactly two states (Operations redesign v2): a live response
+# effort or a closed/historical one. DRAFT/PAUSED were removed; the server
+# derives is_active from status (LIVE ⟺ active). Enforced at the DB layer by the
+# 0053 CHECK constraint and here at the API boundary.
+OPERATION_STATUSES = ("LIVE", "ENDED")
+
+
+def _validate_operation_status(v):
+    """Reject anything outside {LIVE, ENDED}; pass None through (partial update)."""
+    if v is None:
+        return v
+    if v not in OPERATION_STATUSES:
+        raise ValueError("status must be one of LIVE, ENDED")
+    return v
 
 
 # ── Crisis Event ──────────────────────────────────────────────────────────
@@ -17,9 +33,11 @@ class CrisisEventCreate(BaseModel):
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
     form_pack_id: Optional[str] = None
-    is_active: bool = False
-    status: str = "DRAFT"
+    is_active: bool = True
+    status: str = "LIVE"
     place_name: Optional[str] = None
+
+    _chk_status = field_validator("status")(_validate_operation_status)
 
 
 class CrisisEventUpdate(BaseModel):
@@ -34,6 +52,8 @@ class CrisisEventUpdate(BaseModel):
     is_active: Optional[bool] = None
     status: Optional[str] = None
     place_name: Optional[str] = None
+
+    _chk_status = field_validator("status")(_validate_operation_status)
 
 
 # ── Operations list (operator-facing rollup; Phase 2) ──────────────────────
