@@ -2155,11 +2155,39 @@ def delete_report(report_id: str, user=Depends(require_admin), grace_minutes: in
 
 
 @router.post("/{report_id}/undo-delete", response_model=ReportResponse)
-def undo_delete(report_id: str, db: Session = Depends(get_db)):
-    """Undo a pending deletion within the 24-hour grace window."""
+def undo_delete(
+    report_id: str,
+    device_hash: Optional[str] = Query(
+        None,
+        description="Caller's device hash. Required for citizen self-service undo "
+                    "(must match the report's device). Omit when authenticating as admin."),
+    user=Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
+    """Undo a pending deletion within the 24-hour grace window.
+
+    Authorization (Phase-0 hardening): the soft-delete is the privacy / GDPR
+    deletion gate (must-have #10), so REVERSING it must be proven, not open to
+    any anonymous caller who guesses a report id. Allowed when EITHER:
+      - the caller presents an admin / super-admin JWT, OR
+      - the caller's device_hash resolves to this report's own device
+        (citizen self-service undo from the PWA, mirroring the
+        /device/{device_hash} privacy endpoints).
+    Any other caller is rejected with 403 before report state is touched."""
+    from app.models.auth import RoleEnum
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
+
+    is_admin = bool(user and getattr(user, "role", None) in
+                    (RoleEnum.ADMIN.value, RoleEnum.SUPER_ADMIN.value))
+    owns_device = False
+    if device_hash:
+        resolved = _resolve_device_id(device_hash, db)
+        owns_device = bool(resolved and report.device_id and resolved == report.device_id)
+    if not (is_admin or owns_device):
+        raise HTTPException(status_code=403, detail="Not authorized to undo this deletion")
+
     if not report.deletion_requested_at:
         raise HTTPException(status_code=400, detail="Report is not pending deletion")
     # Check if 24h has passed
@@ -2169,7 +2197,7 @@ def undo_delete(report_id: str, db: Session = Depends(get_db)):
     report.deletion_requested_at = None
     db.commit()
     db.refresh(report)
-    logger.info(f"Undo delete for report {report_id} - restored to active")
+    logger.info(f"Undo delete for report {report_id} ({'admin' if is_admin else 'device-owner'}) - restored to active")
     return report
 
 
@@ -5329,6 +5357,7 @@ def list_report_markers(
             Report.id, Location.latitude, Location.longitude,
             Report.severity, Report.status, Report.crisis_type,
             Report.infrastructure_type, Report.server_created_at,
+            Report.crisis_event_id,   # ROUTE-04: lets a map/recent click open in the right op context
         )
         .join(Location, Location.report_id == Report.id)
         .filter(
@@ -5363,6 +5392,7 @@ def list_report_markers(
             "severity": _ev(r.severity), "status": _ev(r.status),
             "crisis_type": r.crisis_type, "infrastructure_type": _ev(r.infrastructure_type),
             "server_created_at": r.server_created_at.isoformat() if r.server_created_at else None,
+            "crisis_event_id": r.crisis_event_id,   # ROUTE-04: open in the incident's operation context
         }
         for r in rows
     ]
@@ -5375,6 +5405,7 @@ def get_reports(
     skip: int = 0,
     limit: int = 100,
     include_deleted: bool = False,
+    pending_deletion: bool = False,   # M15: list ONLY pending-deletion reports (for the deletions badge/panel)
     since: Optional[datetime] = Query(
         None,
         description=(
@@ -5427,7 +5458,13 @@ def get_reports(
     cursor = datetime.now(timezone.utc)
 
     q = db.query(Report)
-    if not include_deleted:
+    if pending_deletion:
+        # M15 (Phase-4): the deletions badge/panel needs ONLY the reports pending
+        # deletion, with an accurate total. Filtering server-side (+ X-Total-Count)
+        # replaces the old client-side filter over the newest-500 listing slice,
+        # which silently undercounted pending deletions beyond row 500 at scale.
+        q = q.filter(Report.deletion_requested_at.isnot(None))
+    elif not include_deleted:
         q = q.filter(Report.deletion_requested_at == None)
 
     # Operations Phase 2: scope the feed to one operation. Applied BEFORE the
@@ -6197,6 +6234,32 @@ def _aggregate_nearby_for_region(
     return payload.model_dump(mode="json")
 
 
+@router.get("/{report_id}", response_model=ReportResponse)
+def get_report(report_id: str, user=Depends(require_viewer), db: Session = Depends(get_db)):
+    """Single report by id - the dashboard's lazy by-id fetch (C1-d Phase-0).
+
+    At scale the dashboard holds only the newest-N working set, but the map
+    (GET /reports/markers, up to 20k points) and deep-links can target an OLDER
+    report outside that window. This returns the full report so the detail panel
+    can open it. Same read auth as the listing (require_viewer); ReportResponse
+    never embeds reporter PII (email/phone). Declared AFTER the single-segment
+    GETs (/markers, /nearby) so the catch-all path param can't shadow them.
+
+    404 if not found or soft-deleted (a pending-deletion report is not openable
+    from the operational view)."""
+    r = (db.query(Report)
+         .options(joinedload(Report.media), joinedload(Report.location),
+                  joinedload(Report.ai_analysis), joinedload(Report.verification),
+                  joinedload(Report.device))
+         .filter(Report.id == report_id, Report.deletion_requested_at.is_(None))
+         .first())
+    if not r:
+        raise HTTPException(status_code=404, detail="Report not found")
+    _attach_reporter_tier(db, [r])
+    _attach_operation_name(db, [r])
+    return r
+
+
 # ── Satellite Truth Verification ─────────────────────────────────────────────
 
 @router.get("/{report_id}/verification", response_model=VerificationResponse)
@@ -6211,7 +6274,7 @@ def get_verification(report_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{report_id}/verify", response_model=VerificationResponse)
-async def verify_report(report_id: str, db: Session = Depends(get_db)):
+async def verify_report(report_id: str, user=Depends(require_analyst), db: Session = Depends(get_db)):
     """
     Run satellite truth verification on a report:
       1. Fetch the most recent Sentinel-2 (or Mapbox) image at the report's GPS.

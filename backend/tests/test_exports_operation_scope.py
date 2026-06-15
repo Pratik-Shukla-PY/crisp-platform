@@ -48,3 +48,40 @@ def test_export_count_scopes_to_one_operation(client, db, admin_token):
         db.query(Report).filter(Report.id.in_(in_a + [orphan])).delete(synchronize_session=False)
         db.query(CrisisEvent).filter(CrisisEvent.id == ev.id).delete(synchronize_session=False)
         db.commit()
+
+
+def test_analytics_summary_briefing_scopes_to_one_operation(client, db, admin_token):
+    """C2 (Phase-0): the sitrep / analytics-summary briefings used to be ALWAYS
+    global. They now accept crisis_event_id and scope the operational summary to
+    one operation."""
+    from app.api.endpoints.analytics import _summary_cache
+    _summary_cache.clear()   # module-level cache persists across tests; start clean
+    tag = uuid.uuid4().hex[:8]
+    ev = CrisisEvent(name="BriefOp-" + tag, crisis_type="FLOOD", status="LIVE",
+                     is_active=True, center_lat=25.6, center_lng=85.1, radius_km=20.0)
+    db.add(ev); db.commit(); db.refresh(ev)
+    in_a = [_seed(client, f"ba-{tag}-{i}") for i in range(2)]
+    orphan = _seed(client, f"bo-{tag}")          # global, no operation
+    db.query(Report).filter(Report.id.in_(in_a)).update(
+        {Report.crisis_event_id: ev.id}, synchronize_session=False)
+    db.commit()
+    _summary_cache.clear()
+
+    def _total(csv_text):
+        for line in csv_text.splitlines():
+            parts = line.split(",")
+            if len(parts) >= 3 and parts[0] == "meta" and parts[1] == "total_reports":
+                return int(parts[2])
+        return None
+    try:
+        scoped = client.get(f"/api/v1/exports/analytics-summary?crisis_event_id={ev.id}",
+                            headers=auth_header(admin_token)).text
+        glob = client.get("/api/v1/exports/analytics-summary",
+                          headers=auth_header(admin_token)).text
+        # Scoped briefing counts ONLY this operation's reports; global sees more.
+        assert _total(scoped) == 2
+        assert _total(glob) >= 3
+    finally:
+        db.query(Report).filter(Report.id.in_(in_a + [orphan])).delete(synchronize_session=False)
+        db.query(CrisisEvent).filter(CrisisEvent.id == ev.id).delete(synchronize_session=False)
+        db.commit()

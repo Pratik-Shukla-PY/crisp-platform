@@ -136,10 +136,12 @@ class TestReviewerVerdictPatch:
 
 
 class TestUndoDeletePatch:
-    def test_undo_delete_clears_deletion_requested_at(
+    def test_undo_delete_requires_ownership_or_admin(
         self, client, sample_report, admin_token, db,
     ):
-        """Soft-delete then undo → deletion_requested_at goes back to NULL."""
+        """Reversing the privacy soft-delete (must-have #10) requires proof of
+        ownership: an owning device_hash OR an admin JWT. An anonymous or
+        wrong-device caller is rejected with 403 BEFORE any state changes."""
         rid = sample_report["id"]
 
         # Soft delete (requires admin).
@@ -154,14 +156,39 @@ class TestUndoDeletePatch:
         r = db.query(Report).filter(Report.id == rid).first()
         assert r.deletion_requested_at is not None
 
-        # Undo delete — endpoint currently has no role gate (called by
-        # mobile app within the 24h grace window).
+        # (1) Anonymous, no device_hash → 403, deletion untouched.
         res = client.post(f"/api/v1/reports/{rid}/undo-delete")
+        assert res.status_code == 403
+        db.expire_all()
+        assert db.query(Report).filter(Report.id == rid).first().deletion_requested_at is not None
+
+        # (2) Wrong device_hash → 403.
+        res = client.post(f"/api/v1/reports/{rid}/undo-delete?device_hash=TEST-DEVICE-999")
+        assert res.status_code == 403
+
+        # (3) Owning device_hash (the one sample_report enrolled with) → 200, cleared.
+        res = client.post(f"/api/v1/reports/{rid}/undo-delete?device_hash=TEST-DEVICE-001")
+        assert res.status_code == 200
+        db.expire_all()
+        assert db.query(Report).filter(Report.id == rid).first().deletion_requested_at is None
+
+    def test_undo_delete_admin_jwt_path(
+        self, client, sample_report, admin_token, db,
+    ):
+        """An admin JWT can undo without a device_hash (mirrors the DELETE gate)."""
+        rid = sample_report["id"]
+        res = client.delete(f"/api/v1/reports/{rid}", headers=auth_header(admin_token))
         assert res.status_code == 200
 
+        res = client.post(
+            f"/api/v1/reports/{rid}/undo-delete",
+            headers=auth_header(admin_token),
+        )
+        assert res.status_code == 200
+
+        from app.models.report import Report
         db.expire_all()
-        r = db.query(Report).filter(Report.id == rid).first()
-        assert r.deletion_requested_at is None
+        assert db.query(Report).filter(Report.id == rid).first().deletion_requested_at is None
 
 
 class TestLocationPatch:
@@ -248,3 +275,60 @@ class TestAISummaryPatch:
         r = db.query(Report).filter(Report.id == rid).first()
         assert r.ai_analysis is not None
         assert r.ai_analysis.ai_summary == "Real summary text."
+
+
+class TestGetSingleReport:
+    """C1-d (Phase-0): GET /reports/{id} - the dashboard's lazy by-id fetch for
+    reports outside the newest-N working set. Includes a route-ordering guard so
+    the catch-all path param can't shadow the single-segment GETs."""
+
+    def test_get_report_by_id_returns_full_report(self, client, sample_report, admin_token):
+        rid = sample_report["id"]
+        res = client.get(f"/api/v1/reports/{rid}", headers=auth_header(admin_token))
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["id"] == rid
+        # ReportResponse never embeds reporter PII (must-have #9).
+        assert "reporter_email" not in body and "reporter_phone" not in body
+
+    def test_get_report_requires_auth(self, client, sample_report):
+        res = client.get(f"/api/v1/reports/{sample_report['id']}")
+        assert res.status_code == 401
+
+    def test_get_missing_report_404(self, client, admin_token):
+        res = client.get("/api/v1/reports/no-such-report-id", headers=auth_header(admin_token))
+        assert res.status_code == 404
+
+    def test_id_catchall_does_not_shadow_markers(self, client, admin_token):
+        # Route-ordering guard: GET /{report_id} must NOT swallow GET /markers.
+        res = client.get("/api/v1/reports/markers?limit=10", headers=auth_header(admin_token))
+        assert res.status_code == 200
+        assert isinstance(res.json(), list)
+
+    def test_id_catchall_does_not_shadow_nearby(self, client, admin_token):
+        # /nearby requires lat/lng query args; a 200/422 (not a 404 "report not
+        # found") proves the /nearby route still resolves, not the /{id} catch-all.
+        res = client.get("/api/v1/reports/nearby?lat=12.97&lng=77.59&radius_km=5",
+                         headers=auth_header(admin_token))
+        assert res.status_code in (200, 422)
+
+
+def test_pending_deletion_filter_lists_only_deleted(client, sample_report, admin_token):
+    """M15 (Phase-4): ?pending_deletion=true returns ONLY reports pending deletion,
+    with an accurate X-Total-Count. Replaces the old client-side filter over the
+    newest-500 listing slice that silently undercounted the backlog at scale."""
+    rid = sample_report["id"]
+    # Not pending deletion yet → absent from the pending-deletion listing.
+    r0 = client.get("/api/v1/reports/?pending_deletion=true", headers=auth_header(admin_token))
+    assert r0.status_code == 200
+    assert rid not in [x["id"] for x in r0.json()]
+    # Soft-delete it (admin).
+    assert client.delete(f"/api/v1/reports/{rid}", headers=auth_header(admin_token)).status_code == 200
+    # Now it appears in the pending-deletion listing + X-Total-Count counts it.
+    r1 = client.get("/api/v1/reports/?pending_deletion=true", headers=auth_header(admin_token))
+    assert r1.status_code == 200
+    assert rid in [x["id"] for x in r1.json()]
+    assert int(r1.headers.get("X-Total-Count", "0")) >= 1
+    # The DEFAULT (non-deleted) listing excludes it.
+    r2 = client.get("/api/v1/reports/", headers=auth_header(admin_token))
+    assert rid not in [x["id"] for x in r2.json()]

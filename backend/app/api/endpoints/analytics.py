@@ -155,29 +155,34 @@ def crisis_top10(
     for rank_i, row in enumerate(top_rows, start=1):
         # Second pass: inside each cluster, find the top crisis_type
         # + damage_classification. Keeps the main query single-pass.
-        sub_q = (
-            db.query(Report.crisis_type, Report.damage_classification, Report.id)
+        # M14 (Phase-4 scale): find the cluster's top crisis_type + damage with
+        # SQL GROUP BY ... ORDER BY count DESC LIMIT 1, NOT by materializing every
+        # report in the bucket into Python. Pre-fix a hot bucket (an epicentre with
+        # tens of thousands of reports) pulled the WHOLE bucket per cluster (the
+        # endpoint's own docstring targets 500k-scale) - now it's two bounded
+        # indexed aggregates per cluster.
+        _bucket_filter = [
+            Report.server_created_at >= cutoff,
+            Report.deletion_requested_at.is_(None),
+            func.floor(Location.latitude / step) * step == row.lat_bucket,
+            func.floor(Location.longitude / step) * step == row.lng_bucket,
+        ]
+        top_crisis_row = (
+            db.query(Report.crisis_type)
             .join(Location, Report.id == Location.report_id)
-            .filter(
-                Report.server_created_at >= cutoff,
-                Report.deletion_requested_at.is_(None),
-                func.floor(Location.latitude / step) * step == row.lat_bucket,
-                func.floor(Location.longitude / step) * step == row.lng_bucket,
-            )
+            .filter(*_bucket_filter, Report.crisis_type.isnot(None))
+            .group_by(Report.crisis_type)
+            .order_by(func.count(Report.id).desc()).first()
         )
-        crisis_counts: dict = {}
-        damage_counts: dict = {}
-        label_candidates: list = []
-        for ct, dc, _rid in sub_q.all():
-            if ct:
-                ct_name = ct.value if hasattr(ct, "value") else str(ct)
-                crisis_counts[ct_name] = crisis_counts.get(ct_name, 0) + 1
-            if dc:
-                dc_name = dc.value if hasattr(dc, "value") else str(dc)
-                damage_counts[dc_name] = damage_counts.get(dc_name, 0) + 1
-
-        top_crisis = max(crisis_counts, key=crisis_counts.get) if crisis_counts else None
-        top_damage = max(damage_counts, key=damage_counts.get) if damage_counts else None
+        top_damage_row = (
+            db.query(Report.damage_classification)
+            .join(Location, Report.id == Location.report_id)
+            .filter(*_bucket_filter, Report.damage_classification.isnot(None))
+            .group_by(Report.damage_classification)
+            .order_by(func.count(Report.id).desc()).first()
+        )
+        top_crisis = _enum_name(top_crisis_row[0]) if top_crisis_row else None
+        top_damage = _enum_name(top_damage_row[0]) if top_damage_row else None
 
         # Cheap label - pick the first non-empty user-entered name we
         # find in the cluster. Keeps queries bounded (no full-text
@@ -441,7 +446,10 @@ def operational_summary(
     # the FastAPI `Query(None)` DEFAULT object, not None - which is truthy and would
     # reach the SQL filter ("can't adapt type Query"). Coerce anything that isn't a
     # real string id back to None (global) so that path and a stray query arg are safe.
-    if not isinstance(crisis_event_id, str):
+    if not isinstance(crisis_event_id, str) or not crisis_event_id.strip():
+        # OPS-11 (Phase-5): also coerce an EMPTY / whitespace string to None
+        # (global). A bare `?crisis_event_id=` would otherwise filter on "" and
+        # return all-zero counts under an operation label.
         crisis_event_id = None
     # crisis_event_id MUST be part of the cache key - otherwise one operation's
     # counts would be served for another (or for the global view).
@@ -473,7 +481,10 @@ def operational_summary(
     counts = SummaryCounts(
         active=_count(*active),
         critical=_count(*active, Report.severity == SeverityEnum.CRITICAL),
-        pending_verification=_count(not_deleted, Report.reviewer_verdict == NOT_REVIEWED),
+        # M9 (Phase-1 count contract): a CLOSED report (resolved/rejected/false-alarm)
+        # is not "pending verification". Active-gate it so dismissing a report
+        # (e.g. FALSE_ALARM) drops it from the backlog instead of inflating it forever.
+        pending_verification=_count(*active, Report.reviewer_verdict == NOT_REVIEWED),
         awaiting_triage=_count(not_deleted, Report.status == ReportStatusEnum.PENDING,
                                Report.reviewer_verdict == NOT_REVIEWED),
         open_dispatch=_count(not_deleted, Report.help_dispatched_at.isnot(None),
@@ -486,9 +497,14 @@ def operational_summary(
                      Report.reviewer_verdict == NOT_REVIEWED,
                      Report.server_created_at < stale_cut),
         sla_at_risk=sla_at_risk,
-        # ── action-based pipeline (mutually exclusive: every open report in one) ──
+        # ── action-based pipeline (mutually exclusive: EVERY open report in one) ──
         # active-ops wins if dispatched/responding; else split by verdict.
-        needs_review=_count(*active, Report.reviewer_verdict == NOT_REVIEWED,
+        # M8 (Phase-1): needs_review captures every not-yet-ACCEPTED open report
+        # (verdict != ACCEPTED → NOT_REVIEWED *or* an open-but-REJECTED report that
+        # still needs a closure decision). Pre-fix `== NOT_REVIEWED` left open-REJECTED
+        # reports in NO bucket (needs_review/needs_response/active_operations), so they
+        # vanished from the operator's pipeline. != ACCEPTED restores the partition.
+        needs_review=_count(*active, Report.reviewer_verdict != ReviewerVerdictEnum.ACCEPTED.value,
                             Report.help_dispatched_at.is_(None),
                             Report.status != ReportStatusEnum.RESPONDING),
         needs_response=_count(*active, Report.reviewer_verdict == ReviewerVerdictEnum.ACCEPTED.value,

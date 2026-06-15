@@ -1102,15 +1102,17 @@ def export_data_dictionary(user=Depends(require_viewer)):
 
 # ── Analytics exports (Jun 2026 - the analytics surface had NO export) ───────
 
-def _summary_payload(db: Session, user, window_hours: int = 24):
-    """Reuse the dashboard's cached operational summary computation."""
+def _summary_payload(db: Session, user, window_hours: int = 24,
+                     crisis_event_id: Optional[str] = None):
+    """Reuse the dashboard's cached operational summary computation.
+
+    crisis_event_id MUST be passed explicitly (None = GLOBAL briefing; a real id
+    scopes the briefing to one operation - C2 Phase-0 fix). Omitting it would let
+    operational_summary's FastAPI `Query(None)` DEFAULT object leak through as the
+    value (it's truthy → reaches the SQL filter → "can't adapt type Query")."""
     from app.api.endpoints.analytics import operational_summary
-    # crisis_event_id MUST be passed explicitly - these CSV/PDF exports are GLOBAL.
-    # Omitting it lets operational_summary's FastAPI `Query(None)` DEFAULT object
-    # leak through as the value (it's truthy → reaches the SQL filter →
-    # "can't adapt type Query"). This is the only programmatic caller path.
     return operational_summary(window_hours=window_hours, stale_hours=24,
-                               crisis_event_id=None, db=db, _user=user)
+                               crisis_event_id=crisis_event_id, db=db, _user=user)
 
 
 @router.get("/analytics-summary")
@@ -1119,9 +1121,10 @@ def export_analytics_summary(
     user=Depends(require_viewer),
     db: Session = Depends(get_db),
     window_hours: int = Query(24, ge=1, le=720),
+    crisis_event_id: Optional[str] = Query(None, description="Scope the briefing to one operation (CrisisEvent id); omit for global"),
 ):
     """Flatten /analytics/summary into a section,metric,value CSV."""
-    s = _summary_payload(db, user, window_hours)
+    s = _summary_payload(db, user, window_hours, crisis_event_id=crisis_event_id)
     d = s.model_dump() if hasattr(s, "model_dump") else dict(s)
 
     def generate():
@@ -1143,7 +1146,7 @@ def export_analytics_summary(
         yield buf.getvalue()
 
     _audit_export(db, user, request, "analytics-summary",
-                  {"window_hours": window_hours}, 1)
+                  {"window_hours": window_hours, "crisis_event_id": crisis_event_id}, 1)
     return StreamingResponse(
         generate(), media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=crisp_analytics_summary_{_utc_date_stamp()}.csv"},
@@ -1156,6 +1159,7 @@ def export_sitrep(
     user=Depends(require_viewer),
     db: Session = Depends(get_db),
     window_hours: int = Query(24, ge=1, le=720),
+    crisis_event_id: Optional[str] = Query(None, description="Scope the sitrep to one operation (CrisisEvent id); omit for global"),
 ):
     """One-page situation-report PDF: the operational summary (counts,
     attention queue, distributions, timings, intake deltas) in a shareable
@@ -1166,7 +1170,7 @@ def export_sitrep(
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
     from reportlab.lib import colors
 
-    s = _summary_payload(db, user, window_hours)
+    s = _summary_payload(db, user, window_hours, crisis_event_id=crisis_event_id)
     d = s.model_dump() if hasattr(s, "model_dump") else dict(s)
     c = d.get("counts") or {}
     t = d.get("timings") or {}
@@ -1248,7 +1252,7 @@ def export_sitrep(
 
     doc.build(story)
     buf.seek(0)
-    _audit_export(db, user, request, "sitrep", {"window_hours": window_hours}, 1)
+    _audit_export(db, user, request, "sitrep", {"window_hours": window_hours, "crisis_event_id": crisis_event_id}, 1)
     return StreamingResponse(
         buf, media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=crisp_sitrep_{_utc_date_stamp()}.pdf"},

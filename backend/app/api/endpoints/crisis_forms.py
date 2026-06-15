@@ -190,8 +190,14 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
             CrisisEvent.started_at, CrisisEvent.ended_at, CrisisEvent.form_pack_id,
             sa_func.max(CrisisFormPack.title).label("form_name"),
             sa_func.count(Report.id).label("total"),
-            sa_func.coalesce(sa_func.sum(
-                case((Report.severity == SeverityEnum.CRITICAL, 1), else_=0)), 0).label("critical"),
+            # M1 (Phase-1 count contract): "Critical" = OPEN critical reports, matching
+            # the operation dashboard's /analytics/summary counts.critical. Pre-fix this
+            # had NO status filter, so a wound-down op still showed resolved / rejected /
+            # false-alarm criticals on its rail card - a different (inflated) number than
+            # the dashboard you land on. (total stays all-status = lifetime report count.)
+            sa_func.coalesce(sa_func.sum(case((and_(
+                Report.severity == SeverityEnum.CRITICAL,
+                Report.status.notin_(_OPEN_REPORT_STATUSES_EXCLUDED)), 1), else_=0)), 0).label("critical"),
             # verified = reviewer accepted (mirrors analytics counts.verified).
             sa_func.coalesce(sa_func.sum(
                 case((Report.reviewer_verdict == ReviewerVerdictEnum.ACCEPTED.value, 1), else_=0)), 0).label("verified"),
@@ -211,9 +217,14 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
                 Report.status == ReportStatusEnum.PENDING,
                 or_(*[and_(Report.severity == sev, Report.server_created_at < now - timedelta(hours=h))
                       for sev, h in _SLA_THRESHOLD_HOURS.items()])), 1), else_=0)), 0).label("sla_breaches"),
-            # review backlog.
+            # review backlog. M10+M8 (Phase-1): identical definition to the global
+            # summary's needs_review - OPEN (pre-fix counted closed reports → drove
+            # AMBER op health off already-resolved reports) AND not-yet-ACCEPTED
+            # (verdict != ACCEPTED, so an open-but-REJECTED report still counts as
+            # needing a closure decision rather than leaking out of every bucket).
             sa_func.coalesce(sa_func.sum(case((and_(
-                Report.reviewer_verdict == ReviewerVerdictEnum.NOT_REVIEWED.value,
+                Report.status.notin_(_OPEN_REPORT_STATUSES_EXCLUDED),
+                Report.reviewer_verdict != ReviewerVerdictEnum.ACCEPTED.value,
                 Report.help_dispatched_at.is_(None),
                 Report.status != ReportStatusEnum.RESPONDING), 1), else_=0)), 0).label("needs_review"),
         )
@@ -638,6 +649,15 @@ def create_event(payload: CrisisEventCreate, db: Session = Depends(get_db), user
     # Two-state invariant: is_active is a strict function of status (LIVE ⟺ active).
     # Never trust a client-supplied is_active - derive it (ENDED ⇒ stops matching).
     ev.is_active = (ev.status == "LIVE")
+    # M7 (Phase-2): a LIVE operation MUST have a form pack bound, else
+    # resolve_active_event skips it (it requires a published pack) and every
+    # report inside its circle stays GLOBAL while the operator believes the op is
+    # capturing - a silent assignment gap. Make the invariant authoritative
+    # server-side (the dashboard already guards it; a direct API call did not).
+    if ev.is_active and not ev.form_pack_id:
+        raise HTTPException(status_code=400,
+            detail="A LIVE operation must have a form pack bound - a live op with no "
+                   "pack captures no reports (they stay global). Bind a pack first.")
     db.add(ev); db.commit(); db.refresh(ev)
     if not ev.place_name:              # denormalise the centre's place name (best-effort)
         pn = _resolve_place_name(ev.center_lat, ev.center_lng, db)
@@ -664,6 +684,14 @@ def update_event(event_id: str, payload: CrisisEventUpdate, db: Session = Depend
     # so the op drops out of resolve_active_event and moves to the ENDED group.
     if "status" in data:
         ev.is_active = (ev.status == "LIVE")
+    # M7 (Phase-2): block activating an operation that has no form pack bound
+    # (mirror of create_event's invariant). Only enforced when the update touches
+    # activation, so unrelated edits of legacy rows aren't retroactively blocked.
+    if (("status" in data) or ("is_active" in data) or ("form_pack_id" in data)) \
+            and ev.is_active and not ev.form_pack_id:
+        raise HTTPException(status_code=400,
+            detail="A LIVE operation must have a form pack bound - a live op with no "
+                   "pack captures no reports (they stay global). Bind a pack first.")
     # Re-derive place_name when the centre MOVED and the caller didn't set one.
     if ("center_lat" in data or "center_lng" in data) and "place_name" not in data:
         ev.place_name = _resolve_place_name(ev.center_lat, ev.center_lng, db) or ev.place_name

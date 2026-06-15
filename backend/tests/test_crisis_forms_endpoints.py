@@ -82,6 +82,33 @@ def test_lint_endpoint(client, admin_token):
     assert r.status_code == 200 and r.json()["valid"] is True and r.json()["errors"] == []
 
 
+# ── M7 (Phase-2): a LIVE operation must have a form pack bound ────────────────
+def test_live_event_without_pack_rejected(client, admin_token):
+    """A LIVE op with no form pack is skipped by resolve_active_event, so reports
+    in its circle stay GLOBAL. The API must reject activating a pack-less op."""
+    body = {"name": "Packless Op", "crisis_type": "WILDFIRE",
+            "center_lat": CENTER[0], "center_lng": CENTER[1], "radius_km": 30.0,
+            "is_active": True}   # status defaults LIVE; NO form_pack_id
+    r = client.post("/api/v1/admin/crisis-forms/events", json=body, headers=_h(admin_token))
+    assert r.status_code == 400, r.text
+    assert "pack" in r.text.lower()
+
+
+def test_draft_event_without_pack_ok_but_activation_blocked(client, admin_token):
+    # A non-LIVE (ENDED/draft) event with no pack is allowed...
+    body = {"name": "Draft Op", "crisis_type": "WILDFIRE",
+            "center_lat": CENTER[0], "center_lng": CENTER[1], "radius_km": 30.0,
+            "status": "ENDED"}
+    r = client.post("/api/v1/admin/crisis-forms/events", json=body, headers=_h(admin_token))
+    assert r.status_code == 201, r.text
+    eid = r.json()["id"]
+    # ...but flipping it LIVE without binding a pack is rejected.
+    r2 = client.patch(f"/api/v1/admin/crisis-forms/events/{eid}",
+                      json={"status": "LIVE"}, headers=_h(admin_token))
+    assert r2.status_code == 400, r2.text
+    assert "pack" in r2.text.lower()
+
+
 # Each geo test uses its OWN center (>1° apart, far beyond the 30 km radius) so
 # rows persisted by sibling tests in the shared session DB can't cross-match.
 def test_active_inside_zone_returns_pack(client, admin_token):

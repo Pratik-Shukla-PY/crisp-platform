@@ -27,6 +27,7 @@ from unittest.mock import patch, AsyncMock
 import pytest
 
 from app.models.report import Media, MediaTypeEnum, ResolutionEnum
+from tests.conftest import auth_header   # POST /verify now requires analyst+ auth (Phase-4 RBAC)
 
 
 def _create_report_with_photo(client, db) -> tuple[str, str, bytes]:
@@ -130,7 +131,7 @@ class TestVerifyEndpointUserPhoto:
 
     @pytest.mark.asyncio
     async def test_user_image_path_is_set_when_storage_can_read(
-        self, client, db
+        self, client, db, admin_token
     ):
         """The fix: storage.read() loads bytes from local OR S3, then a
         temp file is created and passed to truth_scorer. Verifies that
@@ -150,7 +151,7 @@ class TestVerifyEndpointUserPhoto:
             "app.services.satellite_fetcher.satellite_fetcher.fetch",
             new=AsyncMock(return_value=_fake_sat_data()),
         ):
-            res = client.post(f"/api/v1/reports/{rid}/verify")
+            res = client.post(f"/api/v1/reports/{rid}/verify", headers=auth_header(admin_token))
             assert res.status_code == 200, res.text
 
         # The fix: user_image_path was set, the file existed at the
@@ -163,7 +164,7 @@ class TestVerifyEndpointUserPhoto:
         )
 
     @pytest.mark.asyncio
-    async def test_temp_file_is_cleaned_up_after_scoring(self, client, db):
+    async def test_temp_file_is_cleaned_up_after_scoring(self, client, db, admin_token):
         """Temp files in /tmp would accumulate on every verify call.
         After scoring (success OR failure), the temp file must be gone."""
         rid, _, _ = _create_report_with_photo(client, db)
@@ -183,7 +184,7 @@ class TestVerifyEndpointUserPhoto:
             "app.services.satellite_fetcher.satellite_fetcher.fetch",
             new=AsyncMock(return_value=_fake_sat_data()),
         ):
-            res = client.post(f"/api/v1/reports/{rid}/verify")
+            res = client.post(f"/api/v1/reports/{rid}/verify", headers=auth_header(admin_token))
             assert res.status_code == 200, res.text
 
         assert len(captured_paths) == 1
@@ -194,7 +195,7 @@ class TestVerifyEndpointUserPhoto:
         )
 
     @pytest.mark.asyncio
-    async def test_temp_file_cleaned_up_on_score_failure(self, client, db):
+    async def test_temp_file_cleaned_up_on_score_failure(self, client, db, admin_token):
         """Even when truth_scorer raises (Anthropic API down, rate-limited
         etc.), the temp file must NOT leak."""
         rid, _, _ = _create_report_with_photo(client, db)
@@ -218,7 +219,7 @@ class TestVerifyEndpointUserPhoto:
             # cleanup invariant we care about runs in `finally:` BEFORE
             # the exception propagates, so we wrap in pytest.raises.
             with pytest.raises(RuntimeError, match="simulated"):
-                client.post(f"/api/v1/reports/{rid}/verify")
+                client.post(f"/api/v1/reports/{rid}/verify", headers=auth_header(admin_token))
 
         # File should have been captured (we got past the temp-file
         # creation) AND removed by the finally block.
@@ -232,7 +233,7 @@ class TestVerifyEndpointUserPhoto:
 
     @pytest.mark.asyncio
     async def test_missing_user_photo_does_not_block_verification(
-        self, client, db
+        self, client, db, admin_token
     ):
         """If the report has no IMAGE media (audio-only report), the
         verify endpoint should still run, with user_image_path=None.
@@ -265,7 +266,7 @@ class TestVerifyEndpointUserPhoto:
             "app.services.satellite_fetcher.satellite_fetcher.fetch",
             new=AsyncMock(return_value=_fake_sat_data()),
         ):
-            res = client.post(f"/api/v1/reports/{rid}/verify")
+            res = client.post(f"/api/v1/reports/{rid}/verify", headers=auth_header(admin_token))
             assert res.status_code == 200, res.text
 
         # No photo → user_image_path stays None.
