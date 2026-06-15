@@ -38,13 +38,19 @@ TYPE_MAP = {
     "power": "POWER", "water": "WATER", "school": "SCHOOL",
     "telecom": "TELECOM", "government": "GOVERNMENT", "other": "OTHER",
 }
+# Phase-4 (channel parity): map WhatsApp's crisis/damage buttons to CANONICAL
+# UNDP enum values. crisis_hurricane -> CYCLONE (UNDP's single Hurricane/Cyclone
+# category); crisis_landslide / crisis_pandemic -> OTHER - both are NOT on the
+# UNDP spec and the backend Pydantic taxonomy validator 422-REJECTS them on write,
+# which silently dropped the crisis_type on those WhatsApp reports. dmg_none ->
+# MINIMAL (canonical; NO_DAMAGE is a deprecated alias). Mirrors the Telegram map.
 CRISIS_MAP = {
     "crisis_earthquake": "EARTHQUAKE", "crisis_flood": "FLOOD", "crisis_conflict": "CONFLICT",
-    "crisis_hurricane": "HURRICANE", "crisis_wildfire": "WILDFIRE", "crisis_landslide": "LANDSLIDE",
-    "crisis_pandemic": "PANDEMIC", "crisis_other": "OTHER",
+    "crisis_hurricane": "CYCLONE", "crisis_wildfire": "WILDFIRE", "crisis_landslide": "OTHER",
+    "crisis_pandemic": "OTHER", "crisis_other": "OTHER",
 }
 DAMAGE_MAP = {
-    "dmg_none": "NO_DAMAGE", "dmg_partial": "PARTIAL", "dmg_complete": "COMPLETE",
+    "dmg_none": "MINIMAL", "dmg_partial": "PARTIAL", "dmg_complete": "COMPLETE",
 }
 
 

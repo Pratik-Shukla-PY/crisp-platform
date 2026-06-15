@@ -15892,7 +15892,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         btn.disabled = true;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
         try {
-            const res = await fetch(`${API_BASE}/reports/${reportId}/undo-delete`, { method: 'POST' });
+            // Send the device hash so the server can prove ownership before
+            // reversing the privacy deletion (citizen self-service undo).
+            const dh = _deviceHashForHistory();
+            const undoUrl = `${API_BASE}/reports/${reportId}/undo-delete`
+                + (dh ? `?device_hash=${encodeURIComponent(dh)}` : '');
+            const res = await fetch(undoUrl, { method: 'POST' });
             if (res.ok) {
                 setTimeout(async () => {
                     await _checkDeviceReports();
