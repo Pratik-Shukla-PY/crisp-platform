@@ -167,7 +167,7 @@ test.describe('Dashboard — multi-image gallery + PhotoSwipe + tier tabs', () =
         expect(flags.hasPhotoSwipe, 'PhotoSwipe CDN should load via index.html <script>').toBe(true);
     });
 
-    test('originals-pending pill shows when at least one LARGE is incomplete', async ({ page }) => {
+    test('originals-pending count is computed when at least one LARGE is incomplete', async ({ page }) => {
         const reportId = `e2e-mi-pend-${Date.now()}`;
         await page.evaluate((rep) => {
             const arr = (window as any).allReports || [];
@@ -177,9 +177,11 @@ test.describe('Dashboard — multi-image gallery + PhotoSwipe + tier tabs', () =
             if (typeof fn === 'function') fn();
         }, synthReport(reportId, 2, { largeIncomplete: true }));
 
-        const pill = page.locator('#stat-originals-pending');
-        await expect(pill).toBeVisible();
-        await expect(pill.locator('#count-originals-pending')).toHaveText(/^[1-9]\d*$/);
+        // v56: the aggregate orig-pending PILL was retired with the command-bar
+        // (per-report upload status now surfaces on the detail panel - see the
+        // next test). updateCommandStats still computes the count into the
+        // retained stub, so the detection pipeline stays covered.
+        await expect(page.locator('#count-originals-pending')).toHaveText(/^[1-9]\d*$/);
     });
 
     test('per-card ORIG chip surfaces on reports with incomplete LARGE', async ({ page }) => {
@@ -205,19 +207,23 @@ test.describe('Dashboard — multi-image gallery + PhotoSwipe + tier tabs', () =
         // synthetic report before Playwright resolves. evaluate()
         // captures the post-render DOM in one shot and decouples the
         // intent ("chip surfaces") from viewport coincidence.
+        // v55: the original-pending chip moved off the card into the detail
+        // panel's status-chip row (_incidentStatusChips). Assert the chip-
+        // generation logic directly on the report (robust vs. a full detail render).
         const probe = await page.evaluate((id) => {
-            const card = document.querySelector(`.qrt-card[data-report-id="${id}"]`);
-            if (!card) return { cardFound: false };
-            const chip = card.querySelector('.qrt-orig-chip');
+            const r = ((window as any).allReports || []).find((x: any) => x.id === id);
+            const html = (r && (window as any)._incidentStatusChips) ? (window as any)._incidentStatusChips(r) : '';
+            const div = document.createElement('div'); div.innerHTML = html;
+            const chip = div.querySelector('.qrt-orig-chip');
             return {
-                cardFound: true,
+                cardFound: !!r,
                 chipFound: !!chip,
                 chipText: chip ? (chip.textContent || '').trim() : '',
                 chipClass: chip ? chip.className : '',
             };
         }, reportId);
-        expect(probe.cardFound, 'synthetic card with data-report-id must exist').toBe(true);
-        expect(probe.chipFound, 'card must render .qrt-orig-chip when HIGH is pending').toBe(true);
+        expect(probe.cardFound, 'synthetic report must be in allReports').toBe(true);
+        expect(probe.chipFound, 'detail status-chips must render .qrt-orig-chip when HIGH is pending').toBe(true);
         expect(probe.chipText).toMatch(/ORIG/);
         // Phase F state-modifier class must be present so the CSS tone
         // (amber pulse) lights up; without this the chip would render

@@ -132,6 +132,16 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         await expect.poll(() => page.evaluate(() => location.hash)).toContain('/operations/op-a');
     });
 
+    test('M4: deep-link to a deleted/unknown operation shows not-found, not a phantom GREEN dashboard', async ({ page }) => {
+        await boot(page);
+        await page.goto('index.html#/operations/op-zzz');   // id not in the ops list
+        await page.waitForTimeout(800);
+        const wrap = page.locator('#cco-wrap');
+        await expect(wrap).toContainText('Operation not found', { timeout: 6000 });
+        // Must NOT render the live-looking vitals dashboard (the "all clear" illusion).
+        await expect(page.locator('#cco-vitals')).toHaveCount(0);
+    });
+
     test('#/operations/{id} is a worklist dashboard with the triple-cue context chrome', async ({ page }) => {
         await boot(page);
         await page.goto('index.html#/operations/op-a');

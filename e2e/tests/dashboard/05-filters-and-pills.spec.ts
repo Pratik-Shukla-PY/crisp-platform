@@ -114,8 +114,9 @@ test.describe('Dashboard stat-pill + time filter', () => {
         await waitForReport(page, crit);
         await waitForReport(page, mod);
 
-        // All five clickable pills present.
-        for (const id of ['stat-critical', 'stat-pending', 'stat-responding', 'stat-resolved', 'stat-total']) {
+        // The clickable status pills present (relocated into the feed panel;
+        // Closed + Avg-Wait were dropped as low-signal in the v55 redesign).
+        for (const id of ['stat-critical', 'stat-pending', 'stat-responding', 'stat-total']) {
             await expect(page.locator(`#${id}`)).toBeVisible();
         }
 

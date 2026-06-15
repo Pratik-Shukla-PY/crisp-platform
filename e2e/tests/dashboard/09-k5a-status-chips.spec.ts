@@ -164,8 +164,10 @@ test.describe('Dashboard K.5.a — status chip-row', () => {
         })]);
         await bootDashboard(page, request);
         await page.waitForSelector('.qrt-card[data-report-id="k5a-slownet"]', { timeout: 10000 });
+        // v55: non-blocking chips moved off the card into the detail panel.
+        await page.evaluate(() => (window as any).openIncident('k5a-slownet'));
         const chipText = await page.locator(
-            '.qrt-card[data-report-id="k5a-slownet"] .k5a-chip-amber'
+            '#detail-body .dp-status-chips .k5a-chip-amber'
         ).first().textContent();
         expect(chipText).toContain('Original (slow network)');
     });
@@ -177,8 +179,10 @@ test.describe('Dashboard K.5.a — status chip-row', () => {
         })]);
         await bootDashboard(page, request);
         await page.waitForSelector('.qrt-card[data-report-id="k5a-anon"]', { timeout: 10000 });
+        // v55: non-blocking chips moved off the card into the detail panel.
+        await page.evaluate(() => (window as any).openIncident('k5a-anon'));
         const chipText = await page.locator(
-            '.qrt-card[data-report-id="k5a-anon"] .k5a-chip-grey'
+            '#detail-body .dp-status-chips .k5a-chip-grey'
         ).first().textContent();
         expect(chipText).toContain('Attribution lost');
     });
@@ -194,8 +198,10 @@ test.describe('Dashboard K.5.a — status chip-row', () => {
         })]);
         await bootDashboard(page, request);
         await page.waitForSelector('.qrt-card[data-report-id="k5a-uploading"]', { timeout: 10000 });
+        // v55: non-blocking chips moved off the card into the detail panel.
+        await page.evaluate(() => (window as any).openIncident('k5a-uploading'));
         const chipText = await page.locator(
-            '.qrt-card[data-report-id="k5a-uploading"] .k5a-chip-amber'
+            '#detail-body .dp-status-chips .k5a-chip-amber'
         ).first().textContent();
         expect(chipText).toContain('Uploading');
     });

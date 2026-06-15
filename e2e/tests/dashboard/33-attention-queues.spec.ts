@@ -101,8 +101,10 @@ test.describe('Attention rows → dedicated operational queues', () => {
             // Queue banner with the live filtered count — matches the crafted
             // membership (same predicate the badge count definition uses).
             await expect(page.locator('#queue-banner')).toBeVisible({ timeout: 6000 });
-            await expect(page.locator('#queue-banner .qb-count'))
-                .toHaveText(new RegExp(`^${exp.count} report`), { timeout: 6000 });
+            // v55: the unified context banner shows the count in .qb-sub (e.g.
+            // "Immediate response required · 44 incidents").
+            await expect(page.locator('#queue-banner .qb-sub'))
+                .toContainText(new RegExp(`${exp.count} incident`), { timeout: 6000 });
             // A known member of this queue is on screen, with no manual
             // filtering — and the visible card count is EXACTLY the queue
             // membership (cards expose data-report-id, app.js:2400).
@@ -115,9 +117,11 @@ test.describe('Attention rows → dedicated operational queues', () => {
     test('clear-queue button exits the queue and cleans the URL segment', async ({ page }) => {
         await boot(page);
         await page.locator('#cc-att .cc-att-row[data-queue="critical"]').click();
-        await expect(page.locator('#queue-banner')).toBeVisible({ timeout: 6000 });
+        await expect(page.locator('#queue-banner')).toContainText('CRITICAL INCIDENTS', { timeout: 6000 });
         await page.locator('#queue-banner .qb-clear').click();
-        await expect(page.locator('#queue-banner')).toBeHidden();
+        // v55: the banner is ALWAYS visible - clearing a queue falls back to the
+        // GLOBAL state (not hidden) and the URL drops the queue segment.
+        await expect(page.locator('#queue-banner')).toContainText('GLOBAL INCIDENTS', { timeout: 6000 });
         await expect(page).toHaveURL(/#\/incidents(?!;queue=)/);
     });
 
@@ -129,7 +133,7 @@ test.describe('Attention rows → dedicated operational queues', () => {
         await page.waitForTimeout(800);
         await expect(page).toHaveURL(/#\/incidents;queue=needs-review/);
         await expect(page.locator('#queue-banner')).toBeVisible({ timeout: 8000 });
-        await expect(page.locator('#queue-banner')).toContainText('Needs review');
+        await expect(page.locator('#queue-banner')).toContainText('NEEDS REVIEW');
     });
 
     test('browser back returns to the landing; navigating home drops the queue segment', async ({ page }) => {
