@@ -43,7 +43,7 @@ python-multipart>=0.0.6
 # Observability (P3.7 + P3.8)
 structlog>=24.0.0
 prometheus-client>=0.20.0
-sentry-sdk[fastapi]>=2.0.0
+sentry-sdk[fastapi]>=2.62.0
 
 # TOTP authenticator-app MFA (Apr 2026 — single-admin dashboard lockdown).
 # pyotp implements RFC 6238 (the TOTP standard Google Authenticator/Authy
