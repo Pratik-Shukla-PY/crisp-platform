@@ -56,13 +56,30 @@
     // teardown / re-fetch / flicker) - set the deep-link seg + open + highlight
     // directly. Otherwise switch context via navigate → dispatch → restoreFromHash.
     const p = router.parseHash ? router.parseHash() : null;
+    // ROUTE-01 (Phase-3): if we're already on this operation's SCOPED incidents
+    // feed (#/incidents;op={opId}), open the detail IN PLACE - don't eject the
+    // operator to the operation dashboard (/operations/{opId}), which discarded
+    // their scoped-feed context on every incident click.
+    const _curOpSeg = p && (p.stateSegs || []).find((s) => s.startsWith('op='));
+    const _curOp = _curOpSeg ? decodeURIComponent(_curOpSeg.slice(3)) : null;
     const onTarget = !!p && (
       (opId && p.route === '/operations' && p.params && p.params.id === opId) ||
+      (opId && p.route === '/incidents' && _curOp === opId) ||
       (!opId && p.route === '/incidents'));
     if (onTarget && typeof router.setIncidentSeg === 'function') {
       router.setIncidentSeg(incidentId);
-      if (typeof window.selectReport === 'function') window.selectReport(incidentId);
-      markSelected(incidentId);
+      // C1-d: the report may be outside the newest-N working set (older marker
+      // click at scale). Ensure it's loaded BEFORE selectReport, else the detail
+      // can't render. Idempotent + synchronous-fast when already cached.
+      const _open = () => {
+        if (typeof window.selectReport === 'function') window.selectReport(incidentId);
+        markSelected(incidentId);
+      };
+      if (_getReport(incidentId) || typeof window.__crispEnsureReport !== 'function') {
+        _open();
+      } else {
+        window.__crispEnsureReport(incidentId).then(_open).catch(_open);
+      }
     } else {
       router.navigateWithIncident(route, incidentId);
     }
@@ -70,6 +87,10 @@
 
   // Poll the report cache until the incident lands (or timeout). Resolves report|null.
   function _whenReportLoaded(id) {
+    // C1-d: the report may be outside the newest-N working set (deep-link / older
+    // marker at scale). Kick a lazy by-id fetch; the poll below resolves as soon
+    // as it merges into the cache (or on timeout → "not in this view").
+    try { if (window.__crispEnsureReport) window.__crispEnsureReport(id); } catch (_e) {}
     return new Promise((resolve) => {
       const t0 = performance.now();
       const tick = () => {

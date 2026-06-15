@@ -577,6 +577,9 @@
         await api('PATCH', `/events/${id}`, { is_active: !e.is_active });
         toast(e.is_active ? 'Event deactivated - zone reverted to default flow.' : 'Event activated.', 'ok');
         refreshAll();
+        // M3 (Phase-2): a (de)activated op must drop out of / reappear in the
+        // incident-feed operation switcher immediately, not after a full reload.
+        try { if (typeof window.__crispRefreshOps === 'function') window.__crispRefreshOps(); } catch (_e) {}
       } catch (err) { toast('Update failed: ' + err.message, 'err'); }
       return;
     }

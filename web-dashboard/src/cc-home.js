@@ -461,9 +461,14 @@
     };
     const overdue = num(c.sla_at_risk);
     const rows = [
+      // M2 (Phase-1): the HEADLINE number must equal the count the card deep-links
+      // to. The 'critical' queue shows open-CRITICAL REPORTS (c.critical), so the
+      // headline is c.critical; the building-deduped "distinct sites" figure
+      // (critical_incidents) rides along as context when it differs.
       row('🔴', SEV_COLOR.CRITICAL, 'Critical incidents', 'Command attention',
-          num(c.critical_incidents != null ? c.critical_incidents : c.critical),
-          `${fmtNum(num(c.critical))} reports`, 'critical', true),
+          num(c.critical),
+          (c.critical_incidents != null && num(c.critical_incidents) !== num(c.critical))
+            ? `${fmtNum(num(c.critical_incidents))} distinct sites` : '', 'critical', true),
       row('🔍', '#418FDE', 'Needs review', 'Triage & verdict',
           num(c.needs_review != null ? c.needs_review : c.awaiting_triage),
           overdue ? `<span style="color:#f87171">${fmtNum(overdue)} overdue</span>` : '', 'needs-review'),
@@ -781,7 +786,7 @@
         // operation-aware) - previously a dead-end (popup-only, no click handler).
         mk.on('mouseover', () => { try { mk.openPopup(); } catch (_e) {} });
         mk.on('mouseout', () => { try { mk.closePopup(); } catch (_e) {} });
-        mk.on('click', () => { try { window.openIncident && window.openIncident(r.id); } catch (_e) {} });
+        mk.on('click', () => { try { window.openIncident && window.openIncident(r.id, { operationId: r.crisis_event_id || null }); } catch (_e) {} });   // ROUTE-04: open op-owned incidents in their op context
         _cluster.addLayer(mk);
       });
       _map.addLayer(_cluster);

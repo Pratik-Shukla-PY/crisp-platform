@@ -17,6 +17,7 @@ let _predZoneMarkers = [];
 window.togglePredictions = function () {
     const panel = document.getElementById('predictions-panel');
     const isVisible = panel.style.display !== 'none';
+    if (!isVisible && window.__crispOpenExclusivePanel) window.__crispOpenExclusivePanel('predictions-panel');
     panel.style.display = isVisible ? 'none' : 'block';
     if (!isVisible) loadPredictions();
 };

@@ -193,8 +193,20 @@ const BUILDINGS_API = `${BACKEND_HOST}/api/v1/buildings`;
 // Add Authorization header to all fetch calls + handle 401 → redirect to login
 const _origFetch = window.fetch;
 window.fetch = function(url, opts = {}) {
-    if (_crispToken && typeof url === 'string' && url.includes('/api/')) {
-        opts.headers = { ...(opts.headers || {}), 'Authorization': `Bearer ${_crispToken}` };
+    if (typeof url === 'string' && url.includes('/api/')) {
+        // M5 (Phase-3): read the CURRENT token on EVERY call. The access token
+        // rotates mid-session via /auth/refresh (writes crisp_token to
+        // localStorage); a load-time const would pin the STALE token, so after
+        // the original expired every /api/ call 401'd → the whole dashboard
+        // force-logged-out despite a valid refreshed token sitting in storage.
+        // Also: don't clobber an Authorization the caller already set (the cc-*
+        // modules pass their own fresh token via headers).
+        const _tok = localStorage.getItem('crisp_token');
+        const _h = opts.headers || {};
+        const _hasAuth = !!(_h.Authorization || _h.authorization);
+        if (_tok && !_hasAuth) {
+            opts.headers = { ..._h, 'Authorization': `Bearer ${_tok}` };
+        }
     }
     return _origFetch.call(this, url, opts).then(res => {
         if (res.status === 401 && typeof url === 'string' && url.includes('/api/')) {
@@ -299,6 +311,10 @@ let _initialLoadDone = false;  // Suppress notifications on first data load
 let heatLayer = null;
 let clusterGroup = null;
 let boundaryLayers = [];
+// Map↔feed sync: registry of report-id → Leaflet marker so selecting an
+// incident in the feed can highlight its marker (the reverse of marker→feed).
+let _markerById = {};
+let _highlightedMarkerId = null;
 let currentAudio = null;
 let treeState = {};
 let treeSearchTerm = '';
@@ -588,6 +604,34 @@ let _activeQueue = null;                 // queue key | null
 let _escalatingBuildingIds = null;       // Set<building_id> (escalating queue prefetch)
 let _queuePrevSort = null;               // restore the user's sort on queue exit
 let _activeCrisisEventId = null;         // Operations Phase 2 - operation scope | null
+// C1-b/c (Phase-0 scale hardening): the working set (allReports) is the newest
+// window of a possibly-larger scope. `_scopeTotalCount` is the TRUE scope size
+// (X-Total-Count from the last full refresh); `_scopeSummary` is the
+// server-computed /analytics/summary for the active scope; `_scopeMarkers` is
+// the full lean /reports/markers set. The last two are fetched ONLY when the
+// feed is truncated so headline counts + the map stay correct at scale (and
+// there is zero extra cost / behavior change at small scale).
+let _scopeTotalCount = null;
+let _scopeSummary = null;
+let _scopeMarkers = null;
+
+// True when the feed is windowed AND no narrowing filter is active - the moment
+// we should trust server aggregates (summary counts, full marker set) over the
+// truncated working set. With any active filter the client tally over the
+// loaded set is the correct "what I see" number; at small scale it's exact.
+function _scopeAggregatesActive() {
+    const truncated = _scopeTotalCount != null && _scopeTotalCount > allReports.length;
+    // The KPI strip + banner total are a SCOPE breakdown ("how big is this
+    // crisis"), so the default status filter and the status-segment pill do NOT
+    // suppress them - only a different-POPULATION narrowing (queue / search /
+    // chips / an explicit custom time window) does, since those change WHICH
+    // reports the scope refers to. At small scale (not truncated) the client
+    // compute is exact, so this returns false and behavior is unchanged.
+    const noNarrowing = (timeFilterHours || 0) <= 0 &&
+        !_activeQueue && !treeSearchTerm &&
+        !(_activeChipFilters && _activeChipFilters.size);
+    return truncated && noNarrowing;
+}
 
 function _applyQueueFilter(reports) {
     if (!_activeQueue || !QUEUES[_activeQueue]) return reports;
@@ -607,6 +651,16 @@ function setOperationScope(crisisEventId) {
     _lastServerTime = null;
     _lastReportsEtag = null;
     allReports = [];
+    _scopeTotalCount = null;   // C1-b/c: invalidate the previous scope's aggregates
+    _scopeSummary = null;
+    _scopeMarkers = null;
+    // M12 (Phase-2): sticky chip filters must NOT silently carry into a newly-
+    // entered operation scope - they'd under-count the op's incidents with no cue.
+    try {
+        if (_activeChipFilters && _activeChipFilters.size) {
+            _activeChipFilters.clear(); _persistChipFilters(); _paintChipFilterUI();
+        }
+    } catch (_e) {}
     try { fetchReports(); } catch (_e) {}
 }
 window.setOperationScope = setOperationScope;
@@ -629,7 +683,7 @@ async function _loadEscalatingBuildings() {
         _escalatingBuildingIds = new Set();   // fail visible: queue shows 0 + banner stays
     }
     renderFeed();
-    _renderQueueBanner();
+    _renderContextBanner();
 }
 
 function _hashStateSegs() {
@@ -646,7 +700,7 @@ function _queueFromHash() {
 // (deep link, back/forward, refresh) to avoid feedback loops.
 function setActiveQueue(key, updateHash = true) {
     key = key && QUEUES[key] ? key : null;
-    if (key === _activeQueue && !updateHash) { _renderQueueBanner(); return; }
+    if (key === _activeQueue && !updateHash) { _renderContextBanner(); return; }
     if (key && !_activeQueue) _queuePrevSort = cardSortMode;
     _activeQueue = key;
     if (key) {
@@ -667,27 +721,202 @@ function setActiveQueue(key, updateHash = true) {
         const next = '#' + ['/incidents'].concat(segs).join(';');
         if (location.hash !== next) location.hash = next;
     }
-    _renderQueueBanner();
+    _renderContextBanner();
     renderFeed();
 }
 window.clearActiveQueue = () => setActiveQueue(null);
 
-function _renderQueueBanner() {
+// Count reports matching the tree-search term (mirrors renderTreeFeed's haystack).
+function _searchMatchCount() {
+    const t = (treeSearchTerm || '').trim();
+    if (!t) return 0;
+    return allReports.filter((r) => {
+        const haystack = [
+            r.description, r.infrastructure_type, r.severity, r.status, r.source,
+            r.location && r.location.user_location_name, r.location && r.location.device_location_name,
+            r._region, r._country, r.ai_analysis && r.ai_analysis.transcription, r.ai_analysis && r.ai_analysis.ai_summary,
+        ].filter(Boolean).join(' ').toLowerCase();
+        return haystack.includes(t);
+    }).length;
+}
+window.clearIncidentSearch = () => {
+    const i = document.getElementById('tree-search');
+    if (i) i.value = '';
+    treeSearchTerm = '';
+    try { sessionStorage.removeItem('crisp_incident_search'); } catch (_e) {}
+    renderFeed();
+};
+
+// ROUTE-09 (Phase-5): the incident search filter now SURVIVES A REFRESH. The
+// ?incident= detail already restored on reload, but the search term was dropped
+// (it lived only in memory), so a refresh reopened the detail over an unfiltered
+// feed - inconsistent. Persist the term per-tab in sessionStorage (no hash/router
+// change → no deep-link-loop risk) and restore it on boot. The search box's
+// oninput calls this (index.html).
+window._onIncidentSearch = function (v) {
+    treeSearchTerm = (v || '').toLowerCase();
+    try {
+        if (treeSearchTerm) sessionStorage.setItem('crisp_incident_search', treeSearchTerm);
+        else sessionStorage.removeItem('crisp_incident_search');
+    } catch (_e) {}
+    try { renderFeed(); } catch (_e) {}
+};
+function _restoreIncidentSearch() {
+    try {
+        const t = sessionStorage.getItem('crisp_incident_search');
+        if (!t) return;
+        treeSearchTerm = t;
+        const i = document.getElementById('tree-search');
+        if (i && !i.value) i.value = t;
+    } catch (_e) {}
+}
+
+// Unified Incident Context Banner - ALWAYS rendered at the top of the feed panel
+// so the analyst can answer WHERE / WHAT / WHY / WHAT-NEXT in seconds. Replaces
+// the queue-only banner. Precedence: operation scope > active queue > search >
+// global. Each state names the scope, the count, the reason, and a clear/exit.
+function _renderContextBanner() {
     const banner = document.getElementById('queue-banner');
     if (!banner) return;
-    if (!_activeQueue) { banner.style.display = 'none'; return; }
-    const q = QUEUES[_activeQueue];
-    const matched = _applyQueueFilter(allReports).length;
-    const bCount = _activeQueue === 'escalating' && _escalatingBuildingIds
-        ? ` · ${_escalatingBuildingIds.size} building(s)` : '';
+    // C1-b: show the TRUE scope size (X-Total-Count), not the truncated working
+    // set, for the GLOBAL/OPERATION headline. Falls back to the loaded length
+    // before the first full refresh / at small scale (where they're equal).
+    const total = (_scopeTotalCount != null ? _scopeTotalCount : allReports.length);
+    const search = (treeSearchTerm || '').trim();
+    let cls, icon, label, sub, countTxt, clearBtn = '';
+
+    if (_activeCrisisEventId) {
+        // Operation-scoped feed (#/incidents;op={id}). Name + region resolved from
+        // the cached operations list; degrades gracefully before it loads.
+        const meta = _opMeta(_activeCrisisEventId);
+        const nm = (meta && meta.name) || 'this operation';
+        const region = meta && meta.place_name;
+        cls = 'ctx-op'; icon = '🎯'; label = 'OPERATION INCIDENTS';
+        sub = nm + (region ? ' · ' + region : '') + ' · only this operation';
+        countTxt = total + ' incident' + (total === 1 ? '' : 's');
+        clearBtn = '<button class="qb-clear" onclick="window.setIncidentOp&&window.setIncidentOp(null)" title="Return to all incidents worldwide">🌐 Global</button>';
+    } else if (_activeQueue && QUEUES[_activeQueue]) {
+        const q = QUEUES[_activeQueue];
+        const matched = _applyQueueFilter(allReports).length;
+        const bCount = _activeQueue === 'escalating' && _escalatingBuildingIds
+            ? ' · ' + _escalatingBuildingIds.size + ' building(s)' : '';
+        cls = 'ctx-queue ctx-queue-' + _activeQueue; icon = q.icon;
+        label = String(q.label || '').toUpperCase();
+        sub = q.desc;
+        countTxt = matched + ' incident' + (matched === 1 ? '' : 's') + bCount;
+        clearBtn = '<button class="qb-clear" onclick="clearActiveQueue()" title="Leave this view (show all incidents)">✕ Clear</button>';
+    } else if (search) {
+        const matched = _searchMatchCount();
+        cls = 'ctx-search'; icon = '🔍'; label = 'SEARCH RESULTS';
+        sub = 'Matching "' + search + '"';
+        countTxt = matched + ' match' + (matched === 1 ? '' : 'es');
+        clearBtn = '<button class="qb-clear" onclick="clearIncidentSearch()" title="Clear the search">✕ Clear</button>';
+    } else {
+        cls = 'ctx-global'; icon = '🌐'; label = 'GLOBAL INCIDENTS';
+        sub = 'Showing all incidents worldwide';
+        countTxt = total + ' incident' + (total === 1 ? '' : 's');
+    }
+
+    // Always-available operation switcher: jump to any operation's incidents (or
+    // back to global) directly from the feed - the analyst never loses context.
+    const switchBtn = '<button class="ctx-switch" onclick="window.__crispToggleOpSwitcher(event)" title="View incidents for a specific operation">' +
+        '<i class="fa-solid fa-arrow-right-arrow-left"></i> Operation</button>';
+
+    banner.className = 'ctx-banner ' + cls;
     banner.style.display = 'flex';
-    banner.innerHTML = `
-        <span class="qb-icon" aria-hidden="true">${q.icon}</span>
-        <span class="qb-text"><strong>${escapeHtml(q.label)}</strong>
-          <span class="qb-count">${matched} report(s)${bCount}</span>
-          <span class="qb-desc">${escapeHtml(q.desc)}</span></span>
-        <button class="qb-clear" onclick="clearActiveQueue()" title="Leave this queue (show all reports)">✕ Clear queue</button>`;
+    banner.innerHTML =
+        '<span class="qb-icon" aria-hidden="true">' + icon + '</span>' +
+        '<span class="qb-text"><strong class="qb-label">' + escapeHtml(label) + '</strong>' +
+        '<span class="qb-sub">' + escapeHtml(sub) + ' · <b>' + escapeHtml(countTxt) + '</b></span></span>' +
+        '<span class="qb-actions">' + switchBtn + clearBtn + '</span>';
 }
+
+// ── Operation switcher (Jun 2026) ────────────────────────────────────────────
+// Scope the GLOBAL incidents feed to any operation (or back to global) directly
+// from the feed, via #/incidents;op={id}. The op list is fetched once + cached;
+// the context banner names the active operation + its region. Arriving from an
+// operation dashboard ("Open full incident feed") carries the op so context
+// persists (the router applies the scope from the hash, see dispatch()).
+let _opsCache = [];
+function _opMeta(id) { return _opsCache.find((o) => o && o.id === id) || null; }
+async function _loadOpsForSwitcher(force) {
+    if (_opsCache.length && !force) return _opsCache;
+    try {
+        const res = await fetch(API.replace('/api/v1/reports', '/api/v1/operations'), {
+            headers: { Authorization: 'Bearer ' + (localStorage.getItem('crisp_token') || '') },
+        });
+        if (res.ok) { const b = await res.json(); _opsCache = Array.isArray(b) ? b : (b.items || b.operations || []); }
+    } catch (_e) {}
+    return _opsCache;
+}
+function _closeOpSwitcher() { const m = document.getElementById('op-switcher-menu'); if (m) m.style.display = 'none'; }
+window.setIncidentOp = function (opId) {
+    const segs = _hashStateSegs().filter((s) => !s.startsWith('op=') && !s.startsWith('queue='));
+    if (opId) segs.push('op=' + encodeURIComponent(opId));
+    const next = '#' + ['/incidents'].concat(segs).join(';');
+    _closeOpSwitcher();
+    if (location.hash !== next) location.hash = next; else _renderContextBanner();
+};
+// M3 (Phase-2): force a fresh op fetch + re-render after an operation is launched,
+// ended, or deactivated, so the switcher + banner never present a dead op as a
+// live scope target (or miss a just-launched one) until a full reload. Called by
+// cc-wizard (launch) and cc-crisis (activate/deactivate toggle).
+window.__crispRefreshOps = function () {
+    _opsCache = [];
+    return _loadOpsForSwitcher(true).then(() => { try { _renderContextBanner(); } catch (_e) {} });
+};
+// Called by the router after it applies the op scope on a /incidents dispatch.
+// M6 (Phase-2): also drive the shell's GLOBAL/OP scope chip so it can never read
+// GLOBAL while the in-feed banner reads OPERATION - the two indicators must agree.
+window.__crispOnIncidentOpScope = function (opId) {
+    const applyShellCtx = () => {
+        try {
+            const sh = window.__crispShell;
+            if (!sh) return;
+            if (opId && sh.setOpContext) { const m = _opMeta(opId); sh.setOpContext(opId, (m && m.name) || 'Operation'); }
+            else if (!opId && sh.clearOpContext) { sh.clearOpContext(); }
+        } catch (_e) {}
+    };
+    if (opId && !_opMeta(opId)) {
+        _loadOpsForSwitcher().then(() => { try { _renderContextBanner(); } catch (_e) {} applyShellCtx(); });
+    }
+    _renderContextBanner();
+    applyShellCtx();
+};
+window.__crispToggleOpSwitcher = async function (ev) {
+    if (ev) ev.stopPropagation();
+    let menu = document.getElementById('op-switcher-menu');
+    if (menu && menu.style.display === 'block') { menu.style.display = 'none'; return; }
+    if (!menu) {
+        menu = document.createElement('div'); menu.id = 'op-switcher-menu';
+        document.body.appendChild(menu);
+        document.addEventListener('click', (e) => { if (!e.target.closest('#op-switcher-menu, .ctx-switch')) _closeOpSwitcher(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') _closeOpSwitcher(); });
+    }
+    const btn = ev && (ev.currentTarget || (ev.target && ev.target.closest && ev.target.closest('.ctx-switch')));
+    const r = btn ? btn.getBoundingClientRect() : { left: 380, bottom: 130 };
+    menu.style.display = 'block';
+    menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 308)) + 'px';
+    menu.style.top = (r.bottom + 5) + 'px';
+    menu.innerHTML = '<div class="osw-empty">Loading operations…</div>';
+    await _loadOpsForSwitcher(true);   // M3: always fetch fresh on open - ENDED ops drop out, newly-launched ops appear
+    const cur = _activeCrisisEventId;
+    const esc = (s) => escapeHtml(String(s == null ? '' : s));
+    const item = (id, name, sub, active) =>
+        '<button class="osw-item' + (active ? ' active' : '') + '" onclick="window.setIncidentOp(' + (id ? '\'' + esc(id) + '\'' : 'null') + ')">' +
+        '<span class="osw-main"><span class="osw-name">' + esc(name) + '</span>' +
+        (sub ? '<span class="osw-sub">' + esc(sub) + '</span>' : '') + '</span>' +
+        (active ? '<i class="fa-solid fa-check osw-check"></i>' : '') + '</button>';
+    let html = '<div class="osw-h">Switch incidents view</div>';
+    html += item(null, '🌐 Global incidents', 'All incidents worldwide', !cur);
+    const live = (_opsCache || []).filter((o) => o && String(o.status || '').toUpperCase() !== 'ENDED');
+    html += '<div class="osw-sec">Operations</div>';
+    html += live.length
+        ? live.map((o) => item(o.id, o.name || 'Operation',
+            (o.place_name ? o.place_name + ' · ' : '') + (Number(o.critical) || 0).toLocaleString() + ' critical', o.id === cur)).join('')
+        : '<div class="osw-empty">No active operations</div>';
+    menu.innerHTML = html;
+};
 
 // Deep-link sync: applies `;queue=` from the hash on boot, on back/forward,
 // and on refresh. Runs alongside the router's own hashchange handling.
@@ -697,14 +926,92 @@ function _syncQueueFromHash() {
     const key = _queueFromHash();
     if (key !== _activeQueue) setActiveQueue(key, false);
 }
-window.addEventListener('hashchange', _syncQueueFromHash);
+// ROUTE-08 (Phase-3): the router's dispatch() now calls this INSIDE the ordered
+// /incidents dispatch (router.js), so we no longer register a SEPARATE
+// hashchange listener that raced dispatch() (two listeners on one event →
+// double render, no ordering guarantee). The boot sync below still covers
+// cold-load deep-links + refresh.
+window._syncQueueFromHash = _syncQueueFromHash;
 // Boot sync - covers deep links + refresh. DOMContentLoaded may already have
 // fired by the time this script block runs, so sync immediately in that case.
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(_syncQueueFromHash, 0));
+    document.addEventListener('DOMContentLoaded', () => setTimeout(() => { _syncQueueFromHash(); _restoreIncidentSearch(); }, 0));
 } else {
-    setTimeout(_syncQueueFromHash, 0);
+    setTimeout(() => { _syncQueueFromHash(); _restoreIncidentSearch(); }, 0);
 }
+
+// v56: the secondary filter-chip row used to sit in the (now-removed) command
+// bar where it was hidden behind it. Re-parent it INTO the feed panel, right
+// under the KPI strip, so it lives beside the feed it filters (and is finally
+// clickable). Same boot-reparent pattern as the shell's reparentChrome.
+(function _relocateFilterRow() {
+    const move = () => {
+        const row = document.getElementById('cmd-filter-row');
+        const kpi = document.querySelector('.feed-panel .feed-kpi');
+        if (row && kpi && row.previousElementSibling !== kpi) kpi.insertAdjacentElement('afterend', row);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', move);
+    else move();
+})();
+
+// ── Overlay coordination (Jun 2026) ──────────────────────────────────────────
+// Fixes the "panels stack / no close / hidden behind something" class of bugs
+// from the overlay audit: a guaranteed ✕ on the analytics panel, mutual
+// exclusion across the in-page panels (+ closing an open detail that would
+// float over them at z 100000), and a GLOBAL Escape that closes the topmost
+// open dropdown / panel / transient modal. The detail panel, fullscreen report,
+// PhotoSwipe, wizard, and cluster chooser already self-handle Escape.
+(function _crispOverlayCoordination() {
+    const PANELS = ['analytics-panel', 'predictions-panel', 'deletions-panel', 'moderation-panel'];
+    const _vis = (el) => !!el && el.style.display !== 'none' && getComputedStyle(el).display !== 'none';
+    const _ready = (fn) => { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn); else fn(); };
+
+    window.__crispCloseInPagePanels = function (exceptId) {
+        PANELS.forEach((id) => {
+            if (id === exceptId) return;
+            const p = document.getElementById(id);
+            if (_vis(p)) p.style.display = 'none';
+        });
+    };
+    function _detailOpen() {
+        const d = document.getElementById('detail-panel');
+        return !!(d && d.style.display && d.style.display !== 'none');
+    }
+    // Open an in-page panel exclusively: close the other panels + an open detail
+    // panel (which would otherwise float over it at z-100000).
+    window.__crispOpenExclusivePanel = function (id) {
+        window.__crispCloseInPagePanels(id);
+        try { if (_detailOpen() && window.closeDetail) window.closeDetail(); } catch (_e) {}
+    };
+
+    // Analytics shipped without a ✕ close - inject one (matches deletions /
+    // moderation / predictions, which already have a header close button).
+    _ready(function () {
+        const p = document.getElementById('analytics-panel');
+        if (p && !p.querySelector('.panel-x-close')) {
+            const x = document.createElement('button');
+            x.type = 'button'; x.className = 'panel-x-close';
+            x.setAttribute('aria-label', 'Close analytics');
+            x.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+            x.onclick = () => { p.style.display = 'none'; };
+            p.appendChild(x);
+        }
+    });
+
+    // Global Escape - close the topmost OPEN surface that does not already
+    // self-handle Escape: transient modal → header dropdown → in-page panel →
+    // notification panel. One press closes one layer (never the wrong thing).
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || e.defaultPrevented) return;
+        const modal = document.querySelector('.reclaim-modal-backdrop, .ai-logic-overlay, .lightbox-overlay');
+        if (modal) { modal.remove(); return; }
+        const dd = document.querySelector('.export-dropdown.open');
+        if (dd) { dd.classList.remove('open'); return; }
+        for (const id of PANELS) { const p = document.getElementById(id); if (_vis(p)) { p.style.display = 'none'; return; } }
+        const np = document.getElementById('notif-panel');
+        if (_vis(np)) { np.style.display = 'none'; }
+    });
+})();
 
 // Phase G.5 (May 2026) - Bulk multi-select state.
 // `_bulkSelectMode` toggles the checkbox UI; `_bulkSelectedIds` is
@@ -1772,12 +2079,13 @@ function _hideBurstBanner() {
 }
 
 // K.5.e (May 2026, Phase K) - truncation banner.
-// When the backend's X-Total-Count exceeds DASHBOARD_PAGE_LIMIT (10K),
-// the dashboard silently truncates. Pre-fix the only signal was a
-// console.warn that operators never saw. The banner sits at the top of
-// the header chrome and stays visible until the next full-refresh poll
-// where total <= limit.
-function _showTruncationBanner(total, limit) {
+// When the scope total (X-Total-Count) exceeds the rows actually returned,
+// the FEED LIST is windowed to the newest N. Pre-fix the only signal was a
+// console.warn operators never saw, and it only fired past the unreachable
+// 10K ceiling. The banner sits at the top of the header chrome and stays
+// visible until a full-refresh poll where total <= shown. `shown` is the
+// number of rows actually returned this poll; `total` is X-Total-Count.
+function _showTruncationBanner(total, shown) {
     let banner = document.getElementById('truncation-banner');
     if (!banner) {
         banner = document.createElement('div');
@@ -1789,8 +2097,8 @@ function _showTruncationBanner(total, limit) {
     }
     banner.innerHTML = `
         <i class="fa-solid fa-triangle-exclamation"></i>
-        <strong>Showing ${limit.toLocaleString()} of ${total.toLocaleString()} reports</strong>
-        - server-side pagination needed to see the rest.
+        <strong>Feed list shows the newest ${shown.toLocaleString()} of ${total.toLocaleString()} reports</strong>
+        - counts and map reflect all ${total.toLocaleString()}; use filters or open an operation to narrow the list.
         <span class="truncation-banner-close" onclick="_hideTruncationBanner()" title="Dismiss">×</span>
     `;
     banner.style.display = 'flex';
@@ -1910,6 +2218,31 @@ window.openIncident = (id, opts) => {
 // an incident's operation (crisis_event_id) and to wait for the report to land.
 window.__crispGetReport = (id) => {
     try { return (allReports || []).find((x) => x && x.id === id) || null; } catch (_e) { return null; }
+};
+// Test hook: number of markers currently plotted on the main map (the marker
+// registry is rebuilt every render and is independent of cluster collapsing, so
+// it's a stable assertion target for the C1-c scale test).
+window.__crispMapMarkerCount = () => { try { return Object.keys(_markerById || {}).length; } catch (_e) { return 0; } };
+// C1-d (Phase-0): lazily load a single report that is OUTSIDE the newest-N
+// working set - an older marker click (the map now plots up to 20k lean points)
+// or a deep-link at scale. Fetches GET /reports/{id}, merges it into the cache
+// (so selectReport + the detail render + crisis_event_id resolution all work),
+// and resolves the report (or null). Idempotent: returns the cached copy if
+// already present, so it's safe to call on every open.
+window.__crispEnsureReport = async (id) => {
+    if (!id) return null;
+    const cached = (allReports || []).find((x) => x && x.id === id);
+    if (cached) return cached;
+    try {
+        const res = await fetch(`${API}/${encodeURIComponent(id)}`);   // auth via interceptor
+        if (!res.ok) return null;
+        const r = await res.json();
+        if (r && r.id) {
+            try { _applyReportData([r]); } catch (_e) { try { allReports.push(r); } catch (_e2) {} }
+            return (allReports || []).find((x) => x && x.id === id) || r;
+        }
+    } catch (_e) {}
+    return null;
 };
 
 // Single source of truth for the shell's Home alert (unseen count + whether any
@@ -2289,7 +2622,7 @@ function renderHotspots(parentEl, reports) {
 }
 
 function renderFeed() {
-    _renderQueueBanner();
+    _renderContextBanner();
     const el = document.getElementById('report-feed-list');
     if (!el) return;
     if (viewMode === 'queue') {
@@ -2394,7 +2727,8 @@ function renderTriageQueue(el) {
 
     // Apply pill filter (if user clicked a stat pill)
     if (_activePillFilter === 'critical') {
-        reports = reports.filter(r => r.severity === 'CRITICAL' || r.severity === 'SEVERE');
+        // M2: match the 'Critical' KPI count + the 'critical' queue (CRITICAL only).
+        reports = reports.filter(r => r.severity === 'CRITICAL');
     } else if (_activePillFilter === 'pending') {
         reports = reports.filter(r => r.status === 'PENDING' || r.status === 'VERIFIED');
     } else if (_activePillFilter === 'responding') {
@@ -2625,6 +2959,44 @@ function createQueueSection(key, label, incidents, cssClass) {
     return sec;
 }
 
+// Full data-integrity / provenance chip set, rendered in the DETAIL panel.
+// The feed card was simplified to carry only a blocking ⚠ + the evidence chip
+// (see createIncidentCard); this surfaces the complete media-integrity / PII
+// state, original-upload progress, and crisis-form provenance on the detail
+// panel so nothing is lost. Reuses the .k5a-chip / .qrt-orig-chip classes.
+function _incidentStatusChips(r) {
+    const media = r.media || [];
+    const hasAbandon = (reason) => media.some(m => m && m.abandon_reason === reason && !m.recovered_at);
+    const hasPii = (status) => media.some(m => m && m.pii_blur_status === status);
+    const chips = [];
+    if (hasAbandon('checksum_mismatch')) chips.push('<span class="k5a-chip k5a-chip-red" title="Media failed integrity check (checksum mismatch). Bytes are corrupt - only a fresh upload can recover."><i class="fa-solid fa-triangle-exclamation"></i> Media corrupt</span>');
+    if (hasAbandon('chunks_never_arrived') || hasAbandon('assembly_worker_lost')) chips.push('<span class="k5a-chip k5a-chip-red" title="Upload abandoned after the freshness window. Use the Reclaim action below."><i class="fa-solid fa-satellite-dish"></i> Upload abandoned</span>');
+    if (hasPii('failed')) chips.push('<span class="k5a-chip k5a-chip-red" title="PII blur (face / text redaction) failed. Review manually before sharing."><i class="fa-solid fa-eye-low-vision"></i> Redaction failed</span>');
+    if (hasPii('pending')) chips.push('<span class="k5a-chip k5a-chip-amber" title="Image is being scanned for PII; the public URL is gated until the scan completes."><i class="fa-solid fa-shield-halved"></i> Checking PII…</span>');
+    if (hasPii('complete_with_redactions')) chips.push('<span class="k5a-chip k5a-chip-green" title="Faces / PII text were detected and automatically blurred. Safe to share."><i class="fa-solid fa-shield-check"></i> Auto-redacted</span>');
+    if (hasAbandon('bandwidth_tier_deferred')) chips.push('<span class="k5a-chip k5a-chip-amber" title="Higher-quality variant not delivered (slow network). SMALL preview is available."><i class="fa-solid fa-signal"></i> Original (slow network)</span>');
+    if (r.submitted_as_anonymous_due_to_expired_token) chips.push('<span class="k5a-chip k5a-chip-grey" title="Reporter token had expired at drain time; submission accepted anonymously."><i class="fa-solid fa-unlock"></i> Attribution lost</span>');
+    if (r.sync_status === 'PARTIAL' && media.some(m => m && m.assembly_status === 'pending')) chips.push('<span class="k5a-chip k5a-chip-amber" title="Report still progressing - some chunks pending."><i class="fa-solid fa-hourglass-half"></i> Uploading…</span>');
+    const groups = groupPhotos(media.filter(m => m.type === 'IMAGE'));
+    const ageMs = r.server_created_at ? Date.now() - new Date(r.server_created_at).getTime() : 0;
+    let lost = 0, delayed = 0, uploading = 0, missingFresh = 0;
+    for (const g of groups) {
+        const st = _classifyHighTier(g, ageMs);
+        if (st === 'lost') lost++; else if (st === 'delayed') delayed++;
+        else if (st === 'uploading') uploading++; else if (st === 'missing-fresh') missingFresh++;
+    }
+    const pend = lost + delayed + uploading + missingFresh;
+    if (pend > 0 && groups.length > 0) {
+        const state = lost ? 'lost' : delayed ? 'delayed' : uploading ? 'uploading' : 'missing-fresh';
+        const ic = { lost: 'fa-circle-xmark', delayed: 'fa-clock', uploading: 'fa-cloud-arrow-up fa-pulse', 'missing-fresh': 'fa-cloud-arrow-up fa-pulse' }[state];
+        const lb = { lost: 'LOST', delayed: 'DELAYED', uploading: 'ORIG', 'missing-fresh': 'ORIG' }[state];
+        chips.push(`<span class="qrt-orig-chip qrt-orig-chip-${state}" title="Original-quality upload status"><i class="fa-solid ${ic}"></i> ${lb} <span class="qrt-orig-chip-pct">${pend}/${groups.length}</span></span>`);
+    }
+    if (r.form_pack_id) chips.push(`<span class="k5a-chip" style="background:rgba(34,211,238,0.14);color:#67e8f9;" title="Submitted via a Dynamic Crisis Form pack${r.form_pack_version ? ' (v' + r.form_pack_version + ')' : ''}"><i class="fa-solid fa-clipboard-list"></i> Crisis form</span>`);
+    return chips.join('');
+}
+window._incidentStatusChips = _incidentStatusChips;   // test hook + detail-panel reuse
+
 function createIncidentCard(r) {
     const card = document.createElement('div');
     const isSelected = (typeof _bulkSelectedIds !== 'undefined') && _bulkSelectedIds.has(r.id);
@@ -2685,171 +3057,40 @@ function createIncidentCard(r) {
         actionEl = `<span class="qrt-resolved-label"><i class="fa-solid fa-ban"></i> False</span>`;
     }
 
-    // Truth score badge - shown if verification has been run
+    // ── Consolidated evidence + verification signal (Moderate triage redesign).
+    // ONE chip replaces the 3 data-receipt icons + the AI badge + the truth
+    // badge: media presence + verification verdict at a glance. The per-tier
+    // upload detail, PII state, and crisis-form provenance live in the detail
+    // panel (its evidence + form sections) so the card stays scannable.
     const v = r.verification;
-    let truthBadge = '';
+    const _mediaBits = (hasImg ? '<i class="fa-solid fa-camera" title="Photo attached"></i>' : '')
+                     + (hasAudio ? '<i class="fa-solid fa-microphone" title="Audio attached"></i>' : '');
+    let _evidenceChip = '';
     if (v && v.total_score !== undefined) {
-        const score   = v.total_score;
-        const verdict = v.verdict || 'UNVERIFIED';
-        const badgeClass = score >= 80 ? 'truth-strong'
-                         : score >= 60 ? 'truth-likely'
-                         : score >= 40 ? 'truth-partial'
-                         : score >= 20 ? 'truth-low'
-                         :               'truth-unverified';
-        const truthIcon = score >= 60 ? 'fa-satellite' : 'fa-triangle-exclamation';
-        truthBadge = `<span class="qrt-truth-badge ${badgeClass}" title="${verdict.replace(/_/g,' ')}">
-            <i class="fa-solid ${truthIcon}"></i> ${score}
-        </span>`;
+        const score = v.total_score;
+        const evClass = score >= 60 ? 'ev-strong' : score >= 40 ? 'ev-mid' : 'ev-low';
+        _evidenceChip = `<span class="qrt-evidence ${evClass}" title="AI verification ${score}/100 - ${(v.verdict || 'UNVERIFIED').replace(/_/g, ' ')}">
+            <i class="fa-solid fa-satellite"></i> ${score}${_mediaBits ? ` <span class="qrt-ev-media">${_mediaBits}</span>` : ''}</span>`;
+    } else if (hasImg || hasAudio) {
+        _evidenceChip = `<span class="qrt-evidence ev-unver" title="Evidence attached - not yet verified">${_mediaBits} <span class="qrt-ev-l">unverified</span></span>`;
     }
 
-    // Phase C.2 (May 2026) - "Original pending" badge. Fires whenever
-    // any captured photo's LARGE (HIGH) tier hasn't finished assembling.
-    // Surfaces the "reporter is on a slow link, Original is in the
-    // background queue" case from the UNDP spec so operators don't
-    // mistake the SMALL/MEDIUM previews for the final-quality file.
-    // Counts groups for which LARGE is missing or incomplete; shows
-    // worst-case completion_pct for context.
-    //
-    // Phase F image-reliability (May 2026) - the feed-card chip now
-    // distinguishes uploading / delayed / lost / missing states using
-    // `_classifyHighTier()`. Pre-fix this site conflated pending,
-    // assembling, and failed under one 14-day "still uploading" chip
-    // (operator-reported bug: "Originals pending pill never clears").
-    // The card shows the *worst* state across all photo groups so the
-    // operator can prioritise from the queue without opening the card.
-    const _reportAgeMs = r.server_created_at
-        ? Date.now() - new Date(r.server_created_at).getTime()
-        : 0;
-    const _imgRows = (r.media || []).filter(m => m.type === 'IMAGE');
-    const _groups = groupPhotos(_imgRows);
-    // Counters per tri-state so we can pick the worst chip variant.
-    // State precedence (worst → best): lost > delayed > uploading > missing-fresh.
-    let cntLost = 0, cntDelayed = 0, cntUploading = 0, cntMissingFresh = 0;
-    let origMinPct = 100;
-    for (const g of _groups) {
-        const st = _classifyHighTier(g, _reportAgeMs);
-        if (st === 'lost') cntLost++;
-        else if (st === 'delayed') cntDelayed++;
-        else if (st === 'uploading') cntUploading++;
-        else if (st === 'missing-fresh') cntMissingFresh++;
-        // 'missing-old' + 'complete' don't count toward the chip.
-        const hi = g.members.find(m => m.resolution_tier === 'ORIGINAL');
-        if (hi && st !== 'complete') {
-            const pct = Math.round(hi.completion_pct || 0);
-            if (pct < origMinPct) origMinPct = pct;
-        }
-    }
-    const origPendingCount = cntLost + cntDelayed + cntUploading + cntMissingFresh;
-    // Pick the worst state for the chip cosmetic - operator sees a red
-    // chip if ANY group is `lost`, yellow if any are `delayed`, amber
-    // (pulsing cloud-arrow) for the still-uploading happy path.
-    let chipState = 'uploading';
-    if (cntLost > 0)          chipState = 'lost';
-    else if (cntDelayed > 0)  chipState = 'delayed';
-    else if (cntUploading > 0) chipState = 'uploading';
-    else if (cntMissingFresh > 0) chipState = 'missing-fresh';
-    const _chipIcon = {
-        lost:           'fa-solid fa-circle-xmark',
-        delayed:        'fa-solid fa-clock',
-        uploading:      'fa-solid fa-cloud-arrow-up fa-pulse',
-        'missing-fresh': 'fa-solid fa-cloud-arrow-up fa-pulse',
-    }[chipState];
-    const _chipLabel = {
-        lost:    'LOST',
-        delayed: 'DELAYED',
-        uploading: 'ORIG',
-        'missing-fresh': 'ORIG',
-    }[chipState];
-    const _chipTitle = {
-        lost:    `${cntLost} ${cntLost === 1 ? 'Original' : 'Originals'} permanently lost - network never delivered the final chunks. Click to open the report and use the Reclaim button.`,
-        delayed: `${cntDelayed} ${cntDelayed === 1 ? 'Original is' : 'Originals are'} delayed past the 30-min freshness window. The backend recovery sweep will mark them lost on the next tick. Click to inspect.`,
-        uploading: `${origPendingCount} of ${_groups.length} ${origPendingCount === 1 ? 'Original is' : 'Originals are'} still uploading (worst pct: ${origMinPct}%). Click to open the report.`,
-        'missing-fresh': `${cntMissingFresh} ${cntMissingFresh === 1 ? 'Original has' : 'Originals have'} no HIGH-tier row yet - reporter's device may still be queueing. Click to inspect.`,
-    }[chipState];
-    const origPendingChip = origPendingCount > 0 && _groups.length > 0
-        ? `<span class="qrt-orig-chip qrt-orig-chip-${chipState}" title="${_chipTitle}">
-               <i class="${_chipIcon}"></i> ${_chipLabel} <span class="qrt-orig-chip-pct">${origPendingCount}/${_groups.length}</span>
-           </span>`
-        : '';
-
-    // K.5.a (May 2026, Phase K) - operator-visible status chips.
-    // Renders the FIRST applicable chip from the severity-ordered list
-    // below (most-concerning first). Detail panel can show all chips
-    // simultaneously; the feed card stays at one chip per row to keep
-    // operator triage scannable.
-    //
-    // Priority order matches the audit's "operator concern" gradient:
-    //   1. Media corrupt (checksum_mismatch)         - RED, data integrity
-    //   2. Upload abandoned (chunks_never_arrived)   - RED, no recovery
-    //   3. Redaction failed (pii_blur_status=failed)  - RED, privacy risk
-    //   4. Original (slow network, bandwidth_tier_deferred) - AMBER
-    //   5. Attribution lost (expired token)          - GREY, informational
-    //   6. Uploading… (sync_status=PARTIAL + pending media) - AMBER
+    // Only a BLOCKING data-integrity / privacy issue stays on the card - a single
+    // labeled red chip (corrupt / abandoned / redaction-failed) that says "open
+    // this report to resolve". The full non-blocking chip set (PII-pending,
+    // slow-network, attribution, uploading, orig-pending, crisis form) lives in
+    // the detail panel's dp-status-chips row (see _incidentStatusChips).
     const _media = r.media || [];
-    // R1 (May 2026) - chip predicate distinguishes abandoned-and-recovered
-    // from abandoned-forever. Pre-R1 we matched on abandon_reason alone;
-    // that caused successfully-resumed uploads to render the "Upload
-    // abandoned" chip indefinitely because abandon_reason was never
-    // cleared. The post-R1 fix preserves the audit trail (abandon_reason
-    // stays populated) and adds recovered_at as the recovery signal.
-    // A row is "abandoned" for chip purposes iff:
-    //   - abandon_reason matches the chip's signature AND
-    //   - recovered_at IS NULL (no subsequent recovery)
-    const _hasAbandonReason = (reason) => _media.some(m => m
-        && m.abandon_reason === reason
-        && !m.recovered_at);
+    const _hasAbandonReason = (reason) => _media.some(m => m && m.abandon_reason === reason && !m.recovered_at);
     const _hasPiiBlurStatus = (status) => _media.some(m => m && m.pii_blur_status === status);
-    let _statusChip = '';
+    let _blockingFlag = '';
     if (_hasAbandonReason('checksum_mismatch')) {
-        _statusChip = `<span class="k5a-chip k5a-chip-red" title="One or more media files failed integrity check (djb2 checksum mismatch on assembly). Bytes on disk are corrupt - only a fresh upload can recover.">
-            <i class="fa-solid fa-triangle-exclamation"></i> Media corrupt
-        </span>`;
+        _blockingFlag = '<span class="k5a-chip k5a-chip-red" title="Media failed integrity check (checksum mismatch) - bytes are corrupt. Open the report to resolve."><i class="fa-solid fa-triangle-exclamation"></i> Media corrupt</span>';
     } else if (_hasAbandonReason('chunks_never_arrived') || _hasAbandonReason('assembly_worker_lost')) {
-        _statusChip = `<span class="k5a-chip k5a-chip-red" title="Upload abandoned after the 30-min freshness window. Operator may reclaim via the F3 Reclaim button on the detail panel.">
-            <i class="fa-solid fa-satellite-dish"></i> Upload abandoned
-        </span>`;
+        _blockingFlag = '<span class="k5a-chip k5a-chip-red" title="Upload abandoned after the freshness window. Open the report to reclaim."><i class="fa-solid fa-satellite-dish"></i> Upload abandoned</span>';
     } else if (_hasPiiBlurStatus('failed')) {
-        _statusChip = `<span class="k5a-chip k5a-chip-red" title="PII blur (face / text redaction) failed on this image. Review manually before sharing - bytes may contain identifiable faces or text.">
-            <i class="fa-solid fa-eye-low-vision"></i> Redaction failed
-        </span>`;
-    } else if (_hasPiiBlurStatus('pending')) {
-        // B-H (May 2026, Batch B-H of the Forensic Blur Audit) -
-        // canonical 4-state pii_blur_status taxonomy. Pending means
-        // assembly completed but the blur worker hasn't finished yet;
-        // GET /media/{id}/file returns 425 Too Early during this
-        // window (B-A URL gating). Operator sees the amber chip
-        // instead of a broken image - and knows it will resolve
-        // shortly without needing to refresh.
-        _statusChip = `<span class="k5a-chip k5a-chip-amber" title="Image is being scanned for PII (faces + text). Public URL is gated until scan completes - typically 5-30 seconds.">
-            <i class="fa-solid fa-shield-halved"></i> Checking PII…
-        </span>`;
-    } else if (_hasPiiBlurStatus('complete_with_redactions')) {
-        // B-H: positive operator signal - image WAS scanned and
-        // redactions were applied. Green / informational rather than
-        // alerting; the redaction worked.
-        _statusChip = `<span class="k5a-chip k5a-chip-green" title="Faces and / or PII text were detected and automatically blurred. Image is safe to share at any audience tier.">
-            <i class="fa-solid fa-shield-check"></i> Auto-redacted
-        </span>`;
-    } else if (_hasAbandonReason('bandwidth_tier_deferred')) {
-        _statusChip = `<span class="k5a-chip k5a-chip-amber" title="MEDIUM or HIGH variant was not delivered (reporter on slow network). SMALL preview is available and operationally sufficient. Higher-quality bytes may arrive later if the reporter reconnects on a faster link.">
-            <i class="fa-solid fa-signal"></i> Original (slow network)
-        </span>`;
-    } else if (r.submitted_as_anonymous_due_to_expired_token) {
-        _statusChip = `<span class="k5a-chip k5a-chip-grey" title="Reporter was logged in at capture time but their token had expired by the time the report drained. Submission was accepted anonymously. The reporter can retroactively re-link via a future claim-this-report endpoint.">
-            <i class="fa-solid fa-unlock"></i> Attribution lost
-        </span>`;
-    } else if (r.sync_status === 'PARTIAL'
-               && _media.some(m => m && m.assembly_status === 'pending')) {
-        _statusChip = `<span class="k5a-chip k5a-chip-amber" title="Report is still progressing - some chunks pending. Idle-promote (Action ④) will flip to SYNCED after 60s of no media activity.">
-            <i class="fa-solid fa-hourglass-half"></i> Uploading…
-        </span>`;
+        _blockingFlag = '<span class="k5a-chip k5a-chip-red" title="PII redaction failed - review manually before sharing."><i class="fa-solid fa-eye-low-vision"></i> Redaction failed</span>';
     }
-    // B3 - Dynamic Crisis Form provenance chip (when the report came through a
-    // geo-gated crisis pack). Icon-only label keeps the feed card scannable; the
-    // pack title is shown on the detail panel.
-    const _formChip = r.form_pack_id
-        ? `<span class="k5a-chip" style="background:rgba(34,211,238,0.14);color:#67e8f9;" title="Submitted via a Dynamic Crisis Form pack${r.form_pack_version ? ' (v' + r.form_pack_version + ')' : ''}"><i class="fa-solid fa-clipboard-list"></i> Crisis form</span>`
-        : '';
 
     // Phase G.5 - bulk-select checkbox at top-left. Visible only when
     // multi-select mode is enabled (operator toggled the toolbar
@@ -2866,7 +3107,6 @@ function createIncidentCard(r) {
         <div class="qrt-sev-strip strip-${sev}"></div>
         <div class="qrt-card-body">
             <div class="qrt-what">
-                <div class="qrt-infra-icon"><i class="fa-solid ${icon}"></i></div>
                 <span class="qrt-infra-name" title="${infraDisplayLabel(infra, r.infrastructure_sub_type)}">${infraDisplayLabel(infra, r.infrastructure_sub_type)}</span>
                 <span class="qrt-sev-badge qrt-sev-${sev}">${sev}</span>
                 <span class="qrt-source-badge qrt-src-${(r.source || 'APP').toLowerCase()}" title="Source: ${{APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i>',ANDROID:'<i class="fa-solid fa-robot"></i>',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i>',TELEGRAM:'<i class="fa-brands fa-telegram"></i>',SMS:'<i class="fa-solid fa-comment-sms"></i>',IVR:'<i class="fa-solid fa-phone"></i>'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i>'}</span>
@@ -2887,36 +3127,9 @@ function createIncidentCard(r) {
                        </span>`
                     : timeAgo(r.server_created_at)}
             </div>
-            <!-- Phase F.1.c (May 2026) - de-stuffed media presence row.
-                 Previously each icon also carried an inline percent
-                 text (di-pct span) when the upload was mid-progress.
-                 Across a 50-card feed scan that was ~50×3 = ~150
-                 little percentage chips fighting for attention; most
-                 of the time the operator only needs the binary "did
-                 the data arrive?" answer (green icon = yes, amber =
-                 in-progress, grey = absent). Percentages still render
-                 in the detail panel where there is room; the hover
-                 tooltip on each icon also carries the exact percent
-                 so it is never far from reach. -->
-            <div class="qrt-data-progress">
-                <span class="qrt-di ${locDone ? 'di-done' : 'di-off'}" title="Location: ${locDone ? 'Received' : 'Missing'}">
-                    <i class="fa-solid fa-location-dot"></i>
-                </span>
-                <span class="qrt-di ${imgDone ? 'di-done' : hasImg ? 'di-partial' : 'di-off'}" title="Image: ${imgDone ? 'Complete' : hasImg ? Math.round(imgPct) + '%' : 'Not received'}">
-                    <i class="fa-solid fa-camera"></i>
-                </span>
-                <span class="qrt-di ${audioDone ? 'di-done' : hasAudio ? 'di-partial' : 'di-off'}" title="Audio: ${audioDone ? 'Complete' : hasAudio ? Math.round(audioPct) + '%' : 'Not received'}">
-                    <i class="fa-solid fa-microphone"></i>
-                </span>
-                ${v ? `<span class="qrt-ai-badge" title="Verified: ${v.total_score}/100 - ${(v.verdict || '').replace(/_/g,' ')}" style="color:${v.total_score >= 60 ? '#22c55e' : v.total_score >= 40 ? '#eab308' : '#ef4444'};">
-                    <i class="fa-solid fa-brain"></i> ${v.total_score}
-                </span>` : ''}
-            </div>
             <div class="qrt-card-footer">
-                ${_statusChip}
-                ${origPendingChip}
-                ${_formChip}
-                ${truthBadge}
+                ${_blockingFlag}
+                ${_evidenceChip}
                 ${actionEl}
             </div>
         </div>
@@ -3004,23 +3217,98 @@ function _getFilteredReports() {
     return reports;
 }
 
+// C1-b: fetch the server's scope-aware operational summary so the KPI strip and
+// the context-banner total can show TRUE scope counts when the feed is truncated
+// (the working set is only the newest N). Scoped by crisis_event_id when an
+// operation is active; on any error it leaves _scopeSummary null so the client
+// compute (correct at small scale) still drives the strip.
+async function _fetchScopeSummary() {
+    try {
+        const base = API.replace('/api/v1/reports', '/api/v1/analytics/summary');
+        const url = base + (_activeCrisisEventId
+            ? '?crisis_event_id=' + encodeURIComponent(_activeCrisisEventId) : '');
+        const res = await fetch(url);   // auth header injected by the interceptor
+        if (!res.ok) { _scopeSummary = null; return; }
+        const body = await res.json();
+        _scopeSummary = (body && body.counts) ? body : null;
+        // Re-render now that authoritative counts are in.
+        try { updateCommandStats(); } catch (_e) {}
+        try { _renderContextBanner(); } catch (_e) {}
+    } catch (_e) { _scopeSummary = null; }
+}
+
+// C1-c: fetch the FULL lean marker set (id + coords + severity/status/type, up
+// to 20k) for the active scope so the main map plots a representative Common
+// Operating Picture at scale instead of the truncated newest-N working set
+// (SCALE-04). Normalised into report-shaped objects so the existing marker
+// builder consumes them unchanged (no media → no thumbnail in the hover
+// tooltip; the click still opens the full report via the lazy by-id fetch).
+async function _fetchMapMarkers() {
+    try {
+        const base = API.replace('/api/v1/reports', '/api/v1/reports/markers');
+        const params = new URLSearchParams();
+        params.set('limit', '20000');
+        if (_activeCrisisEventId) params.set('crisis_event_id', _activeCrisisEventId);
+        const res = await fetch(base + '?' + params.toString());   // auth via interceptor
+        if (!res.ok) { _scopeMarkers = null; return; }
+        const rows = await res.json();
+        _scopeMarkers = (Array.isArray(rows) ? rows : []).map((m) => ({
+            id: m.id,
+            severity: m.severity,
+            status: m.status,
+            crisis_type: m.crisis_type,
+            infrastructure_type: m.infrastructure_type,
+            crisis_event_id: m.crisis_event_id || null,   // ROUTE-04: preserve op context for lean-marker clicks
+
+            server_created_at: m.server_created_at,
+            location: { latitude: m.lat, longitude: m.lng },
+            media: [],
+            _lean: true,
+        }));
+        try { updateMapMarkers(); } catch (_e) {}
+    } catch (_e) { _scopeMarkers = null; }
+}
+
 function updateCommandStats() {
     const reports = _getFilteredReports();
     let critical = 0, responding = 0, resolved = 0, pending = 0;
 
     reports.forEach(r => {
-        if (r.severity === 'CRITICAL' || r.severity === 'SEVERE') critical++;
+        // M2 (Phase-1 count contract): "Critical" = severity CRITICAL only, matching
+        // the server (summary.critical / op-rollup), the 'critical' queue predicate,
+        // exports, and the server-sourced strip at scale (C1-b). SEVERE is its own
+        // taxonomy level (surfaced under its severity), not folded into Critical -
+        // pre-fix the strip counted CRITICAL+SEVERE so the tile disagreed with the
+        // queue it opened and with every server "critical".
+        if (r.severity === 'CRITICAL') critical++;
         if (r.status === 'RESPONDING') responding++;
         if (r.status === 'RESOLVED' || r.status === 'FALSE_ALARM') resolved++;
         if (r.status === 'PENDING' || r.status === 'VERIFIED') pending++;
     });
+    let total = reports.length;
+
+    // C1-b: when the scope is TRUNCATED and NO narrowing filter is active, the
+    // client tallies above are over the newest-N window only (wrong-low). Prefer
+    // the server's scope summary so the headline strip reflects ALL reports.
+    // Any active filter makes the client tally the correct "what I see" number,
+    // so we keep the client values then (and at small scale there is no summary).
+    if (_scopeAggregatesActive() && _scopeSummary && _scopeSummary.counts) {
+        const sc = _scopeSummary.counts;
+        const tot = Number(_scopeSummary.total_reports) || 0;
+        const active = Number(sc.active) || 0;          // all OPEN (not closed)
+        critical = Number(sc.critical) || 0;            // active CRITICAL
+        responding = Number(sc.active_ops) || 0;        // status == RESPONDING
+        pending = Math.max(0, active - responding);     // open-but-not-responding
+        resolved = Math.max(0, tot - active);           // closed (resolved/rejected/false-alarm)
+        total = tot;
+    }
 
     const _set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     _set('count-critical', critical);
     _set('count-pending', pending);
     _set('count-responding', responding);
     _set('count-resolved', resolved);
-    _set('count-total', reports.length);
+    _set('count-total', total);
 
     // Phase C.2 - Originals-pending count. Show the pill only when > 0
     // so the command bar doesn't grow a permanent "0 ORIG PENDING" chip
@@ -3416,6 +3704,7 @@ window.toggleAnalytics = function () {
     const panel = document.getElementById('analytics-panel');
     if (!panel) return;
     const show = panel.style.display === 'none';
+    if (show && window.__crispOpenExclusivePanel) window.__crispOpenExclusivePanel('analytics-panel');
     panel.style.display = show ? 'block' : 'none';
     if (show) _renderAnalytics();
 };
@@ -4551,6 +4840,18 @@ window.selectReport = (id, skipFly = false) => {
         return `${infraLbl}${locShort ? ' at ' + locShort : ''} - ${sevLbl}${waitChunk || respChunk}.`;
     })();
 
+    // Breadcrumb (P3b) - keeps the Global vs Operation context visible while the
+    // incident is open: "Global › Incident" or "Global › Operations › {op} ›
+    // Incident". Segments are clickable to step back out to that scope.
+    const _bcArrow = '<i class="fa-solid fa-angle-right dp-bc-sep" aria-hidden="true"></i>';
+    const _gSeg = '<a class="dp-bc-seg" onclick="window.__crispRouter&&window.__crispRouter.navigate(\'/incidents\')">Global</a>';
+    const _bc = r.crisis_event_id
+        ? _gSeg + _bcArrow
+          + '<a class="dp-bc-seg" onclick="window.__crispRouter&&window.__crispRouter.navigate(\'/operations\')">Operations</a>' + _bcArrow
+          + `<a class="dp-bc-seg dp-bc-op" onclick="window.location.hash='#/operations/'+encodeURIComponent('${r.crisis_event_id}')">${escapeHtml(r.crisis_event_name || 'Operation')}</a>` + _bcArrow
+          + '<span class="dp-bc-cur">Incident</span>'
+        : _gSeg + _bcArrow + '<span class="dp-bc-cur">Incident</span>';
+
     document.getElementById('detail-body').innerHTML = `
         <!-- Phase J.2 - operator headline + 6-section restructure.
              Headline gives the analyst the at-a-glance answer to
@@ -4560,7 +4861,9 @@ window.selectReport = (id, skipFly = false) => {
              <details> elements with the first two open by default
              (Incident Summary + Response Actions) per operator
              confirmation. -->
+        <nav class="dp-breadcrumb" aria-label="Breadcrumb">${_bc}</nav>
         <div class="dp-headline" title="${escapeHtml(_headline)}">${escapeHtml(_headline)}</div>
+        ${(() => { const _sc = _incidentStatusChips(r); return _sc ? `<div class="dp-status-chips">${_sc}</div>` : ''; })()}
         <!-- ① TOP: Credibility Check result OR "Credibility Check" button -->
         <div class="dp-action-bar">
             <div class="dp-top-row">
@@ -5073,8 +5376,25 @@ window.selectReport = (id, skipFly = false) => {
     })();
 
     if (loc && !skipFly) map.flyTo([loc.latitude, loc.longitude], 15);
+    highlightMarker(id);   // reverse map↔feed sync: light up the selected marker
     renderFeed();
 };
+
+// Highlight the selected incident's map marker (the reverse of marker→feed).
+// Clears any prior highlight. Retries briefly because flyTo declustering may not
+// have produced the marker's DOM icon yet. Pass null to clear all highlight.
+function highlightMarker(id) {
+    const prev = _highlightedMarkerId && _markerById[_highlightedMarkerId];
+    if (prev && prev._icon) prev._icon.classList.remove('crisp-marker-sel');
+    _highlightedMarkerId = id || null;
+    const m = id && _markerById[id];
+    if (!m) return;
+    const mark = () => { if (m._icon) m._icon.classList.add('crisp-marker-sel'); };
+    mark();
+    setTimeout(mark, 350);
+    setTimeout(mark, 800);
+}
+window.highlightMarker = highlightMarker;
 
 // Image/Satellite view toggle in detail panel
 window.dpSwitchView = (reportId, view, btn) => {
@@ -5337,6 +5657,7 @@ window.closeDetail = () => {
     // it defaults back to the best-complete variant.
     if (selectedId) _tierOverride.delete(selectedId);
     selectedId = null;
+    highlightMarker(null);   // clear the reverse map↔feed marker highlight
     // Phase H.1.d - also clear any active Building Console state so
     // the next selectReport call doesn't paint over a stale console.
     if (typeof _selectedBuildingId !== 'undefined' && _selectedBuildingId) {
@@ -9696,10 +10017,18 @@ function updateMapMarkers() {
     if (window._spiderfiedCluster) return;
 
     clusterGroup.clearLayers();
+    _markerById = {};   // rebuilt below; reverse map↔feed highlight relies on it
     if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
 
     const heatPoints = [];
-    const filteredReports = _getFilteredReports();
+    // C1-c: at scale, plotting the newest-N working set shows a non-representative
+    // slice (SCALE-04). When the feed is truncated + unfiltered and we have the
+    // full lean marker set, plot THAT (the honest Common Operating Picture);
+    // otherwise plot the client-filtered working set (exact at small scale, and
+    // the only set that reflects an active client filter).
+    const filteredReports = (_scopeAggregatesActive() && Array.isArray(_scopeMarkers) && _scopeMarkers.length)
+        ? _scopeMarkers
+        : _getFilteredReports();
 
     filteredReports.forEach(r => {
         if (!r.location) return;
@@ -9719,7 +10048,8 @@ function updateMapMarkers() {
         });
         const marker = L.marker([lat, lng], { icon: markerIcon });
         marker._crispReport = r;
-        marker.on('click', () => window.openIncident(r.id));
+        _markerById[r.id] = marker;   // registry for feed→marker highlight
+        marker.on('click', () => window.openIncident(r.id, { operationId: r.crisis_event_id || null }));   // ROUTE-04: keep op context (incl. lean markers at scale)
 
         // Tooltip on hover
         marker.bindTooltip(() => {
@@ -9799,15 +10129,21 @@ let _pendingDeletions = [];
 
 async function _checkPendingDeletions() {
     try {
-        const res = await fetch(`${API}/?include_deleted=true`);
+        // M15 (Phase-4): filter pending deletions SERVER-SIDE and read the true
+        // total from X-Total-Count. The old `include_deleted=true` + client filter
+        // ran over the newest-500 listing slice, so beyond 500 reports it silently
+        // undercounted the deletion backlog. (Deletion governance is global by
+        // design - it's an admin/privacy concern, not an op-scoped operational metric.)
+        const res = await fetch(`${API}/?pending_deletion=true&limit=200`);
         if (!res.ok) return;
         const all = await res.json();
-        _pendingDeletions = all.filter(r => r.deletion_requested_at);
+        _pendingDeletions = Array.isArray(all) ? all : [];
+        const total = parseInt(res.headers.get('X-Total-Count') || String(_pendingDeletions.length), 10);
         const btn = document.getElementById('btn-pending-deletions');
         const badge = document.getElementById('deletion-count-badge');
         if (btn && badge) {
-            btn.style.display = _pendingDeletions.length > 0 ? 'inline-flex' : 'none';
-            badge.textContent = _pendingDeletions.length;
+            btn.style.display = total > 0 ? 'inline-flex' : 'none';
+            badge.textContent = total;
         }
     } catch (_) {}
 }
@@ -9816,6 +10152,7 @@ window.showPendingDeletions = function () {
     const panel = document.getElementById('deletions-panel');
     const body = document.getElementById('del-panel-body');
     if (!panel || !body) return;
+    if (window.__crispOpenExclusivePanel) window.__crispOpenExclusivePanel('deletions-panel');
     panel.style.display = 'flex';
 
     // Bug-fix: always clear the footer first so an empty list can't leave a
@@ -9989,6 +10326,12 @@ function _exportFilterParams() {
     if (timeFilterHours > 0) {
         params.set('since', new Date(Date.now() - timeFilterHours * 3600000).toISOString());
     }
+    // C2 (Phase-0): exports MUST respect the active operation scope. When the
+    // feed is scoped to an operation (#/incidents;op={id}), the Tools->Export
+    // submenu and the Export Center "current filters" scope would otherwise
+    // silently download the GLOBAL dataset. Thread the scope so every export
+    // path that goes through this helper inherits it.
+    if (_activeCrisisEventId) params.set('crisis_event_id', _activeCrisisEventId);
     return params;
 }
 window._exportFilterParams = _exportFilterParams;
@@ -10320,6 +10663,13 @@ function applyGeoResult(r, address, cacheKey) {
         co: a.country,
         cc: continent
     };
+    // STALE-09 (Phase-5): cap the reverse-geocode cache (was unbounded - a
+    // long-running session grew it in localStorage without limit). Keep the
+    // newest ~2000 entries (object insertion order) and trim the oldest.
+    try {
+        const _gk = Object.keys(geoCache);
+        if (_gk.length > 2000) for (const _k of _gk.slice(0, _gk.length - 2000)) delete geoCache[_k];
+    } catch (_e) {}
     localStorage.setItem('crisp_geo_cache', JSON.stringify(geoCache));
 
     // Re-cluster and re-render
@@ -10592,18 +10942,33 @@ async function fetchReports() {
         // proper pagination is needed BEFORE the truncation becomes an
         // ops issue. Idempotent; no-op when caught early.
         const xTotalCount = parseInt(res.headers.get('X-Total-Count') || '0', 10);
-        if (xTotalCount > DASHBOARD_PAGE_LIMIT && wantFullRefresh) {
-            console.warn(`[CRISP] Dashboard truncation imminent: X-Total-Count=${xTotalCount} exceeds DASHBOARD_PAGE_LIMIT=${DASHBOARD_PAGE_LIMIT}. Proper pagination needed.`);
-            // K.5.e (May 2026, Phase K) - operator-visible banner.
-            // Pre-fix the truncation only logged to console; operators
-            // didn't know reports past row 10K were silently hidden.
-            // Banner sits at the top of the header chrome so anyone
-            // looking at the dashboard knows what they're not seeing.
-            _showTruncationBanner(xTotalCount, DASHBOARD_PAGE_LIMIT);
+        // C1-a (Phase-0 hardening): the operator must know whenever the feed is
+        // truncated, NOT only past the unreachable 10K client ceiling. The backend
+        // caps a listing page at 500 rows, so the old `> DASHBOARD_PAGE_LIMIT`
+        // test never fired in the real 501-10000 range and the truncation was
+        // silent. Compare the true scope total (X-Total-Count) against what was
+        // ACTUALLY returned this poll - any shortfall means hidden reports.
+        const returnedCount = Array.isArray(data) ? data.length : 0;
+        if (wantFullRefresh) {
+            // C1-b: remember the TRUE scope size so counts/banner don't read the
+            // truncated working-set length at scale.
+            _scopeTotalCount = xTotalCount > 0 ? xTotalCount : returnedCount;
+        }
+        if (wantFullRefresh && xTotalCount > returnedCount) {
+            console.warn(`[CRISP] Feed truncated: X-Total-Count=${xTotalCount} but only ${returnedCount} rows returned (backend page cap). Counts use /analytics/summary + the map uses /reports/markers; the feed list shows the newest ${returnedCount}.`);
+            // Operator-visible banner at the top of the header chrome so anyone
+            // looking at the dashboard knows what the FEED LIST is not showing.
+            _showTruncationBanner(xTotalCount, returnedCount);
+            // C1-b/c: pull the authoritative server summary (counts) + the full
+            // lean marker set (map) for the active scope so the headline strip,
+            // banner total, and Common Operating Picture reflect ALL reports, not
+            // the newest N. Lazy - only when truncated (no extra request at small scale).
+            try { _fetchScopeSummary(); } catch (_e) {}
+            try { _fetchMapMarkers(); } catch (_e) {}
         } else if (typeof _hideTruncationBanner === 'function') {
-            // Count dropped back below the threshold - clear the banner
-            // on a subsequent full-refresh poll.
-            if (wantFullRefresh) _hideTruncationBanner();
+            // No shortfall - clear the banner + drop the server aggregates so the
+            // client compute (exact at small scale) drives the strip + map.
+            if (wantFullRefresh) { _hideTruncationBanner(); _scopeSummary = null; _scopeMarkers = null; }
         }
 
         try {
@@ -10895,6 +11260,7 @@ window._maybeShowModerationButton = _maybeShowModerationButton;
 window.showModerationPanel = async function () {
     const panel = document.getElementById('moderation-panel');
     if (!panel) return;
+    if (window.__crispOpenExclusivePanel) window.__crispOpenExclusivePanel('moderation-panel');
     panel.style.display = 'flex';
     // Default to triage on open. Force a refresh on every open so the
     // operator always sees current state (the periodic badge refresh

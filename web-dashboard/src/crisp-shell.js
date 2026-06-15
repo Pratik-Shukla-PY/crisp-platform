@@ -193,6 +193,7 @@
     body.crisp-has-globalnav .dp-compare-overlay,
     body.crisp-has-globalnav .ai-logic-overlay,
     body.crisp-has-globalnav .lightbox-overlay,
+    body.crisp-has-globalnav .reclaim-modal-backdrop,
     body.crisp-has-globalnav .bc-reason-modal-overlay{z-index:100010}
     body.crisp-has-globalnav .lightbox-close{z-index:100011}
     /* Top-of-viewport alert strip sits just BELOW the bar (both are top:0
@@ -375,7 +376,13 @@
     const badge = el('cache-freshness-badge');
     const notif = el('notif-area');
     const menu = el('user-menu');
-    [badge, clock, notif, menu].forEach((n) => { if (n) right.appendChild(n); });
+    // The incidents-page action group (time filter · Export · Tools) is also
+    // re-parented into the shell so the now-empty intermediate command-bar can
+    // be removed. It is CSS-gated to the /incidents route (these tools act on
+    // the global feed). Order: tools first, then identity (LIVE · time · 🔔 ·
+    // profile) pinned to the right.
+    const actions = el('command-actions');
+    [actions, badge, clock, notif, menu].forEach((n) => { if (n) right.appendChild(n); });
     return !!(badge && menu && notif);
   }
 

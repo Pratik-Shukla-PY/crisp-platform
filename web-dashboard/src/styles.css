@@ -56,7 +56,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); heig
 .analytics-toggle:hover { background:rgba(56,189,248,0.1); border-color:rgba(56,189,248,0.3); }
 .analytics-toggle i { color:var(--info); }
 .analytics-panel {
-    position:absolute; top:88px; left:16px; right:16px; bottom:16px; z-index:15;
+    position:absolute; top:16px; left:16px; right:16px; bottom:16px; z-index:15;
     background:var(--panel); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
     border:1px solid var(--border); border-radius:var(--radius);
     box-shadow:var(--shadow); overflow:hidden;
@@ -938,11 +938,21 @@ html[dir="rtl"] .bc-rf-input { text-align: right; }
        intercepting clicks. */
     z-index: 30;
     padding: 8px 16px;
-    display: flex;
+    /* v56: the intermediate command-bar is removed. Its identity chrome (LIVE ·
+       clock · bell · profile) and the action group (time filter · Export · Tools)
+       are re-parented into the global shell at boot (crisp-shell.js
+       reparentChrome). The husk is hidden so it reclaims no vertical space; its
+       remaining children (hidden .brand + .command-stats) stay in the DOM only so
+       reparentChrome can find the re-parented nodes at boot. */
+    display: none;
     align-items: center;
     gap: 12px;
     border-radius: var(--radius);
 }
+/* The relocated action group lives in the shell but acts on the global feed, so
+   it shows ONLY on /incidents (router sets body[data-route]). */
+#command-actions { display: none; }
+body[data-route="/incidents"] #command-actions { display: flex; align-items: center; gap: 5px; }
 
 .brand { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 /* May 2026 - brand-icon hosts the inlined ripple-tile SVG. Dropped the
@@ -1204,7 +1214,7 @@ html[dir="rtl"] .bc-rf-input { text-align: right; }
 
 /* Pending Deletions Admin Panel */
 .deletions-panel {
-    position: absolute; top: 88px; right: 16px; bottom: 16px; width: 380px; z-index: 20;
+    position: absolute; top: 16px; right: 16px; bottom: 16px; width: 380px; z-index: 20;
     display: flex; flex-direction: column; overflow: hidden;
     background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg);
     box-shadow: 0 16px 48px rgba(0,0,0,0.5); backdrop-filter: blur(20px);
@@ -1330,7 +1340,7 @@ html[dir="rtl"] .bc-rf-input { text-align: right; }
 /* ══ FEED PANEL (left sidebar) ═════════════════════════════ */
 .feed-panel {
     position: absolute;
-    top: 88px; left: 16px; bottom: 16px;
+    top: 16px; left: 16px; bottom: 16px;
     width: 420px; z-index: 10;
     display: flex; flex-direction: column;
     overflow: hidden;
@@ -1789,7 +1799,10 @@ html[dir="rtl"] .bc-rf-input { text-align: right; }
        reparents the panel to <body> on first open so a display:none ancestor
        (e.g. the hidden incidents view on the operations route) can't clip it. */
     position: fixed;
-    top: 88px; right: 16px; bottom: 16px;
+    /* v56 fix: the panel is reparented to <body> (fixed to the viewport), so its
+       top MUST clear the fixed global shell bar (--gnav-h) - otherwise the
+       header + ✕ close sit behind the shell (z 100001) and can't be reached. */
+    top: calc(var(--gnav-h, 52px) + 16px); right: 16px; bottom: 16px;
     width: 380px; z-index: 100000;
     display: flex; flex-direction: column;
     overflow: hidden;
@@ -1841,12 +1854,15 @@ body.dp-fullscreen::before {
 }
 body.dp-fullscreen .detail-panel {
     position: fixed;
-    top: 5vh;
+    /* Maximised reading view. Clear the shell + keep the panel's high z-index so
+       it stays ABOVE the route overlays (99990) - was z-index:60, which dropped
+       the maximised detail BEHIND the operations/home overlays (hidden). */
+    top: calc(var(--gnav-h, 52px) + 10px);
     left: 5vw;
     right: 5vw;
     bottom: 5vh;
     width: auto;
-    z-index: 60;
+    z-index: 100000;
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
     border-radius: 14px;
 }
@@ -1866,7 +1882,7 @@ body.dp-fullscreen .bc-summary-text,
 body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 @media (max-width: 768px) {
     body.dp-fullscreen .detail-panel {
-        top: 2vh; left: 2vw; right: 2vw; bottom: 2vh;
+        top: calc(var(--gnav-h, 52px) + 6px); left: 2vw; right: 2vw; bottom: 2vh;
         border-radius: 10px;
     }
     body.dp-fullscreen .detail-body { padding: 12px 14px; }
@@ -2630,6 +2646,19 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
     color: #fff; font-size: 12px;
 }
 .crisp-marker-pin:hover { transform: scale(1.3); }
+/* Reverse map↔feed sync: the marker for the incident selected in the feed gets
+   an enlarged, ringed, pulsing pin so the eye finds it on the map immediately. */
+.crisp-marker.crisp-marker-sel { z-index: 1000 !important; }
+.crisp-marker-sel .crisp-marker-pin {
+    transform: scale(1.35);
+    border-color: #fff;
+    box-shadow: 0 0 0 4px rgba(65,143,222,0.55), 0 2px 14px rgba(0,0,0,0.5);
+    animation: crisp-marker-pulse 1.4s ease-in-out infinite;
+}
+@keyframes crisp-marker-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(65,143,222,0.45), 0 2px 14px rgba(0,0,0,0.5); }
+    50%      { box-shadow: 0 0 0 8px rgba(65,143,222,0.18), 0 2px 14px rgba(0,0,0,0.5); }
+}
 
 /* Cluster popup (hover list) */
 .cluster-popup .leaflet-popup-content-wrapper {
@@ -3315,8 +3344,20 @@ body.burst-mode .notif-glow {
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
     display: flex; align-items: center; justify-content: center;
-    z-index: 5000;
+    /* Opened FROM the detail panel (z 100000) - must sit above it, not behind.
+       The shell raises it to 100010; this is the no-shell fallback. */
+    z-index: 100015;
 }
+/* Guaranteed ✕ close for in-page overlay panels that shipped without one
+   (the analytics panel). Injected by the overlay-coordination block in app.js. */
+.panel-x-close {
+    position: absolute; top: 12px; right: 14px; z-index: 6;
+    width: 32px; height: 32px; border-radius: 8px;
+    border: 1px solid var(--border); background: rgba(15,23,42,0.72);
+    color: #cdd8ec; cursor: pointer; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+}
+.panel-x-close:hover { border-color: #f87171; color: #fca5a5; }
 .reclaim-modal {
     background: #0f172a;
     border: 1px solid rgba(255,255,255,0.10);
@@ -3777,6 +3818,33 @@ body.burst-mode .notif-glow {
 .qrt-media-icons { display: flex; gap: 4px; flex: 1; font-size: 12px; color: var(--text-dim); }
 .qrt-media-icons i { opacity: 0.3; }
 .qrt-media-icons i.has-media { opacity: 0.85; color: var(--text-sub); }
+
+/* Consolidated evidence + verification chip (Moderate triage redesign) - one
+   signal replacing the per-tier data-receipt icons + AI badge + truth badge:
+   media presence + verification verdict. Full detail lives in the panel. */
+.qrt-evidence { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700;
+    padding: 2px 7px; border-radius: 7px; border: 1px solid; white-space: nowrap; }
+.qrt-evidence.ev-strong { color: #34D399; border-color: rgba(52,211,153,.4); background: rgba(52,211,153,.12); }
+.qrt-evidence.ev-mid { color: #fbbf24; border-color: rgba(251,191,36,.4); background: rgba(251,191,36,.12); }
+.qrt-evidence.ev-low { color: #f87171; border-color: rgba(248,113,113,.4); background: rgba(248,113,113,.12); }
+.qrt-evidence.ev-unver { color: #9fb2d4; border-color: #2a3a55; background: rgba(148,163,184,.08); font-weight: 600; }
+.qrt-evidence .qrt-ev-media { display: inline-flex; gap: 3px; opacity: .85; }
+.qrt-evidence .qrt-ev-l { font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; }
+/* The ONLY chip that stays on the card: a blocking media-integrity / PII flag. */
+.qrt-flag-block { display: inline-flex; align-items: center; color: #fca5a5; font-size: 13px; }
+/* Detail panel: the full data-integrity / provenance chip set moved off the card. */
+.dp-status-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }
+/* Detail breadcrumb (P3b) - Global vs Operation context for the open incident. */
+.dp-breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 11px; color: #8aa0bf; margin: 0 0 8px; }
+.dp-breadcrumb .dp-bc-seg { color: #9fb2d4; cursor: pointer; text-decoration: none; }
+.dp-breadcrumb .dp-bc-seg:hover { color: #cfe3f8; text-decoration: underline; }
+.dp-breadcrumb .dp-bc-op { color: #a78bfa; font-weight: 600; }
+.dp-breadcrumb .dp-bc-sep { font-size: 9px; opacity: .5; }
+.dp-breadcrumb .dp-bc-cur { color: #e6edf7; font-weight: 700; }
+/* Action button right-aligned; evidence + flag sit at the left of the footer. */
+.qrt-card-footer .qrt-dispatch-btn,
+.qrt-card-footer .qrt-dispatched-label,
+.qrt-card-footer .qrt-resolved-label { margin-left: auto; }
 
 /* One-click dispatch button on the card */
 .qrt-dispatch-btn {
@@ -5407,17 +5475,21 @@ body.burst-mode .notif-glow {
    status segment so the eye still treats CRITICAL / PENDING etc. as
    the primary filter dimension and the chips as a refinement layer.
    ────────────────────────────────────────────────────────────────── */
+/* v57: relocated into the feed panel (under the KPI strip). WRAPS instead of
+   horizontal-scrolling so EVERY filter is immediately visible - the old
+   overflow-x:auto hid filters off-screen to the right (operators missed them). */
 .cmd-filter-row {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 6px;
-    padding: 6px 16px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    background: rgba(15, 23, 42, 0.55);
-    border-bottom: 1px solid rgba(148, 163, 184, 0.08);
-    scrollbar-width: thin;
+    margin: 0 10px 8px;
+    padding: 6px 8px;
+    background: #0e1726;
+    border: 1px solid #1f2c44;
+    border-radius: 9px;
 }
+.cmd-filter-row .cmd-filter-label { flex: 0 0 100%; margin-bottom: 1px; color: #8aa0bf; font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .cmd-filter-row::-webkit-scrollbar { height: 4px; }
 .cmd-filter-row::-webkit-scrollbar-thumb {
     background: rgba(148, 163, 184, 0.20);
@@ -5778,22 +5850,37 @@ body.burst-mode .notif-glow {
 }
 
 /* ── Operational queue banner (Jun 2026 - attention-panel deep links) ── */
+/* Incident Context Banner - the page's "you are here" cue. Always visible; the
+   left-border colour + tint encode the scope at a glance (WHERE), the label/sub
+   give WHAT + WHY, and the count + clear/exit give WHAT-NEXT. */
 #queue-banner {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin: 6px 10px 8px;
+    margin: 8px 10px;
     padding: 9px 12px;
-    border: 1px solid rgba(65, 143, 222, 0.45);
+    border: 1px solid rgba(65, 143, 222, 0.40);
+    border-left-width: 4px;
     background: rgba(65, 143, 222, 0.10);
     border-radius: 10px;
     font-size: 12px;
 }
-#queue-banner .qb-icon { font-size: 15px; }
+#queue-banner.ctx-global { border-left-color: #418FDE; border-color: rgba(65,143,222,0.40); background: rgba(65,143,222,0.08); }
+#queue-banner.ctx-search { border-left-color: #94a3b8; border-color: rgba(148,163,184,0.45); background: rgba(148,163,184,0.10); }
+#queue-banner.ctx-op     { border-left-color: #7c3aed; border-color: rgba(124,58,237,0.50); background: rgba(124,58,237,0.12); }
+#queue-banner.ctx-queue  { border-left-color: #f87171; border-color: rgba(248,113,113,0.45); background: rgba(248,113,113,0.10); }
+#queue-banner.ctx-queue-needs-review,
+#queue-banner.ctx-queue-verification { border-left-color: #fbbf24; border-color: rgba(251,191,36,0.40); background: rgba(251,191,36,0.08); }
+#queue-banner.ctx-queue-active-ops { border-left-color: #34D399; border-color: rgba(52,211,153,0.40); background: rgba(52,211,153,0.08); }
+#queue-banner .qb-icon { font-size: 16px; flex: none; }
 #queue-banner .qb-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-#queue-banner .qb-text strong { color: #cfe3f8; font-size: 12.5px; }
-#queue-banner .qb-count { color: #7db8ef; font-weight: 700; }
-#queue-banner .qb-desc { color: #8A99B5; font-size: 10.5px; line-height: 1.35; }
+#queue-banner .qb-label { color: #eaf2fc; font-size: 12.5px; font-weight: 800; letter-spacing: .04em; }
+#queue-banner .qb-sub {
+    color: #9fb2d4; font-size: 11px; line-height: 1.35;
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+#queue-banner .qb-sub b { color: #cfe3f8; font-weight: 700; }
 #queue-banner .qb-clear {
     margin-left: auto;
     flex: none;
@@ -5805,5 +5892,59 @@ body.burst-mode .notif-glow {
     font-size: 11px;
     cursor: pointer;
     font-family: inherit;
+    white-space: nowrap;
 }
 #queue-banner .qb-clear:hover { border-color: #418FDE; color: #fff; }
+/* Right-aligned actions cluster (operation switcher + clear/exit). */
+#queue-banner .qb-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; flex: none; }
+#queue-banner .qb-actions .qb-clear { margin-left: 0; }
+#queue-banner .ctx-switch {
+    display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+    background: rgba(124,58,237,0.14); border: 1px solid rgba(124,58,237,0.45);
+    color: #c4b5fd; border-radius: 8px; padding: 5px 9px; font-size: 11px;
+    cursor: pointer; font-family: inherit;
+}
+#queue-banner .ctx-switch:hover { border-color: #a78bfa; color: #ddd6fe; }
+/* Operation switcher dropdown - appended to <body>, positioned under the button.
+   z above the detail panel (100000), below the notification stack (100050). */
+#op-switcher-menu {
+    position: fixed; display: none; z-index: 100045;
+    width: 300px; max-height: 60vh; overflow-y: auto;
+    background: #101a2e; border: 1px solid #2a3a55; border-radius: 12px;
+    box-shadow: 0 18px 48px rgba(0,0,0,0.55); padding: 6px;
+    font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+#op-switcher-menu .osw-h { font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #8aa0bf; padding: 6px 8px 4px; }
+#op-switcher-menu .osw-sec { font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #6b7a96; padding: 9px 8px 3px; border-top: 1px solid #1f2c44; margin-top: 4px; }
+#op-switcher-menu .osw-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer; background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 8px 9px; color: #e6edf7; font-family: inherit; }
+#op-switcher-menu .osw-item:hover { background: #13203a; border-color: #233149; }
+#op-switcher-menu .osw-item.active { background: rgba(124,58,237,0.14); border-color: rgba(124,58,237,0.4); }
+#op-switcher-menu .osw-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+#op-switcher-menu .osw-name { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#op-switcher-menu .osw-sub { font-size: 10.5px; color: #8aa0bf; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#op-switcher-menu .osw-check { color: #a78bfa; font-size: 11px; flex: none; }
+#op-switcher-menu .osw-empty { font-size: 11.5px; color: #8aa0bf; padding: 10px 9px; text-align: center; }
+
+/* Feed KPI strip - status filters relocated from the top command bar into the
+   feed panel, compact + click-to-filter. Reuses .cmd-status-seg-item (JS hook)
+   with feed-specific sizing. */
+.feed-kpi { display: flex; gap: 6px; margin: 0 10px 8px; }
+.feed-kpi .cmd-status-seg-item {
+    flex: 1 1 0; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 7px 4px;
+    background: #0e1726; border: 1px solid #1f2c44; border-radius: 9px;
+    cursor: pointer; font-family: inherit;
+    transition: border-color .12s, background .12s;
+}
+.feed-kpi .cmd-status-seg-item:hover { border-color: #418FDE; background: #13203a; }
+.feed-kpi .cmd-status-seg-item.active { border-color: #418FDE; background: rgba(65,143,222,.18); }
+.feed-kpi .cmd-status-seg-item:focus-visible { outline: 2px solid #418FDE; outline-offset: 2px; }
+.feed-kpi .cmd-status-seg-count { font-size: 16px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: #e6edf7; }
+.feed-kpi .cmd-status-seg-label { font-size: 9.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #8aa0bf; }
+.feed-kpi .k-crit .cmd-status-seg-count { color: #f87171; }
+.feed-kpi .k-pend .cmd-status-seg-count { color: #fbbf24; }
+.feed-kpi .k-help .cmd-status-seg-count { color: #34D399; }
+.feed-kpi .k-total .cmd-status-seg-count { color: #cfe3f8; }
+.feed-kpi .cmd-status-seg-item.active-pulse { border-color: #f87171; animation: fk-pulse 1.6s ease-in-out infinite; }
+@keyframes fk-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0); } 50% { box-shadow: 0 0 0 3px rgba(248,113,113,.22); } }

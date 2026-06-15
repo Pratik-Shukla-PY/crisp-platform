@@ -449,6 +449,7 @@
       border:1px solid #233149;background:#101a2e;border-left:5px solid var(--op-accent,#418FDE)}
     .cco-bc{font-size:11.5px;color:#8aa0bf}
     .cco-bc b{color:#E6EDF7;font-weight:700}
+    .cco-bc-region{color:#9fb2d4}
     .cco-exit{margin-left:auto;background:#1b2942;border:1px solid #33476a;border-radius:999px;
       padding:6px 14px;color:#cdd8ec;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
     .cco-exit:hover{border-color:#418FDE;color:#fff}
@@ -571,7 +572,24 @@
       ]);
     } catch (_e) { /* fall through to whatever resolved */ }
 
-    const op = (ops || []).find((o) => o.id === id) || { id, name: 'Operation', crisis_type: null };
+    const op = (ops || []).find((o) => o.id === id);
+    if (!op) {
+      // M4 (Phase-2): a deleted / unknown operation id must NOT render a healthy-
+      // looking GREEN, zero-count dashboard - that reads as "all clear for this
+      // operation". Show an explicit not-found state and drop the shell op-context.
+      try { window.__crispShell && window.__crispShell.clearOpContext && window.__crispShell.clearOpContext(); } catch (_e) {}
+      wrap.innerHTML = `
+        <div class="cco-empty" style="text-align:center;padding:48px 24px">
+          <div style="font-size:34px;margin-bottom:8px">🗺️</div>
+          <h3 style="margin:0 0 6px">Operation not found</h3>
+          <p style="color:#9fb3d1;max-width:440px;margin:0 auto 16px">This operation no longer exists, has been deleted, or has ended and been archived - it may also be outside your access.</p>
+          <button class="cco-exit" id="cco-exit-missing">← Back to operations</button>
+        </div>`;
+      const back = el('cco-exit-missing');
+      if (back) back.addEventListener('click', () => go('#/operations'));
+      return;
+    }
+    const isEnded = String(op.status || '').toUpperCase() === 'ENDED';
     const accent = opColor(op);
     const c = (summary && summary.counts) || {};
     // 2e - drive the shell's operation context (colored chrome + banner).
@@ -588,8 +606,8 @@
     wrap.innerHTML = `
       <div class="cco-banner" style="--op-accent:${accent}">
         <span class="cco-health" style="background:${healthColor(op)}" title="${esc(op.health_reason || op.health || '')}"></span>
-        <div class="cco-bc">CRISP / Operations / <b>${esc(op.name)}</b></div>
-        <span class="cco-status">${esc(op.status || (op.is_active ? 'ACTIVE' : '-'))}</span>
+        <div class="cco-bc">CRISP / Operations / <b>${esc(op.name)}</b>${op.place_name ? ' · <span class="cco-bc-region">' + esc(op.place_name) + '</span>' : ''}</div>
+        <span class="cco-status">${esc(op.status || (op.is_active ? 'ACTIVE' : '-'))}</span>${isEnded ? '<span class="cco-ended-note" style="font-size:10px;font-weight:700;color:#fbbf24;margin-left:6px;letter-spacing:.05em" title="This operation has ended - shown for historical reference">READ-ONLY</span>' : ''}
         <span class="cco-resp">🚑 ${fmtNum(op.responders_active || 0)} responder${(op.responders_active || 0) === 1 ? '' : 's'}</span>
         <button class="cco-exit" id="cco-exit">← Exit to global</button>
       </div>
@@ -603,7 +621,7 @@
           <div class="cco-card" style="padding:8px"><div id="cco-map"></div></div>
         </div>
         <div>
-          <div class="cco-sec-t">Critical worklist</div>
+          <div class="cco-sec-t">Operation incidents <span class="cco-src">only this operation · critical first</span></div>
           <div class="cco-wl" id="cco-wl"></div>
         </div>
       </div>
@@ -619,9 +637,12 @@
     const exit = () => navTo('/');
     el('cco-exit').addEventListener('click', exit);
     el('cco-vitals').querySelectorAll('[data-q]').forEach((v) => {
-      v.addEventListener('click', () => go('#/incidents;queue=' + v.getAttribute('data-q')));
+      // Drill into THIS operation's incidents, filtered by the vital's queue -
+      // the op scope is carried so the analyst keeps context on the feed.
+      v.addEventListener('click', () => go('#/incidents;op=' + encodeURIComponent(_detailOpId) + ';queue=' + v.getAttribute('data-q')));
     });
-    el('cco-act-feed').addEventListener('click', () => go('#/incidents'));
+    // Open the full incident feed SCOPED to this operation (context persists).
+    el('cco-act-feed').addEventListener('click', () => go('#/incidents;op=' + encodeURIComponent(_detailOpId)));
     el('cco-act-export').addEventListener('click', () => {
       // Stash THIS operation's id so the Export Center scopes the download to it.
       // The router's global hideAll() clears the live op scope (setOperationScope

@@ -11,7 +11,7 @@
          empty in source; deploy pipeline patches with the real DSN
          (public-safe write-only key). -->
     <meta name="crisp-sentry-dsn" content="">
-    <meta name="crisp-release" content="crisp-dashboard@v54">
+    <meta name="crisp-release" content="crisp-dashboard@v60">
     <meta name="description" content="United Nations Crisis Response Intelligence System - hierarchical incident monitoring and strategic command center.">
     <meta name="theme-color" content="#7c3aed">
     <!-- May 2026 - favicon. SVG works in modern browsers (Chrome 80+,
@@ -126,56 +126,15 @@
             </div>
         </div>
 
-        <!-- Phase F.1.b (May 2026) - header chip consolidation.
-             Five separate status pills (CRITICAL / PENDING / HELPED /
-             CLOSED / TOTAL) collapse into one segmented control with a
-             count-bubble per state. ORIG PENDING is hidden from the
-             header (the same data surfaces inline on each incident
-             card; F.5 will land it more visibly). AVG WAIT keeps its
-             own pill as a context indicator. ANALYTICS + PREDICT
-             remain as their own buttons (toggleable panels).
-             IDs preserved (#stat-critical / #count-critical / etc.)
-             so updateCommandStats + filterByPill bindings keep working
-             unchanged. -->
-        <div class="command-stats">
-            <div class="cmd-status-seg" role="tablist" aria-label="Filter incidents by status">
-                <button class="cmd-status-seg-item cmd-status-seg-item--critical" id="stat-critical" role="tab" onclick="filterByPill('critical')" title="Critical / severe incidents">
-                    <span class="cmd-status-seg-count" id="count-critical">0</span>
-                    <span class="cmd-status-seg-label">CRITICAL</span>
-                </button>
-                <button class="cmd-status-seg-item cmd-status-seg-item--pending" id="stat-pending" role="tab" onclick="filterByPill('pending')" title="Pending incidents">
-                    <span class="cmd-status-seg-count" id="count-pending">0</span>
-                    <span class="cmd-status-seg-label">PENDING</span>
-                </button>
-                <button class="cmd-status-seg-item cmd-status-seg-item--responding" id="stat-responding" role="tab" onclick="filterByPill('responding')" title="Helped incidents (responder dispatched)">
-                    <span class="cmd-status-seg-count" id="count-responding">0</span>
-                    <span class="cmd-status-seg-label">HELPED</span>
-                </button>
-                <button class="cmd-status-seg-item cmd-status-seg-item--resolved" id="stat-resolved" role="tab" onclick="filterByPill('resolved')" title="Closed incidents">
-                    <span class="cmd-status-seg-count" id="count-resolved">0</span>
-                    <span class="cmd-status-seg-label">CLOSED</span>
-                </button>
-                <button class="cmd-status-seg-item cmd-status-seg-item--total" id="stat-total" role="tab" onclick="filterByPill('all')" title="Show all incidents">
-                    <span class="cmd-status-seg-count" id="count-total">0</span>
-                    <span class="cmd-status-seg-label">TOTAL</span>
-                </button>
-            </div>
-            <!-- ORIG PENDING - Phase F.1.b: hidden from header (was a
-                 conditional pill that oscillated bar width as it
-                 appeared / disappeared at count 0). Element retained
-                 in the DOM with a stable id so updateCommandStats
-                 still updates the count without throwing; F.5 will
-                 surface it via a per-card chip on incidents that
-                 actually have an Original-pending media row. -->
-            <div class="stat-pill originals_pending clickable-pill" id="stat-originals-pending" onclick="filterByPill('originals_pending')" title="Reports whose Original-quality (LARGE) image is still uploading" style="display:none !important;" aria-hidden="true"><span id="count-originals-pending">0</span><label>ORIG PENDING</label></div>
-            <div class="stat-pill avg-response" id="stat-avg-response" title="Average wait time of pending incidents"><span id="count-avg-response">-</span><label>AVG WAIT</label></div>
-            <!-- Phase J.1 (May 2026) - ANALYTICS + PREDICT pills moved
-                 into the Tools dropdown below to reduce header density.
-                 Each still toggles a full-page overlay via the existing
-                 toggleAnalytics() / togglePredictions() handlers. -->
+        <!-- Status KPIs relocated INTO the feed panel (#feed-kpi) so the counts
+             sit next to the feed they describe. The orig-pending pill is retained
+             (hidden) for updateCommandStats; avg-wait + closed were dropped as
+             low-signal. The command bar now carries only nav + global tools. -->
+        <div class="command-stats" hidden aria-hidden="true">
+            <div class="stat-pill originals_pending" id="stat-originals-pending" style="display:none !important;" aria-hidden="true"><span id="count-originals-pending">0</span></div>
         </div>
 
-        <div class="command-actions">
+        <div class="command-actions" id="command-actions">
             <!-- Phase F.1.b - time filters collapse from a three-button
                  row into a dropdown. The dropdown's trigger button shows
                  the currently-selected range; the menu items mirror the
@@ -557,7 +516,6 @@
         <div class="feed-header">
             <div class="feed-title">
                 <h2><i class="fa-solid fa-satellite-dish" style="color:var(--accent);margin-right:6px;font-size:14px;"></i>Incident Feed</h2>
-                <span class="feed-count" id="feed-count-badge">0</span>
             </div>
             <div class="feed-actions">
                 <div class="sort-dropdown" id="sort-dropdown">
@@ -585,10 +543,29 @@
             </div>
         </div>
 
+        <!-- Incident Context Banner: ALWAYS shows WHERE / WHAT / WHY (global ·
+             queue · search · operation) so the analyst orients in seconds. -->
+        <div id="queue-banner" role="status" aria-live="polite"></div>
+
+        <!-- Feed KPI strip (relocated from the top command bar): the counts now
+             sit beside the feed. Each is a click-to-filter control. Classes
+             (.cmd-status-seg-item) + ids (#stat-* / #count-*) are preserved so
+             filterByPill + updateCommandStats wiring is unchanged. -->
+        <div class="feed-kpi" role="tablist" aria-label="Filter incidents by status">
+            <button class="cmd-status-seg-item k-crit" id="stat-critical" role="tab" onclick="filterByPill('critical')" title="Critical incidents">
+                <span class="cmd-status-seg-count" id="count-critical">0</span><span class="cmd-status-seg-label">Critical</span></button>
+            <button class="cmd-status-seg-item k-pend" id="stat-pending" role="tab" onclick="filterByPill('pending')" title="Pending incidents">
+                <span class="cmd-status-seg-count" id="count-pending">0</span><span class="cmd-status-seg-label">Pending</span></button>
+            <button class="cmd-status-seg-item k-help" id="stat-responding" role="tab" onclick="filterByPill('responding')" title="Helped (responder dispatched)">
+                <span class="cmd-status-seg-count" id="count-responding">0</span><span class="cmd-status-seg-label">Helped</span></button>
+            <button class="cmd-status-seg-item k-total" id="stat-total" role="tab" onclick="filterByPill('all')" title="Show all incidents">
+                <span class="cmd-status-seg-count" id="count-total">0</span><span class="cmd-status-seg-label">Total</span></button>
+        </div>
+
         <!-- Tree-mode controls (hidden in queue mode) -->
         <div id="tree-controls" style="display:none;">
             <div style="padding:0 8px 6px;">
-                <input type="text" id="tree-search" class="tree-search" placeholder="Search by location, type, description..." oninput="treeSearchTerm=this.value.toLowerCase();renderFeed()">
+                <input type="text" id="tree-search" class="tree-search" placeholder="Search by location, type, description..." oninput="window._onIncidentSearch(this.value)">
             </div>
             <div class="status-tabs">
                 <button class="stab active" id="stab-active" onclick="setStatusFilter('active')">Needs Help</button>
@@ -598,8 +575,7 @@
             </div>
         </div>
 
-        <div id="queue-banner" style="display:none" role="status" aria-live="polite"></div>
-            <div id="report-feed-list" class="incident-list"></div>
+        <div id="report-feed-list" class="incident-list"></div>
     </aside>
 
     <!-- Detail View (Rapid Decision Interface) -->
@@ -681,20 +657,20 @@
      Defines window.CRISP_TIERS{,BY_ID,LEGACY_ALIASES}; must load BEFORE
      app.js so the reporter_tier-badge renderer can read it synchronously. -->
 <script src="tier-config.js?v=1"></script>
-<script src="app.js?v=791"></script>
-<script src="predictions.js?v=111"></script>
+<script src="app.js?v=800"></script>
+<script src="predictions.js?v=112"></script>
 <!-- Dynamic Crisis Forms admin panel (geo-scoped Stage 2/3 question packs).
      Self-contained + additive: injects an admin-only "Crisis Forms" item into
      the user-menu and opens its own overlay. Does not touch app.js / styles.css. -->
-<script src="cc-crisis.js?v=2"></script>
+<script src="cc-crisis.js?v=3"></script>
 <!-- Account + Organisation Settings (self-contained; injects user-menu items; B6). -->
 <script src="cc-settings.js?v=4"></script>
-<script src="cc-exports.js?v=1"></script>
+<script src="cc-exports.js?v=2"></script>
 <!-- Control Center landing (self-contained additive overlay; B7). -->
-<script src="cc-home.js?v=17"></script>
+<script src="cc-home.js?v=19"></script>
 <!-- Operations workspace: #/operations list + #/operations/{id} worklist dashboard
      (self-contained overlay; defines window.openOperations before the router runs). -->
-<script src="cc-operations.js?v=6"></script>
+<script src="cc-operations.js?v=9"></script>
 <!-- Start-New-Operation wizard (redesign v2): 4-step modal; defines
      window.openOperationWizard, reuses window.CrispFormKit from cc-crisis.js. -->
 <script src="cc-wizard.js?v=1"></script>
@@ -702,14 +678,14 @@
      deep-links + opens the detail inside its operation/global context. Loaded
      AFTER app.js/cc-* (needs selectReport + __crispGetReport) and BEFORE router.js
      (router.dispatch() calls CrispNav.restoreFromHash). -->
-<script src="crisp-nav.js?v=1"></script>
+<script src="crisp-nav.js?v=3"></script>
 <!-- Navigation hub: mandatory Control Center root + hash router (loaded last). -->
-<script src="router.js?v=3"></script>
+<script src="router.js?v=5"></script>
 <!-- Unified Command Center shell: one persistent global nav bar on every
      surface (brand · Home/Operations/Exports/Crisis Forms/Organisation/Users/
      Account · re-parented LIVE badge + profile menu). Loaded after router.js so
      window.__crispRouter exists. -->
-<script src="crisp-shell.js?v=8"></script>
+<script src="crisp-shell.js?v=10"></script>
 
 <!-- Offline status banner. Phase F image-reliability (May 2026): the
      banner now requires ≥ 3 consecutive fetch failures before lighting,

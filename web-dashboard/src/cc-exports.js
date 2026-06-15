@@ -269,6 +269,11 @@
     try {
       if (S.from === '/operations' && window.__crispExportCtx && window.__crispExportCtx.crisis_event_id) {
         S.crisisEventId = window.__crispExportCtx.crisis_event_id;
+      } else if (S.from === '/incidents' && typeof window.getOperationScope === 'function') {
+        // C2 (Phase-0): the op-scoped global feed (#/incidents;op={id}) must
+        // export THAT operation, not everything. Inherit the live feed scope so
+        // every scope option (all / 24h / 7d / custom / current) stays operation-bound.
+        S.crisisEventId = window.getOperationScope() || null;
       }
     } catch (_e) {}
     try { window.__crispExportCtx = null; } catch (_e) {}
@@ -332,7 +337,10 @@
     ov.querySelectorAll('#cc-ex-dataset .cc-ex-card').forEach((b) =>
       b.addEventListener('click', () => download(b, b.getAttribute('data-path'), scopeParams())));
     ov.querySelectorAll('#cc-ex-briefing .cc-ex-card').forEach((b) =>
-      b.addEventListener('click', () => download(b, b.getAttribute('data-path'), new URLSearchParams())));
+      // C2 (Phase-0): briefings (sitrep / analytics-summary) were sent with EMPTY
+      // params, so they were always global even from a scoped Export Center. Send
+      // the same scopeParams() the dataset exports use so they inherit crisis_event_id.
+      b.addEventListener('click', () => download(b, b.getAttribute('data-path'), scopeParams())));
 
     try { el('cc-ex-close').focus(); } catch (_e) {}
     refreshCount();

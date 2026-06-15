@@ -99,7 +99,7 @@
     // Queue state segments are operations-view state (Jun 2026 attention
     // queues). Leaving /incidents drops them so the landing/settings URLs
     // stay clean and a stale queue can't silently re-apply later.
-    if (route !== '/incidents') stateSegs = stateSegs.filter((s) => !s.startsWith('queue='));
+    if (route !== '/incidents') stateSegs = stateSegs.filter((s) => !s.startsWith('queue=') && !s.startsWith('op='));
     // navigate() builds with NO query → any ?incident= selection is cleared
     // when moving to a fresh route (the intuitive "leave the detail" behaviour).
     const next = buildHash(route, stateSegs);
@@ -111,7 +111,7 @@
   // + survives refresh / Back / Forward. queue= preserve policy matches navigate().
   function navigateWithIncident(route, incidentId) {
     let { stateSegs } = parseHash();
-    if (route !== '/incidents') stateSegs = stateSegs.filter((s) => !s.startsWith('queue='));
+    if (route !== '/incidents') stateSegs = stateSegs.filter((s) => !s.startsWith('queue=') && !s.startsWith('op='));
     const next = buildHash(route, stateSegs, incidentId ? { incident: incidentId } : null);
     if (location.hash !== next) location.hash = next;   // → hashchange → dispatch → restore
     else dispatch();                                     // same hash → re-dispatch (re-open)
@@ -178,6 +178,20 @@
     hideAll();
     if (route === '/incidents') {
       showIncidents();
+      // ROUTE-08 (Phase-3): apply the ;queue= state seg HERE, inside the ordered
+      // dispatch - it used to be a SEPARATE hashchange listener racing this one
+      // (double render, no ordering). Queue first, then op scope, so the scoped
+      // fetch renders with the queue already applied.
+      try { if (window._syncQueueFromHash) window._syncQueueFromHash(); } catch (_e) {}
+      // Operation scope from the hash (#/incidents;op={id}) - applied AFTER
+      // hideAll() cleared it, so a scoped feed (e.g. arriving from an operation
+      // dashboard) survives and the context banner can name the operation.
+      try {
+        const opSeg = (parsed.stateSegs || []).find((s) => s.startsWith('op='));
+        const opId = opSeg ? decodeURIComponent(opSeg.slice(3)) : null;
+        if (window.setOperationScope) window.setOperationScope(opId);
+        if (window.__crispOnIncidentOpScope) window.__crispOnIncidentOpScope(opId);
+      } catch (_e) {}
     } else if (route === '/users') {
       try { (window.openAccountSettings || function () {})(); } catch (_e) {}
     } else if (route === '/org') {
