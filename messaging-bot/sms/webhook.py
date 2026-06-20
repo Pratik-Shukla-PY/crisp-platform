@@ -29,6 +29,19 @@ _SMS_REPLIES = {
     "hi": "CRISP: रिपोर्ट मिली (ID:{id})। बचाव दल को सूचित किया गया। डेटा गुमनाम। DELETE भेजें हटाने के लिए।",
 }
 
+# Confirmation for the "DELETE" right-to-erasure keyword (parity with the
+# Telegram /delete command). Every ack tells the reporter "Reply DELETE to
+# remove" - this is what they get when they do.
+_SMS_DELETE_REPLIES = {
+    "en": "CRISP: Your reports have been deleted. Send a new message to report again.",
+    "zh": "CRISP: 您的报告已删除。发送新消息可再次报告。",
+    "ru": "CRISP: Ваши отчёты удалены. Отправьте новое сообщение, чтобы сообщить снова.",
+    "es": "CRISP: Tus reportes han sido eliminados. Envia un nuevo mensaje para reportar de nuevo.",
+    "fr": "CRISP: Vos rapports ont ete supprimes. Envoyez un nouveau message pour signaler a nouveau.",
+    "ar": "CRISP: تم حذف تقاريرك. أرسل رسالة جديدة للإبلاغ مرة أخرى.",
+    "hi": "CRISP: आपकी रिपोर्ट हटा दी गई हैं। दोबारा रिपोर्ट करने के लिए नया संदेश भेजें।",
+}
+
 # Phone prefix → language
 _PHONE_LANG_SMS = {
     "86": "zh", "7": "ru", "34": "es", "52": "es", "54": "es",
@@ -138,6 +151,25 @@ async def _process_sms(phone: str, text: str):
     from uuid import uuid4
 
     device_hash = _hash_phone(phone)
+
+    # 0. Right-to-erasure (must-have #10 + parity with Telegram /delete): a
+    # reporter replying exactly "DELETE" (as instructed in every ack) must ERASE
+    # their data, NOT create a garbage report. Pre-fix this keyword fell straight
+    # through to report creation. Strict exact-match so a description like
+    # "delete the road" cannot trigger an accidental erasure.
+    if text.strip().rstrip(".!? ").upper() == "DELETE":
+        sms_lang = _detect_sms_lang(phone)
+        deleted = 0
+        try:
+            async with httpx.AsyncClient(timeout=30) as c:
+                resp = await c.delete(f"{BACKEND_URL}/api/v1/reports/device/{device_hash}")
+            if resp.status_code == 200:
+                deleted = (resp.json() or {}).get("deleted", 0)
+        except Exception as e:
+            logger.error(f"SMS erasure failed for {device_hash}: {e}")
+        logger.info(f"SMS erasure: device={device_hash} deleted={deleted}")
+        await _send_reply(phone, _SMS_DELETE_REPLIES.get(sms_lang, _SMS_DELETE_REPLIES["en"]))
+        return
 
     # 1. Parse SMS
     parsed = parse_sms(text)
