@@ -2587,7 +2587,7 @@ def _require_purge_auth(request: Request, user=Depends(require_super_admin)):
     the X-Step-Up header (see POST /auth/step-up). Replaces the old shared static
     CRISP_ADMIN_KEY + browser prompt - this is per-user, time-boxed, and auditable."""
     from app.core.security import decode_token
-    from jose import JWTError
+    from jwt import PyJWTError as JWTError  # May 2026: jose -> PyJWT (CVE closure)
     token = request.headers.get("X-Step-Up", "")
     if not token:
         raise HTTPException(status_code=401,
