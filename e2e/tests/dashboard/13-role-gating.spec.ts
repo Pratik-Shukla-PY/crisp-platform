@@ -83,17 +83,19 @@ test.describe('Dashboard — role-gated navigation (CC-IA)', () => {
       await bootAuthed(page, role);
       await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
 
-      // Org + Crisis Forms command-bar items disabled with an "admin" badge.
-      await expect(page.locator('#cc-nav button[data-route="/org"]')).toBeDisabled();
+      // Crisis Forms remains the only admin NAV button (disabled + "admin" badge).
+      // Organisation / Users / Account moved into the account-chip dropdown.
       await expect(page.locator('#cc-nav button[data-route="/reporting"]')).toBeDisabled();
-      await expect(page.locator('#cc-nav button[data-route="/org"]')).toContainText(/admin/i);
       await expect(page.locator('#cc-nav button[data-route="/reporting"]')).toContainText(/admin/i);
+      await expect(page.locator('#cc-nav button[data-route="/org"]')).toHaveCount(0);
+      await expect(qa(page).filter({ hasText: 'Account' })).toHaveCount(0);
 
-      // Non-admin items (Incidents + Account) remain enabled. (Operations has no
-      // nav button anymore - the route is reached via the Home "Active Operations"
-      // rail/Expand + deep-links; role-gating for /operations is router-enforced.)
+      // Incidents stays an enabled nav button. "Account settings" is in the
+      // dropdown for everyone; the admin config items stay hidden for non-admins.
       await expect(qa(page).filter({ hasText: 'Incidents' }).first()).toBeEnabled();
-      await expect(qa(page).filter({ hasText: 'Account' }).first()).toBeEnabled();
+      await expect(page.locator('#btn-account-settings')).toHaveCount(1);
+      await expect.poll(() => page.evaluate(() => document.getElementById('btn-org-settings')?.style.display)).toBe('none');
+      await expect.poll(() => page.evaluate(() => document.getElementById('btn-user-mgmt')?.style.display)).toBe('none');
 
       // Direct navigation to an admin module bounces back to the root.
       await page.evaluate(() => (window as any).__crispRouter.navigate('/org'));
@@ -115,9 +117,13 @@ test.describe('Dashboard — role-gated navigation (CC-IA)', () => {
   test('@smoke ADMIN: Org+Reporting actions enabled; /org + /reporting open their modules', async ({ page }) => {
     await bootAuthed(page, 'ADMIN');
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('#cc-nav button[data-route="/org"]')).toBeEnabled();
     await expect(page.locator('#cc-nav button[data-route="/reporting"]')).toBeEnabled();
     await expect(qa(page).filter({ hasText: 'Incidents' }).first()).toBeEnabled();
+    // Org / User-Management are admin dropdown items now (not nav buttons) and
+    // become visible for admins.
+    await expect(page.locator('#cc-nav button[data-route="/org"]')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => document.getElementById('btn-org-settings')?.style.display)).not.toBe('none');
+    await expect.poll(() => page.evaluate(() => document.getElementById('btn-user-mgmt')?.style.display)).not.toBe('none');
 
     // /org opens the Organisation settings overlay (cc-settings).
     await page.evaluate(() => (window as any).__crispRouter.navigate('/org'));

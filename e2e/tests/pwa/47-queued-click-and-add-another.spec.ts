@@ -223,9 +223,13 @@ test.describe('PWA — queued-report click + Add Another reset', () => {
             };
         });
 
-        // Send button MUST be re-enabled + de-spinning.
+        // Send button MUST drop the in-flight send state (no spinner, not
+        // .is-sending) so the next report isn't a silent no-op. v343: the
+        // button's disabled state now reflects the debris gate - a fresh report
+        // has debris unanswered, so it stays disabled until answered on review
+        // (re-enabled by the Yes/No tap). So we assert it's no longer stuck
+        // mid-send, not that it's unconditionally enabled.
         if (snapshot.btnDisabled !== null) {
-            expect(snapshot.btnDisabled,        '#btn-v4-send must be re-enabled').toBe(false);
             expect(snapshot.btnSending,         '#btn-v4-send must drop .is-sending').toBe(false);
             expect(snapshot.btnHtmlHasSpinner,  '#btn-v4-send innerHTML must lose the spinner').toBe(false);
         }

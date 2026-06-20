@@ -89,14 +89,20 @@ test.describe('Incident routing + deep-linking (CrispNav)', () => {
     await expect(page.locator('#detail-panel')).toBeVisible();
   });
 
-  test('@smoke operation incident → #/operations/{op}?incident=<id> (stays in op) + detail opens', async ({ page }) => {
+  test('@smoke operation incident opened FROM the Incidents feed STAYS on /incidents (op-scoped in place), not the op dashboard', async ({ page }) => {
     await boot(page);
     await page.goto('index.html#/incidents');
     await page.waitForFunction(() => !!(window as any).CrispNav, null, { timeout: 10000 });
-    // op-linked report — resolves its operation from crisis_event_id and switches context.
+    // op-linked report opened from the Incidents page → scope the feed to its
+    // operation IN PLACE (header names the op); the operator is NOT ejected to the
+    // operation dashboard (the back-and-forth that confused analysts).
     await page.evaluate(() => (window as any).openIncident('rid-op', { operationId: 'op-a' }));
-    await expect.poll(() => hash(page)).toContain('/operations/op-a?incident=rid-op');
-    await expect(page.locator('#cc-ops-overlay.cc-ops-open')).toBeVisible({ timeout: 8000 });
+    await expect.poll(() => hash(page)).toContain('/incidents;op=op-a');
+    const h = await hash(page);
+    expect(h).toContain('incident=rid-op');
+    expect(h).not.toContain('/operations/');
+    // The operation dashboard overlay must NOT open - we stay on the feed.
+    await expect(page.locator('#cc-ops-overlay.cc-ops-open')).toHaveCount(0);
     await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 8000 });
   });
 

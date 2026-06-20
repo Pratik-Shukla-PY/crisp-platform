@@ -107,6 +107,15 @@ test.describe('Dashboard — truncation banner (C1-a)', () => {
         expect(text).toContain('4,200');
     });
 
+    test('banner is transient — auto-dismisses after ~5s (not a persistent bar)', async ({ page, request }) => {
+        await stubReportsListWithTotal(page, 9000, 3);
+        await bootDashboard(page, request);
+
+        await page.waitForSelector('#truncation-banner', { state: 'visible', timeout: 5000 });
+        // It informs once, then disappears on its own — like the other banners.
+        await page.waitForSelector('#truncation-banner', { state: 'hidden', timeout: 7000 });
+    });
+
     test('banner can be dismissed via the close button', async ({ page, request }) => {
         await stubReportsListWithTotal(page, 12000, 3);
         await bootDashboard(page, request);

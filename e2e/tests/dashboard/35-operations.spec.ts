@@ -273,3 +273,133 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         expect(reportReqs.some((u) => /crisis_event_id/.test(u))).toBe(false);
     });
 });
+
+test.describe('Dashboard — operation incident click → Incident Feed (v63)', () => {
+    test('@smoke the action button is renamed "Open Incident Feed"', async ({ page }) => {
+        await boot(page);
+        await page.goto('index.html#/operations/op-a');
+        const btn = page.locator('#cco-act-feed');
+        await expect(btn).toBeVisible();
+        await expect(btn).toHaveText('Open Incident Feed');     // was "Open full incident feed"
+        await expect(btn).not.toHaveText(/full/i);
+    });
+
+    test('@smoke clicking an operation incident opens the op-scoped Incident Feed with that report selected (list left + detail right)', async ({ page }) => {
+        await boot(page);
+        await page.goto('index.html#/operations/op-a');
+
+        // Buildings is the default operational worklist now; switch to the Reports tab
+        // to click an individual incident.
+        await page.locator('.cco-tab[data-wl="reports"]').click();
+        const row = page.locator('#cco-wl .cco-wl-row[data-id="r1"]');
+        await expect(row).toBeVisible();
+        await row.click();
+
+        // 1) Redirected OFF the operation dashboard to the Incident Feed page,
+        //    scoped to the operation, with the incident deep-linked.
+        await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/incidents;op=op-a?incident=r1');
+        await expect(page.locator('#view-incidents')).toBeVisible();
+
+        // 2) The detailed incident report opens on the RIGHT.
+        await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 8000 });
+
+        // 3) The feed LIST on the left shows the operation's incidents with the
+        //    selected one highlighted (CrispNav.markSelected → .is-selected /
+        //    renderFeed → .selected). It stays a LIST (r2 is still shown), not
+        //    filtered down to a single incident.
+        const card = page.locator('.tree-incident[data-id="r1"], .qrt-card[data-id="r1"]').first();
+        await expect(card).toBeVisible({ timeout: 8000 });
+        await expect(card).toHaveClass(/is-selected|selected/);
+        await expect(page.locator('.tree-incident[data-id="r2"], .qrt-card[data-id="r2"]').first()).toBeVisible();
+    });
+
+    test('@smoke keyboard (Enter) on an incident row also opens it in the Incident Feed', async ({ page }) => {
+        await boot(page);
+        await page.goto('index.html#/operations/op-a');
+        // Buildings is the default operational worklist now; switch to the Reports tab.
+        await page.locator('.cco-tab[data-wl="reports"]').click();
+        const row = page.locator('#cco-wl .cco-wl-row[data-id="r2"]');
+        await expect(row).toBeVisible();
+        await row.focus();
+        await row.press('Enter');
+        await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/incidents;op=op-a?incident=r2');
+        await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 8000 });
+    });
+});
+
+test.describe('Dashboard — auto-scroll to the selected incident in a long/grouped feed (v64)', () => {
+    // A large op-scoped fixture: 60 PENDING (NEEDS HELP) so progressive disclosure
+    // (>50) hides the tail, plus one RESPONDING (HELP SENT) + one RESOLVED (CLOSED),
+    // both of which start COLLAPSED by default. The deep-linked incident must end up
+    // visible + highlighted regardless of which bucket it lands in.
+    const NOW2 = new Date().toISOString();
+    function manyReports() {
+        const arr = [];
+        for (let i = 0; i < 59; i++) {
+            arr.push({ id: 'p' + i, severity: 'MODERATE', status: 'PENDING', crisis_type: 'WILDFIRE',
+                infrastructure_type: 'HOUSE', crisis_event_id: 'op-a', server_created_at: NOW2,
+                location: { latitude: 12.9, longitude: 77.6, device_location_name: 'Electronic City' } });
+        }
+        // Lowest severity ⇒ sorts to the BOTTOM of NEEDS HELP (index ~59, past the 50 cutoff).
+        arr.push({ id: 'p-target', severity: 'MINOR', status: 'PENDING', crisis_type: 'WILDFIRE',
+            infrastructure_type: 'HOUSE', crisis_event_id: 'op-a', server_created_at: NOW2,
+            location: { latitude: 12.9, longitude: 77.6, device_location_name: 'Electronic City' } });
+        // RESPONDING ⇒ HELP SENT (collapsed by default); RESOLVED ⇒ CLOSED (collapsed).
+        arr.push({ id: 'dispatched-1', severity: 'SEVERE', status: 'RESPONDING', crisis_type: 'WILDFIRE',
+            infrastructure_type: 'GOVERNMENT', crisis_event_id: 'op-a', server_created_at: NOW2,
+            location: { latitude: 12.9, longitude: 77.6, device_location_name: 'Electronic City' } });
+        arr.push({ id: 'closed-1', severity: 'MODERATE', status: 'RESOLVED', crisis_type: 'WILDFIRE',
+            crisis_event_id: 'op-a', server_created_at: NOW2, location: null });
+        return arr;
+    }
+    const REPORTS_MANY = manyReports();
+
+    async function bootMany(page) {
+        await page.addInitScript(() => {
+            localStorage.setItem('crisp_token', 'e2e-fake-token');
+            localStorage.setItem('crisp_user', JSON.stringify({ role: 'ADMIN', email: 'ops@undp.org', full_name: 'Ops Lead' }));
+        });
+        await page.route('**/api/v1/**', async (route) => {
+            const u = route.request().url();
+            if (u.includes('/analytics/summary')) return route.fulfill({ json: SUMMARY_SCOPED });
+            if (u.includes('/config/')) return route.fulfill({ json: { org: { org_public_name: 'UNDP CRISP' } } });
+            if (u.includes('/weather')) return route.fulfill({ json: { available: false } });
+            if (u.includes('/operations')) return route.fulfill({ json: OPERATIONS });
+            if (u.includes('/reports/')) return route.fulfill({ status: 200, headers: { 'X-Total-Count': String(REPORTS_MANY.length) }, json: REPORTS_MANY });
+            return route.fulfill({ status: 200, json: {} });
+        });
+    }
+
+    // "Visible on the screen" = in the browser viewport. toBeInViewport is a
+    // web-first assertion (auto-retries until the smooth scroll settles) and is
+    // agnostic to WHICH element scrolls, so it's robust where hand-rolled rect
+    // math against #report-feed-list was flaky.
+    async function expectRevealed(page, id) {
+        const card = page.locator(`.qrt-card[data-id="${id}"]`);
+        await expect(card).toBeVisible({ timeout: 8000 });            // not display:none (progressive) / collapsed
+        await expect(card).toBeInViewport({ ratio: 0.5, timeout: 8000 });  // scrolled onto the screen
+        await expect(card).toHaveClass(/(^|\s)(is-selected|selected)(\s|$)/);   // clearly highlighted
+    }
+
+    test('@smoke a far-down incident (progressive-hidden past 50) is revealed, scrolled to + highlighted', async ({ page }) => {
+        await bootMany(page);
+        await page.goto('index.html#/incidents;op=op-a?incident=p-target');
+        await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 8000 });
+        await expectRevealed(page, 'p-target');
+    });
+
+    test('@smoke an incident in a default-COLLAPSED section (HELP SENT) auto-expands, scrolls + highlights', async ({ page }) => {
+        await bootMany(page);
+        await page.goto('index.html#/incidents;op=op-a?incident=dispatched-1');
+        await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 8000 });
+        // Its HELP SENT section is collapsed by default; the reveal must open it.
+        await expectRevealed(page, 'dispatched-1');
+    });
+
+    test('@smoke a CLOSED-section incident is also revealed + scrolled to', async ({ page }) => {
+        await bootMany(page);
+        await page.goto('index.html#/incidents;op=op-a?incident=closed-1');
+        await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 8000 });
+        await expectRevealed(page, 'closed-1');
+    });
+});

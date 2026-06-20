@@ -95,83 +95,36 @@ test.describe('Reviewer workflow', () => {
   // ensureAdminAndLogin (which already requests SUPER_ADMIN) yields an admin JWT
   // and /reports/{id}/review no longer 403s. Run the e2e backend with
   // `APP_ENV=dev CRISP_TESTING=1`.
-  test('Mark Accepted → report card shows green verdict chip', async ({ page }) => {
+  // Jun 2026: the Actions section was simplified to Notify Response Team +
+  // Reject + Delete - the Accept/verdict dropdown + Mark dispatched/on-site chips
+  // were dropped from the panel UI for least cognitive load. The /review +
+  // /timestamps endpoints remain (used elsewhere), so these now assert the
+  // backend behaviour directly.
+  test('Accept verdict (API) → reviewer_verdict ACCEPTED + reviewed_at', async ({ page }) => {
     test.skip(!ADMIN_ROLES.includes(roleFromToken(token)), NEEDS_TESTING_FLAG);
-    // Open the detail panel by clicking the feed card for this report.
-    // Open the detail panel via the same global function the card's onclick
-    // calls — there's no per-card ID attribute to CSS-select against.
-    await page.evaluate((id) => (window as any).selectReport(id), reportId);
-    await expect(page.locator('#detail-panel')).toBeVisible();
-
-    // Phase J.2 (May 2026) — Accept / Reject / False alarm collapsed
-    // into a single Verdict dropdown. Click the trigger, then pick
-    // Accept from the menu.
-    await page.locator('.dp-verdict-trigger').first().click();
-    await page.locator('.dp-verdict-item-accept').first().click();
-    // Chip flips to "Accepted".
-    await expect(page.locator('.dp-reviewer-chip.dp-reviewer-accepted')).toContainText(/Accepted/i, { timeout: 10_000 });
-
-    // Backend confirms via the list endpoint (no GET /reports/{id} exists).
+    const rev = await page.request.patch(`http://localhost:8000/api/v1/reports/${reportId}/review`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { verdict: 'ACCEPTED' },
+    });
+    expect(rev.ok(), `review failed: ${rev.status()}`).toBeTruthy();
     const res = await page.request.get('http://localhost:8000/api/v1/reports/', {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const list = await res.json();
-    const body = list.find((r: any) => r.id === reportId);
+    const body = (await res.json()).find((r: any) => r.id === reportId);
     expect(body, 'report missing from list after accept').toBeTruthy();
     expect(body.reviewer_verdict).toBe('ACCEPTED');
     expect(body.reviewed_at).toBeTruthy();
   });
 
-  // Un-skipped (Jun 2026) — same enabler: CRISP_TESTING role honor gives the
-  // harness an ANALYST+ JWT, so /timestamps no longer 403s.
-  test('Mark Dispatched + Arrived → response_time_seconds populates', async ({ page }) => {
+  test('Dispatched + Arrived (API) → response_time_seconds populates', async ({ page }) => {
     test.skip(!ADMIN_ROLES.includes(roleFromToken(token)), NEEDS_TESTING_FLAG);
-    // Open the detail panel via the same global function the card's onclick
-    // calls — there's no per-card ID attribute to CSS-select against.
-    await page.evaluate((id) => (window as any).selectReport(id), reportId);
-    await expect(page.locator('#detail-panel')).toBeVisible();
-
-    // Phase J.2 (May 2026) — Accept via the Verdict dropdown so
-    // reviewed_at is set (required for response-time calc).
-    await page.locator('.dp-verdict-trigger').first().click();
-    await page.locator('.dp-verdict-item-accept').first().click();
-    await expect(page.locator('.dp-reviewer-chip.dp-reviewer-accepted')).toBeVisible();
-
-    // Wait a beat so arrived_at > reviewed_at strictly (>= 1s).
-    await page.waitForTimeout(1500);
-
-    // Phase J.2 (May 2026) — Dispatched / Arrived replaced with
-    // response-progress chips. `.dp-resp-chip-action` is the
-    // clickable variant (shown while the timestamp is unset);
-    // `.dp-resp-chip-done` is the read-only stamped variant.
-    // Wait for the PATCH response so the second click sees the
-    // re-rendered DOM. Each click triggers stampResponderTime()
-    // which fires PATCH /reports/{id}/timestamps and re-renders.
-    await Promise.all([
-      page.waitForResponse(
-        (res) => res.url().includes('/timestamps') && res.request().method() === 'PATCH' && res.ok(),
-      ),
-      page.locator('.dp-resp-chip-action', { hasText: /Mark dispatched/i }).first().click(),
-    ]);
-    // Brief pause so the re-rendered panel stabilises; otherwise the
-    // "Mark on-site" locator can resolve to a stale (detached) node.
-    await page.waitForTimeout(400);
-    await Promise.all([
-      page.waitForResponse(
-        (res) => res.url().includes('/timestamps') && res.request().method() === 'PATCH' && res.ok(),
-      ),
-      page.locator('.dp-resp-chip-action', { hasText: /Mark on-site/i }).first().click(),
-    ]);
-    // Small settle so the ReportResponse computation has the new timestamp.
-    await page.waitForTimeout(300);
-
-    // Backend: response_time_seconds is derived (not stored). Confirm it's
-    // present on the list response.
-    const res = await page.request.get('http://localhost:8000/api/v1/reports/', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const list = await res.json();
-    const body = list.find((r: any) => r.id === reportId);
+    const H = { Authorization: `Bearer ${token}` };
+    await page.request.patch(`http://localhost:8000/api/v1/reports/${reportId}/review`, { headers: H, data: { verdict: 'ACCEPTED' } });
+    await page.waitForTimeout(1200);   // arrived_at strictly after reviewed_at
+    await page.request.patch(`http://localhost:8000/api/v1/reports/${reportId}/timestamps`, { headers: H, data: { stamp_dispatched_now: true } });
+    await page.request.patch(`http://localhost:8000/api/v1/reports/${reportId}/timestamps`, { headers: H, data: { stamp_arrived_now: true } });
+    const res = await page.request.get('http://localhost:8000/api/v1/reports/', { headers: H });
+    const body = (await res.json()).find((r: any) => r.id === reportId);
     expect(body, 'report missing from list after timestamps').toBeTruthy();
     expect(body.help_dispatched_at).toBeTruthy();
     expect(body.help_arrived_at).toBeTruthy();

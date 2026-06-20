@@ -60,7 +60,9 @@ test.describe('Dashboard — Crisis Intelligence mandatory root', () => {
     expect(await page.locator('#cc-home-overlay h1').count()).toBe(1);
     const buttons = qa(page);
     const n = await buttons.count();
-    expect(n).toBeGreaterThanOrEqual(4);
+    // Operational nav is now Incidents · Exports · Crisis Forms (Organisation /
+    // Users / Account moved into the account-chip dropdown).
+    expect(n).toBeGreaterThanOrEqual(3);
     for (let i = 0; i < n; i++) {
       expect(((await buttons.nth(i).innerText()) || '').trim()).not.toEqual('');
     }
@@ -82,13 +84,67 @@ test.describe('Dashboard — Crisis Intelligence mandatory root', () => {
   test('@smoke Account → #/users opens Account settings; ✕ returns to root', async ({ page }) => {
     await bootAuthed(page);
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
-    await qa(page).filter({ hasText: 'Account' }).first().click();
+    // Account settings moved into the account-chip dropdown (not the nav).
+    await page.evaluate(() => (window as any)._toggleUserMenu && (window as any)._toggleUserMenu(true));
+    await page.locator('#btn-account-settings').click();
     await expect(page).toHaveURL(/#\/users/);
     await expect(page.locator('#cc-st-overlay.cc-st-open')).toBeVisible({ timeout: 3000 });
     await expect(page.locator('#cc-st-title')).toHaveText(/Account Settings/i);
     await page.locator('#cc-st-close').click();
     await expect(page).toHaveURL(/#\/$/);
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible();
+  });
+
+  test('@smoke account dropdown: User Management + Organisation Settings open their modules (admin)', async ({ page }) => {
+    await bootAuthed(page);   // default SUPER_ADMIN
+    await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
+    // Organisation Settings → #/org (cc-settings, org mode).
+    await page.evaluate(() => (window as any)._toggleUserMenu && (window as any)._toggleUserMenu(true));
+    await page.locator('#btn-org-settings').click();
+    await expect(page).toHaveURL(/#\/org/);
+    await expect(page.locator('#cc-st-overlay.cc-st-open')).toBeVisible({ timeout: 3000 });
+    await page.locator('#cc-st-close').click();
+    // User Management → #/users on the Users tab.
+    await page.evaluate(() => (window as any)._toggleUserMenu && (window as any)._toggleUserMenu(true));
+    await page.locator('#btn-user-mgmt').click();
+    await expect(page).toHaveURL(/#\/users/);
+    await expect(page.locator('#cc-st-overlay.cc-st-open')).toBeVisible({ timeout: 3000 });
+  });
+
+  test('@smoke account dropdown: "Crisis Intelligence" launcher is HIDDEN on the home page, shown elsewhere', async ({ page }) => {
+    await bootAuthed(page);
+    await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
+    // On the Crisis Intelligence (home) page the launcher is present but hidden -
+    // it's only a way BACK home from another page.
+    await page.evaluate(() => (window as any)._toggleUserMenu && (window as any)._toggleUserMenu(true));
+    await expect(page.locator('#cc-home-launch')).toBeHidden();
+    await page.evaluate(() => (window as any)._toggleUserMenu && (window as any)._toggleUserMenu(false));
+    // Navigate to another page → the launcher appears.
+    await page.evaluate(() => (window as any).__crispRouter.navigate('/incidents'));
+    await expect(page).toHaveURL(/#\/incidents/);
+    await page.evaluate(() => (window as any)._toggleUserMenu && (window as any)._toggleUserMenu(true));
+    await expect(page.locator('#cc-home-launch')).toBeVisible();
+    // And it returns to the Crisis Intelligence home, where it hides itself again.
+    await page.locator('#cc-home-launch').click();
+    await expect(page).toHaveURL(/#\/$/);
+    await page.evaluate(() => (window as any)._toggleUserMenu && (window as any)._toggleUserMenu(true));
+    await expect(page.locator('#cc-home-launch')).toBeHidden();
+  });
+
+  test('@smoke account dropdown has NO duplicate Account / Organisation settings', async ({ page }) => {
+    await bootAuthed(page);   // SUPER_ADMIN
+    await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
+    await page.evaluate(() => (window as any)._toggleUserMenu && (window as any)._toggleUserMenu(true));
+    // The old cc-settings-injected duplicates are gone; the canonical static,
+    // router-driven items are the single source.
+    await expect(page.locator('#cc-st-launch-account')).toHaveCount(0);
+    await expect(page.locator('#cc-st-launch-org')).toHaveCount(0);
+    await expect(page.locator('#btn-account-settings')).toHaveCount(1);
+    await expect(page.locator('#btn-org-settings')).toHaveCount(1);
+    // No menu label is duplicated (pre-fix this was 2 each: static + injected).
+    const menu = page.locator('#user-menu-dropdown');
+    await expect(menu.locator('.user-menu-item', { hasText: /account settings/i })).toHaveCount(1);
+    await expect(menu.locator('.user-menu-item', { hasText: /organisation settings/i })).toHaveCount(1);
   });
 
   test('@smoke Crisis Forms → #/reporting opens the crisis-forms module', async ({ page }) => {
@@ -109,10 +165,13 @@ test.describe('Dashboard — Crisis Intelligence mandatory root', () => {
   test('@smoke role gate: ANALYST sees Org/Reporting actions disabled + #/org redirects to root', async ({ page }) => {
     await bootAuthed(page, { role: 'ANALYST' });
     await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('#cc-nav button[data-route="/org"]')).toBeDisabled();
+    // Org / Account moved to the account dropdown; only Crisis Forms remains an
+    // admin nav button (disabled for non-admins).
+    await expect(page.locator('#cc-nav button[data-route="/org"]')).toHaveCount(0);
+    await expect(qa(page).filter({ hasText: 'Account' })).toHaveCount(0);
     await expect(page.locator('#cc-nav button[data-route="/reporting"]')).toBeDisabled();
     await expect(qa(page).filter({ hasText: 'Incidents' }).first()).toBeEnabled();
-    await expect(qa(page).filter({ hasText: 'Account' }).first()).toBeEnabled();
+    await expect(page.locator('#btn-account-settings')).toHaveCount(1);
     // A direct route to an admin module bounces back to the root.
     await page.evaluate(() => (window as any).__crispRouter.navigate('/org'));
     await expect(page).toHaveURL(/#\/$/);

@@ -695,12 +695,15 @@ test.describe('UNDP §2 — submit gate enforces required questions', () => {
 
     test('blocks submit when only the debris question is unanswered', async ({ page }) => {
         await _armReviewGate(page, { ...FULL, debris_present: null });
-        await page.locator('#btn-v4-send').click();
-        await page.waitForTimeout(300);
+        // v343: the Send button is DISABLED until the debris question is
+        // answered, so the submit cannot even be attempted (a stronger guard
+        // than the old click-time gate). The classify fields are full here, so
+        // debris is the only thing keeping it disabled.
+        await expect(page.locator('#btn-v4-send')).toBeDisabled();
         const calls = await page.evaluate(() => (window as any).__submitCalls);
         expect(calls, 'submit fired with debris unanswered').toBe(0);
-        // Still on review (not advanced to success), and the debris card
-        // flags itself for attention.
+        // Still on review (not advanced to success), and the debris card is
+        // not marked answered.
         const state = await page.evaluate(() => ({
             successActive: document.getElementById('stage-success')?.classList.contains('active'),
             cardAnswered: document.getElementById('v4-debris-card')?.classList.contains('is-answered'),

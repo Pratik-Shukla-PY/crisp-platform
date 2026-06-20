@@ -126,7 +126,7 @@ test.describe('Satellite verification — UNDP-grade rebuild', () => {
     await expect(page.getByText(/missing/i)).toBeVisible();
   });
 
-  test('@smoke dashboard verification panel renders the empty-state CTA for unverified reports', async ({ page, request }) => {
+  test('@smoke dashboard Report Assessment shows the single AI-Assisted CTA for unassessed reports', async ({ page, request }) => {
     const reportId = await seedReport(request, {
       device_hash: `E2E-DEVICE-SAT-EMPTY-${Date.now()}`,
     });
@@ -152,14 +152,13 @@ test.describe('Satellite verification — UNDP-grade rebuild', () => {
     // Open the detail panel by selecting the report.
     await page.evaluate((rid) => (window as any).selectReport && (window as any).selectReport(rid), reportId);
 
-    // The empty-state CTA explains what verification does + has a
-    // "Run verification" button. Both are required for the UNDP
-    // submission demo to make sense to first-time viewers.
-    await expect(page.locator('.dp-verify-empty-cta')).toBeVisible();
-    await expect(page.getByText('Cross-check with satellite imagery')).toBeVisible();
-    await expect(page.getByRole('button', { name: /Run verification/i })).toBeVisible();
-    // The 4 providers are listed in the description for transparency.
-    await expect(page.getByText(/AWS Sentinel-2/)).toBeVisible();
-    await expect(page.getByText(/Microsoft Planetary Computer/)).toBeVisible();
+    // The satellite check now runs as part of the ONE "AI-Assisted Report
+    // Assessment" CTA in the Report Assessment section (satellite is one of the
+    // automated checks folded into the single Confidence Score) - there is no
+    // separate "Run satellite check" button any more.
+    await expect(page.locator('#detail-panel .dp-assess')).toBeVisible();
+    await expect(page.locator('#detail-panel .dp-assess-cta', { hasText: /AI-Assisted Report Assessment/i })).toBeVisible();
+    // The old Evidence empty-state CTA is gone.
+    await expect(page.locator('.dp-verify-empty-cta')).toHaveCount(0);
   });
 });

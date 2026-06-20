@@ -62,23 +62,22 @@ async function boot(page) {
 }
 
 test.describe('Operations redesign v2 — listing + wizard', () => {
-    test('#/operations splits LIVE first / ENDED collapsed + shows Start-New card', async ({ page }) => {
+    test('#/operations registry: Start-New button + status filter (live default, ended on demand)', async ({ page }) => {
         await boot(page);
         await page.goto('index.html#/operations');
         await page.waitForTimeout(800);
         const list = page.locator('#cco-list');
-        // Start-New card present
-        await expect(list.locator('[data-new]')).toBeVisible();
-        await expect(list).toContainText('Start New Operation');
-        // LIVE group header + the live op
-        await expect(list).toContainText('LIVE OPERATIONS');
+        // Start-New moved off a list card into the controls bar (scalable registry).
+        await expect(page.locator('#cco-newop')).toBeVisible();
+        await expect(page.locator('#cco-newop')).toContainText('New operation');
+        // Default = LIVE: the live op shows, the ended op is filtered out (was a
+        // collapsed <details> group; now the status segment owns that).
         await expect(list).toContainText('Bihar Floods');
-        // ENDED group is a collapsed <details> (closed by default) carrying the ended op
-        const ended = list.locator('details.opc-ended');
-        await expect(ended).toHaveCount(1);
-        await expect(ended).not.toHaveAttribute('open', /.*/);
-        await expect(ended).toContainText('ENDED OPERATIONS');
-        await expect(ended).toContainText('Old Cyclone Op');
+        await expect(list).not.toContainText('Old Cyclone Op');
+        // Switching the status segment to Ended surfaces the ended op.
+        await page.locator('.cco-seg[data-status="ended"]').click();
+        await expect(list).toContainText('Old Cyclone Op');
+        await expect(list).not.toContainText('Bihar Floods');
     });
 
     test('Start New Operation → 4-step wizard → single launch-with-form POST', async ({ page }) => {
@@ -87,7 +86,7 @@ test.describe('Operations redesign v2 — listing + wizard', () => {
         await page.waitForTimeout(800);
 
         // open the wizard
-        await page.locator('#cco-list [data-new]').click();
+        await page.locator('#cco-newop').click();
         await expect(page.locator('#cc-wiz-overlay.open')).toBeVisible();
 
         // Step 1: a curated starter + the published template are offered
@@ -131,7 +130,7 @@ test.describe('Operations redesign v2 — listing + wizard', () => {
         await boot(page);
         await page.goto('index.html#/operations');
         await page.waitForTimeout(800);
-        await page.locator('#cco-list [data-new]').click();
+        await page.locator('#cco-newop').click();
         await page.locator('.cc-wiz-tpl[data-stock="WILDFIRE"]').click();
         await expect(page.locator('.cc-wiz-blk').first()).toBeVisible();
         // Escape discards everything

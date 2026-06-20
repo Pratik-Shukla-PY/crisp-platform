@@ -101,8 +101,9 @@ test('Crisis Intelligence landing renders from the real summary contract, no run
     await expect(page.locator('.cc-zone-response')).toContainText('Active Operations');
     await expect(page.locator('.cc-zone-monitor')).toContainText('Global Monitoring');
     await expect(page.locator('#cc-ops-rail')).toContainText('Bihar Floods', { timeout: 6000 });
-    // Cluster CTA no longer pushes operation creation - it offers a choice.
-    await expect(page.locator('#cc-ops-rail')).toContainText('View reports or create an operation');
+    // Cluster CTA is now a slim one-line alert (was a full card) that opens the
+    // chooser (offers a choice, never forces creation).
+    await expect(page.locator('#cc-ops-rail')).toContainText('not yet in an operation');
     await expect(page.locator('#cc-map-badge')).toHaveCount(0);   // de-duped: no map badge echoing the rail
     await expect(page.locator('#cc-kpis')).toHaveCount(0);
     // §3 attention queue (the "Global Attention" block). The terminal pipeline
@@ -232,9 +233,11 @@ test('global shell bar is pinned: stays visible after scrolling to the bottom', 
     expect(onTop, 'shell bar must stack above the page while scrolled').toBe(true);
 });
 
-test('Users deep-link opens Account Settings ON the Users tab (admin)', async ({ page }) => {
+test('User Management (account dropdown) opens Account Settings ON the Users tab (admin)', async ({ page }) => {
     await openLanding(page, 'ADMIN');
-    await page.locator('#cc-nav button[data-intent="users"]').click();
+    // Users moved out of the nav into the account-chip dropdown (sets the Users tab).
+    await page.evaluate(() => (window as any)._toggleUserMenu && (window as any)._toggleUserMenu(true));
+    await page.locator('#btn-user-mgmt').click();
     await expect(page.locator('#cc-st-overlay')).toBeVisible({ timeout: 6000 });
     await expect(page.locator('.cc-st-tab.on')).toHaveText(/Users/i);
 });
@@ -305,13 +308,15 @@ test('Export Center scope change refreshes the count with the right params', asy
 
 test('admin-gated nav items render disabled with the admin chip for viewers', async ({ page }) => {
     await openLanding(page, 'VIEWER');
-    for (const intentOrRoute of ['/reporting', '/org']) {
-        const btn = page.locator(`#cc-nav button[data-route="${intentOrRoute}"]`);
-        await expect(btn).toBeDisabled();
-        await expect(btn.locator('.ad')).toHaveText(/admin/i);
-    }
-    const usersBtn = page.locator('#cc-nav button[data-intent="users"]');
-    await expect(usersBtn).toBeDisabled();
-    // Account (self-service) stays enabled for every role.
-    await expect(page.locator('#cc-nav button[data-route="/users"]:not([data-intent])')).toBeEnabled();
+    // Crisis Forms is the only admin NAV button now (Organisation / Users /
+    // Account moved into the account-chip dropdown).
+    const cf = page.locator('#cc-nav button[data-route="/reporting"]');
+    await expect(cf).toBeDisabled();
+    await expect(cf.locator('.ad')).toHaveText(/admin/i);
+    await expect(page.locator('#cc-nav button[data-route="/org"]')).toHaveCount(0);
+    await expect(page.locator('#cc-nav button[data-intent="users"]')).toHaveCount(0);
+    // "Account settings" is available to every role in the dropdown; the admin
+    // config items stay hidden for a viewer.
+    await expect(page.locator('#btn-account-settings')).toHaveCount(1);
+    await expect.poll(() => page.evaluate(() => document.getElementById('btn-org-settings')?.style.display)).toBe('none');
 });
