@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import and_, case, or_, nullslast, func as sa_func
+from sqlalchemy import and_, case, or_, nullslast, text, func as sa_func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -38,7 +38,7 @@ from app.models.report import (
 )
 from app.api.endpoints.analytics import (
     _SLA_THRESHOLD_HOURS, _ESCALATING_RISK_THRESHOLD, _CLOSED_BUILDING_STATES,
-    _compute_operation_health,
+    _CLOSED_STATUSES, _compute_operation_health,
 )
 from app.services.crisis_form_schema import validate_pack_schema
 from app.services.nearby_aggregator import haversine_km
@@ -61,9 +61,10 @@ admin_router = APIRouter()        # /admin/crisis-forms
 operations_router = APIRouter()   # /operations (operator-facing rollup)
 
 
-_OPEN_REPORT_STATUSES_EXCLUDED = [
-    ReportStatusEnum.RESOLVED, ReportStatusEnum.REJECTED, ReportStatusEnum.FALSE_ALARM,
-]
+# Single-sourced from analytics._CLOSED_STATUSES (P0-4): the operation "critical"
+# rollup and the global summary MUST exclude the SAME terminal statuses, or the
+# incident-vs-operation "critical" counts silently diverge (count-contract drift).
+_OPEN_REPORT_STATUSES_EXCLUDED = _CLOSED_STATUSES
 
 
 def resolve_active_event(db: Session, lat: float, lng: float, now: datetime):
@@ -163,22 +164,47 @@ def active_crisis_form(
 @operations_router.get("", response_model=List[OperationSummaryResponse],
                        summary="List operations with per-event report rollups")
 @operations_router.get("/", response_model=List[OperationSummaryResponse], include_in_schema=False)
-def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)):
+def list_operations(
+    response: Response,
+    db: Session = Depends(get_db),
+    _user=Depends(require_viewer),
+    status: Optional[str] = Query(None, description="Filter: live | ended | all (default all)"),
+    order: str = Query("recent", description="Sort: recent (default) | priority (worst-first)"),
+    limit: Optional[int] = Query(None, ge=1, le=500, description="Page size; omit for all (back-compat)"),
+    offset: int = Query(0, ge=0, description="Page offset (only meaningful with limit)"),
+):
     """Every CrisisEvent (operation) + its live report rollup
     (Critical · New-24h · Total · last activity) in ONE grouped query - no N+1,
     regardless of operation count (must-have #12) - active operations first.
     Appends a synthetic row (id=None, is_cluster=True) counting
     un-operationalised open-critical reports: the rail's "Launch operation here"
     affordance. Operator-facing (require_viewer); editing stays on the admin
-    /admin/crisis-forms/events routes."""
+    /admin/crisis-forms/events routes.
+
+    P3 scale: optional status filter + worst-first server sort + limit/offset
+    pagination + an X-Total-Count header (must-have #12). All params are optional
+    and default to the prior behaviour (return every operation, active-first), so
+    existing callers (the home rail, the registry) keep working unchanged."""
     now = datetime.now(timezone.utc)
     new_cut = now - timedelta(hours=24)
     prev_cut = now - timedelta(hours=48)   # [48h, 24h) window - trend delta vs new_24h
+    # P3: which OPERATIONS are returned (the per-event report sub-counts below are
+    # unaffected). X-Total-Count advertises the full matching count for paging.
+    status_f = (status or "all").lower()
+    op_filter = []
+    if status_f == "live":
+        op_filter.append(CrisisEvent.is_active.is_(True))
+    elif status_f == "ended":
+        op_filter.append(CrisisEvent.is_active.is_(False))
+    _total_q = db.query(sa_func.count(CrisisEvent.id))
+    for _f in op_filter:
+        _total_q = _total_q.filter(_f)
+    response.headers["X-Total-Count"] = str(int(_total_q.scalar() or 0))
     # Report rollup per op - ONE grouped query. The report-only Phase-3 health
     # inputs (unattended_critical, sla_breaches, needs_review) fold in as SUM(CASE)
     # columns; escalation + responders need their own joins (below) - joining them
     # into this rollup would fan rows out and double-count the SUMs.
-    rows = (
+    _rows_q = (
         db.query(
             CrisisEvent.id, CrisisEvent.name, CrisisEvent.crisis_type,
             CrisisEvent.status, CrisisEvent.is_active,
@@ -235,10 +261,20 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
         # 1:1 pack join for the card's form name - does NOT fan out the Report
         # SUMs (≤1 pack per event), so the conditional aggregates stay correct.
         .outerjoin(CrisisFormPack, CrisisFormPack.id == CrisisEvent.form_pack_id)
-        .group_by(CrisisEvent.id)
-        .order_by(CrisisEvent.is_active.desc(), CrisisEvent.created_at.desc())
-        .all()
     )
+    for _f in op_filter:
+        _rows_q = _rows_q.filter(_f)
+    _rows_q = _rows_q.group_by(CrisisEvent.id)
+    if order == "priority":
+        # Worst-first server-side (so a paged response still surfaces the most
+        # urgent ops first). ORDER BY references the SELECT aliases (Postgres).
+        _rows_q = _rows_q.order_by(text("critical DESC"), text("new_24h DESC"),
+                                   text("total DESC"), CrisisEvent.created_at.desc())
+    else:
+        _rows_q = _rows_q.order_by(CrisisEvent.is_active.desc(), CrisisEvent.created_at.desc())
+    if limit is not None:
+        _rows_q = _rows_q.offset(offset).limit(limit)
+    rows = _rows_q.all()
     # Escalating hotspots per op (Report⨝Building grouped - constant query count).
     esc_by_op = {
         row[0]: int(row[1] or 0)
@@ -294,7 +330,9 @@ def list_operations(db: Session = Depends(get_db), _user=Depends(require_viewer)
               Report.status.notin_(_OPEN_REPORT_STATUSES_EXCLUDED),
           ).scalar() or 0
     )
-    if orphan_critical:
+    # The orphan-critical CTA belongs to the first page of a live/all view only
+    # (it's a synthetic row, excluded from X-Total-Count + from any ended page).
+    if orphan_critical and offset == 0 and status_f != "ended":
         ops.append(OperationSummaryResponse(
             id=None, name="Unassigned critical reports", is_cluster=True,
             critical=orphan_critical, total=orphan_critical,

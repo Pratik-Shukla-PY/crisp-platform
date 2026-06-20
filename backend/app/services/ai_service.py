@@ -106,22 +106,5 @@ class AIService:
             logger.warning(f"Partial transcription failed: {e}")
             return ""
 
-    def analyze_image(self, path: str) -> dict:
-        """
-        Analyze image for damage/labels.
-        Currently returns placeholder data.
-        Can be extended with actual ML models (e.g., YOLOv8).
-        """
-        if not os.path.exists(path):
-            logger.error(f"Image file not found: {path}")
-            return {"labels": [], "risk_score": 0.0}
-
-        # Placeholder implementation
-        return {
-            "labels": ["infrastructure_damage"],
-            "risk_score": 0.5,
-            "damage_detected": True
-        }
-
 # Initialize global service instance
 ai_service = AIService()

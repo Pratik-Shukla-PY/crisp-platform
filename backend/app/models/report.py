@@ -206,11 +206,25 @@ class SyncStatusEnum(str, enum.Enum):
     FAILED = "FAILED"
 
 class ReportStatusEnum(str, enum.Enum):
+    """Report lifecycle status.
+
+    LIVE set (the only values any code path actually writes):
+        PENDING -> RESPONDING -> RESOLVED, plus the terminal FALSE_ALARM.
+
+    DEPRECATED / INERT (retained only to avoid a destructive enum migration +
+    a back-compat data scan - do NOT add new writers, and do NOT treat them as
+    synonyms in new code):
+        * VERIFIED  - never assigned anywhere; older read paths treated it as a
+                      PENDING synonym. Verification is expressed via the
+                      orthogonal `reviewer_verdict` axis + `SatelliteVerification`.
+        * REJECTED  - never assigned; rejection lives on `reviewer_verdict=REJECTED`
+                      (kept separate from status so acceptance survives status moves).
+    """
     PENDING = "PENDING"
-    VERIFIED = "VERIFIED"
+    VERIFIED = "VERIFIED"          # DEPRECATED - never written; see docstring.
     RESPONDING = "RESPONDING"
     RESOLVED = "RESOLVED"
-    REJECTED = "REJECTED"
+    REJECTED = "REJECTED"          # DEPRECATED - rejection lives on reviewer_verdict.
     FALSE_ALARM = "FALSE_ALARM"
 
 
@@ -222,11 +236,6 @@ class ReviewerVerdictEnum(str, enum.Enum):
     NOT_REVIEWED = "NOT_REVIEWED"
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
-
-class ClusterStatusEnum(str, enum.Enum):
-    ACTIVE = "ACTIVE"
-    RESOLVED = "RESOLVED"
-    FALSE_ALARM = "FALSE_ALARM"
 
 
 # Phase H.1.b (May 2026) - Building Intelligence operational states.
@@ -342,7 +351,12 @@ class Report(Base):
     description = Column(String)
     detected_language = Column(String(10), nullable=True)  # ISO language code (en, hi, zh, etc.)
     caller_info = Column(JSON, nullable=True)  # Phone number, network city/state for IVR/SMS/Telegram
-    ai_assessment = Column(JSON, nullable=True)  # Cached AI assessment {score, action, summary, details}
+    # The analyst-facing CREDIBILITY DOSSIER from POST /{id}/ai-assess (Claude
+    # Sonnet): {score, action, summary, details}. NOT a duplicate of the
+    # `AIAnalysis` table - that holds the raw Whisper transcription + AI-cleaned
+    # English summary (processing outputs that FEED this dossier). This is the
+    # cached verdict (cached so re-opening a report never re-bills the API).
+    ai_assessment = Column(JSON, nullable=True)
     expected_media = Column(Integer, default=0, nullable=False)   # How many media files expected
     received_media = Column(Integer, default=0, nullable=False)   # How many received so far
     client_created_at = Column(DateTime(timezone=True))
@@ -379,7 +393,18 @@ class Report(Base):
     # ReportResponse.needs_manual_mapping).
     infrastructure_name_from_osm = Column(Boolean, nullable=True)
     debris_clearing_needed = Column(Boolean, nullable=True)     # Does this location need debris clearing?
-    service_status = Column(JSON, nullable=True)                # {"electricity":"DISRUPTED","water":"OPERATIONAL",...}
+    # App-only (PWA/RN). ACTUAL keys: electricity / water / health (each a
+    # DISRUPTED|OPERATIONAL value) + pressing_needs (free text). NOTE: there is
+    # NO `telecom` key (an older comment listed it; no client ever wrote it).
+    service_status = Column(JSON, nullable=True)                # {"electricity":"DISRUPTED","water":"OPERATIONAL","health":"...","pressing_needs":"..."}
+    # P3-1 (cross-level - DEFERRED to the Building-level audit): deliberately a
+    # plain String(36), NOT a ForeignKey to buildings.id. The link is best-effort
+    # / non-authoritative BY DESIGN - a report insert must NEVER 500 because its
+    # building row isn't mirrored yet (must-have #1 parity), and the Building
+    # roll-up is a cache rebuilt from reports, not enforced by the FK. Promoting
+    # this to a real FK (+ widening to Building.id's String(64)) is a Building
+    # decision; see ~/.claude/plans/incident-level-audit.md P3-1. Current values
+    # (UUIDs + osm:<type>:<id>) fit comfortably in 36 chars (no truncation today).
     building_id = Column(String(36), nullable=True, index=True) # Links multiple reports about same structure
     # UNDP must-have #8 (Phase F.5.c, May 2026) - building versioning.
     # Reports about the same building stack up; ordinal counts entries in
@@ -410,6 +435,11 @@ class Report(Base):
     # two-source-of-truth drift.
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     reviewer_verdict = Column(String(20), nullable=False, default=ReviewerVerdictEnum.NOT_REVIEWED.value)
+    # P5-redesign: WHO recorded the verdict. Closes the audit gap where reviewer
+    # identity was never persisted (the dashboard could only say "reviewer not
+    # recorded"). FK to users.id with ON DELETE SET NULL so deleting an operator
+    # account never orphans/destroys the report row. Written by set_review_verdict.
+    reviewed_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     action_taken = Column(Text, nullable=True)
     help_dispatched_at = Column(DateTime(timezone=True), nullable=True)
     help_arrived_at = Column(DateTime(timezone=True), nullable=True)
@@ -422,6 +452,10 @@ class Report(Base):
     # Report columns (which the default flow still fills).
     crisis_event_id   = Column(String(36), ForeignKey("crisis_events.id", ondelete="SET NULL"), nullable=True, index=True)
     form_pack_id      = Column(String(36), ForeignKey("crisis_form_packs.id", ondelete="SET NULL"), nullable=True)
+    # P3-2 (DEFERRED to the form-system audit): a bare version int, not an FK to
+    # crisis_form_pack_versions.id. Resolving a report's exact schema needs the
+    # (form_pack_id, form_pack_version) pair; a real FK is a CrisisFormPack
+    # decision (see incident-level-audit P3-2).
     form_pack_version = Column(Integer, nullable=True)
     form_data         = Column(JSON, nullable=True)  # validated crisis-pack answers {field_key: value}
 
@@ -470,6 +504,7 @@ class DeletionAuditLog(Base):
     damage_type = Column(String(50), nullable=True)
     severity = Column(String(20), nullable=True)
     deletion_source = Column(String(50), default="DASHBOARD")  # MOBILE, DASHBOARD, ADMIN
+    deletion_reason = Column(Text, nullable=True)  # operator-supplied rationale (compliance)
     deleted_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -753,12 +788,8 @@ class AIAnalysis(Base):
     __tablename__ = "ai_analysis"
     id = Column(String(36), primary_key=True, default=gen_uuid)
     report_id = Column(String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=False)
-    damage_score = Column(Float)
-    ai_severity = Column(Enum(SeverityEnum))
     transcription = Column(String)        # Raw Whisper transcription (may be rough)
     ai_summary = Column(String)           # AI-cleaned English interpretation
-    detected_labels = Column(JSON, default=list)
-    processing_time_ms = Column(Integer)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     report = relationship("Report", back_populates="ai_analysis")
@@ -822,24 +853,6 @@ class SatelliteVerification(Base):
     scored_at                    = Column(DateTime(timezone=True), server_default=func.now())
 
     report = relationship("Report", back_populates="verification")
-
-class IncidentCluster(Base):
-    __tablename__ = "incident_clusters"
-    id = Column(String(36), primary_key=True, default=gen_uuid)
-    center_lat = Column(Float, nullable=False)
-    center_lng = Column(Float, nullable=False)
-    radius_meters = Column(Float, nullable=False, default=50.0)
-    confidence_score = Column(Float, default=0.0)
-    status = Column(Enum(ClusterStatusEnum), default=ClusterStatusEnum.ACTIVE, nullable=False)
-    primary_infrastructure_type = Column(Enum(InfraTypeEnum))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
-class ClusterReport(Base):
-    __tablename__ = "cluster_reports"
-    cluster_id = Column(String(36), ForeignKey("incident_clusters.id", ondelete="CASCADE"), primary_key=True)
-    report_id = Column(String(36), ForeignKey("reports.id", ondelete="CASCADE"), primary_key=True)
-    added_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class SyncLog(Base):
     __tablename__ = "sync_logs"
@@ -1668,6 +1681,31 @@ class OperationClaimLog(Base):
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
     )
     happened_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+# Incident Intelligence P3 - reversible analyst duplicate decisions within an
+# incident cluster. The within-cluster duplicate scorer honors the latest active
+# (undone_at IS NULL) decision for a report pair: NOT_DUP suppresses re-flagging,
+# CONFIRMED_DUP pins it; SET_PRIMARY (related_report_id NULL) names the cluster's
+# primary report. Undo sets undone_at (audit trail preserved).
+class ReportDuplicateDecision(Base):
+    """Analyst decision about a within-cluster duplicate pair (or cluster primary)."""
+    __tablename__ = "report_duplicate_decisions"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    cluster_key = Column(String(80), nullable=False)        # building_id or 'h3:<idx>'
+    primary_report_id = Column(
+        String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    related_report_id = Column(
+        String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=True, index=True,
+    )
+    decision = Column(String(20), nullable=False)           # CONFIRMED_DUP | NOT_DUP | SET_PRIMARY
+    actor_user_id = Column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    undone_at = Column(DateTime(timezone=True), nullable=True)
 
 
 # Phase H.3 - per-operator building watch list.

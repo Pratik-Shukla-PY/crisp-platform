@@ -48,7 +48,8 @@ def _parse_iso(value: str, param: str) -> datetime:
 def _query_reports(db: Session, status: Optional[str], crisis_type: Optional[str],
                    since: Optional[str], until: Optional[str],
                    severity: Optional[str] = None, bbox: Optional[str] = None,
-                   crisis_event_id: Optional[str] = None):
+                   crisis_event_id: Optional[str] = None,
+                   report_id: Optional[str] = None):
     """Shared query builder for all export endpoints. Returns the QUERY so
     callers can count() or iterate. Eager-loads the per-report relations
     every format consumes (location, verification, media) - the old lazy
@@ -75,6 +76,11 @@ def _query_reports(db: Session, status: Optional[str], crisis_type: Optional[str
         # dashboard export exactly the reports of one operation (was missing, so
         # exporting from inside an operation silently downloaded every report).
         q = q.filter(Report.crisis_event_id == crisis_event_id)
+    if report_id:
+        # Single-incident export - the dashboard offers per-report CSV/GeoJSON/
+        # KML/count downloads. Additive alongside the other filters (a bogus id
+        # simply yields zero rows).
+        q = q.filter(Report.id == report_id)
     if severity:
         q = q.filter(Report.severity == severity)
     if since:
@@ -120,12 +126,12 @@ def _build_tier_map(db: Session, reports) -> dict:
 
 def _fetch_export_rows(db: Session, status, crisis_type, since, until,
                        severity=None, bbox=None, limit: Optional[int] = None,
-                       crisis_event_id=None):
+                       crisis_event_id=None, report_id: Optional[str] = None):
     """Run the export query and flatten to plain row dicts (no ORM refs held).
     Returns (rows, total) where total is the pre-limit match count so
     truncation is never silent."""
     q = _query_reports(db, status, crisis_type, since, until, severity, bbox,
-                       crisis_event_id=crisis_event_id)
+                       crisis_event_id=crisis_event_id, report_id=report_id)
     reports = q.limit(limit).all() if limit else q.all()
     total = q.order_by(None).count() if limit else len(reports)
     tier_map = _build_tier_map(db, reports)
@@ -363,6 +369,7 @@ def export_csv(
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
     crisis_event_id: Optional[str] = Query(None, description="Scope to one operation (CrisisEvent id)"),
+    report_id: Optional[str] = Query(None, description="Scope the export to a single report"),
     since: Optional[str] = Query(None),
     until: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
@@ -373,7 +380,7 @@ def export_csv(
     the old hand-rolled f'\"{v}\"' writer corrupted any field containing a
     double quote), with an HXL hashtag row for HDX interoperability and a
     formula-injection guard."""
-    rows, total, _ = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox, crisis_event_id=crisis_event_id)
+    rows, total, _ = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox, crisis_event_id=crisis_event_id, report_id=report_id)
     _audit_export(db, user, request, "csv",
                   {"status": status, "crisis_type": crisis_type, "since": since,
                    "until": until, "severity": severity, "bbox": bbox},
@@ -409,6 +416,7 @@ def export_geojson(
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
     crisis_event_id: Optional[str] = Query(None, description="Scope to one operation (CrisisEvent id)"),
+    report_id: Optional[str] = Query(None, description="Scope the export to a single report"),
     since: Optional[str] = Query(None),
     until: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
@@ -417,7 +425,7 @@ def export_geojson(
     """Export reports as a GeoJSON FeatureCollection. Reports without a
     Location row can't be point features - they are counted in the foreign
     `metadata` member instead of silently vanishing."""
-    rows, total, reports = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox, crisis_event_id=crisis_event_id)
+    rows, total, reports = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox, crisis_event_id=crisis_event_id, report_id=report_id)
     features = []
     dropped_no_location = 0
     for r, row in zip(reports, rows):
@@ -895,6 +903,7 @@ def export_kml(
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
     crisis_event_id: Optional[str] = Query(None, description="Scope to one operation (CrisisEvent id)"),
+    report_id: Optional[str] = Query(None, description="Scope the export to a single report"),
     since: Optional[str] = Query(None),
     until: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
@@ -903,7 +912,7 @@ def export_kml(
     """Export all reports as KML for Google Earth."""
     import simplekml
 
-    rows_all, total, reports = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox, crisis_event_id=crisis_event_id)
+    rows_all, total, reports = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox, crisis_event_id=crisis_event_id, report_id=report_id)
     row_by_id = {row["id"]: row for row in rows_all}
     _audit_export(db, user, request, "kml",
                   {"status": status, "crisis_type": crisis_type, "since": since,
@@ -987,6 +996,7 @@ def export_count(
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
     crisis_event_id: Optional[str] = Query(None, description="Scope to one operation (CrisisEvent id)"),
+    report_id: Optional[str] = Query(None, description="Scope the export to a single report"),
     since: Optional[str] = Query(None),
     until: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
@@ -995,7 +1005,7 @@ def export_count(
     """Row count for a prospective export - lets the Export Center show
     'N reports match this scope' BEFORE the user downloads anything."""
     q = _query_reports(db, status, crisis_type, since, until, severity, bbox,
-                       crisis_event_id=crisis_event_id)
+                       crisis_event_id=crisis_event_id, report_id=report_id)
     return {
         "count": q.order_by(None).count(),
         "filters": {k: v for k, v in {

@@ -337,10 +337,8 @@ class NearbyGroup:
 def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     """Distance in kilometres between two lat/lng pairs.
 
-    Mirrors app/services/geo_clustering.py:calculate_distance() but
-    returns kilometres (that helper returns metres). We could call
-    `calculate_distance(...) / 1000` but a local implementation keeps
-    this module independent of the clustering service's import graph.
+    Self-contained great-circle helper so this module carries no
+    cross-service import dependency.
     """
     R = 6371.0   # km
     phi1 = math.radians(lat1)

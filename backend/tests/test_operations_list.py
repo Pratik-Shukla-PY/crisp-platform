@@ -120,6 +120,51 @@ def test_operations_count_parity_with_reports_filter(client, admin_token, ops_wo
     assert a["total"] == int(feed.headers["X-Total-Count"])
 
 
+def test_operations_sets_total_count_header(client, admin_token, ops_world):
+    # P3 scale: X-Total-Count advertises the matching operation count (must-have
+    # #12). The synthetic orphan-critical cluster row is NOT counted.
+    res = client.get("/api/v1/operations", headers=auth_header(admin_token))
+    assert "X-Total-Count" in res.headers
+    total = int(res.headers["X-Total-Count"])
+    non_cluster = [o for o in res.json() if not o.get("is_cluster")]
+    assert total == len(non_cluster)
+    assert total >= 2   # at least our two seeded ops
+
+
+def test_operations_status_filter(client, admin_token, ops_world):
+    h = auth_header(admin_token)
+    live = client.get("/api/v1/operations?status=live", headers=h)
+    assert live.status_code == 200
+    assert all(o["is_active"] for o in live.json() if not o.get("is_cluster"))
+    ended = client.get("/api/v1/operations?status=ended", headers=h)
+    ids = [o["id"] for o in ended.json() if not o.get("is_cluster")]
+    assert ops_world["A"] not in ids and ops_world["B"] not in ids   # both LIVE
+    # the orphan-critical CTA must not ride an ended-only page.
+    assert not any(o.get("is_cluster") for o in ended.json())
+
+
+def test_operations_order_priority_worst_first(client, admin_token, ops_world):
+    res = client.get("/api/v1/operations?order=priority&status=live",
+                     headers=auth_header(admin_token))
+    ops = [o for o in res.json() if not o.get("is_cluster")]
+    ia = next(i for i, o in enumerate(ops) if o["id"] == ops_world["A"])
+    ib = next(i for i, o in enumerate(ops) if o["id"] == ops_world["B"])
+    assert ia < ib   # A (2 critical) ranks above B (1 critical) server-side
+
+
+def test_operations_pagination_limit_offset(client, admin_token, ops_world):
+    h = auth_header(admin_token)
+    total = int(client.get("/api/v1/operations?status=live", headers=h).headers["X-Total-Count"])
+    page1 = client.get("/api/v1/operations?status=live&order=priority&limit=1&offset=0", headers=h).json()
+    p1 = [o for o in page1 if not o.get("is_cluster")]
+    assert len(p1) == 1
+    if total >= 2:
+        page2 = client.get("/api/v1/operations?status=live&order=priority&limit=1&offset=1", headers=h).json()
+        p2 = [o for o in page2 if not o.get("is_cluster")]
+        assert len(p2) == 1 and p2[0]["id"] != p1[0]["id"]
+        assert not any(o.get("is_cluster") for o in page2)   # cluster only on page 1
+
+
 def test_summary_scoped_and_cache_isolated(client, admin_token, ops_world):
     sa = client.get(f"/api/v1/analytics/summary?crisis_event_id={ops_world['A']}",
                     headers=auth_header(admin_token)).json()

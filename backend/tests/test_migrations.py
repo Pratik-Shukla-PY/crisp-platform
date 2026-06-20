@@ -299,6 +299,23 @@ def test_0005_adds_pii_blur_status_column_and_backfills():
             # IF EXISTS) has something to drop — same pattern as the LOW/HIGH re-add.
             conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS is_auto_submitted BOOLEAN"))
             conn.execute(text("CREATE TABLE IF NOT EXISTS auto_submit_regions (id VARCHAR(36) PRIMARY KEY)"))
+            # 0054 — report_duplicate_decisions table + indexes. create_all built the
+            # head shape (table present), so drop it so 0054 recreates it.
+            conn.execute(text("DROP TABLE IF EXISTS report_duplicate_decisions CASCADE"))
+            # 0055 — reports.reviewed_by column.
+            conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS reviewed_by"))
+            # 0057 — deletion_audit_log.deletion_reason column.
+            conn.execute(text("ALTER TABLE deletion_audit_log DROP COLUMN IF EXISTS deletion_reason"))
+            # 0056 — DROPS dead AIAnalysis stub columns + the legacy cluster tables,
+            # all removed from the current model (so absent from create_all). Re-create
+            # minimal stand-ins so 0056's plain drops have something to drop (same
+            # pattern as 0047's is_auto_submitted re-add above).
+            conn.execute(text("ALTER TABLE ai_analysis ADD COLUMN IF NOT EXISTS damage_score FLOAT"))
+            conn.execute(text("ALTER TABLE ai_analysis ADD COLUMN IF NOT EXISTS ai_severity severityenum"))
+            conn.execute(text("ALTER TABLE ai_analysis ADD COLUMN IF NOT EXISTS detected_labels JSON"))
+            conn.execute(text("ALTER TABLE ai_analysis ADD COLUMN IF NOT EXISTS processing_time_ms INTEGER"))
+            conn.execute(text("CREATE TABLE IF NOT EXISTS incident_clusters (id VARCHAR(36) PRIMARY KEY)"))
+            conn.execute(text("CREATE TABLE IF NOT EXISTS cluster_reports (id VARCHAR(36) PRIMARY KEY)"))
 
             # Seed rows: one with client_blur_applied=TRUE (should
             # backfill to 'not_needed'), one with FALSE (stays NULL).
@@ -461,6 +478,21 @@ def test_legacy_db_is_upgraded_without_data_loss():
             # removed from the current model), so its plain drop has something to drop.
             conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS is_auto_submitted BOOLEAN"))
             conn.execute(text("CREATE TABLE IF NOT EXISTS auto_submit_regions (id VARCHAR(36) PRIMARY KEY)"))
+            # 0054 — report_duplicate_decisions table + indexes (drop so 0054 recreates).
+            conn.execute(text("DROP TABLE IF EXISTS report_duplicate_decisions CASCADE"))
+            # 0055 — reports.reviewed_by column.
+            conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS reviewed_by"))
+            # 0057 — deletion_audit_log.deletion_reason column.
+            conn.execute(text("ALTER TABLE deletion_audit_log DROP COLUMN IF EXISTS deletion_reason"))
+            # 0056 — DROPS dead AIAnalysis stub columns + the legacy cluster tables,
+            # all removed from the current model (absent from create_all). Re-create
+            # minimal stand-ins so 0056's plain drops have something to drop.
+            conn.execute(text("ALTER TABLE ai_analysis ADD COLUMN IF NOT EXISTS damage_score FLOAT"))
+            conn.execute(text("ALTER TABLE ai_analysis ADD COLUMN IF NOT EXISTS ai_severity severityenum"))
+            conn.execute(text("ALTER TABLE ai_analysis ADD COLUMN IF NOT EXISTS detected_labels JSON"))
+            conn.execute(text("ALTER TABLE ai_analysis ADD COLUMN IF NOT EXISTS processing_time_ms INTEGER"))
+            conn.execute(text("CREATE TABLE IF NOT EXISTS incident_clusters (id VARCHAR(36) PRIMARY KEY)"))
+            conn.execute(text("CREATE TABLE IF NOT EXISTS cluster_reports (id VARCHAR(36) PRIMARY KEY)"))
 
             conn.execute(text(
                 "INSERT INTO reports "

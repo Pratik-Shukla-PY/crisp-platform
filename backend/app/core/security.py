@@ -158,6 +158,24 @@ def create_refresh_token(user_id: str) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
+def create_step_up_token(user_id: str, ttl_minutes: int = 10) -> str:
+    """Short-lived JWT proving a FRESH re-auth (TOTP code or password) for an
+    irreversible destructive action (the hard-purge). Stateless + time-boxed
+    ("sudo mode"): the exp claim enforces the ~10-min window server-side, so a
+    forgotten open session can't keep purging. `type='step_up'` (NOT 'access')
+    so get_current_user rejects it as a session token - it ONLY authorizes the
+    step-up-gated endpoints. Replaces the shared static CRISP_ADMIN_KEY."""
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": user_id,
+        "type": "step_up",
+        "scope": "step_up",
+        "exp": now + timedelta(minutes=ttl_minutes),
+        "iat": now,
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
 def decode_token(token: str) -> dict:
     """Decode and validate JWT. Raises JWTError on failure."""
     return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
@@ -181,6 +199,35 @@ def get_otp_expiry() -> datetime:
 
 
 # ── Email Delivery ────────────────────────────────────────────────────────────
+
+def send_email(to_email: str, subject: str, text_body: str, html_body: str = None) -> bool:
+    """Generic transactional email via SMTP. Returns True only on a real send.
+
+    Used for operational alerts (e.g. notifying response teams). When SMTP is
+    NOT configured (dev, or a prod that hasn't set SMTP_*) this returns False so
+    callers can report honestly that email was not delivered - it never claims a
+    phantom success the way the dev-mode OTP path does."""
+    if not SMTP_HOST or not SMTP_USER:
+        logger.warning("[email] SMTP not configured - would send to %s: %s", to_email, subject)
+        return False
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = SMTP_FROM
+        msg["To"] = to_email
+        msg.attach(MIMEText(text_body, "plain"))
+        if html_body:
+            msg.attach(MIMEText(html_body, "html"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SMTP_FROM, to_email, msg.as_string())
+        logger.info("[email] sent to %s: %s", to_email, subject)
+        return True
+    except Exception as e:
+        logger.error("[email] delivery failed for %s: %s", to_email, e)
+        return False
+
 
 def send_otp_email(email: str, code: str, purpose: str) -> bool:
     """Send OTP via SMTP. Returns True on success."""

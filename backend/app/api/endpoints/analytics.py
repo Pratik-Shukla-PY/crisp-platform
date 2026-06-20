@@ -382,6 +382,17 @@ class SummaryCounts(BaseModel):
     active_operations: int = 0     # open · dispatched OR responding (reports)
     critical_incidents: int = 0    # distinct critical situations (buildings + ungrouped critical reports)
     escalating_reports: int = 0    # open reports sitting on escalating-hotspot buildings (secondary count)
+    # Incident Intelligence P4 - distinct ACTIVE incident clusters (buildings +
+    # each building-less active report as its own singleton). ADDITIVE: powers the
+    # "N clusters · M reports" dual operational picture; report counts unchanged.
+    cluster_count: int = 0
+    # Duplicate collapse (Jun 2026) - the dual operational picture rendered
+    # everywhere as "Incidents: X / Reports: Y". `reports` = total non-deleted
+    # report volume (corroboration is operational signal, so it never collapses);
+    # `incidents` = reports MINUS the duplicates an analyst confirmed (which merge
+    # under their primary). Both ADDITIVE; existing counts unchanged.
+    reports: int = 0
+    incidents: int = 0
 
 
 class SummaryDistributions(BaseModel):
@@ -522,6 +533,23 @@ def operational_summary(
             .filter(*_scope, *_crit, Report.building_id.isnot(None)).scalar() or 0)
         + _count(*_crit, Report.building_id.is_(None))
     )
+    # P4: cluster_count = distinct ACTIVE buildings + each building-less active
+    # report as its own singleton cluster. Mirrors critical_incidents' entity
+    # dedup; additive for the "N clusters · M reports" dual count.
+    counts.cluster_count = (
+        int(db.query(func.count(func.distinct(Report.building_id)))
+            .filter(*_scope, *active, Report.building_id.isnot(None)).scalar() or 0)
+        + _count(*active, Report.building_id.is_(None))
+    )
+    # Duplicate collapse: dual "Incidents / Reports" picture. `reports` = total
+    # non-deleted volume; `incidents` = that minus the duplicates merged under a
+    # primary. Uses the SAME resolver as the feed/markers so the numbers agree
+    # (local import avoids an endpoint-module import cycle). dup_hidden is small.
+    from app.api.endpoints.reports import _resolve_duplicate_groups
+    dup_hidden, _dup_primary_count = _resolve_duplicate_groups(db)
+    counts.reports = _count(not_deleted)
+    hidden_in_scope = _count(not_deleted, Report.id.in_(dup_hidden)) if dup_hidden else 0
+    counts.incidents = max(0, counts.reports - hidden_in_scope)
 
     # ── distributions ──
     def _group(col) -> dict:
@@ -566,10 +594,14 @@ def operational_summary(
                .filter(*_scope, *active).scalar()) or 0
     service_disruptions: Optional[int] = None
     try:
+        # P2-2: the status keys clients actually send are electricity/water/health
+        # (each a DISRUPTED/OPERATIONAL value) + pressing_needs (free text, not a
+        # status). The old "telecom" key was NEVER written by any channel, so that
+        # branch always missed; pressing_needs is excluded (it's not a status).
         service_disruptions = _count(
             not_deleted, Report.service_status.isnot(None),
             or_(*[func.json_extract_path_text(Report.service_status, k).in_(_DISRUPTED_SERVICE_VALUES)
-                  for k in ("electricity", "water", "health", "telecom")]),
+                  for k in ("electricity", "water", "health")]),
         )
     except Exception:  # noqa: BLE001 - JSON dialect quirk must never 500 the dashboard
         service_disruptions = None

@@ -3,7 +3,7 @@ from typing import List, Optional, Any
 from pydantic import BaseModel, ConfigDict, Field, SerializationInfo, field_serializer, model_validator
 from app.models.report import (
     SourceEnum, SeverityEnum, InfraTypeEnum, MediaTypeEnum,
-    ResolutionEnum, SyncStatusEnum, ReportStatusEnum, ClusterStatusEnum,
+    ResolutionEnum, SyncStatusEnum, ReportStatusEnum,
     DamageClassEnum, CrisisTypeEnum, ServiceStatusEnum
 )
 
@@ -99,6 +99,15 @@ class MediaChunkPayload(BaseModel):
 
 # API Request Payloads
 class ReportCreate(BaseModel):
+    """DEPRECATED / back-compat only (P2-3). The canonical intake schema is
+    `ReportMetaCreate` (POST /reports/meta) - strict, enum-guarded
+    (DamageClassEnum/CrisisTypeEnum/InfraTypeEnum). EVERY production channel
+    (PWA, RN, WhatsApp, Telegram, SMS, IVR) posts to /reports/meta; nothing
+    ships against the loose legacy `POST /reports/` path. This schema's
+    `Optional[str]` taxonomy fields are NOT enum-validated, so do NOT route new
+    clients here. (The model's `_apply_taxonomy` before_insert hook still
+    normalizes legacy chips + derives crisis_category on every insert, so the DB
+    never stores an un-normalized chip even via this path.)"""
     device_hash: str = Field(..., max_length=255)
     # client_report_id is a bare UUID-4 (36 chars) in every shipping
     # client (PWA + RN: crypto.randomUUID / genUUID; bots: uuid.uuid4).
@@ -133,6 +142,11 @@ class ReportMetaCreate(BaseModel):
     infrastructure_type: InfraTypeEnum = InfraTypeEnum.OTHER
     description: Optional[str] = Field(None, max_length=5000)
     caller_info: Optional[Any] = None
+    # P2-1: ISO language code the client detected for the report (e.g. RN sends
+    # the device/transcription language). Was declared on the model + exported
+    # but had NO schema field, so Pydantic silently DROPPED it -> the column was
+    # NULL for every report. Now accepted + persisted at intake.
+    detected_language: Optional[str] = Field(None, max_length=10)
     client_created_at: Optional[datetime] = None
     location: Optional[LocationBase] = None
     expected_media: int = Field(0, ge=0, le=50)
@@ -233,6 +247,10 @@ class ReportDescriptionUpdate(BaseModel):
 # API Response Payloads
 class LocationResponse(LocationBase):
     id: str
+    # H3 res-9 cell (~175 m). Dashboard clustering uses this as the fallback
+    # grouping key for reports with no building_id (free-text channels), so
+    # nearby ungrouped reports still cluster. NULL for legacy rows.
+    h3_idx: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class MediaResponse(MediaBase):
@@ -333,19 +351,9 @@ class MediaResponse(MediaBase):
 
 class AIAnalysisResponse(BaseModel):
     id: str
-    damage_score: Optional[float] = None
-    ai_severity: Optional[SeverityEnum] = None
     transcription: Optional[str] = None
     ai_summary: Optional[str] = None
-    detected_labels: Optional[List[Any]] = []
     model_config = ConfigDict(from_attributes=True)
-
-    @classmethod
-    def model_validate(cls, obj, *args, **kwargs):
-        # Coerce None detected_labels (stored as NULL in older DB rows) to []
-        if hasattr(obj, 'detected_labels') and obj.detected_labels is None:
-            obj.detected_labels = []
-        return super().model_validate(obj, *args, **kwargs)
 
 
 class VerificationResponse(BaseModel):
@@ -479,6 +487,25 @@ class VerificationResponse(BaseModel):
                 out.append(entry)
         return out
 
+
+def compute_response_time_seconds(reviewed_at, help_dispatched_at, help_arrived_at):
+    """P2-4: the ONE canonical per-report response-time formula -
+    COALESCE(arrived, dispatched) - reviewed, tz-normalized, non-negative.
+    Was hand-rolled identically in the ReportResponse serializer AND in
+    reports.py's status-since `_rt`. Derived (never stored). The analytics
+    AVG aggregate mirrors this as a SQL expression. Returns int seconds or None."""
+    end = help_arrived_at or help_dispatched_at
+    if not (reviewed_at and end):
+        return None
+    try:
+        a = reviewed_at if reviewed_at.tzinfo else reviewed_at.replace(tzinfo=_dt_timezone.utc)
+        b = end if end.tzinfo else end.replace(tzinfo=_dt_timezone.utc)
+        delta = int((b - a).total_seconds())
+        return delta if delta >= 0 else None
+    except Exception:
+        return None
+
+
 class ReportResponse(BaseModel):
     id: str
     client_report_id: Optional[str] = None
@@ -596,6 +623,14 @@ class ReportResponse(BaseModel):
     # listing by reports._attach_operation_name so the new-report notification can
     # name its operation. Not a captured column - derived at read time.
     crisis_event_name: Optional[str] = None
+    # Duplicate collapse: how many OTHER reports an analyst has confirmed as
+    # duplicates of THIS one (i.e. this report is the primary/incident, and N
+    # corroborating reports are merged beneath it). Derived at read time by
+    # reports.get_reports from the active duplicate decisions (NOT a column); 0
+    # for ordinary reports + merged-away duplicates. Drives the feed/map
+    # "N duplicate reports merged" badge. corroborating_count = duplicate_count + 1
+    # (the primary itself + its duplicates) for "N corroborating reports" copy.
+    duplicate_count: int = 0
     form_pack_id: Optional[str] = None
     form_pack_version: Optional[int] = None
     form_data: Optional[Any] = None
@@ -610,6 +645,15 @@ class ReportResponse(BaseModel):
     help_dispatched_at: Optional[datetime] = None
     help_arrived_at: Optional[datetime] = None
     response_time_seconds: Optional[int] = None
+    # P5-redesign: WHO recorded the verdict (FK users.id). Pairs with
+    # reviewed_at so the audit ribbon can say "reviewed by <operator>"
+    # instead of the previous "reviewer not recorded" gap.
+    reviewed_by: Optional[str] = None
+    # Incident Credibility Score - ONE fused 0-100 trust score + band for the
+    # dashboard's Assessment section, COMPUTED read-time by the validator below
+    # from the signals already on this response (no DB, no N+1). Never stored,
+    # to avoid two-source drift. See app/services/credibility.py.
+    incident_credibility: Optional[Any] = None
 
     @field_serializer("reviewed_at", "help_dispatched_at", "help_arrived_at", when_used="json")
     def _serialize_reviewer_dt(self, v: Optional[datetime]) -> Optional[str]:
@@ -631,18 +675,44 @@ class ReportResponse(BaseModel):
     @model_validator(mode='after')
     def _compute_response_time(self):
         """Compute `response_time_seconds` from the reviewer + responder
-        timestamps. Derived, not stored - avoids two-source-of-truth drift."""
-        if self.reviewed_at and (self.help_arrived_at or self.help_dispatched_at):
-            end = self.help_arrived_at or self.help_dispatched_at
-            try:
-                from datetime import timezone as _tz
-                a = self.reviewed_at if self.reviewed_at.tzinfo else self.reviewed_at.replace(tzinfo=_tz.utc)
-                b = end if end.tzinfo else end.replace(tzinfo=_tz.utc)
-                delta = int((b - a).total_seconds())
-                if delta >= 0:
-                    self.response_time_seconds = delta
-            except Exception:
-                pass
+        timestamps. Derived, not stored - avoids two-source-of-truth drift.
+        P2-4: delegates to the single canonical helper."""
+        rt = compute_response_time_seconds(
+            self.reviewed_at, self.help_dispatched_at, self.help_arrived_at)
+        if rt is not None:
+            self.response_time_seconds = rt
+        return self
+
+    @model_validator(mode='after')
+    def _compute_incident_credibility(self):
+        """Sum the automated checks into the single system-only Confidence
+        Score (app/services/credibility.py). Pure + read-time so list and
+        detail responses share one path. The human verdict is deliberately
+        NOT an input - the score is the system's automated assessment only.
+        Never let a scoring edge-case 500 the whole response."""
+        try:
+            from app.services.credibility import compute_incident_credibility
+            v = self.verification
+            loc = None
+            if self.location is not None:
+                loc = {
+                    "latitude": getattr(self.location, "latitude", None),
+                    "longitude": getattr(self.location, "longitude", None),
+                    "accuracy_meters": getattr(self.location, "accuracy_meters", None),
+                    "geocoding_confidence": getattr(self.location, "geocoding_confidence", None),
+                }
+            self.incident_credibility = compute_incident_credibility(
+                ai_assessment=self.ai_assessment if isinstance(self.ai_assessment, dict) else None,
+                satellite_score=getattr(v, "total_score", None) if v else None,
+                satellite_error=getattr(v, "error", None) if v else None,
+                satellite_verdict=getattr(v, "verdict", None) if v else None,
+                satellite_scored_at=getattr(v, "scored_at", None) if v else None,
+                reporter_tier=self.reporter_tier,
+                duplicate_count=self.duplicate_count or 0,
+                location=loc,
+            )
+        except Exception:
+            self.incident_credibility = None
         return self
 
     # derive the masked
@@ -695,18 +765,6 @@ class ReportResponse(BaseModel):
         # Explicit False from a v3+ client → user typed it; operator should resolve.
         self.needs_manual_mapping = not self.infrastructure_name_from_osm
         return self
-
-
-class ClusterResponse(BaseModel):
-    id: str
-    center_lat: float
-    center_lng: float
-    radius_meters: float
-    confidence_score: float
-    status: ClusterStatusEnum
-    primary_infrastructure_type: Optional[InfraTypeEnum] = None
-    
-    model_config = ConfigDict(from_attributes=True)
 
 
 # ── "Verified Reports Nearby" - May 2026 ──────────────────────────────

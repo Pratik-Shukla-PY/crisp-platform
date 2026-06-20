@@ -101,12 +101,13 @@ if _sentry_enabled:
     logger.info("Sentry enabled for this process")
 
 
-# ── Security: Admin API Key ──────────────────────────────────────────────────
-# P1.8 - In production we FAIL STARTUP if CRISP_ADMIN_KEY is missing. A
-# previous "no key = dev mode (all allowed)" fallback meant a deployment with
-# a forgotten env var quietly exposed every admin endpoint to the world.
-# Dev mode must be opted into with APP_ENV=dev so an accidental prod deploy
-# refuses to boot instead of shipping open.
+# ── Security: Admin API Key (DEPRECATED) ─────────────────────────────────────
+# APP_ENV gates dev-mode opt-in (and Telegram polling + schema-check fatality
+# below). Historically (P1.8) this section also FAILED STARTUP in production
+# when CRISP_ADMIN_KEY was missing, so a forgotten env var couldn't silently
+# expose the admin endpoints. As of Jun 2026 the only consumers (the manual
+# /reports/purge-* endpoints) moved to SUPER_ADMIN + step-up auth, so a missing
+# key is now just logged, not fatal - see the DEPRECATED note below.
 APP_ENV = os.getenv("APP_ENV", "production").lower()
 
 
@@ -127,26 +128,25 @@ def _should_autostart_telegram_polling(app_env: str, poll_flag: str) -> bool:
     if f == "0":
         return False
     return app_env == "production"
+# DEPRECATED (Jun 2026): CRISP_ADMIN_KEY is no longer required. Its only
+# consumers were the manual /reports/purge-* endpoints, which now require an
+# authenticated SUPER_ADMIN + a fresh TOTP/password step-up (X-Step-Up; see
+# POST /auth/step-up) instead of a shared static key. The env var +
+# verify_admin_key remain as a no-op shim for one release; both can be removed
+# once confirmed unused everywhere.
 ADMIN_KEY = os.getenv("CRISP_ADMIN_KEY", "")
-if not ADMIN_KEY:
-    if APP_ENV == "production":
-        raise RuntimeError(
-            "CRISP_ADMIN_KEY env var is required when APP_ENV=production. "
-            "Set it to a long random string (see scripts/rotate_secrets.sh) "
-            "or set APP_ENV=dev for local development."
-        )
-    logging.getLogger(__name__).warning(
-        "CRISP_ADMIN_KEY not set and APP_ENV=%s - admin endpoints will reject "
-        "all requests. Set the env var to re-enable them.", APP_ENV
+if not ADMIN_KEY and APP_ENV == "production":
+    logging.getLogger(__name__).info(
+        "CRISP_ADMIN_KEY not set - now expected; the var is deprecated "
+        "(purge moved to SUPER_ADMIN + step-up auth)."
     )
 
 def verify_admin_key(request: Request):
-    """Dependency: require X-Admin-Key header for admin-only endpoints.
-
-    Behavior matrix:
-      - APP_ENV=production + no key  → boot already failed above (unreachable)
-      - APP_ENV=dev       + no key  → reject with 503 so devs notice
-      - Any env           + key set → require matching header or 403
+    """DEPRECATED no-op shim (Jun 2026), retained for one release. No endpoint
+    calls this anymore - the manual /reports/purge-* endpoints now require an
+    authenticated SUPER_ADMIN + a fresh step-up token (X-Step-Up; see POST
+    /auth/step-up). If somehow invoked with the env var unset it 503s; with it
+    set it still enforces the old header. Safe to delete once confirmed unused.
     """
     if not ADMIN_KEY:
         raise HTTPException(
@@ -370,7 +370,7 @@ app.add_middleware(
     # bug slipped past spec 119 because Playwright `page.route` stubs
     # bypass the browser's CORS preflight entirely.
     allow_headers=[
-        "Content-Type", "Authorization", "X-Admin-Key",
+        "Content-Type", "Authorization", "X-Admin-Key", "X-Step-Up",
         "If-None-Match", "If-Match",
         "X-Caller-Device-Hash",
     ],

@@ -18,7 +18,7 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models.report import (
     Device, Report, Location, Media, MediaChunk, AIAnalysis,
-    SatelliteVerification, DeletionAuditLog,
+    SatelliteVerification, DeletionAuditLog, ReportDuplicateDecision,
     MediaTypeEnum, ResolutionEnum, ReportStatusEnum, SyncStatusEnum,
     SeverityEnum, InfraTypeEnum,
 )
@@ -1509,11 +1509,13 @@ def _try_full_assembly_bg(media_id: str, media_type: str, report_id: str):
 
 
 def _run_ai_pipeline(report_id: str, media_type: str, file_url: str, db: Session):
-    """Trigger transcription or image analysis after media assembly.
+    """Trigger transcription after media assembly.
 
     Apr 2026 (PR 2) - reads bytes via the storage abstraction + stages
-    a /tmp/ tempfile for the underlying filesystem APIs (faster-whisper,
-    cv2 image analyzer). No persistent local-disk usage.
+    a /tmp/ tempfile for the underlying filesystem API (faster-whisper).
+    No persistent local-disk usage. Only AUDIO produces a stored result;
+    image media carries no automated analysis (the analyst-facing AI
+    credibility dossier comes from POST /{id}/ai-assess, not this path).
     """
     if not file_url:
         return
@@ -1529,20 +1531,6 @@ def _run_ai_pipeline(report_id: str, media_type: str, file_url: str, db: Session
             else:
                 db.add(AIAnalysis(report_id=report_id, transcription=transcription))
             db.commit()
-    elif media_type == 'IMAGE':
-        with _stage_from_storage(file_url, filename) as tmp_path:
-            vision = ai_service.analyze_image(tmp_path)
-        ai = db.query(AIAnalysis).filter(AIAnalysis.report_id == report_id).first()
-        if ai:
-            ai.detected_labels = vision.get("labels", [])
-            ai.damage_score = vision.get("risk_score", 0.0)
-        else:
-            db.add(AIAnalysis(
-                report_id=report_id,
-                detected_labels=vision.get("labels", []),
-                damage_score=vision.get("risk_score", 0.0)
-            ))
-        db.commit()
 
 
 def _push_status_change_safely(report: Report) -> None:
@@ -1596,12 +1584,44 @@ def _audit_report_action(
     # No db.commit() here - caller already commits.
 
 
+# P1-1: allowed report-status transitions. The status setters below used to be
+# UNCONDITIONAL assignments, so an analyst could false-alarm a RESOLVED report or
+# dispatch a FALSE_ALARM one with no warning. This is the `status` axis ONLY;
+# `reviewer_verdict` is orthogonal and intentionally NOT guarded here. Idempotent
+# self-transitions (re-applying the same status) are always allowed.
+_REPORT_STATUS_TRANSITIONS = {
+    ReportStatusEnum.PENDING:     {ReportStatusEnum.RESPONDING, ReportStatusEnum.RESOLVED, ReportStatusEnum.FALSE_ALARM},
+    ReportStatusEnum.RESPONDING:  {ReportStatusEnum.RESOLVED, ReportStatusEnum.FALSE_ALARM},
+    ReportStatusEnum.RESOLVED:    set(),   # terminal
+    ReportStatusEnum.FALSE_ALARM: set(),   # terminal
+    # Deprecated/inert statuses (never written; see ReportStatusEnum docstring) -
+    # treat a legacy VERIFIED row like PENDING, REJECTED as terminal.
+    ReportStatusEnum.VERIFIED:    {ReportStatusEnum.RESPONDING, ReportStatusEnum.RESOLVED, ReportStatusEnum.FALSE_ALARM},
+    ReportStatusEnum.REJECTED:    set(),
+}
+
+
+def _guard_status_transition(report, target: ReportStatusEnum):
+    """Raise 409 if `target` is not a legal move from the report's current
+    status. Self-transition (idempotent re-apply) is always allowed."""
+    current = report.status
+    if current == target:
+        return  # idempotent no-op
+    if target not in _REPORT_STATUS_TRANSITIONS.get(current, set()):
+        cur = getattr(current, "value", current)
+        raise HTTPException(
+            status_code=409,
+            detail=f"Illegal status transition: {cur} -> {target.value}",
+        )
+
+
 @router.patch("/{report_id}/false-alarm", response_model=ReportResponse)
 def mark_false_alarm(report_id: str, user=Depends(require_analyst), db: Session = Depends(get_db)):
     """Mark a report as a FALSE_ALARM without deleting it."""
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
+    _guard_status_transition(report, ReportStatusEnum.FALSE_ALARM)
     report.status = ReportStatusEnum.FALSE_ALARM
     _audit_report_action(db, user, "REPORT_FALSE_ALARM", report_id)
     db.commit()
@@ -1629,6 +1649,7 @@ def dispatch_team(report_id: str, user=Depends(require_analyst), db: Session = D
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
+    _guard_status_transition(report, ReportStatusEnum.RESPONDING)
     was_pending = report.status == ReportStatusEnum.PENDING
     report.status = ReportStatusEnum.RESPONDING
     if was_pending:
@@ -1657,6 +1678,7 @@ def resolve_report(report_id: str, user=Depends(require_analyst), db: Session = 
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
+    _guard_status_transition(report, ReportStatusEnum.RESOLVED)
     was_pending = report.status == ReportStatusEnum.PENDING
     report.status = ReportStatusEnum.RESOLVED
     if was_pending:
@@ -1669,6 +1691,152 @@ def resolve_report(report_id: str, user=Depends(require_analyst), db: Session = 
     db.refresh(report)
     _push_status_change_safely(report)
     return report
+
+
+# ── Notify Response Team (Actions section) ──────────────────────
+# The "Notify Response Team" modal lists the responders linked to the incident's
+# building + operation and lets the analyst alert a selected set by SMS / Email.
+# Contact is a single free-text field, so the channel is derived: a value
+# containing "@" is an email; one with digits is a phone (SMS).
+
+def _responder_channel(contact: Optional[str]) -> Optional[str]:
+    c = (contact or "").strip()
+    if not c:
+        return None
+    if "@" in c:
+        return "email"
+    return "sms" if any(ch.isdigit() for ch in c) else None
+
+
+@router.get("/{report_id}/responders")
+def list_report_responders(report_id: str, user=Depends(require_analyst), db: Session = Depends(get_db)):
+    """List the active responders (building + operation scoped) for an incident,
+    each annotated with the channel its contact supports (sms / email / none)."""
+    from app.models.report import BuildingResponder
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    conds = []
+    if report.building_id:
+        conds.append(BuildingResponder.building_id == report.building_id)
+    if report.crisis_event_id:
+        conds.append(BuildingResponder.crisis_event_id == report.crisis_event_id)
+    if not conds:
+        return {"responders": [], "building_id": report.building_id, "crisis_event_id": report.crisis_event_id}
+    rows = (
+        db.query(BuildingResponder)
+        .filter(BuildingResponder.cleared_at.is_(None))
+        .filter(or_(*conds))
+        .order_by(BuildingResponder.assigned_at.desc())
+        .all()
+    )
+    return {
+        "building_id": report.building_id,
+        "crisis_event_id": report.crisis_event_id,
+        "responders": [
+            {
+                "id": r.id,
+                "name": r.responder_name,
+                "org": r.responder_org,
+                "org_type": r.org_type,
+                "contact": r.responder_contact,
+                "channel": _responder_channel(r.responder_contact),
+                "target_type": r.target_type,
+                "dispatched_at": r.dispatched_at.isoformat() if r.dispatched_at else None,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.post("/{report_id}/notify-responders")
+def notify_responders(
+    report_id: str,
+    payload: dict,
+    user=Depends(require_analyst),
+    db: Session = Depends(get_db),
+):
+    """Alert the selected responders by SMS / Email, log the notification, move
+    the incident into Active Response, and confirm to the reporter (push).
+
+    Body: {"responder_ids": [...], "channels": ["sms","email"]}.
+    A responder is messaged only on a channel its contact supports."""
+    from app.models.report import BuildingResponder
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    ids = [str(x) for x in (payload.get("responder_ids") or [])]
+    channels = {str(c).lower() for c in (payload.get("channels") or ["sms", "email"])}
+    if not ids:
+        raise HTTPException(status_code=400, detail="No responders selected")
+
+    rows = db.query(BuildingResponder).filter(BuildingResponder.id.in_(ids)).all()
+    loc = report.location
+    place = (getattr(loc, "user_location_name", None) or getattr(loc, "device_location_name", None)) if loc else None
+    sev = report.severity.value if report.severity else ""
+    infra = (report.infrastructure_type.value if report.infrastructure_type else "incident").replace("_", " ").lower()
+    body = (
+        f"CRISP response request: {sev} {infra}"
+        + (f" near {place}" if place else "")
+        + f". Please respond. Incident ref {report_id[:8]}."
+    )
+    subject = f"CRISP: response needed - {sev} {infra}".strip()
+
+    from app.services.sms import send_sms, validate_e164
+    from app.core.security import send_email
+
+    notified, failures = [], []
+    sms_ok = email_ok = 0
+    now = datetime.now(timezone.utc)
+    for r in rows:
+        ch = _responder_channel(r.responder_contact)
+        sent = False
+        if ch == "email" and "email" in channels:
+            if send_email(r.responder_contact.strip(), subject, body):
+                email_ok += 1
+                sent = True
+            else:
+                failures.append({"name": r.responder_name, "channel": "email", "reason": "email not configured / send failed"})
+        elif ch == "sms" and "sms" in channels:
+            try:
+                send_sms(validate_e164(r.responder_contact), body)
+                sms_ok += 1
+                sent = True
+            except Exception as e:
+                failures.append({"name": r.responder_name, "channel": "sms", "reason": e.__class__.__name__})
+        else:
+            failures.append({"name": r.responder_name, "channel": ch or "none", "reason": "no matching selected channel"})
+        if sent:
+            notified.append(r.responder_name)
+            if r.dispatched_at is None:
+                r.dispatched_at = now
+
+    _audit_report_action(
+        db, user, "REPORT_NOTIFY_RESPONDERS", report_id,
+        details={"responders": notified[:25], "channels": sorted(channels), "count": len(notified)},
+    )
+
+    # Move into Active Response (mirrors dispatch) when still pending, so the
+    # reporter gets the standard status-change push ("Help is on the way").
+    moved = False
+    if report.status in (ReportStatusEnum.PENDING, ReportStatusEnum.VERIFIED):
+        report.status = ReportStatusEnum.RESPONDING
+        db.flush()
+        _mark_report_verified_for_credibility(report, db)
+        moved = True
+
+    db.commit()
+    db.refresh(report)
+    if moved:
+        _push_status_change_safely(report)
+    return {
+        "notified": len(notified),
+        "sms": sms_ok,
+        "email": email_ok,
+        "failures": failures,
+        "status": report.status.value if report.status else None,
+        "moved_to_responding": moved,
+    }
 
 
 # ── Phase 5 - reviewer workflow ─────────────────────────────────
@@ -1701,6 +1869,8 @@ def set_review_verdict(
         raise HTTPException(status_code=404, detail="Report not found")
     report.reviewer_verdict = verdict
     report.reviewed_at = datetime.now(_tz.utc)
+    # P5-redesign: persist WHO reviewed it (closes the audit-trail gap).
+    report.reviewed_by = getattr(user, "id", None)
     if action_taken is not None:
         report.action_taken = str(action_taken).strip()[:500] or None
 
@@ -1860,6 +2030,10 @@ def _attach_reporter_tier(db: Session, reports: list) -> None:
         return
 
 
+# P3-3 (KEPT - deliberate perf optimization, not removed): this bulk-attaches the
+# operation name in ONE query per page rather than an ORM relationship traversal
+# per report. The audit noted a join could replace it but flagged "validate at
+# 500k scale first" - at that scale the single-query attach is the safe shape.
 def _attach_operation_name(db: Session, reports: list) -> None:
     """Operations redesign v2 - bulk-attach each report's operation NAME as a
     transient ``crisis_event_name`` attribute so the dashboard's new-report
@@ -1986,15 +2160,9 @@ def get_device_status_since(device_hash: str, since: str = None, db: Session = D
         return _utc_iso(dt)
 
     def _rt(r):
-        """Computed response_time_seconds - same formula as ReportResponse."""
-        end = r.help_arrived_at or r.help_dispatched_at
-        if not (r.reviewed_at and end):
-            return None
-        from datetime import timezone as _tz
-        a = r.reviewed_at if r.reviewed_at.tzinfo else r.reviewed_at.replace(tzinfo=_tz.utc)
-        b = end if end.tzinfo else end.replace(tzinfo=_tz.utc)
-        delta = int((b - a).total_seconds())
-        return delta if delta >= 0 else None
+        """Computed response_time_seconds - the ONE canonical helper (P2-4)."""
+        from app.schemas.report import compute_response_time_seconds
+        return compute_response_time_seconds(r.reviewed_at, r.help_dispatched_at, r.help_arrived_at)
 
     def _thumb_url(r):
         """Pick the SMALL photo variant if available - cheap to download,
@@ -2121,12 +2289,15 @@ def set_lives_impacted(report_id: str, payload: dict, user=Depends(require_analy
 
 @router.delete("/{report_id}", status_code=status.HTTP_200_OK)
 def delete_report(report_id: str, user=Depends(require_admin), grace_minutes: int = 1440,
-                  deletion_source: str = "DASHBOARD", db: Session = Depends(get_db)):
-    """Soft-delete with audit logging. grace_minutes: 1440 (24h) for dashboard, 30 for mobile."""
+                  deletion_source: str = "DASHBOARD", reason: Optional[str] = None,
+                  db: Session = Depends(get_db)):
+    """Soft-delete with audit logging. grace_minutes: 1440 (24h) for dashboard, 30 for mobile.
+    `reason` is the operator's rationale (compliance) - stored on the deletion audit row."""
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
+    reason_clean = (str(reason).strip()[:500] or None) if reason else None
     # Audit log: preserve anonymized metadata before deletion
     loc_snapshot = None
     if report.location:
@@ -2139,6 +2310,7 @@ def delete_report(report_id: str, user=Depends(require_admin), grace_minutes: in
         damage_type=report.infrastructure_type.value if report.infrastructure_type else None,
         severity=report.severity.value if report.severity else None,
         deletion_source=deletion_source,
+        deletion_reason=reason_clean,
     )
     db.add(audit)
 
@@ -2146,7 +2318,8 @@ def delete_report(report_id: str, user=Depends(require_admin), grace_minutes: in
     report.deletion_grace_minutes = grace_minutes
     # Phase F.2.b - audit the soft-delete for the per-report ribbon.
     _audit_report_action(db, user, "REPORT_DELETE", report_id,
-                         details={"grace_minutes": grace_minutes, "source": deletion_source})
+                         details={"grace_minutes": grace_minutes, "source": deletion_source,
+                                  **({"reason": reason_clean} if reason_clean else {})})
     db.commit()
     grace_label = f"{grace_minutes} minutes" if grace_minutes < 120 else f"{grace_minutes // 60} hours"
     logger.info(f"Soft-delete: report {report_id} ({deletion_source}) - permanent in {grace_label}")
@@ -2408,24 +2581,42 @@ def _enforce_retention_policy(db: Session, batch_limit: int = 1000) -> int:
     return count
 
 
+def _require_purge_auth(request: Request, user=Depends(require_super_admin)):
+    """Hard-purge is IRREVERSIBLE, so it requires an authenticated SUPER_ADMIN
+    PLUS a fresh step-up (TOTP / password re-auth, ~10-min window) presented as
+    the X-Step-Up header (see POST /auth/step-up). Replaces the old shared static
+    CRISP_ADMIN_KEY + browser prompt - this is per-user, time-boxed, and auditable."""
+    from app.core.security import decode_token
+    from jose import JWTError
+    token = request.headers.get("X-Step-Up", "")
+    if not token:
+        raise HTTPException(status_code=401,
+            detail="Step-up confirmation required - re-confirm with your authenticator code to purge.")
+    try:
+        payload = decode_token(token)
+    except JWTError:
+        raise HTTPException(status_code=401,
+            detail="Step-up confirmation expired or invalid - please re-confirm.")
+    if payload.get("type") != "step_up" or payload.get("sub") != user.id:
+        raise HTTPException(status_code=401, detail="Step-up token does not authorize this action.")
+    return user
+
+
 @router.post("/purge-expired", status_code=status.HTTP_200_OK)
-def purge_expired_deletions(request: Request, db: Session = Depends(get_db)):
+def purge_expired_deletions(user=Depends(_require_purge_auth), db: Session = Depends(get_db)):
     """Admin endpoint: permanently delete all reports past the 24-hour grace
     period. Retention-policy enforcement runs on the scheduled background
     sweep (see app.main._purge_loop), not here, so this endpoint's contract
-    stays a pure grace-purge trigger."""
-    from app.main import verify_admin_key
-    verify_admin_key(request)
+    stays a pure grace-purge trigger. Gated by SUPER_ADMIN + a fresh step-up."""
     count = _purge_expired_deletions(db)
     return {"purged": count}
 
 
 @router.post("/purge-all-pending", status_code=status.HTTP_200_OK)
-def purge_all_pending_deletions(request: Request, db: Session = Depends(get_db)):
+def purge_all_pending_deletions(user=Depends(_require_purge_auth), db: Session = Depends(get_db)):
     """Admin endpoint: permanently delete ALL reports with deletion_requested_at set,
-    regardless of whether the 24-hour grace period has passed."""
-    from app.main import verify_admin_key
-    verify_admin_key(request)
+    regardless of whether the 24-hour grace period has passed. Gated by
+    SUPER_ADMIN + a fresh step-up (X-Step-Up)."""
     pending = db.query(Report).filter(Report.deletion_requested_at != None).all()
     if not pending:
         return {"purged": 0}
@@ -3051,9 +3242,21 @@ def _get_reporter_credibility(device_hash: str, db: Session) -> dict:
     if device:
         all_reps = db.query(Report).filter(Report.device_id == device.id, Report.deletion_requested_at.is_(None)).all()
         false_count = sum(1 for r in all_reps if r.status == ReportStatusEnum.FALSE_ALARM)
-        verified_count = sum(1 for r in all_reps if r.status in (ReportStatusEnum.VERIFIED, ReportStatusEnum.RESPONDING, ReportStatusEnum.RESOLVED))
+        # P1-2: "verified" here now means analyst-ACCEPTED (reviewer_verdict),
+        # the SAME definition Building.verified_report_count + the global
+        # distributions.verified already use. It was status-based
+        # (RESPONDING/RESOLVED), which silently disagreed with every other
+        # "verified" surface. NOTE: ReporterProfile.verified_count is a separate
+        # reporter-ENGAGEMENT counter (reports that got actioned/dispatched) and
+        # is intentionally NOT this number.
+        verified_count = sum(1 for r in all_reps if (r.reviewer_verdict or "") == "ACCEPTED")
     false_rate = round((false_count / max(total, 1)) * 100, 1)
-    base = {"HERO": 95, "GUARDIAN": 85, "HELPER": 70, "NEWCOMER": 50}.get(profile.badge_level, 50)
+    # Map the LIVE reporter-tier ladder. The legacy HERO/GUARDIAN/HELPER keys
+    # were dead (the ladder is T1_SCOUT/T2_SIGNAL/T3_CHANGEMAKER/T4_LIFEKEEPER),
+    # so EVERY reporter fell to the 50 default and the badge weighting never
+    # fired (audit A5). NEWCOMER kept as the no-profile fallback.
+    base = {"T4_LIFEKEEPER": 95, "T3_CHANGEMAKER": 85, "T2_SIGNAL": 70,
+            "T1_SCOUT": 55, "NEWCOMER": 50}.get(profile.badge_level, 50)
     cred = max(10, base - int(false_rate * 0.5))
     return {"badge_level": profile.badge_level, "total_reports": total,
             "verified_reports": verified_count, "false_alarm_rate": false_rate, "credibility_score": cred}
@@ -3378,20 +3581,52 @@ Compute the score breakdown and return JSON as specified."""
             r = await c.post("https://api.anthropic.com/v1/messages",
                 headers={"x-api-key": anthropic_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
                 json={
-                    "model": "claude-sonnet-4-20250514",
-                    "max_tokens": 1200,
+                    "model": "claude-sonnet-4-6",
+                    # The response schema is large (score_breakdown + key_factors +
+                    # risk_flags + summary + a multi-line reasoning); 1200 tokens
+                    # truncated verbose replies mid-JSON, which broke parsing.
+                    "max_tokens": 2000,
                     "system": [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
                     "messages": [{"role": "user", "content": dossier}],
                 })
             if r.status_code == 200:
-                import json as jsonlib
+                import json as jsonlib, re as _re
                 text = r.json().get("content", [{}])[0].get("text", "{}")
-                try:
-                    start = text.index('{')
-                    end = text.rindex('}') + 1
-                    data = jsonlib.loads(text[start:end])
-                except:
-                    data = {"summary": text[:200], "suggested_action": "Review Needed", "reasoning": text, "confidence_score": 0}
+                # Robust extraction: Claude sometimes wraps the object in a ```json
+                # fence or appends prose, and a long reply can still be cut off by
+                # max_tokens. Strip fences, then try the whole text and the
+                # outermost {..} slice. On failure, SALVAGE the key fields by regex
+                # (confidence_score/summary/suggested_action all precede the long
+                # `reasoning` field, so they survive truncation) instead of dumping
+                # the raw JSON into the UI as the summary with a fake score of 0.
+                def _parse_ai_json(t):
+                    s = (t or "").strip()
+                    if s.startswith("```"):
+                        s = _re.sub(r"^```[a-zA-Z]*\s*", "", s)
+                        s = _re.sub(r"\s*```$", "", s).strip()
+                    cands = [s]
+                    if "{" in s and "}" in s:
+                        cands.append(s[s.find("{"): s.rfind("}") + 1])
+                    for cand in cands:
+                        try:
+                            obj = jsonlib.loads(cand)
+                            if isinstance(obj, dict):
+                                return obj
+                        except Exception:
+                            pass
+                    return None
+                data = _parse_ai_json(text)
+                if not isinstance(data, dict):
+                    m_cs = _re.search(r'"confidence_score"\s*:\s*(\d+)', text)
+                    m_sm = _re.search(r'"summary"\s*:\s*"([^"]{0,300})', text)
+                    m_sa = _re.search(r'"suggested_action"\s*:\s*"([^"]{0,80})', text)
+                    data = {
+                        "summary": (m_sm.group(1) if m_sm else "AI assessment response could not be fully parsed — re-run to retry."),
+                        "suggested_action": (m_sa.group(1) if m_sa else "Review Needed"),
+                        "reasoning": text[:1500],
+                        # None (not 0) so a parse miss reads as "not scored", never a fabricated 0.
+                        "confidence_score": (int(m_cs.group(1)) if m_cs else None),
+                    }
 
                 # Phase 3.3 - stamp the assessment with metadata so
                 # later cache hits can surface "computed at X". The
@@ -3399,7 +3634,7 @@ Compute the score breakdown and return JSON as specified."""
                 # clear of any Claude-emitted field names.
                 data["_meta"] = {
                     "computed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-6",
                     "release": os.environ.get("CRISP_BUILD_TAG", ""),
                 }
                 # Persist full assessment to DB
@@ -3727,26 +3962,6 @@ def attach_media(report_id: str, media_in: MediaAttach, db: Session = Depends(ge
             # transcription failure. The dashboard renders without
             # transcription; an analyst can retry from the admin panel.
             logger.warning(f"Audio transcription failed for {file_url}: {e}")
-
-    elif media_in.type == MediaTypeEnum.IMAGE and file_url:
-        try:
-            filename = file_url.rsplit("/", 1)[-1].split("://", 1)[-1].rsplit("/", 1)[-1]
-            with _stage_from_storage(file_url, filename) as tmp_path:
-                vision_result = ai_service.analyze_image(tmp_path)
-            ai = db.query(AIAnalysis).filter(AIAnalysis.report_id == report.id).first()
-            if ai:
-                ai.detected_labels = vision_result.get("labels", [])
-                ai.damage_score = vision_result.get("risk_score", 0.0)
-            else:
-                ai = AIAnalysis(
-                    report_id=report.id,
-                    detected_labels=vision_result.get("labels", []),
-                    damage_score=vision_result.get("risk_score", 0.0)
-                )
-                db.add(ai)
-            db.commit()
-        except Exception as e:
-            logger.warning(f"Image AI pipeline failed for {file_url}: {e}")
 
     db.refresh(report)
     return report
@@ -5269,19 +5484,13 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
 
     db.commit()
 
-    # 5. Pipeline Trigger: Local AI NLP & Computer Vision processing
-    # If the user included text, photos, or voice notes, we analyze them synchronously 
-    # for the MVP to provide immediate tactical insight.
-    ai_metadata = {
-        "transcription": None,
-        "labels": [],
-        "damage_score": 0.0,
-        "processing_time": 0
-    }
-    
-    start_time = time.time()
-    
-    # Extract audio for speech-to-text
+    # 5. Pipeline Trigger: Local AI NLP processing
+    # If the user included voice notes, transcribe them synchronously for the
+    # MVP to provide immediate tactical insight. Image media carries no
+    # automated analysis here - the analyst-facing AI credibility dossier
+    # comes from POST /{id}/ai-assess, not this ingest path.
+    transcription_result = None
+
     audio_files = [m.url for m in saved_media_entities if m.type == MediaTypeEnum.AUDIO]
     logger.info(f"Found {len(audio_files)} audio files for transcription")
     if audio_files:
@@ -5296,31 +5505,15 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
             logger.info(f"File size: {os.path.getsize(disk_path)} bytes")
             logger.info("Starting transcription...")
             transcription_result = ai_service.transcribe_audio(disk_path)
-            ai_metadata["transcription"] = transcription_result
             logger.info(f"Transcription result: {transcription_result[:100] if transcription_result else 'EMPTY'}")
         else:
             logger.error(f"Audio file not found at: {disk_path}")
-            
-    # Extract images for damage assessment
-    image_files = [m.url for m in saved_media_entities if m.type == MediaTypeEnum.IMAGE]
-    if image_files:
-        path = image_files[0].replace("/static/", "")
-        disk_path = os.path.join(UPLOAD_DIR, path)
-        if os.path.exists(disk_path):
-            vision_result = ai_service.analyze_image(disk_path)
-            ai_metadata["labels"] = vision_result.get("labels", [])
-            ai_metadata["damage_score"] = vision_result.get("risk_score", 0.0)
 
-    processing_time = int((time.time() - start_time) * 1000)
-    
     # Hydrate AI analysis table
-    if ai_metadata["transcription"] or ai_metadata["labels"]:
+    if transcription_result:
         db_ai = AIAnalysis(
             report_id=db_report.id,
-            damage_score=ai_metadata["damage_score"],
-            transcription=ai_metadata["transcription"],
-            detected_labels=ai_metadata["labels"],
-            processing_time_ms=processing_time
+            transcription=transcription_result,
         )
         db.add(db_ai)
         db.commit()
@@ -5338,6 +5531,7 @@ def list_report_markers(
     since: Optional[str] = Query(None),
     status: Optional[str] = Query(None, description="comma-separated"),
     crisis_event_id: Optional[str] = Query(None, description="scope to one operation"),
+    include_duplicates: bool = False,
 ):
     """Lightweight map markers - id + coords + severity/status/type ONLY (a
     column tuple query joined to Location; NO media/AI/verification eager loads).
@@ -5367,6 +5561,12 @@ def list_report_markers(
     )
     if crisis_event_id:
         q = q.filter(Report.crisis_event_id == crisis_event_id)
+    # Duplicate collapse: one marker per incident. Hide merged-away duplicates so
+    # the map shows the primary only (with a "N reports" badge), never overlapping
+    # pins for confirmed duplicates. Same resolver as the feed → they agree.
+    dup_hidden, dup_primary_count = _resolve_duplicate_groups(db)
+    if dup_hidden and not include_duplicates:
+        q = q.filter(Report.id.notin_(dup_hidden))
     if status:
         statuses = [s.strip() for s in status.split(",") if s.strip()]
         q = q.filter(Report.status.in_(statuses)) if len(statuses) > 1 \
@@ -5393,9 +5593,144 @@ def list_report_markers(
             "crisis_type": r.crisis_type, "infrastructure_type": _ev(r.infrastructure_type),
             "server_created_at": r.server_created_at.isoformat() if r.server_created_at else None,
             "crisis_event_id": r.crisis_event_id,   # ROUTE-04: open in the incident's operation context
+            "duplicate_count": dup_primary_count.get(r.id, 0),   # merged-away dups under this primary (map "N reports" badge)
         }
         for r in rows
     ]
+
+
+# ── Duplicate review surfaces (static paths MUST precede GET /{report_id}) ─────
+# Defined here so they don't collide with the catch-all `/{report_id}` route
+# below; the _rdd_* helpers they call live further down + resolve at call time.
+@router.get("/duplicate-summary")
+def duplicate_summary(crisis_event_id: Optional[str] = Query(None, description="scope to one operation"),
+                      building_id: Optional[str] = Query(None, description="scope to one building"),
+                      db: Session = Depends(get_db), user=Depends(require_viewer)):
+    """Counts of UNCONFIRMED probable-duplicate pairs by confidence - backs the review
+    panels (Operations Home "Potential Duplicates: N", the Incidents page breakdown, and
+    the per-building 'Potential Duplicates' section on the Building Details page)."""
+    high = med = low = 0
+    for _a, _b, level in _rdd_candidate_pairs(db, crisis_event_id, building_id):
+        if level == "HIGH":
+            high += 1
+        elif level == "MEDIUM":
+            med += 1
+        else:
+            low += 1
+    return {"high": high, "medium": med, "low": low, "total": high + med + low}
+
+
+class DuplicateMergeRequest(_ReclaimBaseModel):
+    confidence: str                                # HIGH | MEDIUM | LOW | ALL
+    crisis_event_id: Optional[str] = None          # scope to one operation
+    building_id: Optional[str] = None              # scope to one building (Building Details)
+
+
+@router.post("/duplicate-merge")
+def duplicate_merge(req: DuplicateMergeRequest, db: Session = Depends(get_db),
+                    user=Depends(require_analyst)):
+    """Bulk-confirm duplicates in ONE action - backs the "Merge all" + "Merge All
+    High / Medium / Low" buttons. confidence=ALL collapses every level at once so the
+    operator clicks once, not per-level and not pair-by-pair.
+
+    GROUP-AWARE: a union-find over the candidate pairs (plus any existing confirmed
+    groupings) means a whole cluster/chain collapses under ONE primary in a single
+    pass - never leaving stragglers that need another click. The surviving PRIMARY is
+    the report that LANDED FIRST (the original), ties broken toward the MOST-COMPLETE
+    report (_rdd_info_score); an existing primary in the cluster is reused so we
+    extend its star rather than spawning a parallel one. Analyst-controlled, never
+    auto. Fully reversible (each is an undoable CONFIRMED_DUP); nothing is deleted."""
+    import uuid
+    from datetime import datetime, timezone as _tz
+    level = (req.confidence or "").strip().upper()
+    if level not in ("HIGH", "MEDIUM", "LOW", "ALL"):
+        raise HTTPException(status_code=400, detail="confidence must be HIGH|MEDIUM|LOW|ALL")
+    wanted = {"HIGH", "MEDIUM", "LOW"} if level == "ALL" else {level}
+    now = datetime.now(_tz.utc)
+    actor = getattr(user, "id", None)
+
+    # 1. Unsettled candidate pairs at the wanted level(s); keep the Report objects.
+    reps_by_id: dict = {}
+    edges = []
+    for a, b, lv in _rdd_candidate_pairs(db, req.crisis_event_id, req.building_id):
+        if lv not in wanted:
+            continue
+        reps_by_id[a.id] = a
+        reps_by_id[b.id] = b
+        edges.append((a.id, b.id))
+    if not edges:
+        return {"merged": 0, "confidence": level}
+
+    # 2. Fold EXISTING confirmed stars into the graph so a new pair touching an
+    #    already-merged cluster EXTENDS it (reuses its primary) instead of forking.
+    confirmed = (db.query(ReportDuplicateDecision)
+                 .filter(ReportDuplicateDecision.undone_at.is_(None),
+                         ReportDuplicateDecision.decision == "CONFIRMED_DUP",
+                         ReportDuplicateDecision.related_report_id.isnot(None)).all())
+    already_related = set()
+    existing_primary_ids = set()
+    for d in confirmed:
+        already_related.add(d.related_report_id)
+        existing_primary_ids.add(d.primary_report_id)
+        edges.append((d.primary_report_id, d.related_report_id))
+
+    # 3. Union-find -> connected components (the cluster collapses as one).
+    parent: dict = {}
+
+    def _find(x):
+        parent.setdefault(x, x)
+        root = x
+        while parent[root] != root:
+            root = parent[root]
+        while parent[x] != root:
+            parent[x], x = root, parent[x]
+        return root
+
+    for x, y in edges:
+        parent[_find(x)] = _find(y)
+    groups: dict = {}
+    for node in list(parent.keys()):
+        groups.setdefault(_find(node), set()).add(node)
+
+    merged = 0
+    for _root, member_ids in groups.items():
+        # NEW (unsettled) reports we can still collapse in this cluster.
+        new_members = [reps_by_id[m] for m in member_ids
+                       if m in reps_by_id and m not in already_related]
+        if not new_members:
+            continue
+        # PRIMARY: reuse the cluster's existing primary if any; else the richest NEW
+        # member, earliest-wins-ties.
+        prim_id = next((m for m in member_ids
+                        if m in existing_primary_ids and m not in already_related), None)
+        if prim_id and prim_id in reps_by_id:
+            primary = reps_by_id[prim_id]
+        elif prim_id:
+            primary = db.query(Report).filter(Report.id == prim_id).first()
+        else:
+            # PRIMARY = the report that LANDED FIRST (the original); ties broken
+            # toward the MOST-COMPLETE report (_rdd_info_score). Flip the key order
+            # to make richest-wins the dominant rule instead.
+            primary = max(new_members, key=lambda r: (
+                -((r.server_created_at or now).timestamp()), _rdd_info_score(r)))
+        if primary is None:
+            continue
+        ckey = _rdd_cluster_key(primary)
+        for r in new_members:
+            if r.id == primary.id:
+                continue
+            db.add(ReportDuplicateDecision(
+                id=str(uuid.uuid4()), cluster_key=ckey,
+                primary_report_id=primary.id, related_report_id=r.id,
+                decision="CONFIRMED_DUP", actor_user_id=actor))
+            # Bump updated_at so the dashboard delta poll re-collapses these reports.
+            primary.updated_at = now
+            r.updated_at = now
+            already_related.add(r.id)
+            merged += 1
+    if merged:
+        db.commit()
+    return {"merged": merged, "confidence": level}
 
 
 @router.get("/", response_model=List[ReportResponse])
@@ -5406,6 +5741,7 @@ def get_reports(
     limit: int = 100,
     include_deleted: bool = False,
     pending_deletion: bool = False,   # M15: list ONLY pending-deletion reports (for the deletions badge/panel)
+    include_duplicates: bool = False,  # when true, also return reports confirmed as duplicates (detail/admin); default collapses them
     since: Optional[datetime] = Query(
         None,
         description=(
@@ -5473,6 +5809,16 @@ def get_reports(
     if crisis_event_id:
         q = q.filter(Report.crisis_event_id == crisis_event_id)
 
+    # Duplicate collapse: a report confirmed as a duplicate of another collapses
+    # UNDER its PRIMARY (the operational incident shown in the feed). Hide the
+    # merged-away members from the default feed - they stay in the DB and remain
+    # reachable by id + via ?include_duplicates=true. Resolved once here so the
+    # per-primary badge count attached below agrees with the listing. The
+    # X-Total-Count scalar runs AFTER this filter, so the visible total stays honest.
+    dup_hidden, dup_primary_count = _resolve_duplicate_groups(db)
+    if dup_hidden and not include_duplicates and not pending_deletion:
+        q = q.filter(Report.id.notin_(dup_hidden))
+
     # Phase 3: delta filter. Match reports whose own row OR any of their
     # media rows has updated since `since`. Media is included because the
     # chunked-upload pipeline only bumps `report.updated_at` at assembly-
@@ -5520,6 +5866,11 @@ def get_reports(
     # logic in the schema where the rest of the derived fields live.
     _attach_reporter_tier(db, reports)
     _attach_operation_name(db, reports)
+    # Roll the merged-away duplicate count onto each primary so the feed card can
+    # render "N duplicate reports merged" (transient read-time attr, like the
+    # operation-name + reporter-tier attaches above; default 0 for non-primaries).
+    for _r in reports:
+        _r.duplicate_count = dup_primary_count.get(_r.id, 0)
 
     # ETag / If-None-Match.
     # Cheap fingerprint: include each report's id+updated_at AND each
@@ -6487,6 +6838,12 @@ async def verify_report(report_id: str, user=Depends(require_analyst), db: Sessi
         v.satellite_images_json = _json.dumps(sat_images_list)
         logger.info(f"Persisted {len(sat_images_list)} multi-source satellite images")
 
+    # P1-3: record the verification act in the per-incident audit ribbon.
+    # REPORT_VERIFY was in the vocab + ribbon label maps but no handler ever
+    # emitted it - satellite verification left no trace at the incident level.
+    _audit_report_action(db, user, "REPORT_VERIFY", report_id,
+                         details={"verdict": getattr(v, "verdict", None),
+                                  "score": getattr(v, "total_score", None)})
     db.commit()
     db.refresh(v)
 
@@ -7486,6 +7843,410 @@ def get_media_duplicates(
         "window_hours": window_hours,
         "candidates": hits,
     }
+
+
+# ── Incident Intelligence P3 - within-cluster duplicate surfacing + decisions ──
+def _rdd_desc_similarity(a: Optional[str], b: Optional[str]) -> float:
+    a = (a or "").strip().lower(); b = (b or "").strip().lower()
+    if not a or not b:
+        return 0.0
+    import difflib
+    return difflib.SequenceMatcher(None, a, b).ratio()
+
+
+def _rdd_phash_match(media_a, media_b, threshold: int = 10) -> bool:
+    from app.services.phash import hamming_distance
+    pa = [m.photo_phash for m in (media_a or []) if getattr(m, "photo_phash", None)]
+    pb = [m.photo_phash for m in (media_b or []) if getattr(m, "photo_phash", None)]
+    for x in pa:
+        for y in pb:
+            if hamming_distance(x, y) <= threshold:
+                return True
+    return False
+
+
+def _rdd_human_delta(seconds: float) -> str:
+    """Human-readable time gap for the duplicate "reason" chips, e.g. "12 min apart"."""
+    m = int(round(seconds / 60.0))
+    if m < 60:
+        return f"{m} min apart"
+    h = m / 60.0
+    if h < 24:
+        return f"{h:.1f} h apart"
+    return f"{int(round(h / 24.0))} d apart"
+
+
+def _rdd_reporter_label(r: "Report") -> str:
+    """Masked, non-PII reporter label for the duplicate review panel (mirrors the
+    feed's "User abc1234" treatment - never exposes email/phone)."""
+    uid = getattr(r, "user_id", None)
+    if uid:
+        return "User " + str(uid)[:7]
+    dev = getattr(r, "device_id", None)
+    if dev:
+        return "Device " + str(dev)[:7]
+    return "Anonymous"
+
+
+def _rdd_score_pair(a: "Report", b: "Report"):
+    """Score how likely two SAME-CLUSTER reports describe the same incident.
+    Lean, deterministic, signals already on the row. White-box: alongside the
+    numeric score it returns the per-factor `reasons` so analysts see WHY two
+    reports were flagged (no black-box). Returns (score, level, sim, reasons)."""
+    reasons = []  # every matched factor + its weight, in scoring order
+    score = 20  # same building/cluster base (they already share a location)
+    reasons.append({"factor": "same_building", "matched": True, "weight": 20,
+                    "label": "Same building"})
+    if a.crisis_type and a.crisis_type == b.crisis_type:
+        score += 18
+        reasons.append({"factor": "same_crisis_type", "matched": True, "weight": 18,
+                        "label": "Same crisis type", "detail": a.crisis_type})
+    if ((a.infrastructure_type and a.infrastructure_type == b.infrastructure_type)
+            or (a.infrastructure_sub_type and a.infrastructure_sub_type == b.infrastructure_sub_type)):
+        score += 12
+        reasons.append({"factor": "same_infrastructure", "matched": True, "weight": 12,
+                        "label": "Same infrastructure"})
+    try:
+        dt = abs((a.server_created_at - b.server_created_at).total_seconds())
+        if dt <= 3600:
+            score += 25
+            reasons.append({"factor": "within_1h", "matched": True, "weight": 25,
+                            "label": "Within 1 hour", "detail": _rdd_human_delta(dt)})
+        elif dt <= 6 * 3600:
+            score += 12
+            reasons.append({"factor": "within_6h", "matched": True, "weight": 12,
+                            "label": "Within 6 hours", "detail": _rdd_human_delta(dt)})
+        elif dt <= 24 * 3600:
+            score += 5
+            reasons.append({"factor": "within_24h", "matched": True, "weight": 5,
+                            "label": "Within 24 hours", "detail": _rdd_human_delta(dt)})
+    except Exception:
+        pass
+    if _rdd_phash_match(getattr(a, "media", None), getattr(b, "media", None)):
+        score += 28
+        reasons.append({"factor": "similar_image", "matched": True, "weight": 28,
+                        "label": "Similar image"})
+    sim = _rdd_desc_similarity(a.description, b.description)
+    if sim >= 0.6:
+        score += 18
+        reasons.append({"factor": "similar_description", "matched": True, "weight": 18,
+                        "label": "Similar description", "detail": f"{int(round(sim * 100))}% match"})
+    elif sim >= 0.4:
+        score += 7
+        reasons.append({"factor": "similar_description", "matched": True, "weight": 7,
+                        "label": "Similar description", "detail": f"{int(round(sim * 100))}% match"})
+    if a.device_id and a.device_id == b.device_id:
+        score += 8
+        reasons.append({"factor": "same_reporter", "matched": True, "weight": 8,
+                        "label": "Same reporter device"})
+    score = min(100, score)
+    level = ("HIGH" if score >= 88 else "MEDIUM" if score >= 68
+             else "LOW" if score >= 50 else None)
+    return score, level, round(sim, 2), reasons
+
+
+def _rdd_cluster_key(r: "Report") -> str:
+    if r.building_id:
+        return r.building_id
+    h = getattr(getattr(r, "location", None), "h3_idx", None)
+    if h:
+        return "h3:" + h
+    return r.id   # singleton - no within-cluster peers
+
+
+def _resolve_duplicate_groups(db: Session):
+    """Derive the duplicate-grouping view from active analyst decisions.
+
+    Duplicates are a RELATIONSHIP (report -> report), NOT a new entity. From the
+    active CONFIRMED_DUP / SET_PRIMARY rows we compute, per within-building group:
+      * the group's PRIMARY report (the active SET_PRIMARY target if any, else the
+        report the duplicates were confirmed against),
+      * the HIDDEN members - every OTHER report in the group, which collapse out of
+        the default feed + map (they remain in the DB + reachable by id), and
+      * how many duplicates roll up under each primary (the feed/marker badge count).
+
+    This is the single source of truth for "what is hidden" so the feed, markers,
+    analytics + the badge can never disagree. One cheap query over the small
+    report_duplicate_decisions table; nothing here is a cluster object.
+    Returns (hidden_ids: set[str], primary_count: dict[str, int]).
+    """
+    rows = (
+        db.query(ReportDuplicateDecision)
+        .filter(
+            ReportDuplicateDecision.undone_at.is_(None),
+            ReportDuplicateDecision.decision.in_(("CONFIRMED_DUP", "SET_PRIMARY")),
+        )
+        .all()
+    )
+    by_key: dict = {}
+    for d in rows:
+        by_key.setdefault(d.cluster_key, []).append(d)
+
+    hidden: set = set()
+    primary_count: dict = {}
+    for decs in by_key.values():
+        confirmed = [d for d in decs if d.decision == "CONFIRMED_DUP" and d.related_report_id]
+        if not confirmed:
+            continue   # a lone SET_PRIMARY with no confirmed dups hides nothing
+        members: set = set()
+        for d in confirmed:
+            members.add(d.primary_report_id)
+            members.add(d.related_report_id)
+        set_primary = next((d.primary_report_id for d in decs if d.decision == "SET_PRIMARY"), None)
+        if set_primary and set_primary in members:
+            primary = set_primary
+        else:
+            # the report that is a confirmed primary but never itself a related
+            relateds = {d.related_report_id for d in confirmed}
+            prims = [d.primary_report_id for d in confirmed if d.primary_report_id not in relateds]
+            primary = prims[0] if prims else confirmed[0].primary_report_id
+        group_hidden = members - {primary}
+        if group_hidden:
+            hidden |= group_hidden
+            primary_count[primary] = primary_count.get(primary, 0) + len(group_hidden)
+    return hidden, primary_count
+
+
+@router.get("/{report_id}/duplicates")
+def get_report_duplicates(report_id: str, db: Session = Depends(get_db), user=Depends(require_viewer)):
+    """Probable duplicates of {report_id} WITHIN its building cluster, with a
+    confidence level (HIGH/MEDIUM/LOW). Honors analyst decisions: NOT_DUP pairs
+    are suppressed, CONFIRMED_DUP pairs pinned HIGH. Singletons (no building) +
+    h3-only clusters return no peers (the building is the auto-grouped HIGH cluster)."""
+    src = db.query(Report).options(joinedload(Report.media)).filter(Report.id == report_id).first()
+    if not src:
+        raise HTTPException(status_code=404, detail="Report not found")
+    cluster_key = _rdd_cluster_key(src)
+    if not src.building_id:
+        return {"report_id": report_id, "cluster_key": cluster_key, "primary_report_id": None, "candidates": []}
+
+    others = (db.query(Report).options(joinedload(Report.media))
+              .filter(Report.building_id == src.building_id,
+                      Report.id != report_id,
+                      Report.deletion_requested_at.is_(None))
+              .limit(200).all())
+
+    decisions = (db.query(ReportDuplicateDecision)
+                 .filter(ReportDuplicateDecision.cluster_key == cluster_key,
+                         ReportDuplicateDecision.undone_at.is_(None)).all())
+    not_dup, confirmed = set(), set()
+    primary_id = None
+    for d in decisions:
+        if d.decision == "SET_PRIMARY":
+            primary_id = d.primary_report_id
+        elif d.related_report_id:
+            pair = frozenset((d.primary_report_id, d.related_report_id))
+            if d.decision == "NOT_DUP":
+                not_dup.add(pair)
+            elif d.decision == "CONFIRMED_DUP":
+                confirmed.add(pair)
+
+    candidates = []
+    for o in others:
+        pair = frozenset((report_id, o.id))
+        if pair in not_dup:
+            continue   # analyst ruled NOT a duplicate → never re-surface
+        score, level, sim, reasons = _rdd_score_pair(src, o)
+        is_conf = pair in confirmed
+        if is_conf:
+            level, score = "HIGH", max(score, 90)
+        if not level:
+            continue
+        loc = getattr(o, "location", None)
+        candidates.append({
+            "report_id": o.id, "confidence": level, "score": score,
+            "confirmed": is_conf, "description_similarity": sim,
+            "reasons": reasons,   # white-box: per-factor breakdown of WHY (no black-box scoring)
+            "reporter": _rdd_reporter_label(o),   # masked reporter for the review panel
+            "severity": getattr(getattr(o, "severity", None), "value", None),
+            "status": getattr(getattr(o, "status", None), "value", None),
+            "crisis_type": o.crisis_type, "infrastructure_type": getattr(getattr(o, "infrastructure_type", None), "value", None),
+            "server_created_at": _utc_iso(o.server_created_at),
+            "location_name": (loc and (loc.user_location_name or loc.device_location_name)) or None,
+        })
+    candidates.sort(key=lambda c: c["score"], reverse=True)
+    return {"report_id": report_id, "cluster_key": cluster_key,
+            "primary_report_id": primary_id, "candidates": candidates}
+
+
+class DuplicateDecisionRequest(_ReclaimBaseModel):
+    decision: str                                  # CONFIRMED_DUP | NOT_DUP | SET_PRIMARY | UNDO
+    related_report_id: Optional[str] = None        # the other report in the pair (not for SET_PRIMARY)
+
+
+@router.post("/{report_id}/duplicate-decision")
+def record_duplicate_decision(report_id: str, req: DuplicateDecisionRequest,
+                              db: Session = Depends(get_db), user=Depends(require_analyst)):
+    """Record (or undo) an analyst duplicate decision. Reversible: a new decision
+    supersedes the prior active one for the same pair/primary (older row's
+    undone_at stamped); UNDO stamps the active one. The scorer reads only active
+    (undone_at IS NULL) rows, so decisions persist + drive future surfacing."""
+    import uuid
+    from datetime import datetime, timezone as _tz
+    src = db.query(Report).options(joinedload(Report.location)).filter(Report.id == report_id).first()
+    if not src:
+        raise HTTPException(status_code=404, detail="Report not found")
+    dec = (req.decision or "").strip().upper()
+    cluster_key = _rdd_cluster_key(src)
+    now = datetime.now(_tz.utc)
+    actor = getattr(user, "id", None)
+
+    def _pair_filter(q):
+        rid = req.related_report_id
+        return q.filter(or_(
+            and_(ReportDuplicateDecision.primary_report_id == report_id,
+                 ReportDuplicateDecision.related_report_id == rid),
+            and_(ReportDuplicateDecision.primary_report_id == rid,
+                 ReportDuplicateDecision.related_report_id == report_id),
+        ))
+
+    if dec == "UNDO":
+        q = db.query(ReportDuplicateDecision).filter(
+            ReportDuplicateDecision.cluster_key == cluster_key,
+            ReportDuplicateDecision.undone_at.is_(None))
+        q = (_pair_filter(q) if req.related_report_id
+             else q.filter(ReportDuplicateDecision.primary_report_id == report_id,
+                           ReportDuplicateDecision.related_report_id.is_(None),
+                           ReportDuplicateDecision.decision == "SET_PRIMARY"))
+        n = 0
+        for d in q.all():
+            d.undone_at = now; n += 1
+        # Bump the involved reports' updated_at so the dashboard's delta poll
+        # re-sends the primary with its refreshed "N duplicates merged" badge and
+        # the un-hidden report reappears (and the listing ETag shifts) on undo.
+        src.updated_at = now
+        if req.related_report_id:
+            _rel = db.query(Report).filter(Report.id == req.related_report_id).first()
+            if _rel is not None:
+                _rel.updated_at = now
+        db.commit()
+        return {"undone": n, "cluster_key": cluster_key}
+
+    if dec not in ("CONFIRMED_DUP", "NOT_DUP", "SET_PRIMARY"):
+        raise HTTPException(status_code=400, detail="Invalid decision")
+    if dec in ("CONFIRMED_DUP", "NOT_DUP") and not req.related_report_id:
+        raise HTTPException(status_code=400, detail="related_report_id required for this decision")
+
+    # Supersede any prior ACTIVE decision for the same pair (or the cluster's
+    # SET_PRIMARY) so there is exactly one active decision per pair/primary.
+    base = db.query(ReportDuplicateDecision).filter(
+        ReportDuplicateDecision.cluster_key == cluster_key,
+        ReportDuplicateDecision.undone_at.is_(None))
+    if dec == "SET_PRIMARY":
+        base = base.filter(ReportDuplicateDecision.decision == "SET_PRIMARY")
+    else:
+        base = _pair_filter(base)
+    for d in base.all():
+        d.undone_at = now
+
+    row = ReportDuplicateDecision(
+        id=str(uuid.uuid4()), cluster_key=cluster_key, primary_report_id=report_id,
+        related_report_id=(None if dec == "SET_PRIMARY" else req.related_report_id),
+        decision=dec, actor_user_id=actor)
+    db.add(row)
+    # Bump the involved reports' updated_at so the dashboard's delta poll re-sends
+    # the primary with its refreshed "N duplicates merged" badge (and the ETag
+    # shifts) the moment a duplicate is confirmed / the primary changes.
+    src.updated_at = now
+    if req.related_report_id:
+        _rel = db.query(Report).filter(Report.id == req.related_report_id).first()
+        if _rel is not None:
+            _rel.updated_at = now
+    db.commit()
+    return {"id": row.id, "decision": dec, "cluster_key": cluster_key}
+
+
+def _rdd_info_score(r: "Report") -> float:
+    """Information richness of a report. Used to break ties when choosing the
+    canonical PRIMARY of a duplicate cluster: the primary is the report that landed
+    FIRST, and among reports that arrived at the same instant this picks the
+    most-complete one. Transparent + bounded; defensive getattr so an unusual row
+    shape never 500s a bulk merge."""
+    s = 0.0
+    try:
+        s += 3.0 * len(getattr(r, "media", None) or [])
+    except Exception:
+        pass
+    desc = (getattr(r, "description", None) or "").strip()
+    if desc:
+        s += min(len(desc), 280) / 40.0          # up to 7
+    try:
+        from app.models.report import ReviewerVerdictEnum as _RV
+        if getattr(r, "reviewer_verdict", None) == _RV.ACCEPTED.value:
+            s += 5.0                              # human-verified = authoritative
+    except Exception:
+        pass
+    if getattr(r, "building_id", None):
+        s += 2.0
+    if getattr(r, "crisis_type", None):
+        s += 1.0
+    if getattr(r, "damage_classification", None):
+        s += 1.0
+    it = getattr(r, "infrastructure_type", None)
+    if it and str(getattr(it, "value", it)).upper() != "OTHER":
+        s += 1.0
+    if getattr(r, "service_status", None):
+        s += 1.0
+    try:
+        loc = getattr(r, "location", None)
+        if loc is not None and (getattr(loc, "user_location_name", None)
+                                or getattr(loc, "device_location_name", None)):
+            s += 1.0
+    except Exception:
+        pass
+    return s
+
+
+def _rdd_candidate_pairs(db: Session, crisis_event_id: Optional[str] = None,
+                         building_id: Optional[str] = None,
+                         max_buildings: int = 3000, max_per_building: int = 60):
+    """Yield (report_a, report_b, level) for every UNCONFIRMED, not-NOT_DUP probable-
+    duplicate pair within multi-report buildings (the only place a pair can exist).
+    Bounded for the 500k scale target: only buildings with >=2 reports are scanned,
+    capped at max_buildings + max_per_building. Shared by the duplicate summary + the
+    bulk merge so the two surfaces agree on what's mergeable. Pass building_id to scope
+    to a single building (the Building Details 'Potential Duplicates' surface)."""
+    scope = [Report.crisis_event_id == crisis_event_id] if crisis_event_id else []
+    if building_id:
+        # Single-building scope: skip the multi-building scan entirely.
+        building_ids = [building_id]
+    else:
+        brows = (db.query(Report.building_id)
+                 .filter(Report.building_id.isnot(None), Report.deletion_requested_at.is_(None), *scope)
+                 .group_by(Report.building_id)
+                 .having(sa_func.count(Report.id) >= 2)
+                 .limit(max_buildings).all())
+        building_ids = [r[0] for r in brows]
+    if not building_ids:
+        return
+    decs = (db.query(ReportDuplicateDecision)
+            .filter(ReportDuplicateDecision.undone_at.is_(None),
+                    ReportDuplicateDecision.decision.in_(("CONFIRMED_DUP", "NOT_DUP"))).all())
+    settled = set()
+    already_collapsed = set()
+    for d in decs:
+        if d.related_report_id:
+            settled.add(frozenset((d.primary_report_id, d.related_report_id)))
+        if d.decision == "CONFIRMED_DUP" and d.related_report_id:
+            already_collapsed.add(d.related_report_id)   # already merged under a primary
+    for bid in building_ids:
+        q = (db.query(Report).options(joinedload(Report.media))
+             .filter(Report.building_id == bid, Report.deletion_requested_at.is_(None)))
+        if already_collapsed:
+            # A report already collapsed under a primary is hidden from the feed -
+            # NEVER re-offer it as a "potential duplicate" (this is what made the
+            # summary count phantom pairs the operator could never actually merge,
+            # so "Merge all" appeared to do nothing). Its primary (not collapsed) is
+            # kept, so brand-new reports can still merge under the existing star.
+            q = q.filter(Report.id.notin_(already_collapsed))
+        reps = q.order_by(Report.server_created_at.asc()).limit(max_per_building).all()
+        for i in range(len(reps)):
+            for j in range(i + 1, len(reps)):
+                if frozenset((reps[i].id, reps[j].id)) in settled:
+                    continue   # already decided (confirmed or ruled-not)
+                _s, level, _sim, _r = _rdd_score_pair(reps[i], reps[j])
+                if level:
+                    yield reps[i], reps[j], level
 
 
 def _ensure_building_for_pwa_pick(

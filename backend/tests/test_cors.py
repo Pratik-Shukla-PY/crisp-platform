@@ -215,3 +215,36 @@ class TestCORSCallerExclusionHeader:
         assert res.status_code == 422, (
             f"radius_km=101 must still 422 (cap is 100); got {res.status_code}"
         )
+
+
+class TestCORSStepUpHeader:
+    """Jun 2026 — preflight must allow `X-Step-Up` so the dashboard's
+    irreversible-purge step-up flow (POST /auth/step-up issues a short-lived
+    token; the purge endpoints require it via X-Step-Up) doesn't 400 in a
+    cross-origin (CDN / separate-deploy) setup. Replaces the old static
+    X-Admin-Key flow. Same browser-preflight class as the conditional-GET and
+    caller-device-hash guards above."""
+
+    @pytest.mark.parametrize("request_headers", [
+        "x-step-up",
+        "X-Step-Up",                                   # spec is case-insensitive
+        "authorization,x-step-up",
+        "content-type,x-step-up",
+    ])
+    def test_step_up_header_in_preflight(self, cors_client, request_headers):
+        res = cors_client.options(
+            "/api/v1/reports/purge-expired",
+            headers={
+                "Origin": "http://localhost:8080",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": request_headers,
+            },
+        )
+        assert res.status_code == 200, (
+            f"preflight with headers={request_headers!r} must succeed; "
+            f"got {res.status_code} body={res.text!r}"
+        )
+        allow_headers = (res.headers.get("access-control-allow-headers") or "").lower()
+        assert "x-step-up" in allow_headers, (
+            f"Access-Control-Allow-Headers missing x-step-up; got {allow_headers!r}"
+        )

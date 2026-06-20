@@ -356,7 +356,7 @@ Generate prediction with full signal breakdown and specific contributing factors
             r = await c.post("https://api.anthropic.com/v1/messages",
                 headers={"x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
                 json={
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-6",
                     "max_tokens": 1000,
                     "system": [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
                     "messages": [{"role": "user", "content": dossier}],

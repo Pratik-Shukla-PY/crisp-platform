@@ -70,8 +70,6 @@ PREFERRED_ORDER = [
     "ai_analysis",
     "media",
     "media_chunks",
-    "incident_clusters",
-    "cluster_reports",
     "prediction_zones",
     "prediction_results",
     "satellite_verifications",

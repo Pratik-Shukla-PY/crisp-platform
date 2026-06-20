@@ -84,7 +84,6 @@ def _add_report(db, device: Device, infra_type: InfraTypeEnum,
 
     db.add(AIAnalysis(
         report_id=report.id,
-        damage_score=0.8,
         transcription="This is a seeded transcription for testing triage.",
     ))
 

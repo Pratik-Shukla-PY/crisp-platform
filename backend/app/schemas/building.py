@@ -70,6 +70,14 @@ class BuildingSummary(BaseModel):
     resolved_report_count: int = 0
     debris_clearing_needed_count: int = 0
 
+    # Operationally-derived per-page counts (NOT stored columns; computed at read for
+    # the building card so an analyst triages in seconds): CRITICAL-severity reports,
+    # responders still assigned (cleared excluded), and confirmed-duplicate groups in
+    # this building. 0 = none / not-yet-computed.
+    critical_report_count: int = 0
+    responder_count: int = 0
+    duplicate_group_count: int = 0
+
     # Aggregated taxonomy.
     severity_max: Optional[str] = None
     damage_class_max: Optional[str] = None

@@ -21,7 +21,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
-from sqlalchemy import desc, or_, text
+from sqlalchemy import desc, func, or_, text
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_optional_user, require_admin, require_analyst
@@ -34,6 +34,7 @@ from app.models.report import (
     BuildingNote,
     BuildingResponder,
     Report,
+    ReportDuplicateDecision,
     SatelliteVerification,
     is_valid_building_state_transition,
 )
@@ -213,10 +214,44 @@ def list_buildings(
     has_more = len(rows) > limit
     rows = rows[:limit]
 
+    # Per-page operational counts for the building card (3 grouped queries over the
+    # page's building ids only - O(page), indexed on building_id, no N+1). critical =
+    # CRITICAL-severity non-deleted reports; responders = BuildingResponder rows still
+    # active (cleared_at NULL); duplicate groups = distinct primaries with a confirmed
+    # duplicate whose primary report sits in this building.
+    page_ids = [b.id for b in rows]
+    crit_map: dict = {}
+    resp_map: dict = {}
+    dup_map: dict = {}
+    if page_ids:
+        for bid, n in (db.query(Report.building_id, func.count(Report.id))
+                       .filter(Report.building_id.in_(page_ids),
+                               Report.deletion_requested_at.is_(None),
+                               Report.severity == "CRITICAL")
+                       .group_by(Report.building_id).all()):
+            crit_map[bid] = int(n or 0)
+        for bid, n in (db.query(BuildingResponder.building_id, func.count(BuildingResponder.id))
+                       .filter(BuildingResponder.building_id.in_(page_ids),
+                               BuildingResponder.cleared_at.is_(None))
+                       .group_by(BuildingResponder.building_id).all()):
+            resp_map[bid] = int(n or 0)
+        for bid, n in (db.query(Report.building_id,
+                                func.count(func.distinct(ReportDuplicateDecision.primary_report_id)))
+                       .join(Report, Report.id == ReportDuplicateDecision.primary_report_id)
+                       .filter(ReportDuplicateDecision.decision == "CONFIRMED_DUP",
+                               ReportDuplicateDecision.undone_at.is_(None),
+                               Report.building_id.in_(page_ids))
+                       .group_by(Report.building_id).all()):
+            dup_map[bid] = int(n or 0)
+
     # Build the response items.
     items: List[BuildingSummary] = []
     for b in rows:
-        items.append(_to_summary(b))
+        s = _to_summary(b)
+        s.critical_report_count = crit_map.get(b.id, 0)
+        s.responder_count = resp_map.get(b.id, 0)
+        s.duplicate_group_count = dup_map.get(b.id, 0)
+        items.append(s)
 
     next_cursor = None
     if has_more and rows:

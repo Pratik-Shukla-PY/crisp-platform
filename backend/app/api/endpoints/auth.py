@@ -21,7 +21,7 @@ from app.models.auth import (
 from app.models.report import Report
 from app.core.security import (
     hash_password, verify_password, validate_password_strength,
-    create_access_token, create_refresh_token, decode_token, hash_token,
+    create_access_token, create_refresh_token, create_step_up_token, decode_token, hash_token,
     generate_otp, get_otp_expiry, send_otp_email,
 )
 from app.core.deps import get_current_user, require_admin, require_super_admin
@@ -664,6 +664,47 @@ def logout(request: Request, user: User = Depends(get_current_user), db: Session
     _audit(db, user.id, user.email or user.phone_number, "LOGOUT", request)
     db.commit()
     return {"message": "Logged out successfully"}
+
+
+# ── Step-up ("sudo mode") for irreversible destructive actions ────────────────
+
+class StepUpRequest(BaseModel):
+    code: str = Field(..., min_length=1, max_length=128,
+                      description="Authenticator (TOTP) code when MFA is enrolled, "
+                                  "otherwise the account password.")
+
+
+@router.post("/step-up")
+def step_up(req: StepUpRequest, request: Request,
+            user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Re-confirm the operator's identity for an IRREVERSIBLE action (hard-purge).
+    Verifies the authenticator (TOTP) code when MFA is enrolled, else the account
+    password, then issues a short-lived step-up token (~10 min) that the client
+    sends as X-Step-Up. Replaces the shared static CRISP_ADMIN_KEY + the browser
+    prompt - this is per-user (auditable) and a real second factor."""
+    code = (req.code or "").strip()
+    method = "totp" if user.mfa_secret else "password"
+    ok = False
+    if user.mfa_secret:
+        try:
+            ok = pyotp.TOTP(user.mfa_secret).verify(code, valid_window=1)
+        except Exception:  # noqa: BLE001 - malformed secret/code must not 500
+            ok = False
+    elif user.password_hash:
+        ok = verify_password(code, user.password_hash)
+    if not ok:
+        _audit(db, user.id, user.email or user.phone_number, "STEP_UP_FAILED",
+               request, details={"method": method})
+        db.commit()
+        raise HTTPException(
+            status_code=401,
+            detail=("Incorrect authenticator code." if method == "totp"
+                    else "Incorrect password."),
+        )
+    _audit(db, user.id, user.email or user.phone_number, "STEP_UP_OK",
+           request, details={"method": method})
+    db.commit()
+    return {"step_up_token": create_step_up_token(user.id), "expires_in": 600}
 
 
 # ── Phase 1: device-linking ──────────────
