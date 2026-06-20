@@ -33,6 +33,10 @@
     // bare language code if no regional variant is configured.
     const SPEECH_MAP = {
         en: 'en-IN', hi: 'hi-IN', kn: 'kn-IN', ta: 'ta-IN', bn: 'bn-IN',
+        // The 5 below were MISSING - their absence left audio guidance SILENT
+        // for these languages (a bare 'gu'/'te'/... rarely matches an installed
+        // voice). Every shipped locale MUST have a BCP-47 entry (CI-guarded).
+        gu: 'gu-IN', ml: 'ml-IN', mr: 'mr-IN', pa: 'pa-IN', te: 'te-IN',
         ur: 'ur-PK', ar: 'ar-SA', fr: 'fr-FR', es: 'es-ES', ru: 'ru-RU',
         zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR', th: 'th-TH', vi: 'vi-VN',
         id: 'id-ID', ms: 'ms-MY', sw: 'sw-KE', am: 'am-ET', pt: 'pt-BR',

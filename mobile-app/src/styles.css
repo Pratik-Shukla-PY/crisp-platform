@@ -4067,7 +4067,9 @@ details.mr-date-group[open] .mr-date-group-chevron {
 }
 .rd-tl-step {
     display: flex; flex-direction: column; align-items: center;
-    flex: 0 0 auto; min-width: 64px;
+    /* Equal-share columns that shrink to fit (was fixed 64px → overflowed at
+       320px). Connectors are short fixed segments so the steps get the room. */
+    flex: 1 1 0; min-width: 0;
 }
 .rd-tl-dot {
     width: 22px; height: 22px; border-radius: 50%;
@@ -4080,8 +4082,9 @@ details.mr-date-group[open] .mr-date-group-chevron {
     margin-top: 4px; color: rgba(255, 255, 255, 0.5);
     text-transform: uppercase; letter-spacing: 0.3px;
     text-align: center;
+    overflow-wrap: anywhere; max-width: 100%;
 }
-.rd-tl-line { flex: 1; height: 2px; background: rgba(255, 255, 255, 0.12); margin: 0 2px; transform: translateY(-10px); }
+.rd-tl-line { flex: 0 0 10px; min-width: 6px; height: 2px; background: rgba(255, 255, 255, 0.12); margin: 0 2px; transform: translateY(-10px); }
 .rd-tl-step.rd-tl-done .rd-tl-dot { background: rgba(128, 238, 152, 0.22); border-color: rgba(128, 238, 152, 0.7); }
 .rd-tl-step.rd-tl-done .rd-tl-label { color: #80EE98; }
 .rd-tl-step.rd-tl-rejected .rd-tl-dot { background: rgba(239, 68, 68, 0.22); border-color: rgba(239, 68, 68, 0.7); }
@@ -4106,24 +4109,23 @@ details.mr-date-group[open] .mr-date-group-chevron {
     .rd-tl-step.rd-tl-current .rd-tl-dot { animation: none; }
 }
 
-/* M5 - ETA badge to the right of the status chip. Soft purple tonal
-   pill with a clock icon. Hidden by default; populated by JS based on
-   r.status / timestamps. */
-.rd-eta-badge {
-    margin-left: auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    background: rgba(21, 145, 155, 0.12);
-    border: 1px solid rgba(21, 145, 155, 0.32);
-    border-radius: 999px;
-    color: #46DFB1;
-    font-size: 11px;
-    font-weight: 600;
-    white-space: nowrap;
+/* Plain-language next-step line under the status row. Full-width + wrapping
+   so it never overflows on small screens (replaces the old right-aligned ETA
+   pill that showed a hardcoded "~30 min" for every report). */
+.rd-nextstep {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0 16px 14px;
+    padding: 8px 12px;
+    background: rgba(21, 145, 155, 0.10);
+    border: 1px solid rgba(21, 145, 155, 0.28);
+    border-radius: 10px;
+    color: #9fe9d6;
+    font-size: 12.5px;
+    line-height: 1.4;
 }
-.rd-eta-badge > i { font-size: 10px; }
+.rd-nextstep > i { color: #46DFB1; font-size: 12px; margin-top: 2px; flex: 0 0 auto; }
 
 /* M5 - mini-map. 130 px-tall Leaflet container under the photo. The
    marker uses the existing leaflet-default-icon (no custom SVG needed
@@ -4155,13 +4157,29 @@ details.mr-date-group[open] .mr-date-group-chevron {
     font-size: 11px;
 }
 
-.rd-photo-wrap {
+/* Evidence: ALL captured photos as a tappable thumbnail grid (was a single
+   16:10 photo). Up to 3 across; a lone photo gets the wide hero treatment. */
+.rd-photos {
     margin: 0 16px 16px;
-    border-radius: 12px; overflow: hidden;
-    background: rgba(255, 255, 255, 0.03);
-    aspect-ratio: 16 / 10;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
 }
-#rd-photo { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; display: block; }
+.rd-photos.rd-photos--single { grid-template-columns: 1fr; }
+.rd-photo-thumb {
+    position: relative;
+    padding: 0; border: 0; margin: 0; cursor: zoom-in;
+    border-radius: 10px; overflow: hidden;
+    background: rgba(255, 255, 255, 0.04);
+    aspect-ratio: 1 / 1;
+    display: flex; align-items: center; justify-content: center;
+    color: #64748b;
+}
+.rd-photos.rd-photos--single .rd-photo-thumb { aspect-ratio: 16 / 10; }
+.rd-photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rd-photo-thumb:focus-visible { outline: 2px solid var(--accent, #46DFB1); outline-offset: 2px; }
+.rd-photo-thumb--broken { font-size: 20px; }
+.rd-photo-placeholder { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: #64748b; font-size: 22px; background: rgba(255, 255, 255, 0.03); }
 
 .rd-section { padding: 0 16px 16px; }
 .rd-section-title {
@@ -4175,6 +4193,34 @@ details.mr-date-group[open] .mr-date-group-chevron {
 .rd-meta-item i { color: #46DFB1; margin-top: 2px; font-size: 12px; }
 .rd-meta-label { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.4px; }
 .rd-meta-value { font-size: 13px; color: #e5e7eb; font-weight: 600; margin-top: 1px; text-transform: capitalize; }
+
+/* Building tag - the tagged OSM footprint (must-have #6). */
+.rd-building {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 10px;
+}
+.rd-building > i { color: #46DFB1; font-size: 15px; flex: 0 0 auto; }
+.rd-building-body { flex: 1 1 auto; min-width: 0; }
+.rd-building-label { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.4px; }
+.rd-building-name { font-size: 14px; color: #e5e7eb; font-weight: 600; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: capitalize; }
+.rd-building-chip {
+    flex: 0 0 auto;
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;
+}
+.rd-building-chip > i { font-size: 9px; }
+.rd-building-chip--mapped { background: rgba(128, 238, 152, 0.14); color: #80EE98; border: 1px solid rgba(128, 238, 152, 0.4); }
+.rd-building-chip--unmapped { background: rgba(245, 158, 11, 0.14); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+
+/* Very small phones (≤360px): details collapse to one column. */
+@media (max-width: 360px) {
+    .rd-meta-grid { grid-template-columns: 1fr; }
+    .rd-tl-label { font-size: 9px; letter-spacing: 0.2px; }
+}
 
 /* Feedback (green block) + rejection (red block) - same shape, colour
    flipped. Shown when the report is resolved one way or the other. */
@@ -5021,6 +5067,27 @@ details.mr-date-group[open] .mr-date-group-chevron {
     transition: background 150ms ease;
 }
 .image-viewer-close:hover { background: rgba(255, 255, 255, 0.2); }
+/* Prev/next paging + counter for multi-photo (submitted-report) viewing. */
+.image-viewer-nav {
+    position: absolute;
+    top: 50%; transform: translateY(-50%);
+    width: 44px; height: 44px; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1); color: #fff; border: none;
+    font-size: 1.1rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 150ms ease;
+}
+.image-viewer-nav:hover { background: rgba(255, 255, 255, 0.2); }
+.image-viewer-prev { inset-inline-start: 12px; }
+.image-viewer-next { inset-inline-end: 12px; }
+.image-viewer-counter {
+    position: absolute;
+    top: calc(20px + env(safe-area-inset-top, 0px));
+    inset-inline-start: 50%; transform: translateX(-50%);
+    padding: 4px 12px; border-radius: 999px;
+    background: rgba(0, 0, 0, 0.5); color: #fff;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
+}
 .image-viewer-delete {
     position: absolute;
     bottom: calc(24px + env(safe-area-inset-bottom, 0px));
@@ -9429,6 +9496,16 @@ body.tier-t4 .home-impact {
     font-size: 16px;
     color: #042818;
 }
+/* Recovery state: activation did not complete within the watchdog
+   window (e.g. an iOS-suspended worker). Amber-tinted so it reads as
+   "needs another try"; the button is re-enabled to retry. */
+.pwa-update-banner.is-error {
+    background: linear-gradient(
+        135deg,
+        rgba(217, 119, 6, 0.97),
+        rgba(180, 83, 9, 0.97)
+    );
+}
 .pwa-update-banner-dismiss {
     flex-shrink: 0;
     width: 28px;
@@ -10025,6 +10102,11 @@ textarea.v4-cp-input { min-height: 72px; resize: vertical; }
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
+.v4-other-prompt-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
 .v4-other-prompt-input {
     width: 100%;
     padding: 10px 12px;
@@ -10034,6 +10116,38 @@ textarea.v4-cp-input { min-height: 72px; resize: vertical; }
     color: var(--text);
     font-size: 14px;
     font-family: inherit;
+}
+.v4-other-prompt-row .v4-other-prompt-input {
+    flex: 1;
+    min-width: 0;   /* allow the field to shrink so the ✓ button always fits (iPhone SE 375px) */
+}
+/* Explicit confirm (✓): muted until there's text, then lights up teal = "ready, tap to continue". */
+.v4-other-confirm {
+    flex: 0 0 auto;
+    width: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(9, 209, 199, 0.4);
+    border-radius: 10px;
+    background: rgba(9, 209, 199, 0.12);
+    color: #09d1c7;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background .15s, color .15s, opacity .15s, transform .05s, box-shadow .15s;
+}
+.v4-other-confirm:disabled {
+    opacity: .4;
+    cursor: default;
+}
+.v4-other-confirm:not(:disabled) {
+    background: #09d1c7;
+    color: #04201c;
+    border-color: #09d1c7;
+    box-shadow: 0 2px 10px rgba(9, 209, 199, 0.32);
+}
+.v4-other-confirm:not(:disabled):active {
+    transform: scale(0.95);
 }
 .v4-other-prompt-input:focus {
     outline: 0;
@@ -10509,6 +10623,16 @@ textarea.v4-cp-input { min-height: 72px; resize: vertical; }
 .v4-send-btn {
     background: linear-gradient(180deg, #80EE98 0%, #46DFB1 100%);
     color: #fff;
+}
+/* Disabled until the required debris question is answered: override the
+   always-on green gradient with a muted, not-allowed look so the gate is
+   VISIBLE, not just functional. Excludes the in-flight "Sending…" state
+   (.is-sending), which keeps the green gradient + its own opacity. */
+.v4-send-btn:disabled:not(.is-sending) {
+    background: rgba(148, 163, 184, 0.18);
+    color: var(--muted, #94a3b8);
+    box-shadow: none;
+    cursor: not-allowed;
 }
 
 @media (max-width: 360px) {
@@ -13985,6 +14109,24 @@ body { background-color: #10284a; }
     line-height: 1.5;
     flex: 0 0 auto;
 }
+/* "Optional" tag on the Login button - muted/neutral pill (informational,
+   not a count/status), so it reads as "you may, but need not" rather than an
+   alert. Hidden once signed-in (data-state) since the choice has been made. */
+.home-stage .home-primary-btn--login .hpb-tag {
+    margin-inline-start: 4px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: var(--text-dim, #9fb2c9);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    line-height: 1.6;
+    flex: 0 0 auto;
+}
+.home-stage .home-primary-btn--login[data-state="signed-in"] .hpb-tag { display: none; }
 /* Signed-in tile state - slightly more emphatic border + brighter
    online dot. Wired by home-screen.js _updateAuthState via
    data-state="signed-in". */

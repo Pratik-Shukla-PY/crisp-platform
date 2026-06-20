@@ -150,27 +150,39 @@
             var source = 'fallback_en';
             var lang = null;
 
-            // 1. manual pick
+            // Device's RAW declared primary language (base only) + the
+            // family-resolved pick. Computed once so the precedence below can
+            // tell an EXPLICIT supported non-English locale (a deliberate user
+            // choice that outranks location) apart from English / an
+            // unsupported locale that merely family-falls to a supported one
+            // (a SOFT default the user's physical location may override).
+            var rawBase = '';
+            try {
+                var nav = (navigator.languages && navigator.languages[0])
+                    || navigator.language || '';
+                rawBase = String(nav).toLowerCase().split('-')[0];
+            } catch (_) {}
+            var navPick = rawBase ? pick(rawBase) : null;
+            var explicitNonEng = !!(rawBase && SUPPORTED.indexOf(rawBase) >= 0 && rawBase !== 'en');
+
+            // 1. manual pick - an in-app language choice always wins.
             try {
                 var m = localStorage.getItem('crisp_lang_manual');
                 if (m) { var p = pick(m); if (p) { lang = p; source = 'manual'; } }
             } catch (_) {}
 
-            // 2. browser language (explicit device signal - outranks geo/IP).
-            //    No 'en' default here: a browser that declares NOTHING is not
-            //    an explicit signal, so it falls through to the region cache.
-            if (!lang) {
-                try {
-                    var nav = (navigator.languages && navigator.languages[0])
-                        || navigator.language || '';
-                    var p3 = nav ? pick(nav) : null;
-                    if (p3) { lang = p3; source = 'browser'; }
-                } catch (_) {}
-            }
+            // 2. EXPLICIT non-English device locale - a deliberately-set
+            //    supported language (fr/es/ar/zh/...) outranks location.
+            //    English, an unset locale, or an UNSUPPORTED one do NOT count
+            //    as explicit here: they defer to the user's physical location
+            //    (operator policy Jun-2026 - "location wins unless the device
+            //    is explicitly set to a non-English supported language").
+            if (!lang && explicitNonEng) { lang = rawBase; source = 'browser'; }
 
-            // 3. cached GPS/IP context (region language - void-filler only,
-            //    reached when the browser locale doesn't resolve to a
-            //    supported language)
+            // 3. cached GPS/IP location language - the location signal now
+            //    outranks an English / family-fallback device locale (it
+            //    previously sat BELOW the browser locale, so an English phone
+            //    never honored where the user physically was).
             if (!lang) {
                 try {
                     var raw = localStorage.getItem('crisp_loc_ctx');
@@ -184,7 +196,13 @@
                 } catch (_) {}
             }
 
-            // 4. fallback
+            // 4. device locale as a SOFT default - English, or a family-mapped
+            //    fallback for an unsupported locale - used only when we have no
+            //    location yet. The deferred home-stage GPS detect (app.js) can
+            //    still upgrade this to the location language once a fix lands.
+            if (!lang && navPick) { lang = navPick; source = 'browser_soft'; }
+
+            // 5. fallback
             if (!lang) { lang = 'en'; source = 'fallback_en'; }
 
             var dir = RTL[lang] ? 'rtl' : 'ltr';
@@ -210,7 +228,7 @@
          CACHE_NAME so errors are bisectable to the deploy build.
          Update both together (or run scripts/sync-release-tags.mjs
          to do it automatically). -->
-    <meta name="crisp-release" content="crisp-pwa@v341">
+    <meta name="crisp-release" content="crisp-pwa@v349">
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#09D1C7">
@@ -595,9 +613,9 @@
         // any locale JSON. Pre-commit hook gates drift.
         window.__crispHomeI18nPacks = {
   "__meta": {
-    "buildTs": "2026-06-14T15:02:57.059Z",
+    "buildTs": "2026-06-19T06:07:24.346Z",
     "scriptVersion": 2,
-    "keyCount": 101,
+    "keyCount": 102,
     "locales": [
       "en",
       "zh",
@@ -624,8 +642,8 @@
     ]
   },
   "en": {
-    "__version": "d001b3375457",
-    "__checksum": "eaee2e2baeca70ae",
+    "__version": "072b7591b682",
+    "__checksum": "5717b40166503072",
     "action_tile_download": "Download App",
     "action_tile_login": "Login",
     "add_to_homescreen": "+ Add to Homescreen",
@@ -692,6 +710,7 @@
     "home_greeting_sub": "Tap below to report another incident.",
     "home_login_icon_signed_in": "Account",
     "home_login_icon_signed_out": "Sign in",
+    "home_login_optional": "Optional",
     "home_logout": "Log out",
     "home_recent_reports_empty": "No reports yet.",
     "home_recent_reports_title": "Your recent reports",
@@ -729,8 +748,8 @@
     "tier_t4_lifekeeper_label": "Lifekeeper"
   },
   "zh": {
-    "__version": "ad1440aeeaff",
-    "__checksum": "c1a5cd60b59e105b",
+    "__version": "40bb3381bc76",
+    "__checksum": "27abbb76e2c79e25",
     "action_tile_download": "下载应用",
     "action_tile_login": "登录",
     "add_to_homescreen": "+ 添加到主屏幕",
@@ -797,6 +816,7 @@
     "home_greeting_sub": "点按下方报告另一起事件。",
     "home_login_icon_signed_in": "账户",
     "home_login_icon_signed_out": "登录",
+    "home_login_optional": "可选",
     "home_logout": "退出登录",
     "home_recent_reports_empty": "暂无报告。",
     "home_recent_reports_title": "你最近的报告",
@@ -834,8 +854,8 @@
     "tier_t4_lifekeeper_label": "生命守护者"
   },
   "es": {
-    "__version": "f4f1db02c349",
-    "__checksum": "ccee58a3e40fbab6",
+    "__version": "909435bc0c69",
+    "__checksum": "dc1ba7a6e509d70b",
     "action_tile_download": "Descargar",
     "action_tile_login": "Acceder",
     "add_to_homescreen": "+ Añadir a Inicio",
@@ -902,6 +922,7 @@
     "home_greeting_sub": "Toca abajo para reportar otro incidente.",
     "home_login_icon_signed_in": "Cuenta",
     "home_login_icon_signed_out": "Iniciar sesión",
+    "home_login_optional": "Opcional",
     "home_logout": "Cerrar sesión",
     "home_recent_reports_empty": "Aún no hay reportes.",
     "home_recent_reports_title": "Tus reportes recientes",
@@ -939,8 +960,8 @@
     "tier_t4_lifekeeper_label": "Guardián de vidas"
   },
   "ar": {
-    "__version": "1b097977752f",
-    "__checksum": "8eaa8db97835fe5a",
+    "__version": "d7e005092deb",
+    "__checksum": "c2fef9ecbe5249c2",
     "action_tile_download": "تنزيل التطبيق",
     "action_tile_login": "تسجيل الدخول",
     "add_to_homescreen": "+ إضافة إلى الشاشة الرئيسية",
@@ -1007,6 +1028,7 @@
     "home_greeting_sub": "اضغط أدناه للإبلاغ عن حادثة أخرى.",
     "home_login_icon_signed_in": "الحساب",
     "home_login_icon_signed_out": "تسجيل الدخول",
+    "home_login_optional": "اختياري",
     "home_logout": "تسجيل الخروج",
     "home_recent_reports_empty": "لا تقارير بعد.",
     "home_recent_reports_title": "تقاريرك الأخيرة",
@@ -1044,8 +1066,8 @@
     "tier_t4_lifekeeper_label": "حافظ الحياة"
   },
   "fr": {
-    "__version": "4bc593bb77cc",
-    "__checksum": "3fcce91fdd00466b",
+    "__version": "bc20d00147bc",
+    "__checksum": "5c06032185aa88e6",
     "action_tile_download": "Télécharger",
     "action_tile_login": "Connexion",
     "add_to_homescreen": "+ Ajouter à l'écran d'accueil",
@@ -1112,6 +1134,7 @@
     "home_greeting_sub": "Appuyez ci-dessous pour signaler un autre incident.",
     "home_login_icon_signed_in": "Compte",
     "home_login_icon_signed_out": "Se connecter",
+    "home_login_optional": "Facultatif",
     "home_logout": "Se déconnecter",
     "home_recent_reports_empty": "Aucun signalement pour l'instant.",
     "home_recent_reports_title": "Vos signalements récents",
@@ -1149,8 +1172,8 @@
     "tier_t4_lifekeeper_label": "Gardien de vies"
   },
   "ru": {
-    "__version": "8680cd2b4602",
-    "__checksum": "8c76a9a3139b2961",
+    "__version": "af0aa631603d",
+    "__checksum": "009d96fe89739441",
     "action_tile_download": "Скачать",
     "action_tile_login": "Войти",
     "add_to_homescreen": "+ Добавить на главный экран",
@@ -1217,6 +1240,7 @@
     "home_greeting_sub": "Нажмите ниже, чтобы сообщить о другом инциденте.",
     "home_login_icon_signed_in": "Аккаунт",
     "home_login_icon_signed_out": "Войти",
+    "home_login_optional": "Необязательно",
     "home_logout": "Выйти",
     "home_recent_reports_empty": "Отчётов пока нет.",
     "home_recent_reports_title": "Ваши недавние отчёты",
@@ -1254,8 +1278,8 @@
     "tier_t4_lifekeeper_label": "Хранитель жизней"
   },
   "hi": {
-    "__version": "b0665eaeba71",
-    "__checksum": "8937eeaf3e239c19",
+    "__version": "6bf91f905066",
+    "__checksum": "4854cd704332f4b3",
     "action_tile_download": "ऐप डाउनलोड करें",
     "action_tile_login": "लॉगिन",
     "add_to_homescreen": "+ होम स्क्रीन पर जोड़ें",
@@ -1322,6 +1346,7 @@
     "home_greeting_sub": "किसी और घटना की रिपोर्ट करने के लिए नीचे टैप करें।",
     "home_login_icon_signed_in": "खाता",
     "home_login_icon_signed_out": "साइन इन करें",
+    "home_login_optional": "Optional",
     "home_logout": "लॉगआउट",
     "home_recent_reports_empty": "अभी कोई रिपोर्ट नहीं।",
     "home_recent_reports_title": "आपकी हाल की रिपोर्टें",
@@ -1359,8 +1384,8 @@
     "tier_t4_lifekeeper_label": "जीवन रक्षक"
   },
   "pt": {
-    "__version": "67469613a9d3",
-    "__checksum": "0d81cac1da214eea",
+    "__version": "696ebe9b4dd0",
+    "__checksum": "2642ff64ef144782",
     "action_tile_download": "Baixar App",
     "action_tile_login": "Entrar",
     "add_to_homescreen": "+ Adicionar à Tela Inicial",
@@ -1427,6 +1452,7 @@
     "home_greeting_sub": "Toque abaixo para reportar outro incidente.",
     "home_login_icon_signed_in": "Conta",
     "home_login_icon_signed_out": "Entrar",
+    "home_login_optional": "Optional",
     "home_logout": "Terminar sessão",
     "home_recent_reports_empty": "Sem relatórios ainda.",
     "home_recent_reports_title": "Os seus relatórios recentes",
@@ -1464,8 +1490,8 @@
     "tier_t4_lifekeeper_label": "Guardião de vidas"
   },
   "bn": {
-    "__version": "4b22e8110075",
-    "__checksum": "6a2200d20c519bd2",
+    "__version": "6f021c5438f5",
+    "__checksum": "ea6ca26f03253a68",
     "action_tile_download": "অ্যাপ ডাউনলোড",
     "action_tile_login": "লগইন",
     "add_to_homescreen": "+ হোম স্ক্রিনে যোগ করুন",
@@ -1532,6 +1558,7 @@
     "home_greeting_sub": "আরেকটি ঘটনা রিপোর্ট করতে নীচে ট্যাপ করুন।",
     "home_login_icon_signed_in": "অ্যাকাউন্ট",
     "home_login_icon_signed_out": "সাইন ইন করুন",
+    "home_login_optional": "Optional",
     "home_logout": "লগ আউট",
     "home_recent_reports_empty": "এখনো কোনো প্রতিবেদন নেই।",
     "home_recent_reports_title": "আপনার সাম্প্রতিক প্রতিবেদন",
@@ -1569,8 +1596,8 @@
     "tier_t4_lifekeeper_label": "জীবনরক্ষাকারী"
   },
   "ja": {
-    "__version": "eb2c2cd3a9db",
-    "__checksum": "90ee6dc5effb2c00",
+    "__version": "1f6fdc8886cb",
+    "__checksum": "aaa488d2dde1293a",
     "action_tile_download": "アプリ取得",
     "action_tile_login": "ログイン",
     "add_to_homescreen": "+ ホーム画面に追加",
@@ -1637,6 +1664,7 @@
     "home_greeting_sub": "下をタップして別の事故を報告してください。",
     "home_login_icon_signed_in": "アカウント",
     "home_login_icon_signed_out": "サインイン",
+    "home_login_optional": "Optional",
     "home_logout": "ログアウト",
     "home_recent_reports_empty": "まだ報告はありません。",
     "home_recent_reports_title": "最近の報告",
@@ -1674,8 +1702,8 @@
     "tier_t4_lifekeeper_label": "ライフキーパー"
   },
   "tr": {
-    "__version": "6c45bfba5d25",
-    "__checksum": "cc4c165327991aee",
+    "__version": "77496faf0c25",
+    "__checksum": "9e9257691618637f",
     "action_tile_download": "Uygulamayı İndir",
     "action_tile_login": "Giriş",
     "add_to_homescreen": "+ Ana Ekrana Ekle",
@@ -1742,6 +1770,7 @@
     "home_greeting_sub": "Başka bir olay bildirmek için aşağıya dokun.",
     "home_login_icon_signed_in": "Hesap",
     "home_login_icon_signed_out": "Giriş yap",
+    "home_login_optional": "Optional",
     "home_logout": "Çıkış yap",
     "home_recent_reports_empty": "Henüz bildirim yok.",
     "home_recent_reports_title": "Son bildirimleriniz",
@@ -1779,8 +1808,8 @@
     "tier_t4_lifekeeper_label": "Hayat koruyucu"
   },
   "vi": {
-    "__version": "d84916d08b9b",
-    "__checksum": "a622e248d580d673",
+    "__version": "1a9ba933a32f",
+    "__checksum": "a18ad9d45437f977",
     "action_tile_download": "Tải Ứng Dụng",
     "action_tile_login": "Đăng nhập",
     "add_to_homescreen": "+ Thêm vào Màn hình chính",
@@ -1847,6 +1876,7 @@
     "home_greeting_sub": "Chạm bên dưới để báo cáo sự cố khác.",
     "home_login_icon_signed_in": "Tài khoản",
     "home_login_icon_signed_out": "Đăng nhập",
+    "home_login_optional": "Optional",
     "home_logout": "Đăng xuất",
     "home_recent_reports_empty": "Chưa có báo cáo nào.",
     "home_recent_reports_title": "Báo cáo gần đây của bạn",
@@ -1884,8 +1914,8 @@
     "tier_t4_lifekeeper_label": "Người giữ mạng sống"
   },
   "ko": {
-    "__version": "beb881e2f861",
-    "__checksum": "a62576138dc1abe2",
+    "__version": "d59e98c8cbf4",
+    "__checksum": "f19ddf160d01b517",
     "action_tile_download": "앱 다운로드",
     "action_tile_login": "로그인",
     "add_to_homescreen": "+ 홈 화면에 추가",
@@ -1952,6 +1982,7 @@
     "home_greeting_sub": "다른 사고를 신고하려면 아래를 탭하세요.",
     "home_login_icon_signed_in": "계정",
     "home_login_icon_signed_out": "로그인",
+    "home_login_optional": "Optional",
     "home_logout": "로그아웃",
     "home_recent_reports_empty": "아직 보고서가 없습니다.",
     "home_recent_reports_title": "최근 보고서",
@@ -1989,8 +2020,8 @@
     "tier_t4_lifekeeper_label": "라이프키퍼"
   },
   "id": {
-    "__version": "8306f8fe458b",
-    "__checksum": "1667ba72188e9ce0",
+    "__version": "c481790b7c53",
+    "__checksum": "6fdb92aed4bb59cc",
     "action_tile_download": "Unduh Aplikasi",
     "action_tile_login": "Masuk",
     "add_to_homescreen": "+ Tambahkan ke Layar Utama",
@@ -2057,6 +2088,7 @@
     "home_greeting_sub": "Sentuh di bawah untuk melaporkan insiden lain.",
     "home_login_icon_signed_in": "Akun",
     "home_login_icon_signed_out": "Masuk",
+    "home_login_optional": "Optional",
     "home_logout": "Keluar",
     "home_recent_reports_empty": "Belum ada laporan.",
     "home_recent_reports_title": "Laporan terbaru Anda",
@@ -2094,8 +2126,8 @@
     "tier_t4_lifekeeper_label": "Penjaga Nyawa"
   },
   "ur": {
-    "__version": "38bff6003bf6",
-    "__checksum": "8271b9a5dda9973b",
+    "__version": "2d2a9041a928",
+    "__checksum": "18609a83ffdfc4dc",
     "action_tile_download": "ایپ ڈاؤن لوڈ",
     "action_tile_login": "لاگ ان",
     "add_to_homescreen": "+ ہوم اسکرین میں شامل کریں",
@@ -2162,6 +2194,7 @@
     "home_greeting_sub": "کسی اور واقعے کی رپورٹ کے لیے نیچے ٹیپ کریں۔",
     "home_login_icon_signed_in": "اکاؤنٹ",
     "home_login_icon_signed_out": "سائن ان کریں",
+    "home_login_optional": "Optional",
     "home_logout": "لاگ آؤٹ",
     "home_recent_reports_empty": "ابھی کوئی رپورٹ نہیں۔",
     "home_recent_reports_title": "آپ کی حالیہ رپورٹس",
@@ -2199,8 +2232,8 @@
     "tier_t4_lifekeeper_label": "حیاتکیپر"
   },
   "kn": {
-    "__version": "b31cf274bde2",
-    "__checksum": "737b38a955a20d08",
+    "__version": "98a4539c1c20",
+    "__checksum": "f0ef1a3b73d57b2e",
     "action_tile_download": "ಆ್ಯಪ್ ಡೌನ್ಲೋಡ್",
     "action_tile_login": "ಲಾಗಿನ್",
     "add_to_homescreen": "+ ಹೋಮ್ ಸ್ಕ್ರೀನ್‌ಗೆ ಸೇರಿಸಿ",
@@ -2267,6 +2300,7 @@
     "home_greeting_sub": "ಮತ್ತೊಂದು ಘಟನೆ ವರದಿ ಮಾಡಲು ಕೆಳಗೆ ಟ್ಯಾಪ್ ಮಾಡಿ.",
     "home_login_icon_signed_in": "ಖಾತೆ",
     "home_login_icon_signed_out": "ಸೈನ್ ಇನ್ ಮಾಡಿ",
+    "home_login_optional": "Optional",
     "home_logout": "ಲಾಗ್ ಔಟ್",
     "home_recent_reports_empty": "ಇನ್ನೂ ವರದಿಗಳಿಲ್ಲ.",
     "home_recent_reports_title": "ಇತ್ತೀಚಿನ ವರದಿಗಳು",
@@ -2304,8 +2338,8 @@
     "tier_t4_lifekeeper_label": "ಜೀವರಕ್ಷಕ"
   },
   "ta": {
-    "__version": "cb8140e602c6",
-    "__checksum": "2d373947d480c9b4",
+    "__version": "a1f5197c4ba2",
+    "__checksum": "14c54723a615e66f",
     "action_tile_download": "ஆப்ஸ் பதிவிறக்கு",
     "action_tile_login": "உள்நுழைய",
     "add_to_homescreen": "+ முகப்புத் திரையில் சேர்க்கவும்",
@@ -2372,6 +2406,7 @@
     "home_greeting_sub": "மற்றொரு சம்பவத்தை அறிக்கையிட கீழே தட்டவும்.",
     "home_login_icon_signed_in": "கணக்கு",
     "home_login_icon_signed_out": "உள்நுழைய",
+    "home_login_optional": "Optional",
     "home_logout": "வெளியேறு",
     "home_recent_reports_empty": "இன்னும் அறிக்கைகள் இல்லை.",
     "home_recent_reports_title": "சமீபத்திய அறிக்கைகள்",
@@ -2409,8 +2444,8 @@
     "tier_t4_lifekeeper_label": "உயிர் காப்பாளர்"
   },
   "te": {
-    "__version": "127c53753fb2",
-    "__checksum": "742742f7e49ed323",
+    "__version": "9b96b5641719",
+    "__checksum": "0a579dc1ff001fed",
     "action_tile_download": "యాప్ డౌన్‌లోడ్",
     "action_tile_login": "లాగిన్",
     "add_to_homescreen": "+ హోమ్ స్క్రీన్‌కి జోడించండి",
@@ -2477,6 +2512,7 @@
     "home_greeting_sub": "మరో సంఘటనను నివేదించడానికి క్రింద నొక్కండి.",
     "home_login_icon_signed_in": "ఖాతా",
     "home_login_icon_signed_out": "సైన్ ఇన్ చేయండి",
+    "home_login_optional": "Optional",
     "home_logout": "లాగ్ ఔట్",
     "home_recent_reports_empty": "ఇంకా నివేదికలు లేవు.",
     "home_recent_reports_title": "ఇటీవలి నివేదికలు",
@@ -2514,8 +2550,8 @@
     "tier_t4_lifekeeper_label": "జీవరక్షకుడు"
   },
   "ml": {
-    "__version": "881e3f1029ed",
-    "__checksum": "461063c908f874ee",
+    "__version": "aa5635544e1b",
+    "__checksum": "3440582b5e77cc6a",
     "action_tile_download": "ആപ്പ് ഡൗൺലോഡ്",
     "action_tile_login": "ലോഗിൻ",
     "add_to_homescreen": "+ ഹോം സ്‌ക്രീനിലേക്ക് ചേർക്കുക",
@@ -2582,6 +2618,7 @@
     "home_greeting_sub": "മറ്റൊരു സംഭവം റിപ്പോർട്ട് ചെയ്യാൻ താഴെ ടാപ് ചെയ്യുക.",
     "home_login_icon_signed_in": "അക്കൗണ്ട്",
     "home_login_icon_signed_out": "സൈൻ ഇൻ ചെയ്യുക",
+    "home_login_optional": "Optional",
     "home_logout": "ലോഗൗട്ട്",
     "home_recent_reports_empty": "ഇതുവരെ റിപ്പോർട്ടുകൾ ഇല്ല.",
     "home_recent_reports_title": "നിങ്ങളുടെ സമീപകാല റിപ്പോർട്ടുകൾ",
@@ -2619,8 +2656,8 @@
     "tier_t4_lifekeeper_label": "ജീവൻ കാത്തവൻ"
   },
   "gu": {
-    "__version": "03f154524f23",
-    "__checksum": "02b4771abc5ee07b",
+    "__version": "6ab83e018ca9",
+    "__checksum": "7b6a9725f5eff7d7",
     "action_tile_download": "ઍપ ડાઉનલોડ",
     "action_tile_login": "લૉગિન",
     "add_to_homescreen": "+ હોમ સ્ક્રીન પર ઉમેરો",
@@ -2687,6 +2724,7 @@
     "home_greeting_sub": "બીજી ઘટના રિપોર્ટ કરવા નીચે ટેપ.",
     "home_login_icon_signed_in": "એકાઉન્ટ",
     "home_login_icon_signed_out": "સાઇન ઇન કરો",
+    "home_login_optional": "Optional",
     "home_logout": "લોગ આઉટ",
     "home_recent_reports_empty": "હજુ કોઈ રિપોર્ટ નથી.",
     "home_recent_reports_title": "તાજેતરની રિપોર્ટ્સ",
@@ -2724,8 +2762,8 @@
     "tier_t4_lifekeeper_label": "જીવનરક્ષક"
   },
   "mr": {
-    "__version": "1c2cdfac72ab",
-    "__checksum": "5e02674e7ce2abb1",
+    "__version": "09b919671364",
+    "__checksum": "b55cad868c43bbc1",
     "action_tile_download": "ॲप डाउनलोड",
     "action_tile_login": "लॉगिन",
     "add_to_homescreen": "+ होम स्क्रीनवर जोडा",
@@ -2792,6 +2830,7 @@
     "home_greeting_sub": "आणखी एक घटनेची तक्रार करण्यासाठी खाली टॅप.",
     "home_login_icon_signed_in": "खाते",
     "home_login_icon_signed_out": "साइन इन करा",
+    "home_login_optional": "Optional",
     "home_logout": "लॉग आउट",
     "home_recent_reports_empty": "अद्याप अहवाल नाहीत.",
     "home_recent_reports_title": "अलीकडील अहवाल",
@@ -2829,8 +2868,8 @@
     "tier_t4_lifekeeper_label": "जीवन रक्षक"
   },
   "pa": {
-    "__version": "ab2a86d26c28",
-    "__checksum": "5b38e2f998f04477",
+    "__version": "07afdb3933ec",
+    "__checksum": "078e4a442416a7b4",
     "action_tile_download": "ਐਪ ਡਾਊਨਲੋਡ",
     "action_tile_login": "ਲੌਗਇਨ",
     "add_to_homescreen": "+ ਹੋਮ ਸਕਰੀਨ 'ਤੇ ਜੋੜੋ",
@@ -2897,6 +2936,7 @@
     "home_greeting_sub": "ਇੱਕ ਹੋਰ ਘਟਨਾ ਦੀ ਰਿਪੋਰਟ ਕਰਨ ਲਈ ਹੇਠਾਂ ਟੈਪ।",
     "home_login_icon_signed_in": "ਖਾਤਾ",
     "home_login_icon_signed_out": "ਸਾਈਨ ਇਨ ਕਰੋ",
+    "home_login_optional": "Optional",
     "home_logout": "ਲਾਗ ਆਊਟ",
     "home_recent_reports_empty": "ਅਜੇ ਕੋਈ ਰਿਪੋਰਟਾਂ ਨਹੀਂ।",
     "home_recent_reports_title": "ਹਾਲੀਆ ਰਿਪੋਰਟਾਂ",
@@ -2976,7 +3016,16 @@
         <button id="btn-image-viewer-close" class="image-viewer-close" aria-label="Close" data-i18n-aria-label="aria_close">
             <i class="fa-solid fa-xmark"></i>
         </button>
+        <!-- Prev/next paging - shown only when viewing a multi-photo set
+             (a submitted report's photo grid); hidden for single images. -->
+        <button id="btn-image-viewer-prev" class="image-viewer-nav image-viewer-prev" style="display:none;" aria-label="Previous photo" data-i18n-aria-label="aria_prev_photo">
+            <i class="fa-solid fa-chevron-left"></i>
+        </button>
+        <button id="btn-image-viewer-next" class="image-viewer-nav image-viewer-next" style="display:none;" aria-label="Next photo" data-i18n-aria-label="aria_next_photo">
+            <i class="fa-solid fa-chevron-right"></i>
+        </button>
         <img id="image-viewer-img" class="image-viewer-img" src="" alt="">
+        <div id="image-viewer-counter" class="image-viewer-counter" style="display:none;" aria-hidden="true">-</div>
         <button id="btn-image-viewer-delete" class="image-viewer-delete">
             <i class="fa-solid fa-trash-can"></i>
             <span data-i18n="image_delete_btn">Delete image</span>
@@ -3540,6 +3589,10 @@
                             </svg>
                         </span>
                         <span class="hpb-label" data-i18n="action_tile_login">Sign in</span>
+                        <!-- "Optional" tag - reassures reporters that login is
+                             NOT required to submit (anonymity, must-have #9).
+                             Hidden once signed-in via the [data-state] CSS. -->
+                        <span class="hpb-tag" data-i18n="home_login_optional">Optional</span>
                         <span class="icon-status-dot dot-offline" id="home-login-dot" aria-hidden="true"></span>
                     </button>
                     <button type="button" class="home-primary-btn home-primary-btn--myreports"
@@ -4851,13 +4904,33 @@
                     <label for="v4-infra-other-input"
                            class="v4-other-prompt-label"
                            data-i18n="v4_infra_other_prompt">Please describe what type of infrastructure</label>
-                    <input id="v4-infra-other-input"
-                           type="text"
-                           class="v4-other-prompt-input"
-                           autocomplete="off"
-                           maxlength="120"
-                           placeholder="e.g. cell tower, religious site, agricultural shed"
-                           data-i18n-placeholder="v4_infra_other_placeholder">
+                    <!-- input + an explicit confirm (✓) button: the preset tiles
+                         auto-advance on tap, but the free-text path needs a clear
+                         "I'm done" affordance. The button stays muted until there's
+                         text, then lights up teal; tapping it commits + continues. -->
+                    <div class="v4-other-prompt-row">
+                        <input id="v4-infra-other-input"
+                               type="text"
+                               class="v4-other-prompt-input"
+                               autocomplete="off"
+                               maxlength="120"
+                               enterkeyhint="done"
+                               placeholder="e.g. cell tower, religious site, agricultural shed"
+                               data-i18n-placeholder="v4_infra_other_placeholder">
+                        <button id="v4-infra-other-confirm"
+                                type="button"
+                                class="v4-other-confirm"
+                                disabled
+                                data-i18n-aria-label="v4_continue"
+                                data-i18n-title="v4_continue"
+                                aria-label="Continue"
+                                title="Continue">
+                            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+                                <path fill="none" stroke="currentColor" stroke-width="3"
+                                      stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             </section>
 
@@ -5182,9 +5255,9 @@
         </div>
 
         <footer class="v4-footer">
-            <button class="v4-primary v4-send-btn is-ready" id="btn-v4-send" type="button">
+            <button class="v4-primary v4-send-btn" id="btn-v4-send" type="button" disabled aria-disabled="true">
                 <i class="fa-solid fa-paper-plane"></i>
-                <span data-i18n="v4_send">Send to UNDP</span>
+                <span data-i18n="v4_send">Send Report</span>
             </button>
         </footer>
 
@@ -6856,10 +6929,14 @@
         <div class="rd-status-row">
             <span class="rd-status-chip" id="rd-status-chip">-</span>
             <span class="rd-meta" id="rd-meta-date">-</span>
-            <span class="rd-eta-badge" id="rd-eta-badge" style="display:none;">
-                <i class="fa-solid fa-clock" aria-hidden="true"></i>
-                <span id="rd-eta-text">-</span>
-            </span>
+        </div>
+
+        <!-- Plain-language next-step expectation - NO fabricated ETA (was a
+             hardcoded "~30 min" shown for every report). Full-width so it never
+             overflows on small screens. Set by _renderRdEta(). -->
+        <div class="rd-nextstep" id="rd-eta-badge" style="display:none;">
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+            <span id="rd-eta-text">-</span>
         </div>
 
         <!-- Status timeline - Submitted → Under Review → Accepted/Rejected
@@ -6879,11 +6956,10 @@
             <!-- Injected by JS to keep i18n + state in one place. -->
         </div>
 
-        <!-- Primary photo - SMALL variant for bandwidth; user can tap
-             to see the LARGE via the lightbox (existing openLightbox). -->
-        <div class="rd-photo-wrap" id="rd-photo-wrap" style="display:none;">
-            <img id="rd-photo" src="" alt="Report photo" loading="lazy">
-        </div>
+        <!-- Evidence: ALL captured photos as a thumbnail grid (was a single
+             thumbnail). Tapping any opens the shared full-screen viewer
+             (read-only, prev/next, Close ✕). Built by renderReportDetail(). -->
+        <div class="rd-photos" id="rd-photos" style="display:none;"></div>
 
         <!-- M5 mini-map - populated by _renderRdMiniMap() when the report
              carries non-zero coordinates. 130 px-tall static Leaflet view
@@ -6902,6 +6978,13 @@
         <div class="rd-section" id="rd-desc-section" style="display:none;">
             <div class="rd-section-title" data-i18n="description_label">Description</div>
             <p class="rd-desc" id="rd-desc">-</p>
+        </div>
+
+        <!-- Building tag - the OSM footprint the reporter tagged (must-have
+             #6). Hidden when the report has no building. Built by
+             renderReportDetail(). -->
+        <div class="rd-section" id="rd-building-section" style="display:none;">
+            <div class="rd-building" id="rd-building"></div>
         </div>
 
         <!-- Metadata: location + damage + severity + crisis type. -->
@@ -7132,7 +7215,7 @@
      (commit 79ffc56). Self-contained IIFE; throttled to once per 24 h.
      Loaded with defer so it runs after app.js wires up the device_id. -->
 <script defer src="device-telemetry.js?v=1"></script>
-<script defer src="app.js?v=1039"></script>
+<script defer src="app.js?v=1041"></script>
 <!-- v4-flow loads AFTER app.js so it can read window.goToStage / state /
      applyI18n etc. Internally it _whenReady-polls until those are set. -->
 <!-- May 2026 (photo-consent pass) - modal shown ONCE per device when
@@ -7171,7 +7254,7 @@
         </div>
     </div>
 </div>
-<script defer src="v4-flow.js?v=4"></script>
+<script defer src="v4-flow.js?v=5"></script>
 <!-- May 2026 reward-system v2 (futuristic pass) - 8 hero caricature
      SVGs. Loaded BEFORE badge-studio.js so the composer can read
      `window.crispCharacterPack` synchronously on first paint. -->

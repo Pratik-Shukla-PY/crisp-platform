@@ -116,92 +116,86 @@ if ('serviceWorker' in navigator) {
         }
     });
 
-    // PWA update prompt wiring.
+    // PWA in-app update prompt (hardened).
     //
-    // Problem: previously sw.js called self.skipWaiting() on install,
-    // so a new version silently took over on the next navigation.
-    // Installed-to-homescreen users who kept the same tab/window
-    // open for days would either never see the update OR lose
-    // in-progress capture state when the SW flipped under them.
+    // sw.js does NOT auto-skipWaiting on install, so a new worker parks
+    // in 'waiting' until the user taps the in-app banner. The flow must
+    // survive the cases where activation does NOT complete: an iOS
+    // standalone worker suspended on backgrounding, a 'redundant' worker
+    // left by a second deploy, or a wedged active worker. The previous
+    // version removed the banner ONLY via a reload fired from
+    // 'controllerchange', so whenever that never fired the button froze
+    // at "Updating..." forever.
     //
-    // New flow:
-    //   1. sw.js's install handler no longer auto-skipWaiting (the
-    //      new worker stays in 'waiting' state when there's an
-    //      existing controller).
-    //   2. This function detects 'waiting' / 'updatefound' and
-    //      renders a small bottom banner: "New version available · Update".
-    //   3. On tap, the page postMessages SKIP_WAITING to the waiting
-    //      SW, which calls self.skipWaiting() and then fires
-    //      'controllerchange' on this page. We catch that, debounce
-    //      against multiple SWs racing, and reload.
-    //   4. First-ever install bypasses the banner entirely
-    //      (navigator.serviceWorker.controller is null until the
-    //      first SW takes control), so new users don't see a
-    //      misleading "Update" prompt for their initial install.
+    // Hardened flow:
+    //   1. Detect 'waiting' / 'updatefound' -> show the banner.
+    //   2. On tap, RE-RESOLVE the live reg.waiting (the worker captured
+    //      when the banner was drawn may be 'redundant' by now, and
+    //      postMessage to a redundant worker is a SILENT no-op) and post
+    //      SKIP_WAITING to it.
+    //   3. Reload ONLY when activation is CONFIRMED - the target worker
+    //      reaches 'activated', or 'controllerchange' fires for our
+    //      worker. Never reload on a blind timer: a blind reload re-shows
+    //      the banner in a loop because the worker never activated.
+    //   4. Watchdog: if activation is not confirmed within
+    //      _PWA_ACTIVATE_TIMEOUT_MS, RECOVER instead of freezing - the
+    //      button is re-enabled and the banner explains the update could
+    //      not finish (reopen the app), so the user is never stuck.
+    //   First-ever install (controller === null) shows no banner.
     let _pwaUpdateReloading = false;
-    // only reload after the user explicitly
-    // taps "Update now". Previous code reloaded on EVERY
-    // 'controllerchange', which on a first-visit (no existing
-    // controller) fires when the brand-new SW activates → spurious
-    // reload + execution-context-destroyed during prod-smoke tests.
     let _pwaUpdateClicked = false;
+    let _pwaUpdateDismissed = false;   // soft, session-only; resets on reload + on a newer update
+    let _pwaNewVersion = '';
+    // How long to wait for the new worker to ACTIVATE after a tap before
+    // declaring the update could not finish. Overridable for tests.
+    const _PWA_ACTIVATE_TIMEOUT_MS =
+        (typeof window !== 'undefined' && window.__crispPwaActivateTimeoutMs) || 8000;
+
+    // Reload exactly once, after a brief success toast. Idempotent - both
+    // the 'activated' statechange and 'controllerchange' may fire.
+    function _pwaReloadOnce() {
+        if (_pwaUpdateReloading) return;
+        _pwaUpdateReloading = true;
+        try { _renderPwaUpdateSuccess(); } catch (_) {}
+        setTimeout(() => { try { window.location.reload(); } catch (_) {} }, 1000);
+    }
+
     function _wireUpdatePrompt(reg) {
-        // Case 1: there's already a worker in 'waiting' from a previous
-        // visit (user dismissed the banner, then reloaded the tab).
-        // Surface the banner immediately.
+        // Case 1: a worker already waiting from a previous visit.
         if (reg.waiting && navigator.serviceWorker.controller) {
             _showPwaUpdateBanner(reg.waiting);
         }
-        // Case 2: an update is being installed right now (the
-        // hourly reg.update() in the .then above just discovered a
-        // newer sw.js). Listen for the new worker reaching 'installed'.
+        // Case 2: an update is installing right now (hourly reg.update()
+        // discovered a newer sw.js). Listen for it reaching 'installed'.
         reg.addEventListener('updatefound', () => {
             const newWorker = reg.installing;
             if (!newWorker) return;
+            // A genuinely newer version warrants re-prompting even if the
+            // user soft-dismissed the previous one.
+            _pwaUpdateDismissed = false;
             newWorker.addEventListener('statechange', () => {
                 if (newWorker.state === 'installed'
                     && navigator.serviceWorker.controller) {
-                    // 'installed' + existing controller = real update
-                    // (not first install). Show banner.
                     _showPwaUpdateBanner(newWorker);
                 }
             });
         });
 
-        // Case 3: the user tapped Update on the banner; the SW called
-        // skipWaiting(); now the new worker has taken control and
-        // 'controllerchange' fires. Reload exactly once so the page
-        // re-fetches the new assets through the new SW.
-        //
-        // gated by _pwaUpdateClicked so this listener
-        // does NOT fire a reload on the FIRST install (when there's
-        // no existing controller and the new SW activates naturally).
-        // Without this gate, every fresh browser context - Playwright
-        // included - got force-reloaded on SW activation, which
-        // destroyed the page-evaluate context mid-test and broke
-        // prod-smoke's "service worker cache version is current"
-        // assertion.
+        // Case 3: activation took control of this page.
+        //   - if WE initiated it (the user tapped) -> reload to pick up
+        //     the new assets;
+        //   - otherwise the update was applied in ANOTHER tab; this tab's
+        //     banner is now stale, so just remove it. Do NOT auto-reload
+        //     a non-initiating tab - that could discard in-progress
+        //     capture state in it.
         navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (!_pwaUpdateClicked) return;
-            if (_pwaUpdateReloading) return;
-            _pwaUpdateReloading = true;
-            // HC75 (May 2026) - show a "Upgraded to vNNN" success
-            // toast for ~1 second before the reload, so the user
-            // sees their tap completed successfully. The version
-            // came back from the SW's SKIP_WAITING reply (handler
-            // below); if it didn't arrive we fall back to a generic
-            // "Update applied" message and still reload.
-            try { _renderPwaUpdateSuccess(); } catch (_) {}
-            setTimeout(() => {
-                window.location.reload();
-            }, 1000);
+            if (_pwaUpdateClicked) { _pwaReloadOnce(); return; }
+            const stale = document.getElementById('pwa-update-banner');
+            if (stale) stale.remove();
         });
 
-        // HC75 - listen for the SW's `CRISP_NEW_VERSION` reply
-        // (sent in response to our SKIP_WAITING postMessage). The
-        // payload's `version` field is the new SW's `CACHE_NAME`
-        // (e.g. "crisp-v302"). Cached on the page so the success
-        // toast can render it.
+        // SW reply carrying the incoming CACHE_NAME (e.g. "crisp-v342"),
+        // so the success toast can name the version.
         navigator.serviceWorker.addEventListener('message', (ev) => {
             const data = ev && ev.data;
             if (data && data.type === 'CRISP_NEW_VERSION' && data.version) {
@@ -209,24 +203,21 @@ if ('serviceWorker' in navigator) {
             }
         });
     }
-    let _pwaNewVersion = '';
 
     /**
-     * HC75 - swap the banner's contents to a success toast.
-     * Shows for ~1 second; the controllerchange handler reloads the
-     * page right after. Renders even if `_pwaNewVersion` wasn't
-     * captured (fallback to a generic "Update applied").
+     * Swap the banner to a brief success toast just before the reload.
+     * Renders even if `_pwaNewVersion` wasn't captured (generic fallback).
      */
     function _renderPwaUpdateSuccess() {
         const banner = document.getElementById('pwa-update-banner');
         if (!banner) return;
         const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
-        // Trim "crisp-" prefix if present so the toast reads as just
-        // "v302" not "crisp-v302".
+        // Trim "crisp-" prefix so the toast reads "v342" not "crisp-v342".
         let ver = _pwaNewVersion;
         if (ver && ver.indexOf('crisp-') === 0) ver = ver.slice(6);
         const successMsg = (_t('pwa_update_done') || 'Upgraded to')
             + (ver ? ' ' + ver : '');
+        banner.classList.remove('is-error');
         banner.classList.add('is-success');
         banner.innerHTML =
             '<span class="pwa-update-banner-msg pwa-update-banner-msg-success">'
@@ -235,18 +226,37 @@ if ('serviceWorker' in navigator) {
             + '</span>';
     }
 
+    /**
+     * Recover the banner when activation did not complete within the
+     * watchdog window (e.g. an iOS-suspended worker, or a redundant
+     * target). The button is re-enabled so a retry re-resolves the live
+     * waiting worker, and the message guides the user to reopen the app.
+     * We deliberately do NOT reload here - a blind reload would just
+     * re-show the banner (loop) because the worker never activated.
+     */
+    function _renderPwaUpdateFailed(banner) {
+        if (!banner || !document.body.contains(banner)) return;
+        if (_pwaUpdateReloading) return;   // a late activation already won
+        const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
+        const msg = banner.querySelector('.pwa-update-banner-msg');
+        const btn = banner.querySelector('.pwa-update-banner-btn');
+        if (msg) {
+            msg.textContent = _t('pwa_update_reopen')
+                || "Update didn't finish. Reopen the app to apply it.";
+        }
+        if (btn) { btn.disabled = false; btn.textContent = _t('pwa_update_now') || 'Update'; }
+        banner.classList.add('is-error');
+    }
+
     function _showPwaUpdateBanner(worker) {
         // Don't render twice if statechange + waiting both fire.
         if (document.getElementById('pwa-update-banner')) return;
-        // Respect a session-scoped dismiss so the banner doesn't keep
-        // re-appearing on every async detection within the same tab.
-        // (A page reload clears sessionStorage so the user does still
-        // get re-prompted on the next visit.)
-        try {
-            if (sessionStorage.getItem('crisp_pwa_update_dismissed') === '1') {
-                return;
-            }
-        } catch (_) {}
+        // Soft, session-only dismiss. NOTE: the previous implementation
+        // persisted this in sessionStorage, which does NOT clear on a
+        // same-tab reload - so a single dismiss hid the update prompt for
+        // the entire life of the (often long-lived, installed) app window.
+        // An in-memory flag resets on reload and on a newer update (Case 2).
+        if (_pwaUpdateDismissed) return;
         const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
         const banner = document.createElement('div');
         banner.id = 'pwa-update-banner';
@@ -265,34 +275,47 @@ if ('serviceWorker' in navigator) {
             + '<i class="fa-solid fa-xmark"></i></button>';
         document.body.appendChild(banner);
 
+        // Pre-fetch the incoming version so the success toast can name it
+        // (the SW's GET_VERSION reply -> CRISP_NEW_VERSION -> the message
+        // listener sets _pwaNewVersion before the user even taps).
+        try { worker.postMessage({ type: 'GET_VERSION' }); } catch (_) {}
+
         banner.querySelector('.pwa-update-banner-btn').addEventListener('click', () => {
-            // Disable button so the user doesn't double-tap during the
-            // brief skipWaiting → controllerchange → reload race.
             const btn = banner.querySelector('.pwa-update-banner-btn');
             btn.disabled = true;
-            // HC75 (May 2026) - was `_t('upload_sending')` which
-            // resolved to "Sending report..." (wrong i18n key
-            // entirely - that's the report-upload progress text).
-            // Operator screenshot 2026-05-26 showed this stuck
-            // visible. Now uses the proper `pwa_update_now_loading`
-            // key with an "Updating…" fallback.
             btn.textContent = _t('pwa_update_now_loading') || 'Updating…';
-            // arm the reload gate. controllerchange will
-            // now reload, but ONLY because this explicit user tap
-            // armed the flag.
+            banner.classList.remove('is-error');
             _pwaUpdateClicked = true;
-            try { worker.postMessage({ type: 'SKIP_WAITING' }); }
-            catch (e) {
-                // postMessage failed - fall back to a hard reload so
-                // the user at least gets a fresh fetch of sw.js.
-                console.warn('SW postMessage failed:', e);
-                window.location.reload();
-            }
+
+            // Re-resolve the LIVE waiting worker at tap time - the captured
+            // `worker` may be 'redundant' (a newer version installed since)
+            // and postMessage to a redundant worker is a silent no-op, so
+            // the update would never start.
+            navigator.serviceWorker.getRegistration().then((r) => {
+                const target = (r && (r.waiting || r.installing)) || worker;
+                if (!target) { window.location.reload(); return; }
+                // Confirm activation directly - don't rely solely on
+                // controllerchange, which is unreliable on iOS standalone.
+                try {
+                    target.addEventListener('statechange', () => {
+                        if (target.state === 'activated') _pwaReloadOnce();
+                    });
+                } catch (_) {}
+                try { target.postMessage({ type: 'SKIP_WAITING' }); }
+                catch (e) {
+                    console.warn('SW postMessage failed:', e);
+                    window.location.reload();
+                    return;
+                }
+                // Watchdog: recover (don't freeze, don't loop) if activation
+                // is not confirmed within the window.
+                setTimeout(() => { _renderPwaUpdateFailed(banner); }, _PWA_ACTIVATE_TIMEOUT_MS);
+            }).catch(() => { window.location.reload(); });
         });
+
         banner.querySelector('.pwa-update-banner-dismiss').addEventListener('click', () => {
             banner.remove();
-            try { sessionStorage.setItem('crisp_pwa_update_dismissed', '1'); }
-            catch (_) {}
+            _pwaUpdateDismissed = true;
         });
     }
 }
@@ -2040,7 +2063,7 @@ const I18N = {
         v4_record: "Record voice",
         v4_review_subtitle: "Tap any card to edit",
         v4_review_title: "Review your report",
-        v4_send: "Send to UNDP",
+        v4_send: "Send Report",
         v4_step_1_of_3: "Step 1 of 3",
         v4_step_2_of_3: "Step 2 of 3",
         v4_step_3_of_3: "Step 3 of 3",
@@ -2510,7 +2533,7 @@ Object.assign(I18N.en, {
     v4_unknown: "Unknown", v4_working: "Working", v4_intermittent: "Intermittent",
     v4_load_shedding: "Load shedding", v4_blackout: "Blackout",
     v4_fully_op: "Fully operational", v4_partly_op: "Partial", v4_not_op: "Not operational",
-    v4_needs: "Pressing needs", v4_send: "Send to UNDP",
+    v4_needs: "Pressing needs", v4_send: "Send Report",
     coming_soon: "Coming soon",
     landing_title: "Report damage. Help responders.",
     landing_sub: "Quick, anonymous, works offline. Aligned with UNDP RAPIDA.",
@@ -2548,7 +2571,7 @@ Object.assign(I18N.fr || (I18N.fr = {}), {
     v4_unknown: "Inconnu", v4_working: "Fonctionnel", v4_intermittent: "Intermittent",
     v4_load_shedding: "Délestage", v4_blackout: "Coupure",
     v4_fully_op: "Pleinement opérationnel", v4_partly_op: "Partiel", v4_not_op: "Inopérant",
-    v4_needs: "Besoins urgents", v4_send: "Envoyer au PNUD",
+    v4_needs: "Besoins urgents", v4_send: "Envoyer le rapport",
     coming_soon: "Bientôt",
     landing_title: "Signaler. Aider les secours.",
     landing_sub: "Rapide, anonyme, hors ligne. Aligné avec PNUD RAPIDA.",
@@ -2579,7 +2602,7 @@ Object.assign(I18N.es || (I18N.es = {}), {
     v4_unknown: "Desconocido", v4_working: "Funciona", v4_intermittent: "Intermitente",
     v4_load_shedding: "Cortes", v4_blackout: "Apagón",
     v4_fully_op: "Operativo", v4_partly_op: "Parcial", v4_not_op: "No opera",
-    v4_needs: "Necesidades", v4_send: "Enviar a PNUD",
+    v4_needs: "Necesidades", v4_send: "Enviar informe",
     coming_soon: "Próximamente",
     landing_title: "Reporta daños. Ayuda.",
     landing_sub: "Rápido, anónimo, sin conexión. Alineado con PNUD RAPIDA.",
@@ -2610,7 +2633,7 @@ Object.assign(I18N.ar || (I18N.ar = {}), {
     v4_unknown: "غير معروف", v4_working: "يعمل", v4_intermittent: "متقطع",
     v4_load_shedding: "تخفيف الأحمال", v4_blackout: "انقطاع تام",
     v4_fully_op: "يعمل بالكامل", v4_partly_op: "جزئي", v4_not_op: "متوقف",
-    v4_needs: "الاحتياجات الملحة", v4_send: "إرسال إلى UNDP",
+    v4_needs: "الاحتياجات الملحة", v4_send: "إرسال التقرير",
     coming_soon: "قريباً",
     landing_title: "أبلغ عن الأضرار. ساعد الفرق.",
     landing_sub: "سريع، مجهول، يعمل دون اتصال. متوافق مع UNDP RAPIDA.",
@@ -2641,7 +2664,7 @@ Object.assign(I18N.ru || (I18N.ru = {}), {
     v4_unknown: "Неизвестно", v4_working: "Работает", v4_intermittent: "Прерывистый",
     v4_load_shedding: "Отключения", v4_blackout: "Полное отключение",
     v4_fully_op: "Работает полностью", v4_partly_op: "Частично", v4_not_op: "Не работает",
-    v4_needs: "Срочные нужды", v4_send: "Отправить в ПРООН",
+    v4_needs: "Срочные нужды", v4_send: "Отправить отчёт",
     coming_soon: "Скоро",
     landing_title: "Сообщайте об ущербе. Помогайте.",
     landing_sub: "Быстро, анонимно, оффлайн. Соответствует ПРООН RAPIDA.",
@@ -2672,7 +2695,7 @@ Object.assign(I18N.zh || (I18N.zh = {}), {
     v4_unknown: "未知", v4_working: "正常", v4_intermittent: "断续",
     v4_load_shedding: "分时停电", v4_blackout: "停电",
     v4_fully_op: "完全运行", v4_partly_op: "部分运行", v4_not_op: "停止运行",
-    v4_needs: "紧迫需求", v4_send: "发送到开发署",
+    v4_needs: "紧迫需求", v4_send: "发送报告",
     coming_soon: "即将推出",
     landing_title: "报告损害。协助救援。",
     landing_sub: "快速、匿名、离线可用。符合开发署 RAPIDA。",
@@ -4745,6 +4768,20 @@ function detectAndSetupLanguage() {
     // `state.detectedLang` / `state.detectedLangLabel` are still populated
     // so the picker can show a "Detected: ಕನ್ನಡ" hint row when the user
     // has manually picked something that differs from their region.
+    //
+    // "Explicit non-English device locale" = the device's RAW declared
+    // primary-language base is a SUPPORTED locale other than English. Such a
+    // deliberate choice outranks GPS location; English / unsupported / unset
+    // do NOT (they defer to location). Read straight from navigator so it
+    // stays correct even if the boot IIFE's source metric is unavailable.
+    function _deviceExplicitNonEnglishLocale() {
+        try {
+            const raw = (navigator.languages && navigator.languages[0])
+                || navigator.language || '';
+            const base = String(raw).toLowerCase().split('-')[0];
+            return !!base && base !== 'en' && SUPPORTED_LANGS.has(base);
+        } catch (_) { return false; }
+    }
     function noteDetectedLocal(code, label) {
         state.detectedLang = code || null;
         state.detectedLangLabel = label || null;
@@ -4753,23 +4790,24 @@ function detectAndSetupLanguage() {
             localBtn.textContent = '🌐 ' + String(code || 'EN').toUpperCase();
             if (label) localBtn.title = label;
         }
-        // Auto-activate policy (Jun 2026 - explicit-signal precedence):
-        // a geo/IP-detected region language fills a VOID, it never overrides
-        // an explicit locale signal. Precedence: manual pick > browser
-        // locale (when it resolves to a supported language) > geo detection
-        // > en. Previously "local wins" auto-switched even when the device
-        // declared a supported locale (e.g. an en-US browser in Karnataka
-        // silently flipped to Kannada) - jarring, non-deterministic across
-        // host machines, and it surprised evaluators. The suggestion pill
-        // below still always advertises the detected region language.
+        // Auto-activate policy (Jun 2026, revised - "location wins unless the
+        // device is explicitly set to a non-English supported language"):
+        // a geo-detected location language is APPLIED unless an explicit
+        // locale signal outranks it. Precedence: manual in-app pick >
+        // explicit non-English device locale (fr/es/ar/zh/...) > GPS location
+        // > English / unsupported / none. English is a SOFT default - a phone
+        // left in English defers to where the user physically is - so an
+        // English phone in Dhaka opens in Bengali, while a phone explicitly
+        // set to French stays French. Manual pick is always remembered and a
+        // one-tap revert (the picker) is always available; the suggestion pill
+        // below still advertises the detected region language when we did not
+        // auto-switch.
         // Gate on SUPPORTED_LANGS instead of I18N[code]: the inline I18N
         // only holds en/kn/hi/ta; the other 18 locales live in JSON files
         // and merge on activateLang.
         const manual = localStorage.getItem('crisp_lang_manual') || '';
-        let _bootSrc = '';
-        try { _bootSrc = (window.__crispI18nMetrics && window.__crispI18nMetrics.source) || ''; } catch (_) {}
-        const _explicitBoot = _bootSrc === 'manual' || _bootSrc === 'browser';
-        if (!manual && !_explicitBoot && code && code !== state.lang && SUPPORTED_LANGS.has(code)) {
+        const _explicitNonEng = _deviceExplicitNonEnglishLocale();
+        if (!manual && !_explicitNonEng && code && code !== state.lang && SUPPORTED_LANGS.has(code)) {
             activateLang(code);
         }
         // Paint the suggestion chip inside the picker overlay only when
@@ -4971,10 +5009,13 @@ function detectAndSetupLanguage() {
         }
     }
 
-    // UX rewrite: start with English by default, then
-    // upgrade to the user's manual choice (from localStorage) if present.
-    // GPS / IP detection proceeds in the background purely to populate
-    // the "Your region" suggestion - never to force-switch the UI.
+    // Boot resolves to the manual pick if present, else the boot IIFE's
+    // Option-B choice (explicit non-English locale > location > English).
+    // The deferred home-stage GPS detect THEN upgrades an English / family
+    // soft-default to the user's location language (it force-switches only
+    // when no manual pick and no explicit non-English locale outrank it - see
+    // noteDetectedLocal); for an explicit non-English locale it stays put and
+    // only populates the "Your region" suggestion pill.
     const _manualLang = (() => {
         try { return localStorage.getItem('crisp_lang_manual') || ''; } catch (_) { return ''; }
     })();
@@ -5007,15 +5048,19 @@ function detectAndSetupLanguage() {
         }
         return false;
     };
-    // boot-time language resolution order:
+    // boot-time language resolution order (Option B, mirrors the head IIFE):
     //   1. Manual pick (`crisp_lang_manual`) - explicit user choice always wins.
-    //   2. Browser locale (`navigator.language`) - zero cost, no permission
-    //      prompt, no network. A French Chrome user lands in French on
-    //      their very first visit before any GPS / IP detection.
-    //   3. English - last-resort default.
-    // Cached `crisp_loc_ctx` from a prior detection (next block) can
-    // upgrade the choice further. Deferred GPS detection (below) can
-    // refine it once the user is interactive on the home stage.
+    //   2. EXPLICIT non-English device locale - a deliberately-set supported
+    //      language (e.g. a French Chrome user) lands in that language before
+    //      any GPS detection; it outranks location.
+    //   3. Cached `crisp_loc_ctx` location language (next block) - an English /
+    //      family-fallback device locale defers to where the user physically is.
+    //   4. English (or the family-mapped soft default) - last resort until a
+    //      location fix lands.
+    // `_inferLangFromBrowser` only resolves the device-locale candidate; the
+    // explicit-vs-soft split + the location step are applied by the head IIFE
+    // (authoritative via `__crispBootLang`) and, on its result, by the
+    // deferred GPS detection + `_applyLocCtx` below.
     function _inferLangFromBrowser() {
         try {
             const raw = (navigator.languages && navigator.languages[0])
@@ -5682,16 +5727,48 @@ function setupPhotoStage() {
     // is a plain module var so the confirm dialog knows WHAT to delete
     // (primary vs extra[idx]) when the user taps Delete.
     let _viewerContext = null;
+    // Multi-photo viewing state (submitted-report grid pages through its set).
+    let _viewerPhotos = null;
+    let _viewerIdx = 0;
+    function _paintViewer(srcOverride) {
+        const img = document.getElementById('image-viewer-img');
+        const prevB = document.getElementById('btn-image-viewer-prev');
+        const nextB = document.getElementById('btn-image-viewer-next');
+        const counter = document.getElementById('image-viewer-counter');
+        const multi = !!(_viewerPhotos && _viewerPhotos.length > 1);
+        let src = srcOverride;
+        if (_viewerPhotos && _viewerPhotos.length) src = _viewerPhotos[_viewerIdx];
+        if (prevB) prevB.style.display = multi ? '' : 'none';
+        if (nextB) nextB.style.display = multi ? '' : 'none';
+        if (counter) {
+            counter.style.display = multi ? '' : 'none';
+            if (multi) counter.textContent = `${_viewerIdx + 1} / ${_viewerPhotos.length}`;
+        }
+        if (img && src) img.src = src;
+    }
+    function _viewerStep(delta) {
+        if (!_viewerPhotos || !_viewerPhotos.length) return;
+        _viewerIdx = (_viewerIdx + delta + _viewerPhotos.length) % _viewerPhotos.length;
+        _paintViewer();
+    }
     function _openImageViewer(src, context) {
         _viewerContext = context || null;
         const overlay = document.getElementById('image-viewer-overlay');
         const img = document.getElementById('image-viewer-img');
         if (!overlay || !img) return;
-        img.src = src;
+        _viewerPhotos = (context && Array.isArray(context.photos) && context.photos.length) ? context.photos : null;
+        _viewerIdx = (context && Number.isInteger(context.index)) ? context.index : 0;
+        // Read-only (submitted-report) viewing hides the capture "Delete image"
+        // button; capture-flow viewing keeps it shown.
+        const delBtn = document.getElementById('btn-image-viewer-delete');
+        if (delBtn) delBtn.style.display = (context && (context.readonly || context.kind === 'submitted')) ? 'none' : '';
+        _paintViewer(src);
         overlay.style.display = 'flex';
     }
     function _closeImageViewer() {
         _viewerContext = null;
+        _viewerPhotos = null;
+        _viewerIdx = 0;
         const overlay = document.getElementById('image-viewer-overlay');
         const img = document.getElementById('image-viewer-img');
         if (overlay) overlay.style.display = 'none';
@@ -5701,6 +5778,7 @@ function setupPhotoStage() {
     this._openImageViewer = _openImageViewer;
     window.__crispOpenImageViewer = _openImageViewer;
     window.__crispCloseImageViewer = _closeImageViewer;
+    window.__crispViewerStep = _viewerStep;
     window.__crispViewerContext = () => _viewerContext;
     window.__crispDeletePrimaryPhoto = _deletePrimaryPhoto;
     // PR 5: camera modal's "Done" button needs a refresh hook so
@@ -12689,13 +12767,15 @@ function _mapReportStatus(r) {
     return { state: 'SUBMITTED', color: '#9ca3af', icon: '⚪', label: t('rd_status_submitted') };
 }
 
-// ── M5 - ETA badge + mini-map for report-detail ────────────────
+// ── Next-step line + mini-map for report-detail ────────────────
 //
-// The ETA badge surfaces a next-step expectation derived from the current
-// status. Backend doesn't yet emit per-report ETAs (planned for v3.1 once
-// we have enough verified-response data per region to build percentile
-// curves), so we use heuristic ranges that match what users see on the
-// dashboard side.
+// The next-step line tells the reporter, in plain language, what happens
+// next - NO fabricated time. The backend emits no per-report ETA, so the
+// previous "Awaiting review · ~30 min" pill was a hardcoded placeholder shown
+// IDENTICALLY for every not-yet-actioned report (a 2-week-old report read the
+// same as a 30-second-old one). We now surface the REAL elapsed time on the
+// status row (_timeAgo) and only a qualitative next-step expectation here -
+// honest + dynamic, no invented numbers.
 function _renderRdEta(r) {
     const badge = document.getElementById('rd-eta-badge');
     const text = document.getElementById('rd-eta-text');
@@ -12704,28 +12784,27 @@ function _renderRdEta(r) {
     const status = (r.status || 'PENDING').toUpperCase();
     let key = null;
     if (r.help_arrived_at) {
-        // No ETA - help is already on-site.
+        // Help is already on-site - the timeline shows it; no next-step line.
         badge.style.display = 'none';
         return;
     }
-    if (r.help_dispatched_at && !r.help_arrived_at) {
-        key = 'rd_eta_help_otw';
+    if (r.help_dispatched_at) {
+        key = 'rd_eta_help_otw';                 // "Help is on the way."
     } else if (verdict === 'ACCEPTED') {
-        key = 'rd_eta_accepted';
+        key = 'rd_eta_accepted';                 // "Accepted - help is being arranged."
     } else if (verdict === 'REJECTED' || status === 'FALSE_ALARM') {
-        // No ETA - terminal state.
+        // Terminal - the rejection block explains the outcome.
         badge.style.display = 'none';
         return;
-    } else if (status === 'RESPONDING') {
-        key = 'rd_eta_under_review';
+    } else if (status === 'RESPONDING' || r.reviewed_at) {
+        key = 'rd_eta_under_review';             // "A reviewer is assessing your report."
     } else {
-        // PENDING / VERIFIED-no-verdict - first-stage review.
-        key = 'rd_eta_initial';
+        key = 'rd_eta_initial';                  // "A reviewer will assess your report shortly."
     }
     const txt = (typeof t === 'function' && t(key)) || '';
     if (!txt || txt === key) { badge.style.display = 'none'; return; }
     text.textContent = txt;
-    badge.style.display = 'inline-flex';
+    badge.style.display = 'flex';
 }
 
 // May 21, 2026 - audit Item 1 visual differentiation: marker icons use
@@ -13846,21 +13925,35 @@ window.__crispPurgeStaleDetails = _purgeStaleDetails;
 /** Open the detail view for a report. Populates stage-report-detail from
  *  the submitted-cache (populated by _renderSubmittedReports). */
 window.openReportDetail = async function (id) {
-    // Try cache first, then fall back to fetching the full list again.
+    // The list / status-since payload is LIGHTWEIGHT (no media[] / building_id /
+    // infrastructure_name). Render it instantly so the screen appears, then
+    // UPGRADE to the FULL report (GET /device/{hash} → ReportResponse with the
+    // photo set + tagged building, auth-free) so the detail can show every photo
+    // and the Building tag. Falls back to status-since when the full fetch fails
+    // (offline / not-yet-synced) so the report always opens.
     let report = _submittedCache.find(r => r.id === id || r.client_report_id === id);
-    if (!report) {
-        const deviceHash = _deviceHashForHistory();
-        if (deviceHash) {
-            try {
-                // HAR-driven dedupe - see _singleFlightFetch helper.
-                const res = await _singleFlightFetch(`${API_BASE}/reports/device/${deviceHash}/status-since?since=1970-01-01T00:00:00Z`);
-                if (res.ok) {
-                    const arr = await res.json();
-                    _submittedCache = arr;
-                    report = arr.find(r => r.id === id || r.client_report_id === id);
-                }
-            } catch(_) {}
-        }
+    if (report) { renderReportDetail(report); goToStage('stage-report-detail'); }
+    const deviceHash = _deviceHashForHistory();
+    if (deviceHash) {
+        try {
+            const res = await _singleFlightFetch(`${API_BASE}/reports/device/${encodeURIComponent(deviceHash)}`);
+            if (res.ok) {
+                const full = await res.json();
+                const fullRep = Array.isArray(full) && full.find(r => r.id === id || r.client_report_id === id);
+                if (fullRep) report = fullRep;
+            }
+        } catch (_) {}
+    }
+    if (!report && deviceHash) {
+        try {
+            // HAR-driven dedupe - see _singleFlightFetch helper.
+            const res = await _singleFlightFetch(`${API_BASE}/reports/device/${deviceHash}/status-since?since=1970-01-01T00:00:00Z`);
+            if (res.ok) {
+                const arr = await res.json();
+                _submittedCache = arr;
+                report = arr.find(r => r.id === id || r.client_report_id === id);
+            }
+        } catch (_) {}
     }
     if (!report) {
         showToast(t('report_not_found'), 'error');
@@ -13871,6 +13964,36 @@ window.openReportDetail = async function (id) {
 };
 
 /** Render the detail view. Pure DOM mutation - no state changes. */
+// Derive the DISTINCT photos for a report from r.media. The backend stores
+// 3 tiers (SMALL/MEDIUM/ORIGINAL) per captured photo, all sharing a
+// photo_group_id - so we group by that and keep the highest tier per group for
+// the full-size viewer, plus the row's thumbnail for the grid. Audio rows are
+// excluded. Falls back to the single r.thumbnail_url when media[] is absent.
+function _distinctPhotos(r) {
+    const media = (Array.isArray(r.media) ? r.media : []).filter((m) =>
+        m && String(m.type || 'PHOTO').toUpperCase() !== 'AUDIO' && (m.url || m.thumbnail_url));
+    const rank = { ORIGINAL: 3, MEDIUM: 2, SMALL: 1 };
+    const best = new Map(); // photo_group_id -> highest-tier media row
+    for (const m of media) {
+        const key = m.photo_group_id || m.url || m.thumbnail_url;
+        const cur = best.get(key);
+        const score = rank[String(m.resolution_tier || '').toUpperCase()] || 0;
+        const curScore = cur ? (rank[String(cur.resolution_tier || '').toUpperCase()] || 0) : -1;
+        if (!cur || score > curScore) best.set(key, m);
+    }
+    const out = [];
+    for (const m of best.values()) {
+        const full = window._resolveMediaUrl(m.url || m.thumbnail_url);
+        const thumb = window._resolveMediaUrl(m.thumbnail_url || m.url);
+        if (full || thumb) out.push({ thumb: thumb || full, full: full || thumb });
+    }
+    if (!out.length) {
+        const u = window._resolveMediaUrl(r.thumbnail_url);
+        if (u) out.push({ thumb: u, full: u });
+    }
+    return out;
+}
+
 function renderReportDetail(r) {
     // Stash the last-rendered report so applyI18n() can re-invoke on
     // language change without needing to re-fetch.
@@ -13884,11 +14007,18 @@ function renderReportDetail(r) {
         chip.textContent = `${st.icon} ${st.label}`;
     }
 
-    // Date sub-meta
+    // Elapsed-time sub-meta: real, dynamic "Submitted {2 days ago}" (was an
+    // absolute date sitting next to a fabricated "~30 min" pill). _timeAgo is
+    // localized; the absolute timestamp moves to the title tooltip.
     const dateMeta = document.getElementById('rd-meta-date');
     if (dateMeta) {
         const iso = r.server_created_at || r.updated_at;
-        dateMeta.textContent = iso ? _fmtLocalDateTime(iso) : '';
+        if (iso) {
+            dateMeta.textContent = `${t('rd_tl_submitted')} ${_timeAgo(iso)}`;
+            try { dateMeta.title = _fmtLocalDateTime(iso); } catch (_) {}
+        } else {
+            dateMeta.textContent = '';
+        }
     }
 
     // Timeline - 4 stops: Submitted → Under Review → Accepted → Help Sent.
@@ -13955,26 +14085,37 @@ function renderReportDetail(r) {
     // grey letters, Delta-S2 in the audit). (c) Photo node is
     // re-built on every render so a previous placeholder swap doesn't
     // strand the wrap without an <img> element on the next view.
-    const photoWrap = document.getElementById('rd-photo-wrap');
-    if (photoWrap) {
-        const url = window._resolveMediaUrl(r.thumbnail_url);
-        if (url) {
-            photoWrap.innerHTML = '<img id="rd-photo" src="" alt="" loading="lazy">';
-            const photo = photoWrap.querySelector('#rd-photo');
-            photo.src = url;
-            photoWrap.style.display = '';
-            photo.onclick = () => {
-                if (typeof window.openLightbox === 'function') {
-                    window.openLightbox(url, 'Report photo');
-                }
-            };
-            photo.onerror = () => {
-                try {
-                    photoWrap.innerHTML = '<div class="rd-photo-placeholder" aria-label="Photo unavailable"><i class="fa-solid fa-camera" aria-hidden="true"></i></div>';
-                } catch (_) {}
-            };
+    // ALL captured photos as a thumbnail grid (was a single thumbnail_url with
+    // a dead `window.openLightbox` no-op). Tapping any thumbnail opens the
+    // shared full-screen viewer in read-only mode (no delete) with prev/next
+    // paging across the report's photo set + a clear Close button.
+    const photosEl = document.getElementById('rd-photos');
+    if (photosEl) {
+        const photos = _distinctPhotos(r);
+        if (photos.length) {
+            const fulls = photos.map((p) => p.full);
+            photosEl.classList.toggle('rd-photos--single', photos.length === 1);
+            photosEl.innerHTML = photos.map((p, i) =>
+                `<button class="rd-photo-thumb" type="button" data-idx="${i}" aria-label="${escapeHtmlSimple(t('rd_view_photo'))}">
+                    <img src="${escapeHtmlSimple(p.thumb)}" alt="" loading="lazy">
+                </button>`).join('');
+            photosEl.style.display = '';
+            photosEl.querySelectorAll('.rd-photo-thumb').forEach((btn) => {
+                const idx = parseInt(btn.getAttribute('data-idx'), 10) || 0;
+                const imgEl = btn.querySelector('img');
+                if (imgEl) imgEl.onerror = () => {
+                    btn.classList.add('rd-photo-thumb--broken');
+                    btn.innerHTML = '<i class="fa-solid fa-camera" aria-hidden="true"></i>';
+                };
+                btn.onclick = () => {
+                    if (typeof window.__crispOpenImageViewer === 'function') {
+                        window.__crispOpenImageViewer(fulls[idx], { kind: 'submitted', readonly: true, photos: fulls, index: idx });
+                    }
+                };
+            });
         } else {
-            photoWrap.style.display = 'none';
+            photosEl.innerHTML = '';
+            photosEl.style.display = 'none';
         }
     }
 
@@ -13987,6 +14128,33 @@ function renderReportDetail(r) {
             descSection.style.display = '';
         } else {
             descSection.style.display = 'none';
+        }
+    }
+
+    // Building tag - the OSM footprint / building the reporter tagged
+    // (must-have #6). Shown whenever the report carries a building_id OR an
+    // infrastructure_name; it was never rendered before, so reporters could
+    // not confirm the exact building they marked. building_id present => the
+    // reporter tapped an OSM footprint ("Mapped"); otherwise free-text that
+    // still "Needs mapping".
+    const bSection = document.getElementById('rd-building-section');
+    const bEl = document.getElementById('rd-building');
+    if (bSection && bEl) {
+        const bName = (r.infrastructure_name || '').trim();
+        const mapped = !!r.building_id;
+        if (mapped || bName) {
+            const name = bName || t('rd_building_generic');
+            const chip = mapped
+                ? `<span class="rd-building-chip rd-building-chip--mapped"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> ${escapeHtmlSimple(t('rd_building_mapped'))}</span>`
+                : `<span class="rd-building-chip rd-building-chip--unmapped"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ${escapeHtmlSimple(t('rd_building_needs_mapping'))}</span>`;
+            bEl.innerHTML = `<i class="fa-solid fa-building" aria-hidden="true"></i>
+                <div class="rd-building-body">
+                    <div class="rd-building-label">${escapeHtmlSimple(t('rd_meta_building'))}</div>
+                    <div class="rd-building-name">${escapeHtmlSimple(name)}</div>
+                </div>${chip}`;
+            bSection.style.display = '';
+        } else {
+            bSection.style.display = 'none';
         }
     }
 
@@ -15264,14 +15432,24 @@ function reportLifecycleReset() {
     // bleed across reports.
     const _bv4s = document.getElementById('btn-v4-send');
     if (_bv4s) {
-        _bv4s.disabled = false;
         _bv4s.classList.remove('is-sending');
-        // Reset innerHTML to the original "Send to UNDP" markup - the
-        // submit handler replaces this with a spinner + "Sending…"
-        // label which would otherwise persist.
-        _bv4s.innerHTML = '<i class="fa-solid fa-paper-plane"></i> <span data-i18n="v4_send">Send to UNDP</span>';
+        // Reset innerHTML to the idle send-button markup - the submit
+        // handler replaces this with a spinner + "Sending…" label which
+        // would otherwise persist.
+        _bv4s.innerHTML = '<i class="fa-solid fa-paper-plane"></i> <span data-i18n="v4_send">Send Report</span>';
         if (typeof applyI18n === 'function') {
             try { applyI18n(_bv4s); } catch (_) {}
+        }
+        // The send button is gated on the (now reset) debris answer. Re-derive
+        // its enabled state via v4-flow's single source of truth - a fresh
+        // report has debris unanswered, so it stays disabled until answered on
+        // review (and the Yes/No tap + review entry re-enable it). Fall back to
+        // simply clearing the stuck-disabled state if v4-flow isn't loaded yet.
+        if (typeof window.__crispV4UpdateSendBtn === 'function') {
+            try { window.__crispV4UpdateSendBtn(); } catch (_) { _bv4s.disabled = false; }
+        } else {
+            _bv4s.disabled = false;
+            _bv4s.classList.remove('is-ready');
         }
     }
     const _upov = document.getElementById('upload-overlay');
@@ -15406,6 +15584,18 @@ function setupImageViewer() {
     // Tap backdrop (not the image or buttons) → close.
     overlay.addEventListener('click', (e) => {
         if (e.target === overlay) window.__crispCloseImageViewer();
+    });
+    // Prev/next paging for multi-photo (submitted-report) viewing.
+    const prevBtn = document.getElementById('btn-image-viewer-prev');
+    const nextBtn = document.getElementById('btn-image-viewer-next');
+    if (prevBtn) prevBtn.addEventListener('click', (e) => { e.stopPropagation(); if (window.__crispViewerStep) window.__crispViewerStep(-1); });
+    if (nextBtn) nextBtn.addEventListener('click', (e) => { e.stopPropagation(); if (window.__crispViewerStep) window.__crispViewerStep(1); });
+    // Keyboard: Escape closes, ←/→ page (only while the viewer is open).
+    document.addEventListener('keydown', (e) => {
+        if (overlay.style.display !== 'flex') return;
+        if (e.key === 'Escape') window.__crispCloseImageViewer();
+        else if (e.key === 'ArrowLeft' && window.__crispViewerStep) window.__crispViewerStep(-1);
+        else if (e.key === 'ArrowRight' && window.__crispViewerStep) window.__crispViewerStep(1);
     });
     // Delete button inside viewer → open confirm dialog.
     if (deleteBtn) deleteBtn.addEventListener('click', () => {

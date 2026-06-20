@@ -1458,6 +1458,8 @@
                 if (prompt) { if (isOther) prompt.removeAttribute('hidden'); else prompt.setAttribute('hidden', ''); }
                 const input = document.getElementById('v4-infra-other-input');
                 if (input) input.value = isOther ? (s.infrastructure_name || '') : '';
+                const confirmBtn = document.getElementById('v4-infra-other-confirm');
+                if (confirmBtn) confirmBtn.disabled = !(isOther && (s.infrastructure_name || '').trim().length);
             } catch (_) {}
         }
         window.__crispV4RenderFromState = _renderV4FromState;
@@ -2488,10 +2490,30 @@
                 _scheduleClassifyAdvance('infra', tile);
             });
         });
+        const otherConfirm = document.getElementById('v4-infra-other-confirm');
         if (otherInput) {
             otherInput.addEventListener('input', () => {
                 _setState({ infrastructure_name: otherInput.value });
+                // Light up the ✓ button only when there's something to confirm.
+                if (otherConfirm) otherConfirm.disabled = otherInput.value.trim().length === 0;
                 _refreshClassifyNext();
+            });
+        }
+        // Explicit ✓ confirm button - the clear "I'm done, continue" affordance
+        // for the free-text path (the preset tiles auto-advance on tap; this
+        // mirrors that). preventDefault on pointer/mouse-down keeps focus on the
+        // input so it never blurs - so the blur auto-advance can't double-fire.
+        if (otherConfirm && !otherConfirm.__crispWired) {
+            otherConfirm.__crispWired = true;
+            otherConfirm.addEventListener('pointerdown', (e) => e.preventDefault());
+            otherConfirm.addEventListener('mousedown', (e) => e.preventDefault());
+            otherConfirm.addEventListener('click', () => {
+                const s = window.state || {};
+                if (s.infrastructure_type !== 'OTHER') return;
+                const name = (otherInput ? otherInput.value : '').trim();
+                if (!name) { try { otherInput.focus(); } catch (_) {} return; }
+                _setState({ infrastructure_name: name });
+                _doClassifyAdvance('infra');
             });
         }
         // Wire Enter/blur auto-advance for the OTHER free-text input
@@ -3097,18 +3119,41 @@
         // while unanswered. Renders from state so reset/back-nav stay
         // correct (called from _renderV4FromState via the window hook +
         // review stage-entry below).
+        // Enable the review Send button ONLY once the required debris
+        // question is answered (the last required answer on the review
+        // surface). Mirrors the _onSend debris gate: when the deployed
+        // crisis-form pack already collects debris, the standalone card is
+        // suppressed and the pack's answer satisfies it. The classify
+        // fields are already gated at the classify stage; if a back-nav
+        // edit left one unset, _onSend still toasts + bounces.
+        function _updateSendBtnState() {
+            const btn = document.getElementById('btn-v4-send');
+            if (!btn || btn.classList.contains('is-sending')) return;
+            const s = _getState();
+            const debrisAnswered = _packCollectsDebris()
+                || s.debris_present === true || s.debris_present === false;
+            btn.disabled = !debrisAnswered;
+            btn.classList.toggle('is-ready', debrisAnswered);
+            btn.setAttribute('aria-disabled', String(!debrisAnswered));
+        }
+        window.__crispV4UpdateSendBtn = _updateSendBtnState;
+
         function _renderDebrisCard() {
             const card = document.getElementById('v4-debris-card');
-            if (!card) return;
-            // If the deployed crisis form already asks debris, don't ask again here.
-            if (_packCollectsDebris()) { card.style.display = 'none'; return; }
-            card.style.display = '';
-            const v = _getState().debris_present;
-            const yes = document.getElementById('v4-debris-yes');
-            const no = document.getElementById('v4-debris-no');
-            if (yes) yes.classList.toggle('is-selected', v === true);
-            if (no) no.classList.toggle('is-selected', v === false);
-            card.classList.toggle('is-answered', v === true || v === false);
+            if (card && !_packCollectsDebris()) {
+                card.style.display = '';
+                const v = _getState().debris_present;
+                const yes = document.getElementById('v4-debris-yes');
+                const no = document.getElementById('v4-debris-no');
+                if (yes) yes.classList.toggle('is-selected', v === true);
+                if (no) no.classList.toggle('is-selected', v === false);
+                card.classList.toggle('is-answered', v === true || v === false);
+            } else if (card) {
+                // Deployed crisis form already asks debris - don't ask again here.
+                card.style.display = 'none';
+            }
+            // Keep the Send button's enabled state in lockstep with the answer.
+            _updateSendBtnState();
         }
         window.__crispV4RenderDebrisCard = _renderDebrisCard;
         (function _wireDebrisCard() {
