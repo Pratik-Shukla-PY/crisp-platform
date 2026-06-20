@@ -38,6 +38,7 @@
   "chip_has_media": "Avec médias",
   "chip_verified": "Vérifié",
   "chip_building_tagged": "Bâtiment marqué",
+  "chip_needs_review": "À examiner",
   "chip_clear_all": "Effacer les filtres",
   "feed_no_reports": "Aucun rapport ne correspond aux filtres actifs.",
   "card_send_help": "Envoyer de l'aide",

@@ -190,17 +190,44 @@ const API = `${BACKEND_HOST}/api/v1/reports`;
 // fetch sites don't accidentally double-prefix and 404.
 const BUILDINGS_API = `${BACKEND_HOST}/api/v1/buildings`;
 
-// Add Authorization header to all fetch calls + handle 401 → redirect to login
+// Add Authorization header to all fetch calls + handle 401 with a TRANSPARENT
+// refresh-and-retry (so a 30-min access-token expiry never kicks the operator to
+// login / bounces them to home mid-crisis).
 const _origFetch = window.fetch;
+// Shared in-flight refresh so the 4s poll + concurrent clicks that all 401 at the
+// same instant trigger exactly ONE /auth/refresh, not a storm.
+let _refreshInflight = null;
+function _tryRefreshToken() {
+    if (_refreshInflight) return _refreshInflight;
+    const refresh = localStorage.getItem('crisp_refresh');
+    if (!refresh) return Promise.resolve(false);
+    _refreshInflight = _origFetch.call(window, `${BACKEND_HOST}/api/v1/auth/refresh`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refresh }),
+    })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+            if (data && data.access_token) { localStorage.setItem('crisp_token', data.access_token); return true; }
+            return false;
+        })
+        .catch(() => false)
+        .finally(() => { _refreshInflight = null; });
+    return _refreshInflight;
+}
+function _hardLogout() {
+    localStorage.removeItem('crisp_token');
+    localStorage.removeItem('crisp_user');
+    localStorage.removeItem('crisp_refresh');
+    if (!window.location.pathname.includes('login')) window.location.href = 'login.html';
+}
 window.fetch = function(url, opts = {}) {
-    if (typeof url === 'string' && url.includes('/api/')) {
-        // M5 (Phase-3): read the CURRENT token on EVERY call. The access token
-        // rotates mid-session via /auth/refresh (writes crisp_token to
-        // localStorage); a load-time const would pin the STALE token, so after
-        // the original expired every /api/ call 401'd → the whole dashboard
-        // force-logged-out despite a valid refreshed token sitting in storage.
-        // Also: don't clobber an Authorization the caller already set (the cc-*
-        // modules pass their own fresh token via headers).
+    const _isApi = typeof url === 'string' && url.includes('/api/');
+    // Don't try to refresh the auth endpoints themselves (would loop).
+    const _isAuth = _isApi && /\/auth\/(refresh|login|logout|step-up)/.test(url);
+    if (_isApi) {
+        // M5 (Phase-3): read the CURRENT token on EVERY call (it rotates via
+        // /auth/refresh). Don't clobber an Authorization the caller already set
+        // (the cc-* modules pass their own fresh token via headers).
         const _tok = localStorage.getItem('crisp_token');
         const _h = opts.headers || {};
         const _hasAuth = !!(_h.Authorization || _h.authorization);
@@ -208,15 +235,19 @@ window.fetch = function(url, opts = {}) {
             opts.headers = { ..._h, 'Authorization': `Bearer ${_tok}` };
         }
     }
-    return _origFetch.call(this, url, opts).then(res => {
-        if (res.status === 401 && typeof url === 'string' && url.includes('/api/')) {
-            localStorage.removeItem('crisp_token');
-            localStorage.removeItem('crisp_user');
-            if (!window.location.pathname.includes('login')) {
-                window.location.href = 'login.html';
-            }
-        }
-        return res;
+    return _origFetch.call(this, url, opts).then((res) => {
+        if (res.status !== 401 || !_isApi || _isAuth) return res;
+        // Already retried with a fresh token and STILL 401 → the session is truly
+        // dead (refresh token revoked/expired). Now log out.
+        if (opts.__crispRetried) { _hardLogout(); return res; }
+        // First 401: the access token likely just expired. Refresh it transparently
+        // and retry the SAME request ONCE; only log out if the refresh fails.
+        return _tryRefreshToken().then((ok) => {
+            if (!ok) { _hardLogout(); return res; }
+            const _tok = localStorage.getItem('crisp_token');
+            const _h = opts.headers || {};
+            return window.fetch(url, { ...opts, __crispRetried: true, headers: { ..._h, Authorization: `Bearer ${_tok}` } });
+        });
     });
 };
 const POLL_INTERVAL        = 4000;  // normal polling
@@ -265,11 +296,9 @@ const liveMarkers = {};
 let firstZoomDone = false;
 
 // ── Live Incident Notifications ─────────────────────────────────────────────
-let _unseenReports = [];
-// K.5.d (May 2026, Phase K) - bell cap raised 10 → 50 so burst-mode
-// arrivals (5+ in 5 s) don't lose the older entries off the LIFO. The
-// burst banner above the bell still suppresses per-card spawn under
-// burst conditions; the bell itself can now carry the full burst.
+// Notification Center depth cap. Bounded history (read + unread) so the
+// persisted store below can't grow without limit. Raised 10 → 50 in Phase K
+// so a burst never sheds older entries; the durable store reuses this cap.
 const _MAX_NOTIFS = 50;
 // K.5.c (May 2026, Phase K) - _seenIds LRU cap. Pre-fix the Set grew
 // unbounded in localStorage; an operator session running for weeks
@@ -306,6 +335,54 @@ function _persistSeenIds() {
         console.warn('[CRISP] _seenIds persist failed (quota?):', e?.message || e);
     }
 }
+
+// ── Notification Center (durable, per-operator) ─────────────────────────────
+// Single source of truth for the bell: a persisted, bounded history holding
+// BOTH unread and read notifications. Replaces the old transient in-memory
+// `_unseenReports` array (wiped on every refresh, no history, no read-state).
+//
+// Two ledgers with distinct, complementary roles:
+//   · `_seenIds`     (above, 1000-cap) - the SHOW-ONCE gate. The poll's
+//                     producer (_applyReportData) checks it BEFORE ever
+//                     calling _addNotification, so a displayed incident is
+//                     never re-toasted after a scope-switch / refresh.
+//   · `_notifCenter` (here, _MAX_NOTIFS-cap) - the rich HISTORY the bell
+//                     renders (read/unread/category). Membership = "delivered
+//                     to the center". Persisted so history survives a reload.
+// The caps differ on purpose: an id can age out of the 50-deep history while
+// still being in the 1000-deep seen-ledger, so it still never replays.
+//
+// Namespaced per operator so a shared workstation never leaks one analyst's
+// history (or read-state) to the next.
+function _notifUserKey(prefix) {
+    let uid = 'anon';
+    try { uid = String((_crispUser && (_crispUser.id || _crispUser.username)) || 'anon'); } catch (_) {}
+    return prefix + uid;
+}
+function _notifCenterKey() { return _notifUserKey('crisp_notif_center_'); }
+let _notifCenter = (() => {
+    try {
+        const raw = JSON.parse(localStorage.getItem(_notifCenterKey()) || '[]');
+        return Array.isArray(raw) ? raw.slice(0, _MAX_NOTIFS) : [];
+    } catch (_) { return []; }
+})();
+function _persistNotifCenter() {
+    try {
+        if (_notifCenter.length > _MAX_NOTIFS) _notifCenter = _notifCenter.slice(0, _MAX_NOTIFS);
+        localStorage.setItem(_notifCenterKey(), JSON.stringify(_notifCenter));
+    } catch (e) { /* quota - non-fatal; history just won't persist this write */ }
+}
+function _notifUnread() { return _notifCenter.filter(n => !n.read); }
+function _notifUnreadCount() { let c = 0; for (const n of _notifCenter) if (!n.read) c++; return c; }
+// Push a freshly-built notification record onto the durable center (newest
+// first, capped, persisted). Used by the confirmed-new path + the synthetic
+// session-summary / urgent-broadcast producers.
+function _notifCenterAdd(rec) {
+    _notifCenter.unshift(rec);
+    if (_notifCenter.length > _MAX_NOTIFS) _notifCenter = _notifCenter.slice(0, _MAX_NOTIFS);
+    _persistNotifCenter();
+}
+
 let _notifPanelOpen = false;
 let _initialLoadDone = false;  // Suppress notifications on first data load
 let heatLayer = null;
@@ -599,11 +676,20 @@ const QUEUES = {
         pass: (r) => !_QUEUE_CLOSED.includes(r.status) && !r.crisis_event_id && r.severity === 'CRITICAL',
         sort: 'priority',
     },
+    // Rejected reports - removed from the active feed + every other queue (see
+    // _applyQueueFilter), reachable ONLY here for audit/re-triage.
+    'rejected': {
+        label: 'Rejected reports', icon: '🚫',
+        desc: 'Reports an analyst rejected as invalid / spam / not actionable - kept for audit; not in the active feed or response queues',
+        pass: (r) => r.reviewer_verdict === 'REJECTED',
+        sort: 'recent',
+    },
 };
 let _activeQueue = null;                 // queue key | null
 let _escalatingBuildingIds = null;       // Set<building_id> (escalating queue prefetch)
 let _queuePrevSort = null;               // restore the user's sort on queue exit
 let _activeCrisisEventId = null;         // Operations Phase 2 - operation scope | null
+let _scopeLoading = false;               // a fresh (scoped/global) feed fetch is in flight with no data yet → show "Loading…", never the prior/global list
 // C1-b/c (Phase-0 scale hardening): the working set (allReports) is the newest
 // window of a possibly-larger scope. `_scopeTotalCount` is the TRUE scope size
 // (X-Total-Count from the last full refresh); `_scopeSummary` is the
@@ -634,8 +720,13 @@ function _scopeAggregatesActive() {
 }
 
 function _applyQueueFilter(reports) {
-    if (!_activeQueue || !QUEUES[_activeQueue]) return reports;
-    return reports.filter(QUEUES[_activeQueue].pass);
+    // The "Rejected" view is the ONLY place rejected reports surface.
+    if (_activeQueue === 'rejected') return reports.filter(r => r.reviewer_verdict === 'REJECTED');
+    // Everywhere else (default feed + every other queue) hides them, so a rejected
+    // report leaves the active feed + all review/response queues.
+    const base = reports.filter(r => r.reviewer_verdict !== 'REJECTED');
+    if (!_activeQueue || !QUEUES[_activeQueue]) return base;
+    return base.filter(QUEUES[_activeQueue].pass);
 }
 
 // Operations Phase 2 - scope the incident feed to a single operation. Resets
@@ -654,6 +745,10 @@ function setOperationScope(crisisEventId) {
     _scopeTotalCount = null;   // C1-b/c: invalidate the previous scope's aggregates
     _scopeSummary = null;
     _scopeMarkers = null;
+    // New scope = a fresh truncation episode: clear any lingering banner + re-arm
+    // so the (transient ~5s) "newest N of M" message shows ONCE for the new scope.
+    try { _hideTruncationBanner(true); } catch (_e) {}
+    _scopeLoading = true;      // a fresh scoped/global fetch starts now → loading state, not the just-cleared list
     // M12 (Phase-2): sticky chip filters must NOT silently carry into a newly-
     // entered operation scope - they'd under-count the op's incidents with no cue.
     try {
@@ -661,10 +756,61 @@ function setOperationScope(crisisEventId) {
             _activeChipFilters.clear(); _persistChipFilters(); _paintChipFilterUI();
         }
     } catch (_e) {}
+    // Repaint the feed DOM to the loading state IMMEDIATELY. The #report-feed-list
+    // still holds the PREVIOUS scope's cards; if we don't repaint now, revealing
+    // the view (showIncidents) would flash them until the scoped fetch returns.
+    try { renderFeed(); } catch (_e) {}
+    try { window.__crispRouteTrace && window.__crispRouteTrace('setOperationScope', { scope: next || 'GLOBAL' }); } catch (_e) {}
     try { fetchReports(); } catch (_e) {}
 }
 window.setOperationScope = setOperationScope;
 window.getOperationScope = () => _activeCrisisEventId;
+
+// ── Routing / data-init instrumentation ──────────────────────────────────────
+// OFF by default. Enable with `localStorage.crisp_nav_trace = '1'` (or
+// `window.__crispNavTrace = true`) to verify the load order with no hidden
+// global-first path: dispatch → context detected → dataset loaded → incident
+// auto-opened. Uses console.debug (hidden unless the console "Verbose" level is on).
+window.__crispRouteTrace = function () {
+    try {
+        if (!window.__crispNavTrace &&
+            !(window.localStorage && localStorage.getItem('crisp_nav_trace') === '1')) return;
+        console.debug('[crisp-route]', ...arguments);
+    } catch (_e) {}
+};
+
+// Read an operation scope already present in the URL (#/incidents;op=X) WITHOUT
+// depending on the router having dispatched yet - used at cold boot so the FIRST
+// fetch is already scoped (no global fetch+render before the router re-applies it).
+function _scopeFromHash() {
+    try {
+        let segs = [];
+        if (window.__crispRouter && window.__crispRouter.parseHash) {
+            segs = window.__crispRouter.parseHash().stateSegs || [];
+        } else {
+            const raw = (location.hash || '').replace(/^#/, '').split('?')[0];
+            segs = raw.split(';').filter(Boolean);
+        }
+        const seg = segs.find((s) => s.startsWith('op='));
+        return seg ? (decodeURIComponent(seg.slice(3)) || null) : null;
+    } catch (_e) { return null; }
+}
+
+// The feed "Loading…" placeholder. Scope-aware: names the operation so the
+// operator sees the correct context BEFORE any incident card renders.
+function _loadingFeedHtml() {
+    const scope = (window.getOperationScope && window.getOperationScope()) || _activeCrisisEventId;
+    let label = 'Loading incidents…';
+    if (scope) {
+        const op = (typeof _opMeta === 'function') ? _opMeta(scope) : null;
+        label = 'Loading ' + (op && op.name ? escapeHtml(op.name) + ' Incidents…' : 'Operation Incidents…');
+    }
+    return `<div class="feed-empty-state feed-loading-state">
+        <i class="fa-solid fa-circle-notch fa-spin" style="color:var(--info);"></i>
+        <div class="feed-empty-title">${label}</div>
+        <div class="feed-empty-sub">Fetching the latest reports for this view…</div>
+    </div>`;
+}
 
 // Escalating prefetch - the badge's population lives on the buildings table
 // (Building.escalation_risk / Building.state), not on report rows.
@@ -789,11 +935,17 @@ function _renderContextBanner() {
         // Operation-scoped feed (#/incidents;op={id}). Name + region resolved from
         // the cached operations list; degrades gracefully before it loads.
         const meta = _opMeta(_activeCrisisEventId);
-        const nm = (meta && meta.name) || 'this operation';
+        const nm = meta && meta.name;
         const region = meta && meta.place_name;
-        cls = 'ctx-op'; icon = '🎯'; label = 'OPERATION INCIDENTS';
-        sub = nm + (region ? ' · ' + region : '') + ' · only this operation';
-        countTxt = total + ' incident' + (total === 1 ? '' : 's');
+        cls = 'ctx-op'; icon = '🎯';
+        // Tight + professional: merge the operation NAME into the bold header line
+        // (prominent, single-line, ellipsised) and keep the sub short - just the
+        // region + the dual count - so it never overflows/truncates. The 🎯 icon +
+        // purple chrome already say "operation", so drop the "only this operation"
+        // filler. Falls back to the generic label until the op name resolves.
+        label = nm ? ('OPERATION · ' + nm) : 'OPERATION INCIDENTS';
+        sub = region || '';
+        countTxt = _dualCount(total);
         clearBtn = '<button class="qb-clear" onclick="window.setIncidentOp&&window.setIncidentOp(null)" title="Return to all incidents worldwide">🌐 Global</button>';
     } else if (_activeQueue && QUEUES[_activeQueue]) {
         const q = QUEUES[_activeQueue];
@@ -814,7 +966,7 @@ function _renderContextBanner() {
     } else {
         cls = 'ctx-global'; icon = '🌐'; label = 'GLOBAL INCIDENTS';
         sub = 'Showing all incidents worldwide';
-        countTxt = total + ' incident' + (total === 1 ? '' : 's');
+        countTxt = _dualCount(total);
     }
 
     // Always-available operation switcher: jump to any operation's incidents (or
@@ -822,21 +974,137 @@ function _renderContextBanner() {
     const switchBtn = '<button class="ctx-switch" onclick="window.__crispToggleOpSwitcher(event)" title="View incidents for a specific operation">' +
         '<i class="fa-solid fa-arrow-right-arrow-left"></i> Operation</button>';
 
+    // Discoverable entry to the dedicated Rejected Reports view (rejected reports
+    // are hidden from the active feed + every other queue). Shown when there are
+    // any and we're not already viewing them.
+    const rejectedCount = (allReports || []).filter(r => r.reviewer_verdict === 'REJECTED').length;
+    const rejectedBtn = (_activeQueue !== 'rejected' && rejectedCount > 0)
+        ? '<button class="ctx-switch ctx-rejected" onclick="setActiveQueue(\'rejected\')" title="View rejected reports (kept for audit)">🚫 Rejected <b>' + rejectedCount + '</b></button>'
+        : '';
+
     banner.className = 'ctx-banner ' + cls;
     banner.style.display = 'flex';
     banner.innerHTML =
         '<span class="qb-icon" aria-hidden="true">' + icon + '</span>' +
         '<span class="qb-text"><strong class="qb-label">' + escapeHtml(label) + '</strong>' +
-        '<span class="qb-sub">' + escapeHtml(sub) + ' · <b>' + escapeHtml(countTxt) + '</b></span></span>' +
-        '<span class="qb-actions">' + switchBtn + clearBtn + '</span>';
+        '<span class="qb-sub">' + (sub ? escapeHtml(sub) + ' · ' : '') + '<b>' + escapeHtml(countTxt) + '</b></span></span>' +
+        '<span class="qb-actions">' + switchBtn + rejectedBtn + clearBtn + '</span>';
 }
+
+// P4: distinct incident clusters in the active scope. Prefers the server's
+// scope-wide cluster_count (honest at 500k scale); falls back to grouping the
+// loaded working set (building_id → h3 → singleton). Powers the dual count.
+function _scopeClusterCount() {
+    try {
+        if (_scopeSummary && _scopeSummary.counts && typeof _scopeSummary.counts.cluster_count === 'number') {
+            return _scopeSummary.counts.cluster_count;
+        }
+    } catch (_e) {}
+    const keys = new Set();
+    for (const r of allReports) keys.add(_clusterKey(r));
+    return keys.size;
+}
+// "X incidents · Y reports" - the dual operational picture. `total` is the feed's
+// X-Total-Count, which already EXCLUDES merged duplicates (collapsed) = incidents.
+// `reports` is the full report volume incl. corroborating duplicates (never collapses
+// - corroboration is operational signal). Equal when nothing has been merged.
+function _dualCount(total) {
+    let reports = total;
+    try {
+        if (_scopeSummary && _scopeSummary.counts && typeof _scopeSummary.counts.reports === 'number') {
+            reports = Math.max(_scopeSummary.counts.reports, total);
+        }
+    } catch (_e) {}
+    return total + ' incident' + (total === 1 ? '' : 's') + ' · ' + reports + ' report' + (reports === 1 ? '' : 's');
+}
+
+// ── Potential Duplicates review panel (Incidents page entry point) ───────────
+// Surfaces the unconfirmed-duplicate backlog by confidence with one-click
+// "Merge All" actions. Analyst-controlled (HIGH/MEDIUM/LOW are operator clicks,
+// never auto). Throttled fetch (the summary scans buildings) + cache-busted on a
+// merge. Scoped to the active operation when one is open.
+let _dupSummaryCache = { ts: 0, scope: undefined, data: null };
+async function _renderDupReviewPanel(force) {
+    const banner = document.getElementById('queue-banner');
+    if (!banner || !banner.parentNode) return;
+    let panel = document.getElementById('dup-review-panel');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'dup-review-panel';
+        panel.style.cssText = 'display:none;margin:6px 0;padding:8px 12px;background:rgba(56,189,248,.07);border:1px solid rgba(56,189,248,.25);border-radius:10px;font-size:12px;align-items:center;flex-wrap:wrap;gap:4px';
+        banner.parentNode.insertBefore(panel, banner.nextSibling);
+    }
+    const scope = _activeCrisisEventId || null;
+    const now = Date.now();
+    if (!force && _dupSummaryCache.data && _dupSummaryCache.scope === scope && (now - _dupSummaryCache.ts) < 30000) {
+        _paintDupPanel(panel, _dupSummaryCache.data); return;
+    }
+    try {
+        const url = API + '/duplicate-summary' + (scope ? '?crisis_event_id=' + encodeURIComponent(scope) : '');
+        const res = await fetch(url, { headers: { Authorization: 'Bearer ' + (localStorage.getItem('crisp_token') || '') } });
+        if (!res.ok) { panel.style.display = 'none'; return; }
+        const data = await res.json();
+        _dupSummaryCache = { ts: now, scope, data };
+        _paintDupPanel(panel, data);
+    } catch (_e) { panel.style.display = 'none'; }
+}
+function _paintDupPanel(panel, d) {
+    const total = (d && d.total) || 0;
+    if (!total) { panel.style.display = 'none'; return; }
+    let role = '';
+    try { role = (JSON.parse(localStorage.getItem('crisp_user') || '{}').role) || ''; } catch (_e) {}
+    // Anyone who can record a decision (analyst and up) sees the bulk actions; the
+    // backend's require_analyst is the real gate. VIEWER is read-only.
+    const canMerge = role === 'ANALYST' || role === 'ADMIN' || role === 'SUPER_ADMIN';
+    const btn = (lvl, n, label) => (n > 0 && canMerge)
+        ? `<button class="dup-rev-btn" onclick="window._dupMergeAll('${lvl}')" style="background:#1b2942;border:1px solid #2b3b56;color:#cbd9ef;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;margin-left:6px">${label} (${n})</button>`
+        : '';
+    panel.style.display = 'flex';
+    panel.innerHTML =
+        `<span style="font-weight:700;color:#7dd3fc">🔗 Potential Duplicates</span>` +
+        `<span style="color:#cbd9ef;margin-left:6px">High <b>${d.high || 0}</b> · Medium <b>${d.medium || 0}</b> · Low <b>${d.low || 0}</b> · Total <b>${total}</b></span>` +
+        `<span style="margin-left:auto;display:flex;flex-wrap:wrap;gap:2px">` +
+        // ONE-CLICK merge-all: collapses every duplicate (High+Medium+Low) under its
+        // primary in a single action (group-aware on the backend - whole clusters
+        // collapse at once). Reversible. The per-level buttons stay for granular use.
+        ((total > 0 && canMerge)
+            ? `<button class="dup-rev-btn" onclick="window._dupMergeAll('ALL')" title="Collapse every duplicate (High + Medium + Low) under its primary in one click - the primary is the earliest, most-complete report. Reversible." style="background:#1d4ed8;border:1px solid #2563eb;color:#fff;border-radius:6px;padding:3px 11px;font-size:11px;font-weight:700;cursor:pointer;margin-left:6px">Merge all (${total})</button>`
+            : '') +
+        btn('HIGH', d.high || 0, 'Merge All High') +
+        btn('MEDIUM', d.medium || 0, 'Merge All Medium') +
+        btn('LOW', d.low || 0, 'Merge All Low') +
+        `<button class="dup-rev-btn" onclick="window.setViewMode&&window.setViewMode('clusters')" title="Review duplicates one by one in the building-grouped view" style="background:#1b2942;border:1px solid #2b3b56;color:#cbd9ef;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;margin-left:6px">Review Individually</button>` +
+        `</span>`;
+}
+// "Merge All <level>": analyst-initiated bulk confirm of every unconfirmed pair at
+// that confidence in the active scope. Reversible; nothing deleted.
+window._dupMergeAll = async (level) => {
+    try {
+        const body = { confidence: level };
+        if (_activeCrisisEventId) body.crisis_event_id = _activeCrisisEventId;
+        const res = await fetch(API + '/duplicate-merge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (localStorage.getItem('crisp_token') || '') },
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) { showToast(res.status === 403 ? 'Not authorized (analyst required)' : 'Could not merge', 'error'); return; }
+        const out = await res.json();
+        const n = out.merged || 0;
+        showToast('Merged ' + n + ' duplicate' + (n !== 1 ? 's' : ''), 'success');
+        _dupSummaryCache = { ts: 0, scope: undefined, data: null };   // bust the cache
+        try { _lastServerTime = null; _lastReportsEtag = null; } catch (_e) {}
+        try { fetchReports(); } catch (_e) {}
+        try { _renderDupReviewPanel(true); } catch (_e) {}
+    } catch (_e) { showToast('Could not merge', 'error'); }
+};
 
 // ── Operation switcher (Jun 2026) ────────────────────────────────────────────
 // Scope the GLOBAL incidents feed to any operation (or back to global) directly
 // from the feed, via #/incidents;op={id}. The op list is fetched once + cached;
 // the context banner names the active operation + its region. Arriving from an
-// operation dashboard ("Open full incident feed") carries the op so context
-// persists (the router applies the scope from the hash, see dispatch()).
+// operation dashboard ("Open Incident Feed", or clicking an op incident row)
+// carries the op so context persists (the router applies the scope from the
+// hash, see dispatch()).
 let _opsCache = [];
 function _opMeta(id) { return _opsCache.find((o) => o && o.id === id) || null; }
 async function _loadOpsForSwitcher(force) {
@@ -954,6 +1222,62 @@ if (document.readyState === 'loading') {
     else move();
 })();
 
+// Collapsible FILTERS row: the secondary filter chips + Saved Views take a chunk
+// of vertical space at the top of the feed panel, pushing the incident cards down
+// on shorter windows. The "Filters" label is now a toggle that hides/shows the
+// chips (default COLLAPSED so the feed gets the room); choice persists. When
+// collapsed with active filters, a count badge on the label keeps it discoverable.
+(function _setupFilterCollapse() {
+    const KEY = 'crisp_filters_collapsed';
+    const setup = () => {
+        const row = document.getElementById('cmd-filter-row');
+        const label = row && row.querySelector('.cmd-filter-label');
+        if (!row || !label) return;
+        if (!document.getElementById('cmd-filter-collapse-css')) {
+            const s = document.createElement('style');
+            s.id = 'cmd-filter-collapse-css';
+            s.textContent =
+                '#cmd-filter-toggle{cursor:pointer;user-select:none;border-radius:6px;padding:2px 4px}' +
+                '#cmd-filter-toggle:hover{background:rgba(148,163,184,.12)}' +
+                '#cmd-filter-toggle .cft-caret{transition:transform .15s;font-size:9px;opacity:.7;margin-left:4px}' +
+                '.cmd-filter-row.cmd-filters-collapsed>*:not(.cmd-filter-label){display:none !important}' +
+                '.cmd-filter-row.cmd-filters-collapsed #cmd-filter-toggle .cft-caret{transform:rotate(-90deg)}' +
+                '#cmd-filter-active-count{margin-left:6px;background:rgba(56,189,248,.22);color:#7dd3fc;border-radius:8px;padding:0 6px;font-size:10px;font-weight:700;display:none}';
+            document.head.appendChild(s);
+        }
+        if (!label.id) {
+            label.id = 'cmd-filter-toggle';
+            label.setAttribute('role', 'button');
+            label.setAttribute('tabindex', '0');
+            label.title = 'Show / hide the filter chips';
+            label.insertAdjacentHTML('beforeend', ' <i class="fa-solid fa-caret-down cft-caret"></i><span id="cmd-filter-active-count"></span>');
+            const toggle = () => {
+                const collapsed = !row.classList.contains('cmd-filters-collapsed');
+                row.classList.toggle('cmd-filters-collapsed', collapsed);
+                try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (_e) {}
+            };
+            label.addEventListener('click', toggle);
+            label.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+            });
+        }
+        let collapsed = true;   // default collapsed - the feed cards are the priority
+        try { if (localStorage.getItem(KEY) === '0') collapsed = false; } catch (_e) {}
+        row.classList.toggle('cmd-filters-collapsed', collapsed);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setup);
+    else setup();
+})();
+// Keep the collapsed "Filters" label's active-count badge in sync so a hidden
+// chip row still shows how many filters are applied. Cheap; called from renderFeed.
+function _syncFilterActiveCount() {
+    const badge = document.getElementById('cmd-filter-active-count');
+    if (!badge) return;
+    const n = (typeof _activeChipFilters !== 'undefined' && _activeChipFilters && _activeChipFilters.size) || 0;
+    badge.textContent = n ? String(n) : '';
+    badge.style.display = n ? 'inline-block' : 'none';
+}
+
 // ── Overlay coordination (Jun 2026) ──────────────────────────────────────────
 // Fixes the "panels stack / no close / hidden behind something" class of bugs
 // from the overlay audit: a guaranteed ✕ on the analytics panel, mutual
@@ -1008,9 +1332,30 @@ if (document.readyState === 'loading') {
         const dd = document.querySelector('.export-dropdown.open');
         if (dd) { dd.classList.remove('open'); return; }
         for (const id of PANELS) { const p = document.getElementById(id); if (_vis(p)) { p.style.display = 'none'; return; } }
+        // Incident detail / building console (D2) - a body-level overlay that
+        // previously ignored Escape. Skip if a child modal (reason / sat-compare)
+        // is open, since those self-handle Escape.
+        const dp = document.getElementById('detail-panel');
+        if (_vis(dp) && !document.querySelector('.bc-reason-modal-overlay, .dp-compare-overlay')) {
+            try { window.closeDetail && window.closeDetail(); } catch (_e) { dp.style.display = 'none'; }
+            return;
+        }
         const np = document.getElementById('notif-panel');
         if (_vis(np)) { np.style.display = 'none'; }
     });
+
+    // D5: tear down the in-page panels + transient modals on route change so they
+    // can't orphan onto the next route (the analytics panel survived a route
+    // change and reappeared over the wrong page). Exposed for router.hideAll().
+    // The detail panel is intentionally NOT closed here - it owns its ?incident=
+    // deep-link lifecycle (navigate() clears the selection when leaving the route).
+    window.__ccCloseTransientOverlays = () => {
+        try {
+            document.querySelectorAll('.reclaim-modal-backdrop, .ai-logic-overlay, .lightbox-overlay, .bc-reason-modal-overlay, .dp-compare-overlay')
+                .forEach((n) => { try { n.remove(); } catch (_e) {} });
+            for (const id of PANELS) { const p = document.getElementById(id); if (_vis(p)) p.style.display = 'none'; }
+        } catch (_e) {}
+    };
 })();
 
 // Phase G.5 (May 2026) - Bulk multi-select state.
@@ -1424,32 +1769,795 @@ function _classifyHighTier(group, reportAgeMs) {
     return reportAgeMs < _ORIG_FRESH_MS ? 'uploading' : 'delayed';
 }
 
-// Phase B.3 (May 2026, UNDP-grade rebuild) - empty-state CTA for the
-// satellite verification panel when no verification has run yet.
-// Replaces the bare "Verify via Satellite" button with a richer card
-// that explains what verification DOES - analysts unfamiliar with the
-// feature otherwise wonder what the button is for. The card lists the
-// 4 providers used (transparency for UNDP judges) + the typical
-// runtime so analysts know what to expect.
-function _renderVerifyEmptyCTA(reportId) {
-    return `
-    <div class="dp-verify-empty-cta">
-        <div class="dp-verify-empty-header">
-            <i class="fa-solid fa-satellite-dish"></i>
-            <span class="dp-verify-empty-title">Cross-check with satellite imagery</span>
-        </div>
-        <p class="dp-verify-empty-desc">
-            CRISP fetches recent satellite imagery from
-            <strong>AWS Sentinel-2</strong>, <strong>Microsoft Planetary Computer</strong>,
-            <strong>ESA Copernicus</strong>, and <strong>Mapbox</strong>, then asks
-            an AI vision model to score how well the citizen's photo matches the scene.
-        </p>
-        <button class="dp-sat-verify-btn" id="btn-verify-${reportId}" onclick="runVerification('${reportId}')">
-            <i class="fa-solid fa-satellite"></i> Run verification
-            <span class="dp-verify-runtime">~25s</span>
-        </button>
-    </div>`;
+// ── Report Assessment - the ONE automated-credibility surface ─────────────────
+// Renders the single, system-only Confidence Score (0-100) from the backend
+// `incident_credibility` object (see app/services/credibility.py). The score is
+// the SUM of independent automated checks (AI content, satellite, location,
+// corroboration, reporter) - it is the MACHINE's assessment only. An analyst's
+// accept/reject verdict and manual review deliberately never move it (that is
+// the operational status, shown elsewhere). One primary CTA - "AI-Assisted
+// Report Assessment" - runs every check; the resulting score is then clickable
+// → a per-check breakdown modal that explains exactly how the number is reached.
+// No incident mutation here; the CTA just (re)computes the score.
+function _credBandMeta(band) {
+    const M = {
+        VERIFIED:   { word: 'High confidence', color: '#22c55e' },
+        LIKELY:     { word: 'Likely credible', color: '#2dd4bf' },
+        MIXED:      { word: 'Mixed signals',   color: '#eab308' },
+        WEAK:       { word: 'Low confidence',  color: '#f97316' },
+        UNVERIFIED: { word: 'Not yet assessed', color: '#64748b' },
+    };
+    const m = M[band] || M.UNVERIFIED;
+    return { cls: (band || 'unverified').toLowerCase(), word: m.word, color: m.color };
 }
+
+// ── Assessment cache (per session) ───────────────────────────────────────────
+// The completed assessment is cached against the report id so the breakdown is
+// REUSED whenever the operator reopens it, and a background poll that momentarily
+// serializes incident_credibility as null can never revert the card to "run it
+// again". Re-running (runFullAssessment) overwrites this. In-memory only: after a
+// refresh it self-heals from the server-computed incident_credibility.
+window.__assessCache = window.__assessCache || {};
+
+// Resolve the assessment snapshot for a report: prefer the live server-computed
+// incident_credibility when it is assessed (refreshing the cache from it), else
+// fall back to the cached snapshot from when the operator last ran it.
+function _assessSnapshot(r) {
+    if (!r) return null;
+    const liveIc = r.incident_credibility;
+    if (liveIc && liveIc.assessed && liveIc.score !== null && liveIc.score !== undefined) {
+        const prev = window.__assessCache[r.id];
+        let icAt = null;
+        if (liveIc.assessed_at) { try { icAt = new Date(ensureUTC(liveIc.assessed_at)).getTime(); } catch (_e) { icAt = null; } }
+        const snap = {
+            ic: liveIc,
+            verification: r.verification || (prev && prev.verification) || null,
+            ai_assessment: r.ai_assessment || (prev && prev.ai_assessment) || null,
+            duplicate_count: r.duplicate_count || 0,
+            building_id: r.building_id || null,
+            // Prefer the FRESH server timestamp when present so "Last assessed N
+            // ago" tracks the latest assessment even when another operator re-ran
+            // it; fall back to this client's run-time only when the server omits it.
+            at: icAt || (prev && prev.at) || null,
+        };
+        window.__assessCache[r.id] = snap;
+        return snap;
+    }
+    return window.__assessCache[r.id] || null;
+}
+
+// "Last assessed N ago" caption from the snapshot timestamp.
+function _assessedAtLabel(snap) {
+    if (!snap || !snap.at) return '';
+    try { return `Last assessed ${timeAgo(new Date(snap.at).toISOString())}`; } catch (_e) { return ''; }
+}
+
+// Compact contributor checklist for the card: each automated check that RAN with
+// points shows a ✓; ran-but-zero a neutral dot; not-run a dim ✗.
+function _contributorChips(ic) {
+    const short = { ai: 'AI analysis', satellite: 'Satellite', location: 'Location', corroboration: 'Duplicates', reporter: 'Reporter' };
+    return (ic.factors || []).map(f => {
+        const ok = f.ran && f.awarded > 0;
+        const cls = ok ? 'ok' : (f.ran ? 'neutral' : 'off');
+        const icon = ok ? 'fa-circle-check' : (f.ran ? 'fa-circle' : 'fa-circle-xmark');
+        return `<span class="dp-contrib dp-contrib-${cls}"><i class="fa-solid ${icon}"></i> ${escapeHtml(short[f.key] || f.label)}</span>`;
+    }).join('');
+}
+
+function _renderIncidentAssessment(r) {
+    const snap = _assessSnapshot(r);
+    const totalChecks = (snap && snap.ic.total_checks) || 5;
+
+    // Not yet assessed → one plain explainer + the single primary CTA. No
+    // fabricated number, no scattered per-check buttons.
+    if (!snap) {
+        return `
+        <section class="dp-section dp-assess dp-assess-cta-state" id="dp-assess-${r.id}">
+            <div class="dp-assess-cta-head">
+                <i class="fa-solid fa-gauge-high dp-assess-cta-icon"></i>
+                <div>
+                    <div class="dp-assess-title">Report Assessment</div>
+                    <div class="dp-assess-cta-sub">Run every automated credibility check to score this report 0&ndash;100.</div>
+                </div>
+            </div>
+            <button class="dp-assess-cta" id="btn-assess-${r.id}" onclick="runFullAssessment('${r.id}')">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> AI-Assisted Report Assessment
+            </button>
+            <div class="dp-assess-cta-note">Runs AI content analysis, satellite correlation, location, corroboration &amp; reporter checks. Analyst decisions never affect this score.</div>
+        </section>`;
+    }
+
+    // Assessed → the big, clickable Confidence Score + contributor checklist +
+    // "Last assessed N ago" + a re-run affordance. Click the score row → the
+    // investigative breakdown workspace.
+    const ic = snap.ic;
+    const meta = _credBandMeta(ic.band);
+    const atLabel = _assessedAtLabel(snap);
+    return `
+    <section class="dp-section dp-assess dp-assess-scored dp-cred-${meta.cls}" id="dp-assess-${r.id}" style="--cred-color:${meta.color};">
+        <div class="dp-assess-scorerow" role="button" tabindex="0"
+             aria-label="Open the Confidence Score breakdown"
+             onclick="_showAssessmentModal('${r.id}')"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();_showAssessmentModal('${r.id}');}">
+            <div class="dp-assess-dial">
+                <span class="dp-assess-num">${ic.score}</span>
+                <span class="dp-assess-den">/100</span>
+            </div>
+            <div class="dp-assess-meta">
+                <div class="dp-assess-title">Confidence Score <span class="dp-assess-band">${meta.word}</span></div>
+                <div class="dp-assess-contribs">${_contributorChips(ic)}</div>
+                <div class="dp-assess-presence">${atLabel ? escapeHtml(atLabel) + ' · ' : ''}${ic.ran_count} of ${totalChecks} checks <span class="dp-assess-link">View breakdown <i class="fa-solid fa-arrow-right"></i></span></div>
+            </div>
+        </div>
+    </section>`;
+    // Re-run lives inside the breakdown workspace (the modal's sticky header
+    // "Re-run assessment"), keeping this card to a single decision: the score.
+}
+window._renderIncidentAssessment = _renderIncidentAssessment;
+
+// Build the multi-signal payload for POST /{id}/ai-assess. Shared by the single
+// "AI-Assisted Report Assessment" CTA and the legacy Re-run path so both send an
+// identical dossier to Claude.
+function _buildAiAssessPayload(r) {
+    const loc = r.location;
+    const nearbyReports = loc ? allReports.filter(rr => rr.id !== r.id && rr.location &&
+        haversineKm(loc.latitude, loc.longitude, rr.location.latitude, rr.location.longitude) < 5).length : 0;
+    return {
+        id: r.id, source: r.source, severity: r.severity,
+        infrastructure_type: r.infrastructure_type, status: r.status,
+        description: r.description || '',
+        transcription: r.ai_analysis?.transcription || '',
+        ai_summary: r.ai_analysis?.ai_summary || '',
+        location: loc ? { lat: loc.latitude, lng: loc.longitude, name: loc.user_location_name || loc.device_location_name || '' } : null,
+        media_count: r.media?.length || 0,
+        has_image: !!r.media?.find(m => m.type === 'IMAGE'),
+        has_audio: !!r.media?.find(m => m.type === 'AUDIO'),
+        verification: r.verification ? {
+            score: r.verification.total_score, verdict: r.verification.verdict,
+            scores: r.verification.scores || {},
+            photo_analysis: r.verification.photo_analysis || '',
+            satellite_scene: r.verification.satellite_scene_description || '',
+            key_findings: r.verification.key_findings || [],
+            caveats: r.verification.caveats || [],
+        } : null,
+        caller_info: r.caller_info || null,
+        nearby_reports: nearbyReports,
+    };
+}
+
+// THE single assessment trigger. Runs every automated check (AI content +
+// satellite correlation), then re-fetches the report so the server-computed
+// Confidence Score (incident_credibility) is fresh, and re-renders. Individual
+// checks may fail (e.g. no cloud-free imagery, AI key missing); the breakdown
+// then shows each as "could not run" rather than blocking the whole score.
+window.runFullAssessment = async (id) => {
+    const r = allReports.find(x => x.id === id)
+        || (_detailOnlyReport && _detailOnlyReport.id === id ? _detailOnlyReport : null);
+    if (!r) return;
+    if (window.__assessRunning === id) return;            // double-submit guard
+    window.__assessRunning = id;
+
+    const btn = document.getElementById(`btn-assess-${id}`)
+        || document.querySelector('#assess-modal-overlay .assess-rerun-top')
+        || document.querySelector(`#dp-assess-${id} .dp-assess-rerun`);
+    if (btn) { btn._label = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Running…'; }
+    showToast('Running automated assessment — AI analysis + satellite…', 'info');
+
+    // Re-run (already assessed once) forces a fresh Claude call; first run uses
+    // the cache-friendly default.
+    const force = !!(r.ai_assessment || (r.incident_credibility && r.incident_credibility.assessed));
+    const aiUrl = `${BACKEND_HOST}/api/v1/reports/${id}/ai-assess${force ? '?force=true' : ''}`;
+
+    const [aiOk, satOk] = await Promise.all([
+        fetch(aiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(_buildAiAssessPayload(r)) })
+            .then(res => res.ok).catch(() => false),
+        fetch(`${API}/${id}/verify`, { method: 'POST' }).then(res => res.ok).catch(() => false),
+    ]);
+
+    // Re-fetch the full report so incident_credibility (server-computed) is fresh.
+    const fresh = await _fetchReportByIdRaw(id);
+    if (fresh) {
+        const idx = allReports.findIndex(x => x.id === id);
+        if (idx >= 0) allReports[idx] = { ...allReports[idx], ...fresh };
+        if (_detailOnlyReport && _detailOnlyReport.id === id) _detailOnlyReport = { ..._detailOnlyReport, ...fresh };
+        // Cache the completed result against the report (the user reopens the
+        // breakdown repeatedly; it must reuse THIS result, with the run time).
+        const fic = fresh.incident_credibility;
+        if (fic && fic.assessed) {
+            window.__assessCache[id] = {
+                ic: fic, verification: fresh.verification || null, ai_assessment: fresh.ai_assessment || null,
+                duplicate_count: fresh.duplicate_count || 0, building_id: fresh.building_id || null, at: Date.now(),
+            };
+        }
+    }
+    window.__assessRunning = null;
+    try { selectReport(id, true); renderFeed(); } catch (_e) {}
+    // If the breakdown is open, refresh it in place with the new result.
+    if (document.getElementById('assess-modal-overlay')) { try { _showAssessmentModal(id); } catch (_e) {} }
+
+    const ic = fresh && fresh.incident_credibility;
+    if (ic && ic.assessed && ic.score !== null && ic.score !== undefined) {
+        showToast(`Confidence Score: ${ic.score}/100 · ${_credBandMeta(ic.band).word}`, 'success');
+    } else if (!aiOk && !satOk) {
+        showToast('Assessment could not run — check API keys / connectivity.', 'error');
+        if (btn && btn._label) { btn.disabled = false; btn.innerHTML = btn._label; }
+    } else {
+        showToast('Assessment ran with partial results — open the breakdown.', 'info');
+    }
+};
+
+// ── Breakdown workspace - section renderers ───────────────────────────────────
+// The breakdown is the ONE investigative surface: everything needed to answer
+// "how confident are we this incident is real, and why?" lives here, so the
+// operator never navigates to another section. Section 2 embeds the FULL
+// satellite analysis (it no longer lives in the Evidence section).
+
+// Section 2 - Satellite verification, fully embedded (imagery + ground↔satellite
+// comparison + sub-scores + AI observations + re-verify). Self-contained from
+// r.verification so it can render inside the modal.
+function _renderSatelliteAnalysis(r) {
+    const v = r.verification || null;
+    if (!v) {
+        return `<div class="assess-sat-empty">
+            <i class="fa-solid fa-satellite-dish"></i>
+            <span>Satellite imagery correlation hasn't run for this report.</span>
+            <button class="assess-mini-btn" id="btn-verify-${r.id}" onclick="runVerification('${r.id}')"><i class="fa-solid fa-satellite"></i> Run satellite check</button>
+        </div>`;
+    }
+    if (v.error) {
+        return `<div class="assess-sat-empty assess-sat-err">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span>Satellite verification could not run: ${escapeHtml(v.error)}</span>
+            <button class="assess-mini-btn" id="btn-verify-${r.id}" onclick="runVerification('${r.id}')"><i class="fa-solid fa-rotate"></i> Retry satellite</button>
+        </div>`;
+    }
+    const total = v.total_score || 0;
+    const gc = total >= 80 ? '#22c55e' : total >= 60 ? '#86efac' : total >= 40 ? '#eab308' : total >= 20 ? '#f97316' : '#ef4444';
+    const verdictLabels = { STRONGLY_CORROBORATED:'Corroborated', LIKELY_AUTHENTIC:'Likely Authentic', PARTIALLY_VERIFIED:'Partial', LOW_CONFIDENCE:'Low Confidence', UNVERIFIED:'Unverified' };
+    const vLabel = verdictLabels[v.verdict] || v.verdict || '';
+
+    const satSrc    = v.satellite_image_url ? getMediaUrl(v.satellite_image_url) : '';
+    const satAltSrc = v.satellite_image_url_alt ? getMediaUrl(v.satellite_image_url_alt) : '';
+    const satLabel  = (v.satellite_source || 'Satellite').split('(')[0].trim();
+    const satAltLabel = (v.satellite_source_alt || 'Alt').split('(')[0].trim();
+    const cit = (r.media || []).find(m => m.type === 'IMAGE' && m.assembly_status === 'complete' && m.url);
+    const citSrc = cit ? getMediaUrl(cit.url) : ((r.media || []).find(m => m.type === 'IMAGE' && m.thumbnail_url) ? getMediaUrl((r.media || []).find(m => m.type === 'IMAGE' && m.thumbnail_url).thumbnail_url) : '');
+
+    // Imagery: a ground↔satellite wipe comparison when both exist (the real
+    // operator question - does the overhead corroborate the ground report?);
+    // otherwise whichever single image we have, with a primary/alt tab.
+    let imageryHtml = '';
+    if (citSrc && satSrc) {
+        imageryHtml = `<div class="assess-compare" id="assess-compare-${r.id}">
+            <div class="assess-compare-stage">
+                <img class="assess-compare-base" src="${satSrc}" alt="Satellite view" onclick="openLightbox('${satSrc}','Satellite')">
+                <img class="assess-compare-top" id="assess-compare-top-${r.id}" src="${citSrc}" alt="Ground report" style="clip-path:inset(0 50% 0 0);">
+                <div class="assess-compare-divider" id="assess-compare-div-${r.id}" style="left:50%;"></div>
+            </div>
+            <input type="range" min="0" max="100" value="50" class="assess-compare-range" aria-label="Wipe between the ground photo and the satellite view" oninput="_assessWipe('${r.id}', this.value)">
+            <div class="assess-compare-labels"><span><i class="fa-solid fa-camera"></i> Ground photo</span><span>Satellite view <i class="fa-solid fa-satellite"></i></span></div>
+        </div>`;
+    } else if (satSrc) {
+        imageryHtml = `<div class="assess-sat-imgwrap">
+            ${satAltSrc ? `<div class="dp-sat-tabs">
+                <button class="dp-sat-tab active" onclick="switchSatSource('${r.id}','primary',this,'${satSrc}')">${escapeHtml(satLabel)}</button>
+                <button class="dp-sat-tab" onclick="switchSatSource('${r.id}','alt',this,'${satAltSrc}')">${escapeHtml(satAltLabel)}</button>
+            </div>` : ''}
+            <div class="dp-img" onclick="openLightbox(document.getElementById('dp-sat-img-${r.id}').src,'Satellite')">
+                <img id="dp-sat-img-${r.id}" src="${satSrc}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">
+            </div>
+        </div>`;
+    }
+
+    // Match confidence - the 4 sub-scores (each /25).
+    const sc = v.scores || {};
+    const subDefs = [
+        ['Location authenticity', sc.location_authenticity],
+        ['Damage corroboration', sc.damage_corroboration],
+        ['Description coherence', sc.description_coherence],
+        ['Data quality', sc.data_quality],
+    ].filter(([, val]) => typeof val === 'number');
+    const subHtml = subDefs.length ? `<div class="assess-subscores">${subDefs.map(([l, val]) => {
+        const pc = Math.max(2, Math.round((val / 25) * 100));
+        return `<div class="assess-subscore"><span class="assess-subscore-l">${l}</span><div class="assess-subscore-bar"><span style="width:${pc}%;"></span></div><b>${val}/25</b></div>`;
+    }).join('')}</div>` : '';
+
+    // Acquisition + cloud + sources + last-verified chips.
+    const chips = [];
+    if (v.satellite_acquisition_date) {
+        const acq = formatShortDate(v.satellite_acquisition_date);
+        const gap = (typeof v.satellite_days_gap === 'number') ? v.satellite_days_gap : null;
+        let gapLabel = '', gapColor = '#94a3b8';
+        if (gap !== null) {
+            if (gap === 0) { gapLabel = 'same day as incident'; gapColor = '#22c55e'; }
+            else if (gap > 0) { gapLabel = `${gap}d before incident`; gapColor = gap <= 3 ? '#22c55e' : gap <= 14 ? '#eab308' : '#f97316'; }
+            else { const a = Math.abs(gap); gapLabel = `${a}d after incident`; gapColor = a <= 7 ? '#22c55e' : a <= 30 ? '#eab308' : '#f97316'; }
+        }
+        chips.push(`<span class="dp-sat-meta-chip" style="border-color:${gapColor}40;"><i class="fa-regular fa-calendar"></i> <span style="color:#cbd5e1;">${acq}</span>${gapLabel ? ` <span style="color:${gapColor};font-weight:600;">· ${gapLabel}</span>` : ''}</span>`);
+    }
+    if (typeof v.satellite_cloud_cover_pct === 'number') {
+        const c = v.satellite_cloud_cover_pct, cc = c <= 30 ? '#22c55e' : c <= 70 ? '#eab308' : '#ef4444';
+        chips.push(`<span class="dp-sat-meta-chip" style="border-color:${cc}40;"><i class="fa-solid fa-cloud" style="color:${cc};"></i> <span style="color:#cbd5e1;font-weight:600;">${c.toFixed(0)}% cloud</span></span>`);
+    }
+    const srcs = Array.isArray(v.satellite_images) ? v.satellite_images : [];
+    if (srcs.length >= 2) chips.push(`<span class="dp-sat-meta-chip" title="${escapeHtml(srcs.map(s => s.source || '').filter(Boolean).join(' · '))}"><i class="fa-solid fa-layer-group"></i> <span style="color:#cbd5e1;font-weight:600;">${srcs.length} sources</span></span>`);
+    else if (v.satellite_source) chips.push(`<span class="dp-sat-meta-chip" title="${escapeHtml(v.satellite_source)}"><i class="fa-solid fa-satellite-dish"></i> <span style="color:#cbd5e1;font-weight:600;">${escapeHtml(v.satellite_source.split('(')[0].trim())}</span></span>`);
+    if (v.scored_at) chips.push(`<span class="dp-sat-meta-chip" title="Last AI verification run"><i class="fa-solid fa-clock-rotate-left"></i> <span style="color:#cbd5e1;">${timeAgo(v.scored_at)}</span></span>`);
+    const chipsHtml = chips.length ? `<div class="dp-sat-meta-row">${chips.join('')}</div>` : '';
+
+    // AI observations (reasoning / findings / scene / caveats) - all real.
+    const obs = [];
+    if (v.reasoning) obs.push(`<p class="assess-sat-obs">${escapeHtml(String(v.reasoning).slice(0, 400))}</p>`);
+    else if (v.satellite_scene_description) obs.push(`<p class="assess-sat-obs">${escapeHtml(String(v.satellite_scene_description).slice(0, 400))}</p>`);
+    if (Array.isArray(v.key_findings) && v.key_findings.length) obs.push(`<ul class="assess-sat-list">${v.key_findings.slice(0, 4).map(k => `<li><i class="fa-solid fa-circle-check"></i> ${escapeHtml(k)}</li>`).join('')}</ul>`);
+    if (Array.isArray(v.caveats) && v.caveats.length) obs.push(`<ul class="assess-sat-list assess-sat-caveats">${v.caveats.slice(0, 3).map(k => `<li><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(k)}</li>`).join('')}</ul>`);
+
+    const cloudWarn = ((v.satellite_cloud_cover_pct ?? 0) > 70 && (sc.damage_corroboration ?? 25) <= 10)
+        ? `<div class="dp-sat-warning"><i class="fa-solid fa-triangle-exclamation"></i> Heavy cloud cover may have reduced visible damage detection - consider re-verifying after the next clear pass.</div>` : '';
+
+    return `
+        <div class="assess-sat-head">
+            <i class="fa-solid fa-satellite" style="color:${gc};"></i>
+            <span class="assess-sat-score" style="color:${gc};">${total}/100</span>
+            <span class="assess-sat-verdict" style="color:${gc};">${escapeHtml(vLabel)}</span>
+            <div class="dp-sat-bar"><div class="dp-sat-bar-fill" style="width:${total}%;background:${gc};"></div></div>
+        </div>
+        ${chipsHtml}
+        ${imageryHtml}
+        ${subHtml}
+        ${cloudWarn}
+        ${obs.join('')}
+        <div class="dp-sat-actions">
+            <button class="dp-reverify-btn" id="btn-verify-${r.id}" onclick="runVerification('${r.id}')" title="Re-run AI satellite verification (~25s)"><i class="fa-solid fa-rotate"></i> Re-verify</button>
+            <button class="dp-share-evidence-btn" onclick="copyEvidenceLink('${r.id}')" title="Copy a public link to this verification"><i class="fa-solid fa-share-nodes"></i> Share evidence</button>
+        </div>`;
+}
+
+// Wipe handler for the ground↔satellite comparison slider.
+window._assessWipe = (id, val) => {
+    const top = document.getElementById(`assess-compare-top-${id}`);
+    const div = document.getElementById(`assess-compare-div-${id}`);
+    if (top) top.style.clipPath = `inset(0 ${100 - val}% 0 0)`;
+    if (div) div.style.left = `${val}%`;
+};
+
+// Section 4 - Evidence & metadata checks. REAL signals only (no fabricated
+// "image authenticity" verdict - the codebase has no tamper/EXIF analyzer, so we
+// surface only what is genuinely recorded). Each check renders only when its
+// backing field is present.
+function _renderEvidenceChecks(r) {
+    const checks = [];
+    const _row = (state, icon, label, detail) =>
+        `<div class="assess-check assess-check-${state}"><i class="fa-solid ${icon}"></i><div><div class="assess-check-l">${label}</div>${detail ? `<div class="assess-check-d">${detail}</div>` : ''}</div></div>`;
+    const loc = r.location || null;
+
+    // GPS / location consistency.
+    if (loc && loc.latitude != null && loc.longitude != null) {
+        const acc = loc.accuracy_meters;
+        const accTxt = (typeof acc === 'number') ? ` (±${Math.round(acc)} m${acc <= 50 ? ', precise' : ''})` : '';
+        checks.push(_row('ok', 'fa-location-crosshairs', 'GPS coordinates present', `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}${escapeHtml(accTxt)}`));
+        const dn = loc.device_location_name, un = loc.user_location_name;
+        if (dn && un && dn.trim() && un.trim() && dn.trim() !== un.trim()) {
+            checks.push(_row('warn', 'fa-triangle-exclamation', 'Device GPS and reported place differ', `Device: ${escapeHtml(dn)} · Reported: ${escapeHtml(un)}`));
+        }
+        if (loc.is_user_corrected) checks.push(_row('info', 'fa-pen', 'Reporter adjusted the pin', 'The location was manually corrected from the raw GPS fix.'));
+        if (typeof loc.geocoding_confidence === 'number') {
+            const g = loc.geocoding_confidence;
+            checks.push(_row(g >= 0.7 ? 'ok' : 'warn', 'fa-map-location-dot', 'Location geocoded from text', `Geocoding confidence ${Math.round(g * 100)}%${loc.geocoding_source ? ' · ' + escapeHtml(loc.geocoding_source) : ''}`));
+        }
+    } else if (loc && typeof loc.geocoding_confidence === 'number') {
+        checks.push(_row(loc.geocoding_confidence >= 0.7 ? 'ok' : 'warn', 'fa-map-location-dot', 'Location geocoded from text', `Confidence ${Math.round(loc.geocoding_confidence * 100)}%`));
+    } else {
+        checks.push(_row('off', 'fa-location-dot', 'No location attached', 'This report has no GPS or geocoded coordinates.'));
+    }
+
+    // Timestamp consistency.
+    if (r.client_created_at && r.server_created_at) {
+        let delayTxt = '';
+        try {
+            const d = (new Date(ensureUTC(r.server_created_at)) - new Date(ensureUTC(r.client_created_at))) / 60000;
+            if (isFinite(d)) delayTxt = d < 2 ? 'received in real time' : `${Math.round(d)} min from capture to receipt`;
+        } catch (_e) {}
+        checks.push(_row('ok', 'fa-clock', 'Capture and receipt times recorded', `Captured ${formatShortDate(r.client_created_at)}${delayTxt ? ' · ' + delayTxt : ''}`));
+    } else if (r.server_created_at) {
+        checks.push(_row('info', 'fa-clock', 'Received', formatShortDate(r.server_created_at)));
+    }
+
+    // Media integrity + PII (per first image, when those fields are serialized).
+    const im = (r.media || []).find(m => m.type === 'IMAGE');
+    if (im) {
+        if (im.assembly_status) checks.push(_row(im.assembly_status === 'complete' ? 'ok' : 'warn', 'fa-puzzle-piece', 'Photo upload assembled', `Status: ${escapeHtml(im.assembly_status)}`));
+        if (im.full_asset_checksum) checks.push(_row('ok', 'fa-fingerprint', 'Integrity checksum recorded', 'A device-side checksum was captured for the original bytes.'));
+        if (im.client_blur_applied) checks.push(_row('ok', 'fa-user-shield', 'Client-side face blur applied', 'Faces were redacted on the device before upload.'));
+        const pb = im.pii_blur_status;
+        if (pb) {
+            const pbMap = { complete_clean: ['ok', 'PII check clean'], complete_with_redactions: ['ok', 'Faces redacted server-side'], pending: ['info', 'PII check pending'], failed: ['warn', 'PII redaction failed — verify manually'], not_needed: ['ok', 'No PII detected'] };
+            const [st, lbl] = pbMap[pb] || ['info', `PII status: ${pb}`];
+            checks.push(_row(st, 'fa-shield-halved', lbl, ''));
+        }
+    }
+
+    // AI photo analysis (the only real image-content signal — labelled honestly,
+    // NOT presented as a tamper/authenticity verdict).
+    const v = r.verification || null;
+    if (v && v.photo_analysis) checks.push(_row('info', 'fa-image', 'AI photo analysis', escapeHtml(String(v.photo_analysis).slice(0, 220))));
+
+    if (!checks.length) return `<div class="assess-empty-note">No additional evidence or metadata signals recorded for this report.</div>`;
+    return `<div class="assess-checks">${checks.join('')}</div>`;
+}
+
+// Section 5 - concise AI reasoning, composed from the real ai_assessment /
+// verification narrative plus the strongest contributing factors.
+function _renderAiReasoning(r, snap) {
+    const aa = r.ai_assessment || (snap && snap.ai_assessment) || null;
+    const v = r.verification || (snap && snap.verification) || null;
+    const ic = snap.ic;
+    const paras = [];
+    if (aa && aa.summary) paras.push(escapeHtml(aa.summary));
+    else if (v && v.reasoning) paras.push(escapeHtml(String(v.reasoning).slice(0, 400)));
+    const top = (ic.factors || []).filter(f => f.ran && f.awarded > 0).sort((a, b) => b.awarded - a.awarded).slice(0, 3);
+    const why = top.length ? `Strongest signals: ${top.map(f => `${escapeHtml(f.label)} (+${f.awarded})`).join(', ')}.` : '';
+    const action = (aa && aa.suggested_action) ? `<div class="assess-ai-action"><i class="fa-solid fa-arrow-right"></i> Suggested: ${escapeHtml(aa.suggested_action)}</div>` : '';
+    if (!paras.length && !why) return `<div class="assess-empty-note">No AI narrative available yet.</div>`;
+    return `${paras.map(p => `<p class="assess-ai-p">${p}</p>`).join('')}${why ? `<p class="assess-ai-why">${why}</p>` : ''}${action}`;
+}
+
+// Section 3 - duplicate / corroboration analysis, loaded async into the modal.
+window._loadAssessmentDuplicates = async (r) => {
+    const host = document.getElementById('assess-dup-host');
+    if (!host || !r) return;
+    const loc = r.location || null;
+    const distLabel = (cid) => {
+        if (!loc) return '';
+        const o = allReports.find(x => x.id === cid);
+        if (!o || !o.location) return '';
+        const d = haversineKm(loc.latitude, loc.longitude, o.location.latitude, o.location.longitude);
+        return d < 1 ? `${Math.round(d * 1000)} m away` : `${d.toFixed(1)} km away`;
+    };
+    let cands = [];
+    if (r.building_id) {
+        try {
+            const res = await fetch(`${API}/${encodeURIComponent(r.id)}/duplicates`);
+            if (res.ok) { const data = await res.json(); cands = (data && data.candidates) || []; }
+        } catch (_e) {}
+    }
+    if (document.getElementById('assess-dup-host') !== host) return;  // modal closed/replaced
+
+    if (cands.length) {
+        const conf = (lvl) => { const c = lvl === 'HIGH' ? '#f87171' : lvl === 'MEDIUM' ? '#fb923c' : '#9fb3d1'; return `<span class="assess-dup-conf" style="color:${c};border-color:${c};">${escapeHtml(lvl || '')}</span>`; };
+        host.innerHTML = cands.map(c => {
+            const meta = [_dupTitle(c.crisis_type), _dupTitle(c.infrastructure_type), c.location_name].filter(Boolean).join(' · ');
+            const dist = distLabel(c.report_id);
+            const sub = [c.reporter, c.server_created_at ? timeAgo(c.server_created_at) : '', (c.score != null ? `Similarity ${c.score}%` : (c.confidence ? c.confidence + ' confidence' : '')), dist].filter(Boolean).join(' · ');
+            const reasons = (c.reasons || []).map(x => `<span class="assess-dup-reason" title="+${x.weight || 0} pts">✓ ${escapeHtml(x.label || x.factor || '')}${x.detail ? ' (' + escapeHtml(x.detail) + ')' : ''}</span>`).join('');
+            const idJs = `decodeURIComponent('${encodeURIComponent(c.report_id)}')`;
+            return `<div class="assess-dup-row">
+                <div class="assess-dup-main">${conf(c.confidence)}<a class="assess-dup-open" onclick="(function(){var o=document.getElementById('assess-modal-overlay');if(o)o.remove();window._switchToReport(${idJs});})()">${escapeHtml(meta || 'Report')} <i class="fa-solid fa-arrow-up-right-from-square"></i></a></div>
+                ${sub ? `<div class="assess-dup-sub">${escapeHtml(sub)}</div>` : ''}
+                ${reasons ? `<div class="assess-dup-reasons">${reasons}</div>` : ''}
+            </div>`;
+        }).join('')
+            // Merge DECISIONS live at the building level (v91) - this stays
+            // read-only and links out to the Building Console workflow.
+            + `<button class="assess-dup-review" onclick="(function(){var o=document.getElementById('assess-modal-overlay');if(o)o.remove();window.openBuildingConsole&&window.openBuildingConsole(decodeURIComponent('${encodeURIComponent(r.building_id)}'));})()"><i class="fa-solid fa-code-merge"></i> Review &amp; merge in Building Console</button>`;
+        return;
+    }
+
+    // Fallback: nearby corroborating incidents (haversine), since duplicate
+    // candidates require a mapped building.
+    if (loc) {
+        const nearby = allReports.filter(rr => rr.id !== r.id && rr.location && haversineKm(loc.latitude, loc.longitude, rr.location.latitude, rr.location.longitude) < 5)
+            .map(rr => ({ rr, dist: haversineKm(loc.latitude, loc.longitude, rr.location.latitude, rr.location.longitude) }))
+            .sort((a, b) => a.dist - b.dist).slice(0, 6);
+        if (nearby.length) {
+            host.innerHTML = `<div class="assess-dup-note">No confirmed duplicates. ${nearby.length} other report${nearby.length === 1 ? '' : 's'} within 5 km may corroborate this incident:</div>` + nearby.map(({ rr, dist }) => {
+                const meta = [infraDisplayLabel(rr.infrastructure_type, rr.infrastructure_sub_type), (rr.location.user_location_name || rr.location.device_location_name || '')].filter(Boolean).join(' · ');
+                const d = dist < 1 ? `${Math.round(dist * 1000)} m away` : `${dist.toFixed(1)} km away`;
+                const idJs = `decodeURIComponent('${encodeURIComponent(rr.id)}')`;
+                return `<div class="assess-dup-row"><div class="assess-dup-main"><a class="assess-dup-open" onclick="(function(){var o=document.getElementById('assess-modal-overlay');if(o)o.remove();window._switchToReport(${idJs});})()">${escapeHtml(meta || 'Report')} <i class="fa-solid fa-arrow-up-right-from-square"></i></a></div><div class="assess-dup-sub">${escapeHtml(d + ' · ' + _displayStatus(rr).label)}</div></div>`;
+            }).join('');
+            return;
+        }
+    }
+    host.innerHTML = `<div class="assess-empty-note">No duplicate or nearby corroborating reports found.</div>`;
+};
+
+// The Confidence Score breakdown - an investigative WORKSPACE opened by clicking
+// the score. Five sections: Score composition · Satellite verification (embedded)
+// · Duplicate analysis · Evidence & metadata checks · AI reasoning. Reuses the
+// cached snapshot (never asks to re-run once assessed). Closes with ×, click-out,
+// or Escape. Re-run is a separate action (the card's "Re-run assessment").
+window._showAssessmentModal = (reportId) => {
+    const r = allReports.find(x => x.id === reportId)
+        || (_detailOnlyReport && _detailOnlyReport.id === reportId ? _detailOnlyReport : null);
+    const snap = _assessSnapshot(r);
+    if (!snap) { showToast('Run the assessment first to see the breakdown.', 'info'); return; }
+    const ic = snap.ic;
+
+    const old = document.getElementById('assess-modal-overlay');
+    if (old) old.remove();
+    const ov = document.createElement('div');
+    ov.id = 'assess-modal-overlay';
+    ov.className = 'assess-modal-overlay';
+    const onKey = (e) => {
+        const o = document.getElementById('assess-modal-overlay');
+        if (!o) { document.removeEventListener('keydown', onKey); return; }
+        if (e.key === 'Escape') { o.remove(); document.removeEventListener('keydown', onKey); }
+    };
+    document.addEventListener('keydown', onKey);
+    ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+
+    const meta = _credBandMeta(ic.band);
+    const factors = ic.factors || [];
+
+    // Section 1 - score composition (per-check points + bars + evidence).
+    const rowHtml = factors.map(f => {
+        const pct = (f.ran && f.max) ? Math.max(2, Math.round((f.awarded / f.max) * 100)) : 0;
+        const state = !f.ran ? 'skip' : (f.awarded >= f.max * 0.7 ? 'strong' : f.awarded > 0 ? 'partial' : 'none');
+        return `<div class="assess-factor assess-factor-${state}">
+            <div class="assess-factor-top">
+                <span class="assess-factor-label">${escapeHtml(f.label)}</span>
+                <span class="assess-factor-pts">${f.ran ? `+${f.awarded}` : '<i class="fa-solid fa-minus"></i>'}<span class="assess-factor-max"> / ${f.max}</span></span>
+            </div>
+            <div class="assess-factor-bar"><span style="width:${pct}%;"></span></div>
+            <div class="assess-factor-reason">${escapeHtml(f.reason || '')}</div>
+        </div>`;
+    }).join('');
+    const eqTerms = factors.filter(f => f.ran && f.awarded > 0).map(f => `<span class="assess-eq-term">+${f.awarded}</span>`).join('');
+    const eqHtml = `<div class="assess-eq"><div class="assess-eq-row">${eqTerms || '<span class="assess-eq-term">+0</span>'}<span class="assess-eq-eq">=</span><span class="assess-eq-total">${ic.score}</span><span class="assess-eq-den">/ 100</span></div></div>`;
+
+    const atLabel = _assessedAtLabel(snap);
+    const _section = (key, icon, title, body, sub) =>
+        `<details class="assess-sec" ${key === 'composition' || key === 'satellite' ? 'open' : ''}>
+            <summary class="assess-sec-head"><i class="fa-solid ${icon}"></i> <span>${title}</span>${sub ? `<span class="assess-sec-sub">${sub}</span>` : ''}<i class="fa-solid fa-chevron-down assess-sec-caret"></i></summary>
+            <div class="assess-sec-body">${body}</div>
+        </details>`;
+
+    const dupCount = snap.duplicate_count || 0;
+
+    ov.innerHTML = `<div class="assess-modal assess-workspace" role="dialog" aria-label="Confidence Score breakdown" style="--cred-color:${meta.color};">
+        <div class="assess-head">
+            <div class="assess-head-dial"><span class="assess-head-num">${ic.score}</span><span class="assess-head-den">/100</span></div>
+            <div class="assess-head-meta">
+                <div class="assess-head-title">Confidence Score</div>
+                <div class="assess-head-band">${meta.word} · ${ic.ran_count} of ${ic.total_checks} checks ran${atLabel ? ' · ' + escapeHtml(atLabel) : ''}</div>
+            </div>
+            <button class="assess-rerun-top" onclick="runFullAssessment('${r.id}')" title="Run every automated check again"><i class="fa-solid fa-rotate"></i> Re-run assessment</button>
+            <button class="assess-close" aria-label="Close" onclick="const o=document.getElementById('assess-modal-overlay');if(o)o.remove();"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="assess-intro">Everything the system used to judge how credible and actionable this report is — automated checks only; an analyst's verdict never changes the score.</div>
+        <div class="assess-body">
+            ${_section('composition', 'fa-calculator', 'Score composition', `<div class="assess-factors">${rowHtml}</div>${eqHtml}`)}
+            ${_section('satellite', 'fa-satellite', 'Satellite verification', _renderSatelliteAnalysis(r))}
+            ${_section('duplicates', 'fa-clone', 'Duplicate analysis', `<div id="assess-dup-host"><div class="assess-empty-note"><i class="fa-solid fa-spinner fa-spin"></i> Checking for duplicate and nearby reports…</div></div>`, dupCount > 0 ? `${dupCount} merged` : '')}
+            ${_section('evidence', 'fa-clipboard-check', 'Evidence & metadata checks', _renderEvidenceChecks(r))}
+            ${_section('reasoning', 'fa-lightbulb', 'AI reasoning', _renderAiReasoning(r, snap))}
+        </div>
+        <div class="assess-method">
+            <div class="assess-method-h"><i class="fa-solid fa-circle-info"></i> How this is calculated</div>
+            <p>The Confidence Score is the sum of independent automated checks, each contributing up to a fixed maximum: <strong>AI content 30</strong> · <strong>Satellite 25</strong> · <strong>Location 15</strong> · <strong>Corroboration 15</strong> · <strong>Reporter 15</strong> = 100.</p>
+            <p>It reflects the <strong>system's automated assessment only</strong>. An analyst accepting, rejecting, or otherwise reviewing this report never changes the number — that decision is tracked separately as the report's status.</p>
+        </div>
+    </div>`;
+    document.body.appendChild(ov);
+    try { _loadAssessmentDuplicates(r); } catch (_e) {}
+};
+
+// ── ONE combined incident status ──────────────────────────────────────────────
+// The operational lifecycle (PENDING/RESPONDING/RESOLVED/FALSE_ALARM) and the
+// human review verdict (NOT_REVIEWED/ACCEPTED/REJECTED) were two separate pills
+// that read like two competing statuses ("PENDING" + "Not reviewed") and ADDED
+// cognitive load. This collapses them into ONE status the operator reads at a
+// glance - a single lifecycle: Needs review -> Accepted/Rejected -> Responding
+// -> Resolved (the most-advanced operational state wins; verdict only shows
+// while the incident is still pending a response decision).
+function _displayStatus(r) {
+    const st = r.status, vd = r.reviewer_verdict || 'NOT_REVIEWED';
+    if (st === 'FALSE_ALARM') return { label: 'False alarm', cls: 'false-alarm', title: 'Closed as a false alarm.' };
+    if (st === 'RESOLVED')    return { label: 'Resolved',    cls: 'resolved',    title: 'Situation handled and resolved.' };
+    if (st === 'RESPONDING')  return { label: 'Responding',  cls: 'responding',  title: 'Help has been dispatched - response in progress.' };
+    if (vd === 'REJECTED')    return { label: 'Rejected',    cls: 'rejected',    title: 'An analyst reviewed and rejected this report.' };
+    if (vd === 'ACCEPTED')    return { label: 'Accepted',    cls: 'accepted',    title: 'Reviewed and accepted - awaiting a response decision.' };
+    return { label: 'Needs review', cls: 'needs-review', title: 'New report - not yet reviewed or responded to.' };
+}
+window._displayStatus = _displayStatus;
+
+// ── Feed-card shared helpers ─────────────────────────────────────────────────
+// ONE source of truth for the Confidence chip, status pill, action CTA and card
+// title across all three card renderers (createIncidentCard, createIncidentRow,
+// showIncidentPreview). Before this, each renderer hand-rolled its own status /
+// action / score markup and drifted from the incident-detail workflow (stale
+// "SEND HELP" / "HELPED" labels, the satellite sub-score shown as if it were the
+// Confidence Score). Routing all three through these helpers keeps the feed in
+// lock-step with the detail page.
+
+// Short band labels for the compact card chip (the detail page uses the longer
+// _credBandMeta words like "High confidence"). UNVERIFIED -> "Unrated" so it is
+// never confused with the human "Rejected" verdict.
+const _BAND_SHORT = { VERIFIED: 'Verified', LIKELY: 'Likely', MIXED: 'Mixed', WEAK: 'Weak', UNVERIFIED: 'Unrated' };
+
+// The composite Confidence Score chip - the SAME 0-100 + band the operator acts
+// on in the detail panel (incident_credibility, server-computed at read time and
+// present on every list payload). Suppressed to a muted "Unrated" pill until the
+// AI and/or satellite check has run (incident_credibility.assessed).
+function _confidenceChip(r) {
+    const ic = r && r.incident_credibility;
+    if (ic && ic.assessed && typeof ic.score === 'number') {
+        const meta = _credBandMeta(ic.band);
+        const short = _BAND_SHORT[ic.band] || 'Unrated';
+        return `<span class="qrt-confidence cf-${meta.cls}" style="--cf:${meta.color}"`
+            + ` title="Confidence Score ${ic.score}/100 - ${meta.word}. Open the incident for the full breakdown.">`
+            + `<span class="cf-dot"></span>${short} ${ic.score}</span>`;
+    }
+    return `<span class="qrt-confidence cf-unverified" title="Not yet assessed - open the incident to run the assessment.">`
+        + `<span class="cf-dot"></span>Unrated</span>`;
+}
+window._confidenceChip = _confidenceChip;
+
+// Tiny media-presence icons (photo / audio) - split OUT of the old evidence chip
+// so the card carries exactly one number (the Confidence Score) and the media
+// state reads as a separate, quieter signal.
+function _cardMediaIcons(r) {
+    const m = (r && r.media) || [];
+    const hasImg = m.some(x => x && x.type === 'IMAGE');
+    const hasAudio = m.some(x => x && x.type === 'AUDIO');
+    return (hasImg ? '<i class="fa-solid fa-camera qrt-media-ic" title="Photo attached"></i>' : '')
+         + (hasAudio ? '<i class="fa-solid fa-microphone qrt-media-ic" title="Audio attached"></i>' : '');
+}
+
+const _STATUS_ICON = {
+    'needs-review': 'fa-circle-dot', accepted: 'fa-circle-check', rejected: 'fa-ban',
+    responding: 'fa-truck-medical', resolved: 'fa-flag-checkered', 'false-alarm': 'fa-xmark',
+};
+
+// Verdict-aware operational status pill - identical vocabulary to the detail page
+// (_displayStatus composes report.status x reviewer_verdict): Needs review /
+// Accepted / Rejected / Responding / Resolved / False alarm.
+function _cardStatusPill(r) {
+    const ds = _displayStatus(r);
+    const ic = _STATUS_ICON[ds.cls] || 'fa-circle-dot';
+    return `<span class="qrt-status-pill st-${ds.cls}" title="${ds.title}"><i class="fa-solid ${ic}"></i> ${ds.label}</span>`;
+}
+window._cardStatusPill = _cardStatusPill;
+
+// Footer-right: the status pill, plus the Notify Responders CTA for incidents
+// that are still open (PENDING/VERIFIED and not rejected). Rejected / responding
+// / resolved / false-alarm cards show the pill only (no live dispatch button) -
+// this also fixes the rejected-queue bug where a rejected report (still status
+// PENDING) used to render a clickable "SEND HELP". patchReport(id,'dispatch') is
+// the same always-dispatch + reporter-push path as the detail "Notify Response
+// Team" action; only the card label was stale.
+function _cardActionEl(r) {
+    const verdict = r.reviewer_verdict || 'NOT_REVIEWED';
+    const isOpen = (r.status === 'PENDING' || r.status === 'VERIFIED') && verdict !== 'REJECTED';
+    if (isOpen) {
+        return _cardStatusPill(r)
+            + `<button class="qrt-dispatch-btn" title="Notify the response team and alert the reporter"`
+            + ` onclick="event.stopPropagation(); patchReport('${r.id}', 'dispatch')">`
+            + `<i class="fa-solid fa-bell-concierge"></i> Notify Responders</button>`;
+    }
+    return _cardStatusPill(r);
+}
+window._cardActionEl = _cardActionEl;
+
+// Card title in the Global > Operation > Building > Incident hierarchy: prefer the
+// BUILDING name (the operational object) when the report is building-tagged, so
+// the operator can group/triage by building from the feed; fall back to the
+// infrastructure-type label otherwise. Flags free-text (non-OSM) building names
+// as "needs mapping" (must-have #6).
+function _cardTitle(r) {
+    if (r.building_id && r.infrastructure_name) {
+        const needsMap = r.infrastructure_name_from_osm === false
+            ? ' <span class="qrt-needsmap" title="Free-text building name - not matched to an OSM footprint">needs mapping</span>'
+            : '';
+        return escapeHtml(r.infrastructure_name) + needsMap;
+    }
+    return infraDisplayLabel(r.infrastructure_type || 'OTHER', r.infrastructure_sub_type);
+}
+window._cardTitle = _cardTitle;
+
+// Building Console deep-link for the card (Global > Operation > BUILDING). Only
+// rendered when the report is building-tagged.
+function _cardBuildingLink(r) {
+    if (!r.building_id) return '';
+    return `<a class="qrt-bldg-link" title="Open the Building Console - all reports for this building"`
+        + ` onclick="event.stopPropagation(); window.openBuildingConsole && window.openBuildingConsole(decodeURIComponent('${encodeURIComponent(r.building_id)}'))">`
+        + `<i class="fa-solid fa-building"></i> Console</a>`;
+}
+window._cardBuildingLink = _cardBuildingLink;
+
+// "N more reports nearby" CTA -> a modal listing the nearby incidents, each
+// click-through to that incident. Sourced from `allReports`, which ALREADY
+// excludes merged-away duplicates (confirmed duplicates collapsed under their
+// primary are hidden from the feed working set) - so a primary never lists the
+// reports merged into it.
+window._showNearbyModal = (reportId) => {
+    const r = allReports.find(x => x.id === reportId)
+        || (_detailOnlyReport && _detailOnlyReport.id === reportId ? _detailOnlyReport : null);
+    if (!r || !r.location) return;
+    const loc = r.location;
+    const nearby = allReports
+        .filter(rr => rr.id !== r.id && rr.location)
+        .map(rr => ({ rr, dist: haversineKm(loc.latitude, loc.longitude, rr.location.latitude, rr.location.longitude) }))
+        .filter(x => x.dist < 5)
+        .sort((a, b) => a.dist - b.dist);
+
+    const old = document.getElementById('nearby-modal-overlay');
+    if (old) old.remove();
+    const ov = document.createElement('div');
+    ov.id = 'nearby-modal-overlay';
+    ov.className = 'nearby-modal-overlay';
+    const onKey = (e) => {
+        const o = document.getElementById('nearby-modal-overlay');
+        if (!o) { document.removeEventListener('keydown', onKey); return; }
+        if (e.key === 'Escape') { o.remove(); document.removeEventListener('keydown', onKey); }
+    };
+    document.addEventListener('keydown', onKey);
+    ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+
+    const _distLabel = (d) => d < 1 ? `${Math.round(d * 1000)} m` : `${d.toFixed(1)} km`;
+    const _incidentRow = ({ rr, dist }) => {
+        const sevc = SEV_COLORS[rr.severity] || '#64748b';
+        const infra = infraDisplayLabel(rr.infrastructure_type, rr.infrastructure_sub_type) || 'Incident';
+        const place = (rr.location && (rr.location.user_location_name || rr.location.device_location_name))
+            || `${rr.location.latitude.toFixed(3)}, ${rr.location.longitude.toFixed(3)}`;
+        const ds = _displayStatus(rr);
+        const dup = (rr.duplicate_count > 0) ? `<span class="nearby-dup" title="${rr.duplicate_count} corroborating reports merged under this incident">🔗 ${rr.duplicate_count}</span>` : '';
+        return `<button class="nearby-row" onclick="window.openIncident('${rr.id}');const o=document.getElementById('nearby-modal-overlay');if(o)o.remove();">
+            <span class="nearby-sev" style="background:${sevc};"></span>
+            <span class="nearby-main">
+                <span class="nearby-title">${escapeHtml(infra)} ${dup}</span>
+                <span class="nearby-sub">${escapeHtml(place)} · ${escapeHtml(ds.label)}</span>
+            </span>
+            <span class="nearby-dist">${_distLabel(dist)} <i class="fa-solid fa-chevron-right"></i></span>
+        </button>`;
+    };
+
+    // Group by BUILDING (the operational object): Building › Incident, groups open
+    // by default; the building header opens the Building Console. Incidents with no
+    // mapped building fall into a final "Not in a mapped building" group.
+    const byBuilding = new Map();
+    const ungrouped = [];
+    for (const item of nearby) {
+        const bid = item.rr.building_id;
+        if (!bid) { ungrouped.push(item); continue; }
+        if (!byBuilding.has(bid)) byBuilding.set(bid, { bid, items: [], name: null, minDist: Infinity });
+        const g = byBuilding.get(bid);
+        g.items.push(item);
+        if (item.dist < g.minDist) g.minDist = item.dist;
+        if (!g.name && item.rr.infrastructure_name) g.name = item.rr.infrastructure_name;
+    }
+    const groupsHtml = [...byBuilding.values()].sort((a, b) => a.minDist - b.minDist).map(g => `
+        <div class="nearby-group">
+            <button class="nearby-group-head" title="Open the Building Console (all reports for this building)"
+                    onclick="window.openBuildingConsole&&window.openBuildingConsole(decodeURIComponent('${encodeURIComponent(g.bid)}'));const o=document.getElementById('nearby-modal-overlay');if(o)o.remove();">
+                <i class="fa-solid fa-building nearby-group-icon"></i>
+                <span class="nearby-group-name">${escapeHtml(g.name || 'Building')}</span>
+                <span class="nearby-group-count">${g.items.length}</span>
+                <span class="nearby-group-go">${_distLabel(g.minDist)} <i class="fa-solid fa-arrow-up-right-from-square"></i></span>
+            </button>
+            <div class="nearby-group-body">${g.items.map(_incidentRow).join('')}</div>
+        </div>`).join('');
+    const ungroupedHtml = ungrouped.length ? `
+        <div class="nearby-group">
+            <div class="nearby-group-head nearby-group-head-static">
+                <i class="fa-solid fa-location-dot nearby-group-icon"></i>
+                <span class="nearby-group-name">Not in a mapped building</span>
+                <span class="nearby-group-count">${ungrouped.length}</span>
+            </div>
+            <div class="nearby-group-body">${ungrouped.map(_incidentRow).join('')}</div>
+        </div>` : '';
+    const listInner = (groupsHtml + ungroupedHtml) || '<div class="nearby-empty">No other incidents nearby.</div>';
+
+    ov.innerHTML = `<div class="nearby-modal" role="dialog" aria-label="Nearby incidents">
+        <div class="nearby-head">
+            <span><i class="fa-solid fa-layer-group"></i> ${nearby.length} nearby incident${nearby.length === 1 ? '' : 's'} <span class="nearby-head-sub">within 5 km</span></span>
+            <button class="nearby-close" aria-label="Close" onclick="const o=document.getElementById('nearby-modal-overlay');if(o)o.remove();"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="nearby-list">${listInner}</div>
+    </div>`;
+    document.body.appendChild(ov);
+};
 
 /** Ensure ISO string is treated as UTC if no timezone indicator present */
 function ensureUTC(iso) {
@@ -1536,6 +2644,44 @@ function showToast(msg, type = 'info') {
     container.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
 }
+
+// D6: shared double-submit / busy guard. Disables the triggering button for the
+// duration of an async action and shows an inline spinner, then restores it.
+// Re-entrant calls on an already-busy button are ignored (the real double-submit
+// guard). Returns whatever the wrapped fn resolves to (undefined if guarded out).
+// Many handlers re-render their panel on success, replacing the button - that's
+// fine: the finally block then operates on a detached node, which is harmless.
+async function withBusy(btn, fn) {
+    if (!btn) { return typeof fn === 'function' ? await fn() : undefined; }
+    if (btn.dataset.busy === '1' || btn.disabled) return undefined; // already in flight
+    // Only buttons/links get the spinner label-swap; for form controls (select,
+    // input) we must NOT touch innerHTML (it would wipe a <select>'s options) -
+    // disabling them is enough to block a second submit.
+    const tag = (btn.tagName || '').toUpperCase();
+    const swap = tag === 'BUTTON' || tag === 'A';
+    const prevHtml = swap ? btn.innerHTML : null;
+    const prevWidth = btn.offsetWidth;
+    btn.dataset.busy = '1';
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    if (swap) {
+        // Pin the width so the spinner swap doesn't reflow the button.
+        if (prevWidth) { try { btn.style.minWidth = prevWidth + 'px'; } catch (_e) {} }
+        try { btn.innerHTML = '<span class="cc-busy-spin" aria-hidden="true"></span>'; } catch (_e) {}
+    }
+    try {
+        return await fn();
+    } finally {
+        // The node may have been replaced by a re-render; guard every touch.
+        try {
+            btn.disabled = false;
+            delete btn.dataset.busy;
+            btn.removeAttribute('aria-busy');
+            if (swap) { btn.style.minWidth = ''; btn.innerHTML = prevHtml; }
+        } catch (_e) { /* node detached - nothing to restore */ }
+    }
+}
+window.withBusy = withBusy;
 
 // ── Ungrouped-critical cluster chooser ───────────────────────────────────────
 // Clicking the "N critical reports, no operation" card no longer FORCES
@@ -1645,17 +2791,22 @@ window.openClusterChooser = openClusterChooser;
 // crisis_event_id on exactly those reports). Surfaced as the operation
 // dashboard's "Undo claim" button.
 
-async function unclaimOperation(opId) {
+async function unclaimOperation(opId, btn) {
     if (!opId) return;
+    // D4: disable the trigger during the async unclaim so it can't be spam-clicked.
+    const _reenable = () => { if (btn) { try { btn.disabled = false; } catch (_e) {} } };
+    if (btn) { try { btn.disabled = true; } catch (_e) {} }
     try {
         const res = await fetch(`${BACKEND_HOST}/api/v1/operations/${encodeURIComponent(opId)}/unclaim`,
             { method: 'POST' });
         const body = await res.json().catch(() => ({}));
-        if (!res.ok) { showToast(body.detail || 'Nothing to undo', 'info'); return; }
+        if (!res.ok) { showToast(body.detail || 'Nothing to undo', 'info'); _reenable(); return; }
         const n = body.unclaimed_count || 0;
         showToast(`Claim reversed · ${n} report${n === 1 ? '' : 's'} released`, 'success');
-        try { window.location.hash = '#/'; } catch (_e) {}
-    } catch (_e) { showToast('Undo failed - network error', 'error'); }
+        // D4: defer the redirect home so the success toast is actually readable
+        // (it used to redirect in the same tick, flashing the toast away).
+        setTimeout(() => { try { window.location.hash = '#/'; } catch (_e) {} }, 1800);
+    } catch (_e) { showToast('Undo failed - network error', 'error'); _reenable(); }
 }
 window.unclaimOperation = unclaimOperation;
 
@@ -1673,11 +2824,21 @@ window.unclaimOperation = unclaimOperation;
 // building+crisis 60 s coalesce.
 
 const _STACK_MAX_VISIBLE = 3;       // max cards in the visible stack
-const _STACK_AUTODISMISS_SOLO_MS = 6000;  // single card lifespan
+const _STACK_AUTODISMISS_SOLO_MS = 5000;  // single card lifespan (~5s, show-once)
 const _STACK_QUIET_MS = 12000;      // stack collapse after this long idle
-const _BURST_THRESHOLD = 5;         // operator-confirmed: 5 in 5 s
-const _BURST_WINDOW_MS = 5000;
+const _BURST_THRESHOLD = 3;         // 3 in 12 s - engage under SUSTAINED load too, not
+const _BURST_WINDOW_MS = 12000;     // just sharp bursts; collapses center-card spam into
+                                    // the burst banner (bell still counts every arrival).
 const _COALESCE_WINDOW_MS = 60000;  // same building+crisis = update
+// REAL-TIME age gate: a report only flashes an individual center-screen toast
+// when it was CREATED within this window of now. Older reports are "historical"
+// - they land silently in the Notification Center (unread) and are summarised by
+// a "since your last visit" banner, never replayed as per-card pop-ups (e.g.
+// opening an Operation surfaces its hours-old backlog).
+const _REALTIME_WINDOW_MS = 5 * 60 * 1000;
+const _BACKLOG_BANNER_MIN = 3;   // >= this many silent historical arrivals in ONE
+                                 // full-refresh (scope switch) → one summary banner
+let _backlogSilent = 0;          // running count of age-gated (silent) arrivals
 let _notificationStack = [];        // [{ id, clientId, buildingId, crisisType, severity, type, location, source, srcIcon, srcBrand, sevColor, addedAt }]
 let _burstArrivals = [];            // timestamps of recent arrivals (in burst window)
 let _burstBannerActive = false;
@@ -1778,6 +2939,22 @@ function _addNotification(r) {
         // Operation ID - so clicking the notification opens the incident INSIDE
         // its operation (deep-link), not just the global feed.
         crisisEventId: r.crisis_event_id || null,
+        // Corroboration (#8): a new report in a building that ALREADY has a visible
+        // incident is additional EVIDENCE, not a new incident - soften the alert so
+        // analysts focus on genuinely-new incidents. Building is the dominant
+        // duplicate signal; the analyst still confirms/merges explicitly.
+        corroborates: !!(r.building_id && allReports.some((x) => x && x.id !== r.id && x.building_id === r.building_id)),
+        // Category (notification taxonomy):
+        //   A Informational - new / corroborating report (toast 5s, never repeat)
+        //   B Important     - CRITICAL severity (toast 5s + stays highlighted in
+        //                     the center until read)
+        //   C Urgent        - safety / outage / emergency broadcast (persistent
+        //                     until acknowledged). No automatic producer in v1 -
+        //                     reserved for window.crispUrgentBroadcast(); the audit
+        //                     confirmed nothing in the report path is urgent.
+        cat: (String(r.severity).toUpperCase() === 'CRITICAL') ? 'B' : 'A',
+        read: false,
+        acknowledged: false,
     };
 
     // ── DEDUP-FIRST. Nothing touches state until we know this is a
@@ -1810,18 +2987,21 @@ function _addNotification(r) {
     //    silently, so the bell entry stayed stale (e.g. old severity).
     //    Now we update the bell entry IN PLACE so the operator sees
     //    fresh content on next bell open. Center-screen still suppressed.
-    const bellIdx = _unseenReports.findIndex(n => n.id === notif.id);
+    const bellIdx = _notifCenter.findIndex(n => n.id === notif.id);
     if (bellIdx >= 0) {
-        const prev = _unseenReports[bellIdx];
-        _unseenReports[bellIdx] = {
+        const prev = _notifCenter[bellIdx];
+        _notifCenter[bellIdx] = {
             ...prev,
             severity: notif.severity,
             type: notif.type,
             location: notif.location,
             sevColor: notif.sevColor,
             timestamp: notif.timestamp,
-            // addedAt stays - bell entry's "age" is anchored to first arrival.
+            cat: notif.cat,
+            // addedAt + read stay - bell entry's "age" is anchored to first
+            // arrival and a media-upgrade must not silently mark it unread again.
         };
+        _persistNotifCenter();
         _renderNotifications();
         _notifLog('dedup:bell-update', notif.id);
         return;
@@ -1840,13 +3020,14 @@ function _addNotification(r) {
             _notifLog('dedup:client-reconcile', notif.clientId, '→', notif.id);
             return;
         }
-        const bellClientIdx = _unseenReports.findIndex(n => n.clientId === notif.clientId);
+        const bellClientIdx = _notifCenter.findIndex(n => n.clientId === notif.clientId);
         if (bellClientIdx >= 0) {
             // Adopt the server id on the bell entry but don't pop another card.
-            _unseenReports[bellClientIdx] = {
-                ..._unseenReports[bellClientIdx],
+            _notifCenter[bellClientIdx] = {
+                ..._notifCenter[bellClientIdx],
                 id: notif.id,
             };
+            _persistNotifCenter();
             _renderNotifications();
             _notifLog('dedup:bell-client-reconcile', notif.clientId, '→', notif.id);
             return;
@@ -1873,23 +3054,61 @@ function _addNotification(r) {
     // ── Confirmed: new event. Now mutate state.
     _notifLog('new', notif.id, notif.severity, notif.type);
 
-    // Bell panel - LIFO, cap _MAX_NOTIFS.
-    _unseenReports.unshift(notif);
-    if (_unseenReports.length > _MAX_NOTIFS) _unseenReports.pop();
+    // SHOW-ONCE (durable). Record that this incident has been DISPLAYED so it
+    // can NEVER be replayed by a later poll - not after an operation-scope
+    // full-refresh evicts it from knownIds, not after a page reload, not on
+    // any route change. The poll's producer gate (_applyReportData) consults
+    // _seenIds.has(id) BEFORE it ever calls _addNotification, so this single
+    // write closes the exact replay window that made already-seen toasts
+    // re-flash when the analyst moved between Home / Operations / Incidents.
+    // (Set on the CONFIRMED-NEW branch, i.e. AFTER the four dedup checks, so
+    // offline-reconcile / coalesce semantics above are preserved.)
+    _seenIds.add(notif.id);
+    _persistSeenIds();
+
+    // Notification Center (durable history) - newest first, unread, capped,
+    // persisted. This is what the bell renders + what survives a refresh.
+    _notifCenterAdd(notif);
     _renderNotifications();
+
+    // Category C (Urgent) - persistent banner, no auto-dismiss, no burst/stack.
+    if (notif.cat === 'C') { _showUrgentBanner(notif); return; }
+
+    // ── AGE GATE. The durable record above (_seenIds + _notifCenterAdd +
+    //    _renderNotifications) has ALREADY run, so a historical-but-unseen report
+    //    is now an unread bell entry that the "since your last visit" summary
+    //    surfaces - it just must NOT pop a center-screen toast. Only GENUINELY
+    //    REAL-TIME arrivals (created within _REALTIME_WINDOW_MS of now) flash a
+    //    card / engage burst. This is what stops opening an Operation (or any
+    //    scope full-refresh) from replaying its hours-old backlog as individual
+    //    pop-ups. AGE - not seen-state - is the right discriminator: an id evicted
+    //    from the 1000-cap _seenIds and reloaded via a scope switch is still OLD,
+    //    so still no re-toast. A missing / unparseable timestamp is treated as
+    //    real-time (never drop a genuine arrival on an unknown time). NOTE: we do
+    //    NOT bypass on client_report_id - nearly every app/chat report carries one,
+    //    so that would defeat the gate; a genuine offline-reconcile is already
+    //    handled by the clientId dedup branch above (it returns before here).
+    const _createdMs = notif.timestamp
+        ? new Date((window.__ccEnsureUTC || ((x) => x))(notif.timestamp)).getTime() : NaN;
+    if (Number.isFinite(_createdMs) && (now - _createdMs) > _REALTIME_WINDOW_MS) {
+        _backlogSilent++;
+        _notifLog('age-gate:silent-bell', notif.id, Math.round((now - _createdMs) / 60000) + 'm old');
+        return;
+    }
 
     // Track arrival for burst detection.
     _burstArrivals.push(now);
 
     if (_inBurstMode()) {
         _showBurstBanner();
-        // Suppress per-card spawn; bell already updated.
+        // Suppress per-card spawn; the center already recorded it.
         return;
     } else if (_burstBannerActive) {
         _hideBurstBanner();
     }
 
-    // Prepend to stack.
+    // Prepend to the transient toast stack (~5s show-once surface).
+    notif.displayedAt = now;
     _notificationStack.unshift(notif);
     if (_notificationStack.length > _STACK_MAX_VISIBLE) {
         _notificationStack = _notificationStack.slice(0, _STACK_MAX_VISIBLE);
@@ -1913,14 +3132,14 @@ function _buildStackCardInner(n) {
         ? `<div class="notif-upgrade-chip" title="${escapeHtml(n._upgradeReason || 'updated')}">
               <i class="fa-solid fa-arrow-up"></i> ${escapeHtml(n._upgradeReason || 'updated')}
            </div>` : '';
-    const hintTail = _notificationStack.length === 1 ? ' &middot; Auto-dismiss in 6s' : '';
+    const hintTail = _notificationStack.length === 1 ? ' &middot; Auto-dismiss in 5s' : '';
     const opChip = n.operation
         ? `<div class="notif-flash-op" title="Operation"><i class="fa-solid fa-folder-tree"></i> ${escapeHtml(n.operation)}</div>`
         : `<div class="notif-flash-op global" title="Not tied to any operation"><i class="fa-solid fa-earth-americas"></i> Global</div>`;
     return `
         ${upgradeChip}
         <div class="notif-flash-icon" style="color:${n.sevColor};">🚨</div>
-        <div class="notif-flash-title">${n.coalescedCount > 1 ? `${n.coalescedCount}× reports - same building` : 'NEW INCIDENT REPORTED'}</div>
+        <div class="notif-flash-title">${n.coalescedCount > 1 ? `${n.coalescedCount}× reports - same building` : (n.corroborates ? 'Existing Incident Updated (+1 corroborating report)' : 'NEW INCIDENT REPORTED')}</div>
         ${opChip}
         <div class="notif-flash-detail">
             <span class="notif-sev" style="background:${n.sevColor}25;color:${n.sevColor};font-size:13px;padding:4px 10px;">${n.severity}</span>
@@ -2057,7 +3276,7 @@ function _showBurstBanner() {
         };
         document.body.appendChild(banner);
     }
-    const total = _unseenReports.length;
+    const total = _notifUnreadCount();
     banner.innerHTML = `
         <i class="fa-solid fa-bolt"></i>
         <strong>${total}</strong> incidents reporting
@@ -2078,14 +3297,22 @@ function _hideBurstBanner() {
     }
 }
 
-// K.5.e (May 2026, Phase K) - truncation banner.
-// When the scope total (X-Total-Count) exceeds the rows actually returned,
-// the FEED LIST is windowed to the newest N. Pre-fix the only signal was a
-// console.warn operators never saw, and it only fired past the unreachable
-// 10K ceiling. The banner sits at the top of the header chrome and stays
-// visible until a full-refresh poll where total <= shown. `shown` is the
-// number of rows actually returned this poll; `total` is X-Total-Count.
+// K.5.e (May 2026, Phase K) - truncation banner. Now a TRANSIENT ~5s message
+// (Jun 2026), not a persistent bar.
+// When the scope total (X-Total-Count) exceeds the rows actually returned, the
+// FEED LIST is windowed to the newest N (counts + map still reflect ALL via
+// /analytics/summary + /reports/markers). Operators need to KNOW that once on
+// entering a truncated scope - they don't need a permanent banner nagging on
+// every route. So it shows ONCE per truncation episode (per scope entry) and
+// auto-dismisses after ~5s, consistent with the other informational banners.
+// The poll re-detects truncation on every full-refresh (~2 min) + scope change;
+// `_truncShown` guards against re-popping, and is reset when truncation resolves
+// or the scope changes (setOperationScope) so a new episode shows once.
+let _truncShown = false;
+let _truncTimer = null;
 function _showTruncationBanner(total, shown) {
+    if (_truncShown) return;          // already shown this episode - don't re-pop
+    _truncShown = true;
     let banner = document.getElementById('truncation-banner');
     if (!banner) {
         banner = document.createElement('div');
@@ -2102,10 +3329,18 @@ function _showTruncationBanner(total, shown) {
         <span class="truncation-banner-close" onclick="_hideTruncationBanner()" title="Dismiss">×</span>
     `;
     banner.style.display = 'flex';
+    if (_truncTimer) clearTimeout(_truncTimer);
+    _truncTimer = setTimeout(() => _hideTruncationBanner(), 5000);   // auto-dismiss
 }
-function _hideTruncationBanner() {
+// Hide the banner (auto-dismiss timer, the × button, or a resolved shortfall).
+// Does NOT reset _truncShown - so it stays dismissed for the rest of this
+// episode and won't re-pop on the next poll. `resetEpisode` (passed only when
+// the shortfall RESOLVES or the scope changes) re-arms it for a future episode.
+function _hideTruncationBanner(resetEpisode) {
+    if (_truncTimer) { clearTimeout(_truncTimer); _truncTimer = null; }
     const banner = document.getElementById('truncation-banner');
     if (banner) banner.style.display = 'none';
+    if (resetEpisode === true) _truncShown = false;
 }
 // Expose for the close button + e2e spec to drive directly.
 window._hideTruncationBanner = _hideTruncationBanner;
@@ -2125,11 +3360,12 @@ function _renderNotifications() {
     const list = document.getElementById('notif-list');
     if (!bell || !countEl || !list) return;
 
-    const count = _unseenReports.length;
+    const unread = _notifUnread();
+    const count = unread.length;
 
-    // Update bell badge
+    // Bell badge = UNREAD count (read history does not light the bell).
     if (count > 0) {
-        countEl.textContent = count;
+        countEl.textContent = count > 99 ? '99+' : String(count);
         countEl.style.display = 'flex';
         bell.classList.add('has-new');
     } else {
@@ -2141,25 +3377,52 @@ function _renderNotifications() {
     // alert + any other consumers stay in sync with this single source.
     try { window.dispatchEvent(new CustomEvent('crisp:notif-change')); } catch (_e) {}
 
-    // Render cards
-    if (count === 0) {
-        list.innerHTML = '<div class="notif-empty"><i class="fa-solid fa-check-circle"></i> No new incidents</div>';
+    if (!_notifCenter.length) {
+        list.innerHTML = '<div class="notif-empty"><i class="fa-solid fa-check-circle"></i> No incidents yet</div>';
         return;
     }
 
-    list.innerHTML = _unseenReports.map(n => {
-        const sevColor = SEV_COLORS[n.severity] || '#64748b';
-        return `<div class="notif-card" onclick="dismissNotif('${n.id}')" style="border-left:3px solid ${sevColor};">
+    // One card renderer for both unread + read history. Synthetic items
+    // (session summary / urgent broadcast) carry a title/body and no incident.
+    const card = (n) => {
+        const sevColor = SEV_COLORS[n.severity] || (n.sevColor || '#64748b');
+        const synthetic = String(n.id).startsWith('__');
+        const cls = 'notif-card'
+            + (n.cat === 'B' ? ' notif-card-important' : '')
+            + (n.cat === 'C' ? ' notif-card-urgent' : '')
+            + (n.read ? ' is-read' : '');
+        const safeId = String(n.id).replace(/[^\w:-]/g, '');
+        if (synthetic) {
+            return `<div class="${cls}" onclick="openNotif('${safeId}')" style="border-left:3px solid ${sevColor};">
+                <div class="notif-card-top">
+                    <span class="notif-type"><i class="${n.srcBrand || 'fa-solid'} ${n.srcIcon || 'fa-bell'}"></i> ${escapeHtml(n.title || 'Update')}</span>
+                </div>
+                <div class="notif-loc">${escapeHtml(n.body || '')}</div>
+                <div class="notif-time">${timeAgo(n.timestamp)}</div>
+            </div>`;
+        }
+        return `<div class="${cls}" onclick="openNotif('${safeId}')" style="border-left:3px solid ${sevColor};">
             <div class="notif-card-top">
                 <span class="notif-sev" style="background:${sevColor}20;color:${sevColor};">${n.severity}</span>
-                <span class="notif-type">${n.type}</span>
-                <i class="${n.srcBrand} ${n.srcIcon}" style="color:#64748b;font-size:11px;" title="${n.source}"></i>
+                <span class="notif-type">${escapeHtml(n.type)}</span>
+                ${n.cat === 'B' ? '<span class="notif-impt-tag" title="Important">!</span>' : ''}
+                <i class="${n.srcBrand} ${n.srcIcon}" style="color:#64748b;font-size:11px;" title="${escapeHtml(n.source)}"></i>
             </div>
             <div class="notif-loc"><i class="fa-solid fa-location-dot" style="color:${sevColor};"></i> ${escapeHtml(n.location)}</div>
             <div class="notif-op ${n.operation ? '' : 'global'}"><i class="fa-solid ${n.operation ? 'fa-folder-tree' : 'fa-earth-americas'}"></i> ${n.operation ? escapeHtml(n.operation) : 'Global'}</div>
             <div class="notif-time">${timeAgo(n.timestamp)}</div>
         </div>`;
-    }).join('');
+    };
+
+    const readItems = _notifCenter.filter(n => n.read);
+    let html = '';
+    if (count > 0) {
+        html += `<div class="notif-sec-h">Unread <span>${count}</span></div>` + unread.map(card).join('');
+    }
+    if (readItems.length) {
+        html += `<div class="notif-sec-h notif-sec-read">Earlier <span>${readItems.length}</span></div>` + readItems.map(card).join('');
+    }
+    list.innerHTML = html;
 }
 
 window.toggleNotifPanel = () => {
@@ -2169,32 +3432,171 @@ window.toggleNotifPanel = () => {
     panel.style.display = _notifPanelOpen ? 'block' : 'none';
 };
 
-window.dismissNotif = (id) => {
-    // Capture the notification's operation BEFORE removing it, so the click opens
-    // the incident INSIDE its operation (deep-link) - not just the global feed.
-    const _n = _unseenReports.find(n => n.id === id);
-    _unseenReports = _unseenReports.filter(n => n.id !== id);
-    _seenIds.add(id);
-    _persistSeenIds();  // K.5.c - LRU cap + safe persist
-    _renderNotifications();
-    window.openIncident(id, { operationId: _n && _n.crisisEventId, source: 'notification' });
-    // Close panel if empty
-    if (_unseenReports.length === 0) {
-        const panel = document.getElementById('notif-panel');
-        if (panel) panel.style.display = 'none';
-        _notifPanelOpen = false;
-    }
-};
-
-window.clearAllNotifs = () => {
-    _unseenReports.forEach(n => _seenIds.add(n.id));
-    _unseenReports = [];
-    _persistSeenIds();  // K.5.c - LRU cap + safe persist
-    _renderNotifications();
+// Open a notification: mark it READ (kept in history - never deleted), clear
+// any live center-screen toast for it, close the panel, and open the incident
+// inside its operation. Used for both unread + read-history cards (re-opening a
+// read card is a no-op on read-state). Synthetic items (session summary /
+// urgent broadcast) have no incident to open.
+window.openNotif = (id) => {
+    const n = _notifCenter.find(x => String(x.id) === String(id));
+    if (n && !n.read) { n.read = true; _persistNotifCenter(); }
+    // Clear the transient toast for this id if it's still on screen.
+    _notificationStack = _notificationStack.filter(x => String(x.id) !== String(id));
+    _renderNotificationStack();
+    _refreshStackTimers();
     const panel = document.getElementById('notif-panel');
     if (panel) panel.style.display = 'none';
     _notifPanelOpen = false;
+    _renderNotifications();
+    if (n && String(n.id).startsWith('__')) return;   // synthetic - no incident
+    window.openIncident(id, { operationId: n && n.crisisEventId, source: 'notification' });
 };
+// Back-compat: every existing caller / inline onclick that said dismissNotif
+// now routes through the read-model handler.
+window.dismissNotif = window.openNotif;
+
+// "Mark all read": move every unread item to read (history retained, badge → 0).
+// Does NOT delete - history stays available, satisfying the "notification
+// history remains available" requirement.
+window.clearAllNotifs = () => {
+    let changed = false;
+    _notifCenter.forEach(n => {
+        if (!n.read) { n.read = true; changed = true; }
+        _seenIds.add(n.id);   // defensive: keep the show-once gate consistent
+    });
+    if (changed) { _persistNotifCenter(); _persistSeenIds(); }
+    _renderNotifications();
+    // Keep the panel OPEN so the operator sees the items moved to "Earlier"
+    // (the new value: history is retained, not wiped).
+};
+
+// "Clear" the read history: remove READ items only (anything still unread
+// stays). Two-step by design - "Mark all read" then "Clear" fully empties.
+window.clearNotifHistory = () => {
+    _notifCenter = _notifCenter.filter(n => !n.read);
+    _persistNotifCenter();
+    _renderNotifications();
+};
+
+// ── Category C (Urgent) - persistent until acknowledged ─────────────────────
+// A red banner that stays until the operator clicks Acknowledge. No
+// auto-dismiss. Reserved for rare safety / outage / emergency broadcasts;
+// there is NO automatic producer in v1 (the audit confirmed nothing in the
+// report path is urgent). Ops tooling can raise one via
+// window.crispUrgentBroadcast({ title, body }).
+function _showUrgentBanner(item) {
+    let banner = document.getElementById('notif-urgent-banner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'notif-urgent-banner';
+        banner.className = 'notif-urgent-banner';
+        document.body.appendChild(banner);
+    }
+    banner.innerHTML = `
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <div class="nub-text"><strong>${escapeHtml(item.title || 'Urgent')}</strong>${item.body ? ' &middot; ' + escapeHtml(item.body) : ''}</div>
+        <button type="button" class="nub-ack">Acknowledge</button>
+    `;
+    banner.querySelector('.nub-ack').onclick = () => {
+        item.acknowledged = true; item.read = true; _persistNotifCenter();
+        banner.remove(); _renderNotifications();
+    };
+    banner.style.display = 'flex';
+}
+window.crispUrgentBroadcast = (opts) => {
+    opts = opts || {};
+    const item = {
+        id: '__urgent_' + Date.now(),
+        cat: 'C', read: false, acknowledged: false,
+        title: opts.title || 'Urgent alert', body: opts.body || '',
+        severity: 'CRITICAL', type: 'BROADCAST', location: opts.location || '',
+        source: 'SYSTEM', srcIcon: 'fa-tower-broadcast', srcBrand: 'fa-solid',
+        sevColor: '#ef4444', operation: null, crisisEventId: null,
+        timestamp: new Date().toISOString(), addedAt: Date.now(), coalescedCount: 1,
+    };
+    _notifCenterAdd(item);
+    _renderNotifications();
+    _showUrgentBanner(item);
+    return item.id;
+};
+
+// ── Session summary ("Since your last visit: +N reports …") ─────────────────
+// Shown ONCE per browser session (sessionStorage guard - survives an in-session
+// refresh, never re-fires on route change), comparing against a per-operator
+// last-visit watermark. The replacement for replaying dozens of stale alerts.
+function _visitWatermarkKey() { return _notifUserKey('crisp_last_visit_'); }
+function _advanceVisitWatermark() {
+    try { localStorage.setItem(_visitWatermarkKey(), new Date().toISOString()); } catch (_) {}
+}
+function _maybeShowSessionSummary() {
+    let shown = false;
+    try { shown = sessionStorage.getItem('crisp_notif_summary_shown') === '1'; } catch (_) {}
+    if (shown) return;
+    try { sessionStorage.setItem('crisp_notif_summary_shown', '1'); } catch (_) {}
+
+    let watermark = null;
+    try { watermark = localStorage.getItem(_visitWatermarkKey()); } catch (_) {}
+    const wmMs = watermark ? Date.parse(watermark) : NaN;
+    // First-ever visit on this profile (or unparseable) - set a baseline
+    // silently; there is nothing to summarise yet.
+    if (!wmMs) { _advanceVisitWatermark(); return; }
+
+    // Count what arrived since the last visit, from the loaded working set.
+    // (Approximation at extreme scale where the feed is windowed; strictly
+    // better than replaying old toasts, and dependency-free.)
+    const fresh = (allReports || []).filter(r => {
+        const t = Date.parse(r && r.server_created_at);
+        return t && t > wmMs;
+    });
+    const newCount = fresh.length;
+    const critCount = fresh.filter(r => String(r.severity).toUpperCase() === 'CRITICAL').length;
+    const opCount = new Set(fresh.map(r => r && r.crisis_event_id).filter(Boolean)).size;
+    _advanceVisitWatermark();   // measure the NEXT visit from now
+    if (newCount <= 0) return;  // nothing new - stay quiet
+
+    const parts = [`+${newCount} new report${newCount === 1 ? '' : 's'}`];
+    if (critCount > 0) parts.push(`+${critCount} critical`);
+    if (opCount > 0) parts.push(`across ${opCount} operation${opCount === 1 ? '' : 's'}`);
+    const msg = parts.join(' · ');
+
+    // Record in the center so it's available later (Cat A, unread).
+    _notifCenterAdd({
+        id: '__session_' + Date.now(), cat: 'A', read: false, acknowledged: false,
+        title: 'Since your last visit', body: msg,
+        severity: critCount > 0 ? 'CRITICAL' : 'INFO', type: 'SUMMARY', location: '',
+        source: 'SYSTEM', srcIcon: 'fa-clock-rotate-left', srcBrand: 'fa-solid',
+        sevColor: critCount > 0 ? '#ef4444' : '#38bdf8', operation: null, crisisEventId: null,
+        timestamp: new Date().toISOString(), addedAt: Date.now(), coalescedCount: 1,
+    });
+    _renderNotifications();
+    _showSessionSummaryBanner(msg, critCount > 0);
+}
+function _showSessionSummaryBanner(msg, crit) {
+    let banner = document.getElementById('notif-session-summary');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'notif-session-summary';
+        banner.className = 'notif-session-summary';
+        banner.onclick = () => { _hideSessionSummaryBanner(); window.toggleNotifPanel(); };
+        document.body.appendChild(banner);
+    }
+    banner.classList.toggle('crit', !!crit);
+    banner.innerHTML = `
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <div class="nss-text"><strong>Since your last visit</strong><span>${escapeHtml(msg)}</span></div>
+        <span class="nss-hint">tap to review</span>
+    `;
+    banner.style.display = 'flex';
+    if (banner._t) clearTimeout(banner._t);
+    banner._t = setTimeout(() => _hideSessionSummaryBanner(), 5000);   // ~5s auto-dismiss
+}
+function _hideSessionSummaryBanner() {
+    const b = document.getElementById('notif-session-summary');
+    if (b) { if (b._t) clearTimeout(b._t); b.style.display = 'none'; }
+}
+// Advance the visit watermark when the operator leaves, so the next session
+// measures "since your last visit" from this moment.
+try { window.addEventListener('beforeunload', () => { try { _advanceVisitWatermark(); } catch (_) {} }); } catch (_) {}
 
 // Open an incident's detail panel from ANYWHERE. The notification bell now
 // lives in the global shell, so a click can arrive while the Operations view
@@ -2245,12 +3647,28 @@ window.__crispEnsureReport = async (id) => {
     return null;
 };
 
-// Single source of truth for the shell's Home alert (unseen count + whether any
-// unseen incident is CRITICAL). Reads the same _unseenReports the bell uses.
-window.__crispNotifSummary = () => ({
-    count: _unseenReports.length,
-    critical: _unseenReports.some(n => String(n.severity).toUpperCase() === 'CRITICAL'),
-});
+// Single source of truth for the shell's Home alert (unread count + whether any
+// unread incident is CRITICAL). Reads the same durable center the bell renders.
+window.__crispNotifSummary = () => {
+    const unread = _notifUnread();
+    return {
+        count: unread.length,
+        critical: unread.some(n => String(n.severity).toUpperCase() === 'CRITICAL'),
+    };
+};
+
+// Test hook (e2e): drive the REAL producer path deterministically without
+// waiting for the 4s poll. `replace:true` routes through _replaceReportData
+// (the full-refresh diff that EVICTS knownIds - the operation-scope-switch
+// path that caused the replay bug); otherwise _applyReportData (the delta
+// upsert). Lets specs assert show-once across a knownIds eviction.
+window.__crispApplyReportsForTest = (arr, opts) => {
+    try {
+        if (opts && opts.replace) _replaceReportData(arr || []);
+        else _applyReportData(arr || []);
+        return true;
+    } catch (e) { return String((e && e.message) || e); }
+};
 
 // Close panel when clicking outside
 document.addEventListener('click', (e) => {
@@ -2547,16 +3965,20 @@ function createIncidentRow(r) {
     const srcClass = {APP:'qrt-src-app',WHATSAPP:'qrt-src-whatsapp',TELEGRAM:'qrt-src-telegram',SMS:'qrt-src-sms',IVR:'qrt-src-ivr'}[r.source] || 'qrt-src-app';
     const srcBrand = ['WHATSAPP','TELEGRAM'].includes(r.source) ? 'fa-brands' : 'fa-solid';
 
+    const _ds = _displayStatus(r);
+    const _verdict = r.reviewer_verdict || 'NOT_REVIEWED';
+    const _isOpen = (r.status === 'PENDING' || r.status === 'VERIFIED') && _verdict !== 'REJECTED';
     inc.innerHTML = `
         <span class="inc-sev-dot sev-dot-${r.severity}"></span>
-        <span class="tv-status tv-st-${r.status}">${r.status === 'RESPONDING' || r.status === 'RESOLVED' ? 'HELPED' : r.status === 'FALSE_ALARM' ? 'FALSE' : r.status}</span>
+        <span class="tv-status st-${_ds.cls}" title="${_ds.title}">${_ds.label}</span>
         <span class="tv-desc" title="${(r.description || '').replace(/"/g, '&quot;')}">${desc || 'No description'}</span>
         <span class="tv-meta">
             <span class="tv-time">${timeAgo(r.server_created_at)}</span>
+            ${_confidenceChip(r)}
             <span class="qrt-source-badge ${srcClass}" title="${r.source}"><i class="${srcBrand} ${srcIcon}"></i></span>
         </span>
         <span class="tv-actions">
-            ${r.status === 'PENDING' || r.status === 'VERIFIED' ? `<button class="tv-act tv-act-dispatch" onclick="event.stopPropagation();patchReport('${r.id}','dispatch')" title="Send Help"><i class="fa-solid fa-hands-helping"></i></button>` : ''}
+            ${_isOpen ? `<button class="tv-act tv-act-dispatch" onclick="event.stopPropagation();patchReport('${r.id}','dispatch')" title="Notify Responders"><i class="fa-solid fa-bell-concierge"></i></button>` : ''}
             ${r.status !== 'FALSE_ALARM' ? `<button class="tv-act tv-act-false" onclick="event.stopPropagation();patchReport('${r.id}','false-alarm')" title="False Alarm"><i class="fa-solid fa-ban"></i></button>` : ''}
             <button class="tv-act tv-act-delete" onclick="event.stopPropagation();if(confirm('Delete?'))deleteReport('${r.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
         </span>
@@ -2622,11 +4044,26 @@ function renderHotspots(parentEl, reports) {
 }
 
 function renderFeed() {
-    _renderContextBanner();
+    _renderContextBanner();   // context banner ALWAYS renders first - the scope is visible before any list
+    try { _renderDupReviewPanel(); } catch (_e) {}   // Potential Duplicates review panel (throttled fetch)
+    try { _syncFilterActiveCount(); } catch (_e) {}   // collapsed Filters label shows the active-filter count
     const el = document.getElementById('report-feed-list');
     if (!el) return;
+    // The scoped/global LIST fetch is in flight → show a real "Loading Operation
+    // Incidents…" placeholder instead of the (misleading) empty state, a stale
+    // list, or the partial single incident that the by-id lazy fetch may have
+    // merged in. `_scopeLoading` is set by setOperationScope() / boot and cleared
+    // ONLY when the LIST fetchReports() applies data (NOT by a by-id merge), so it
+    // stays up until the full operation dataset arrives.
+    if (_scopeLoading) {
+        el.innerHTML = _loadingFeedHtml();
+        updateCommandStats();
+        return;
+    }
     if (viewMode === 'queue') {
         renderTriageQueue(el);
+    } else if (viewMode === 'clusters') {
+        renderClusterFeed(el);
     } else {
         renderTreeFeed(el);
     }
@@ -2635,7 +4072,164 @@ function renderFeed() {
     // past the first 50 and wire up a sentinel + IntersectionObserver that
     // reveals the next 50 when the user scrolls near the bottom. Keeps the
     // initial paint under 100 ms even with 1000+ reports in `allReports`.
-    _applyProgressiveReveal(el);
+    // SKIP in clusters mode: the feed is collapsed cluster sections (cheap),
+    // and progressive-hiding cards across collapsed bodies would fight expansion.
+    if (viewMode !== 'clusters') _applyProgressiveReveal(el);
+}
+
+// ── Clusters Mode (opt-in) ────────────────────────────────────────────────────
+// Group reports into Building/Location incident clusters so the analyst sees ONE
+// operational problem, not N report cards. Cluster key precedence:
+//   building_id  →  h3 cell (~175 m)  →  the report itself (singleton)
+// so NOTHING ever disappears from the feed. Read-time aggregation over the loaded
+// working set; clusters collapsed by default, expand for the evidence (reports).
+const _CC_SEV_RANK = { CRITICAL: 4, SEVERE: 3, MODERATE: 2, MINOR: 1, UNKNOWN: 0 };
+// Which clusters the operator has expanded - persisted across feed re-renders
+// (polls) so new data never re-collapses an open cluster. Keyed by cluster key.
+const _expandedClusters = new Set();
+
+function _ensureClusterStyles() {
+    if (document.getElementById('cc-cluster-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'cc-cluster-styles';
+    s.textContent = `
+      .cc-cluster .qrt-section-header{display:flex;align-items:center;gap:10px;cursor:pointer}
+      .cc-cluster-sev{width:9px;height:9px;border-radius:50%;flex:none}
+      .cc-cluster-main{flex:1;min-width:0}
+      .cc-cluster-title{font-weight:600;font-size:13px;color:#e6eefb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .cc-cluster-meta{font-size:11px;color:#9fb3d1;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .cc-cluster-meta b{color:#f87171}
+      .cc-cluster-single .cc-cluster-title{font-weight:500;color:#cbd9ef}
+      .cc-cluster-open{flex:none;background:none;border:none;color:#9fb3d1;cursor:pointer;padding:4px 6px;border-radius:6px;font-size:12px}
+      .cc-cluster-open:hover{background:rgba(148,163,184,.16);color:#e6eefb}`;
+    document.head.appendChild(s);
+}
+
+function _clusterKey(r) {
+    if (r.building_id) return 'b:' + r.building_id;
+    const h = r.location && r.location.h3_idx;
+    if (h) return 'h3:' + h;
+    return 'r:' + r.id;   // singleton - ungroupable report still gets its own card
+}
+function _clusterName(rs) {
+    for (const r of rs) { if (r.infrastructure_name) return r.infrastructure_name; }
+    for (const r of rs) {
+        const ln = r.location && (r.location.user_location_name || r.location.device_location_name);
+        if (ln) return ln;
+    }
+    const r0 = rs[0] || {};
+    const t = String(r0.infrastructure_type || r0.crisis_type || 'Report');
+    return t.charAt(0) + t.slice(1).toLowerCase().replace(/_/g, ' ');
+}
+function _clusterSummary(key, rs) {
+    let maxRank = 0, maxSev = 'UNKNOWN', critical = 0, newCount = 0, lastActivity = 0;
+    const now = Date.now();
+    for (const r of rs) {
+        const sev = String(r.severity || 'UNKNOWN').toUpperCase();
+        const rank = _CC_SEV_RANK[sev] || 0;
+        if (rank > maxRank) { maxRank = rank; maxSev = sev; }
+        if (sev === 'CRITICAL') critical++;
+        const t = Date.parse(r.server_created_at) || 0;
+        if (t > lastActivity) lastActivity = t;
+        if (t && now - t < 24 * 3600 * 1000) newCount++;
+    }
+    return { key, reports: rs, count: rs.length, maxRank, maxSev, critical, newCount,
+             lastActivity, name: _clusterName(rs), singleton: key.charAt(0) === 'r',
+             buildingId: key.charAt(0) === 'b' ? key.slice(2) : null };
+}
+function _renderClusterCard(c) {
+    const sec = document.createElement('div');
+    const expanded = _expandedClusters.has(c.key);
+    sec.className = 'qrt-section cc-cluster' + (expanded ? '' : ' collapsed') + (c.singleton ? ' cc-cluster-single' : '');
+    sec.dataset.clusterKey = c.key;
+    const color = SEV_COLORS[c.maxSev] || SEV_COLORS.UNKNOWN;
+    const bits = [`${c.count} report${c.count !== 1 ? 's' : ''}`];
+    if (c.critical) bits.push(`<b>${c.critical} critical</b>`);
+    if (c.newCount) bits.push(`${c.newCount} new`);
+    bits.push(timeAgo(new Date(c.lastActivity || Date.now()).toISOString()));
+    const header = document.createElement('div');
+    header.className = 'qrt-section-header';
+    header.innerHTML =
+        `<span class="cc-cluster-sev" style="background:${color}"></span>` +
+        `<div class="cc-cluster-main"><div class="cc-cluster-title">${escapeHtml(c.name)}</div>` +
+        `<div class="cc-cluster-meta">${bits.join(' · ')}</div></div>` +
+        // Building-backed clusters open the full Cluster View (Building Console);
+        // h3/singleton clusters have no console (the report list IS the cluster).
+        (c.buildingId
+            ? `<button class="cc-cluster-open" title="Open Building Details" aria-label="Open Building Details" onclick="event.stopPropagation();window.openBuildingConsole&&window.openBuildingConsole(decodeURIComponent('${encodeURIComponent(c.buildingId)}'))"><i class="fa-solid fa-up-right-from-square"></i></button>`
+            : '') +
+        `<span class="qrt-section-count">${c.count}</span>` +
+        `<i class="fa-solid fa-chevron-down qrt-section-chevron"></i>`;
+    header.addEventListener('click', () => {
+        if (_expandedClusters.has(c.key)) _expandedClusters.delete(c.key);
+        else _expandedClusters.add(c.key);
+        sec.classList.toggle('collapsed');
+    });
+    sec.appendChild(header);
+    const body = document.createElement('div');
+    body.className = 'qrt-section-body';
+    c.reports.slice()
+        .sort((a, b) => (_CC_SEV_RANK[String(b.severity).toUpperCase()] || 0) - (_CC_SEV_RANK[String(a.severity).toUpperCase()] || 0)
+            || String(b.server_created_at || '').localeCompare(String(a.server_created_at || '')))
+        .forEach((r) => body.appendChild(createIncidentCard(r)));
+    sec.appendChild(body);
+    return sec;
+}
+// Population matches the queue feed's narrowing (queue/status/time/search/chips)
+// so toggling view modes shows the SAME reports, just grouped.
+function _clusterFilteredReports() {
+    let reports = _activeQueue ? _applyQueueFilter(allReports)
+        : allReports.filter((r) => {
+            if (statusFilter === 'all') return true;
+            const s = r.status;
+            if (statusFilter === 'active') return s === 'PENDING' || s === 'VERIFIED';
+            return String(s).toLowerCase() === String(statusFilter).toLowerCase();
+        });
+    if (!_activeQueue && timeFilterHours > 0) {
+        const cutoff = Date.now() - timeFilterHours * 3600000;
+        reports = reports.filter((r) => _priorityTime(r) > cutoff);
+    }
+    if (treeSearchTerm) {
+        reports = reports.filter((r) => {
+            const hay = [r.description, r.infrastructure_type, r.infrastructure_name, r.severity, r.status,
+                r.location?.user_location_name, r.location?.device_location_name].filter(Boolean).join(' ').toLowerCase();
+            return hay.includes(treeSearchTerm);
+        });
+    }
+    if (_activeChipFilters && _activeChipFilters.size) reports = reports.filter(_passesChipFilters);
+    return reports;
+}
+function renderClusterFeed(el) {
+    _ensureClusterStyles();
+    const reports = _clusterFilteredReports();
+    el.innerHTML = '';
+    if (!reports.length) {
+        el.innerHTML = `<div class="feed-empty-state">
+            <i class="fa-solid fa-object-group"></i>
+            <div class="feed-empty-title">${allReports.length === 0 ? 'Awaiting Incidents' : 'No incidents in this view'}</div>
+            <div class="feed-empty-sub">${allReports.length === 0 ? 'Reports from the field will appear here, grouped by building/location.' : 'Try widening the filters above.'}</div>
+        </div>`;
+        const badge = document.getElementById('feed-count-badge');
+        if (badge) badge.textContent = 'All Clear';
+        return;
+    }
+    const groups = new Map();
+    for (const r of reports) {
+        const k = _clusterKey(r);
+        let g = groups.get(k);
+        if (!g) { g = []; groups.set(k, g); }
+        g.push(r);
+    }
+    const clusters = [];
+    groups.forEach((rs, key) => clusters.push(_clusterSummary(key, rs)));
+    // Worst severity first, then most recent activity, then largest.
+    clusters.sort((a, b) => (b.maxRank - a.maxRank) || (b.lastActivity - a.lastActivity) || (b.count - a.count));
+    const frag = document.createDocumentFragment();
+    for (const c of clusters) frag.appendChild(_renderClusterCard(c));
+    el.appendChild(frag);
+    const badge = document.getElementById('feed-count-badge');
+    if (badge) badge.textContent =
+        `${clusters.length} cluster${clusters.length !== 1 ? 's' : ''} · ${reports.length} report${reports.length !== 1 ? 's' : ''}`;
 }
 
 let _progressiveIO = null;
@@ -2652,6 +4246,15 @@ function _applyProgressiveReveal(container) {
 
     // Hide everything beyond the initial page.
     let visibleCount = _PROGRESSIVE_PAGE_SIZE;
+    // Keep the SELECTED incident (deep-link / op-worklist click / search) inside
+    // the revealed window so it is never display:none when CrispNav scrolls to it.
+    // Reveal everything up to + including its card (cheap: one extra scan).
+    if (selectedId) {
+        for (let i = visibleCount; i < cards.length; i++) {
+            const cid = (cards[i].dataset && cards[i].dataset.id) || cards[i].getAttribute('data-id');
+            if (cid === selectedId) { visibleCount = i + 1; break; }
+        }
+    }
     cards.forEach((c, i) => { if (i >= visibleCount) c.style.display = 'none'; });
 
     // Add a sentinel div right after the last visible card.
@@ -2798,8 +4401,8 @@ function renderTriageQueue(el) {
     if (criticals.length > 0) frag.appendChild(createAlertBanner(criticals.length));
 
     // Three collapsible sections
-    frag.appendChild(createQueueSection('needs',      '<i class="fa-solid fa-circle-exclamation"></i> NEEDS HELP', needs,      'qrt-section-needs'));
-    frag.appendChild(createQueueSection('dispatched', '<i class="fa-solid fa-hands-helping"></i> HELP SENT', dispatched, 'qrt-section-dispatched'));
+    frag.appendChild(createQueueSection('needs',      '<i class="fa-solid fa-circle-exclamation"></i> NEEDS ACTION', needs,      'qrt-section-needs'));
+    frag.appendChild(createQueueSection('dispatched', '<i class="fa-solid fa-truck-medical"></i> RESPONDING', dispatched, 'qrt-section-dispatched'));
     frag.appendChild(createQueueSection('resolved',   '<i class="fa-solid fa-circle-check"></i> CLOSED',     resolved,   'qrt-section-resolved'));
 
     el.appendChild(frag);
@@ -2896,8 +4499,10 @@ function getSortFunction() {
             };
         case 'confidence':
             return (a, b) => {
-                const sa = a.ai_assessment?.confidence_score ?? -1;
-                const sb = b.ai_assessment?.confidence_score ?? -1;
+                // Composite Confidence Score (incident_credibility) - the value
+                // shown on the card + detail, not the AI-only sub-score.
+                const sa = (a.incident_credibility && a.incident_credibility.assessed) ? a.incident_credibility.score : -1;
+                const sb = (b.incident_credibility && b.incident_credibility.assessed) ? b.incident_credibility.score : -1;
                 return sb - sa || new Date(b.server_created_at) - new Date(a.server_created_at);
             };
         case 'crisis':
@@ -2931,7 +4536,12 @@ function createAlertBanner(count) {
 }
 
 function createQueueSection(key, label, incidents, cssClass) {
-    const isOpen = sectionState[key] !== false;
+    // A section that holds the SELECTED incident always renders EXPANDED so the
+    // card is visible when we scroll to it (HELP SENT / CLOSED start collapsed by
+    // default). This does NOT mutate the operator's saved collapse preference
+    // (sectionState), which still governs every other section + later renders.
+    const hasSelected = selectedId && incidents.some((r) => r.id === selectedId);
+    const isOpen = hasSelected || sectionState[key] !== false;
     const sec = document.createElement('div');
     sec.className = `qrt-section ${cssClass}${isOpen ? '' : ' collapsed'}`;
 
@@ -2997,6 +4607,21 @@ function _incidentStatusChips(r) {
 }
 window._incidentStatusChips = _incidentStatusChips;   // test hook + detail-panel reuse
 
+// Duplicate collapse: the "N duplicate reports merged" chip the PRIMARY card
+// wears once an analyst has merged corroborating reports beneath it. duplicate_count
+// is the number of merged-away duplicates (server-derived); the incident itself plus
+// its duplicates = N+1 corroborating reports. Consistent 🔗 treatment on feed + map +
+// detail. Returns '' for ordinary reports so the card stays scannable.
+function _dupMergedBadge(r) {
+    const n = (r && r.duplicate_count) || 0;
+    if (!n) return '';
+    const corro = n + 1;
+    return `<span class="qrt-dup-merged" title="${n} duplicate report${n > 1 ? 's' : ''} merged under this incident · ${corro} corroborating reports total. Open the report to switch between them."` +
+        ` style="display:inline-flex;align-items:center;gap:4px;background:rgba(56,189,248,.14);color:#7dd3fc;border:1px solid rgba(56,189,248,.35);border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600">` +
+        `🔗 ${n} duplicate report${n > 1 ? 's' : ''}</span>`;
+}
+window._dupMergedBadge = _dupMergedBadge;
+
 function createIncidentCard(r) {
     const card = document.createElement('div');
     const isSelected = (typeof _bulkSelectedIds !== 'undefined') && _bulkSelectedIds.has(r.id);
@@ -3025,7 +4650,6 @@ function createIncidentCard(r) {
 
     const sev   = r.severity || 'UNKNOWN';
     const infra = r.infrastructure_type || 'OTHER';
-    const icon  = INFRA_CARD_ICONS[infra] || 'fa-triangle-exclamation';
 
     // WHERE - prefer user-named location, fall back to device name, then coords
     const loc     = r.location;
@@ -3033,47 +4657,11 @@ function createIncidentCard(r) {
                  || loc?.device_location_name
                  || (loc ? `${loc.latitude.toFixed(3)}, ${loc.longitude.toFixed(3)}` : 'Location unknown');
 
-    const imgMedia   = r.media?.find(m => m.type === 'IMAGE');
-    const audioMedia = r.media?.find(m => m.type === 'AUDIO');
-    const hasImg     = !!imgMedia;
-    const hasAudio   = !!audioMedia;
-    const imgPct     = imgMedia?.completion_pct ?? (hasImg ? 100 : 0);
-    const imgDone    = imgMedia?.assembly_status === 'complete';
-    const audioPct   = audioMedia?.completion_pct ?? (hasAudio ? 100 : 0);
-    const audioDone  = audioMedia?.assembly_status === 'complete';
-    const locDone    = !!(loc?.latitude || loc?.device_latitude);
-    const allDone    = (!r.expected_media || r.received_media >= r.expected_media) && locDone;
-
-    // ACTION button - differs by current status
-    let actionEl;
-    if (r.status === 'PENDING' || r.status === 'VERIFIED') {
-        actionEl = `<button class="qrt-dispatch-btn"
-            onclick="event.stopPropagation(); patchReport('${r.id}', 'dispatch')">
-            <i class="fa-solid fa-hands-helping"></i> SEND HELP
-        </button>`;
-    } else if (r.status === 'RESPONDING' || r.status === 'RESOLVED') {
-        actionEl = `<span class="qrt-dispatched-label"><i class="fa-solid fa-circle-check"></i> Help Sent</span>`;
-    } else {
-        actionEl = `<span class="qrt-resolved-label"><i class="fa-solid fa-ban"></i> False</span>`;
-    }
-
-    // ── Consolidated evidence + verification signal (Moderate triage redesign).
-    // ONE chip replaces the 3 data-receipt icons + the AI badge + the truth
-    // badge: media presence + verification verdict at a glance. The per-tier
-    // upload detail, PII state, and crisis-form provenance live in the detail
-    // panel (its evidence + form sections) so the card stays scannable.
-    const v = r.verification;
-    const _mediaBits = (hasImg ? '<i class="fa-solid fa-camera" title="Photo attached"></i>' : '')
-                     + (hasAudio ? '<i class="fa-solid fa-microphone" title="Audio attached"></i>' : '');
-    let _evidenceChip = '';
-    if (v && v.total_score !== undefined) {
-        const score = v.total_score;
-        const evClass = score >= 60 ? 'ev-strong' : score >= 40 ? 'ev-mid' : 'ev-low';
-        _evidenceChip = `<span class="qrt-evidence ${evClass}" title="AI verification ${score}/100 - ${(v.verdict || 'UNVERIFIED').replace(/_/g, ' ')}">
-            <i class="fa-solid fa-satellite"></i> ${score}${_mediaBits ? ` <span class="qrt-ev-media">${_mediaBits}</span>` : ''}</span>`;
-    } else if (hasImg || hasAudio) {
-        _evidenceChip = `<span class="qrt-evidence ev-unver" title="Evidence attached - not yet verified">${_mediaBits} <span class="qrt-ev-l">unverified</span></span>`;
-    }
+    // Footer signals now come from the shared helpers (see _confidenceChip /
+    // _cardActionEl above): the composite Confidence Score + band, the
+    // verdict-aware status pill, and the Notify-Responders CTA. This replaced the
+    // old inline "SEND HELP" button + the satellite-sub-score evidence chip so the
+    // card mirrors the incident-detail workflow exactly.
 
     // Only a BLOCKING data-integrity / privacy issue stays on the card - a single
     // labeled red chip (corrupt / abandoned / redaction-failed) that says "open
@@ -3102,22 +4690,31 @@ function createIncidentCard(r) {
                   title="Select for bulk action" />`
         : '';
 
+    // Title prefers the BUILDING name when building-tagged (hierarchy: the
+    // building is the operational object); the infra TYPE then drops to a chip.
+    const _bldgTitle = !!(r.building_id && r.infrastructure_name);
+    const _titlePlain = _bldgTitle ? r.infrastructure_name : infraDisplayLabel(infra, r.infrastructure_sub_type);
+    const _infraChip = _bldgTitle ? `<span class="qrt-tag qrt-tag-infra">${infraDisplayLabel(infra, r.infrastructure_sub_type)}</span>` : '';
+    const _hasTags = !!(_infraChip || r.crisis_type || r.damage_classification);
+
     card.innerHTML = `
         ${bulkChk}
         <div class="qrt-sev-strip strip-${sev}"></div>
         <div class="qrt-card-body">
             <div class="qrt-what">
-                <span class="qrt-infra-name" title="${infraDisplayLabel(infra, r.infrastructure_sub_type)}">${infraDisplayLabel(infra, r.infrastructure_sub_type)}</span>
+                <span class="qrt-infra-name" title="${escapeHtml(_titlePlain)}">${_cardTitle(r)}</span>
                 <span class="qrt-sev-badge qrt-sev-${sev}">${sev}</span>
                 <span class="qrt-source-badge qrt-src-${(r.source || 'APP').toLowerCase()}" title="Source: ${{APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i>',ANDROID:'<i class="fa-solid fa-robot"></i>',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i>',TELEGRAM:'<i class="fa-brands fa-telegram"></i>',SMS:'<i class="fa-solid fa-comment-sms"></i>',IVR:'<i class="fa-solid fa-phone"></i>'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i>'}</span>
             </div>
-            ${r.crisis_type || r.damage_classification ? `<div class="qrt-undp-tags">
+            ${_hasTags ? `<div class="qrt-undp-tags">
+                ${_infraChip}
                 ${r.crisis_type ? `<span class="qrt-tag qrt-tag-crisis">${crisisLabel(r.crisis_type)}</span>` : ''}
                 ${r.damage_classification ? `<span class="qrt-tag qrt-tag-dmg-${r.damage_classification}">${r.damage_classification.replace(/_/g,' ')}</span>` : ''}
             </div>` : ''}
             <div class="qrt-where">
                 <i class="fa-solid fa-location-dot"></i>
                 <span class="qrt-where-text" title="${locText}">${locText}</span>
+                ${_cardBuildingLink(r)}
             </div>
             <div class="qrt-when">
                 <i class="fa-regular fa-clock"></i>
@@ -3128,9 +4725,15 @@ function createIncidentCard(r) {
                     : timeAgo(r.server_created_at)}
             </div>
             <div class="qrt-card-footer">
-                ${_blockingFlag}
-                ${_evidenceChip}
-                ${actionEl}
+                <div class="qrt-footer-left">
+                    ${_confidenceChip(r)}
+                    <span class="qrt-media-ics">${_cardMediaIcons(r)}</span>
+                    ${_dupMergedBadge(r)}
+                    ${_blockingFlag}
+                </div>
+                <div class="qrt-footer-right">
+                    ${_cardActionEl(r)}
+                </div>
             </div>
         </div>
     `;
@@ -3259,7 +4862,7 @@ async function _fetchMapMarkers() {
             crisis_type: m.crisis_type,
             infrastructure_type: m.infrastructure_type,
             crisis_event_id: m.crisis_event_id || null,   // ROUTE-04: preserve op context for lean-marker clicks
-
+            duplicate_count: m.duplicate_count || 0,      // duplicate collapse: drives the pin's "N reports" count
             server_created_at: m.server_created_at,
             location: { latitude: m.lat, longitude: m.lng },
             media: [],
@@ -3550,7 +5153,7 @@ function _applyView(v) {
         _activePillFilter = v.statusPill || null;
     }
     timeFilterHours = (typeof v.timeHours === 'number') ? v.timeHours : 0;
-    if (v.viewMode && (v.viewMode === 'queue' || v.viewMode === 'tree')) {
+    if (v.viewMode && (v.viewMode === 'queue' || v.viewMode === 'tree' || v.viewMode === 'clusters')) {
         viewMode = v.viewMode;
     }
     if (v.sortMode) cardSortMode = v.sortMode;
@@ -3691,8 +5294,14 @@ function _passesChipFilters(r) {
         if (!(r.media && r.media.length > 0)) return false;
     }
     if (_activeChipFilters.has('verified')) {
-        const v = r.verification;
-        if (!v || (v.total_score || 0) < 60) return false;
+        // "Credible": composite Confidence band VERIFIED or LIKELY - the same
+        // Confidence Score the operator acts on, NOT the raw satellite sub-score.
+        const ic = r.incident_credibility;
+        if (!ic || !ic.assessed || !(ic.band === 'VERIFIED' || ic.band === 'LIKELY')) return false;
+    }
+    if (_activeChipFilters.has('needs-review')) {
+        const vd = r.reviewer_verdict || 'NOT_REVIEWED';
+        if (!(vd === 'NOT_REVIEWED' && (r.status === 'PENDING' || r.status === 'VERIFIED'))) return false;
     }
     if (_activeChipFilters.has('building')) {
         if (!r.building_id) return false;
@@ -4361,12 +5970,12 @@ function showIncidentPreview(r, event) {
                     <i class="fa-solid ${INFRA_ICONS[r.infrastructure_type] || 'fa-triangle-exclamation'}" style="color:${sevColor};"></i>
                     <span class="fp-type">${infraDisplayLabel(r.infrastructure_type, r.infrastructure_sub_type)}</span>
                     <span class="fp-sev-badge" style="background:${sevColor}20;color:${sevColor};">${r.severity}</span>
-                    <span class="fp-status-badge fp-st-${r.status}">${r.status === 'RESPONDING' || r.status === 'RESOLVED' ? 'HELPED' : r.status === 'FALSE_ALARM' ? 'FALSE' : r.status}</span>
+                    <span class="fp-status-badge st-${_displayStatus(r).cls}" title="${_displayStatus(r).title}">${_displayStatus(r).label}</span>
                 </div>
                 <div class="fp-meta-row">
                     <span>${timeAgo(r.server_created_at)}</span>
                     <span><i class="${srcBrand} ${srcIcon}"></i> ${r.source}</span>
-                    ${v ? `<span style="color:${gc};font-weight:700;">${v.total_score}/100</span>` : '<span style="color:var(--text-dim);">Not verified</span>'}
+                    ${_confidenceChip(r)}
                 </div>
             </div>
         </div>
@@ -4390,6 +5999,7 @@ function showIncidentPreview(r, event) {
             <div class="fp-loc-row"><i class="fa-solid fa-location-dot" style="color:${sevColor};"></i> ${escapeHtml(locName)}</div>
             ${audioUrl ? `<button class="fp-play-btn" onclick="event.stopPropagation();playPreviewAudio('${audioUrl}',this)"><i class="fa-solid fa-play"></i> Play Audio</button>` : ''}
             ${v ? `<div class="fp-verify-row">
+                <span class="fp-verify-label">Satellite</span>
                 <span class="fp-verify-score" style="color:${gc};">${v.total_score}</span>
                 <div class="fp-verify-dots">
                     <span style="color:${dotCol(scores.location_authenticity)};">● Loc ${scores.location_authenticity ?? '-'}</span>
@@ -4400,7 +6010,7 @@ function showIncidentPreview(r, event) {
             </div>` : ''}
         </div>
         <div class="fp-actions">
-            ${r.status === 'PENDING' || r.status === 'VERIFIED' ? `<button class="fp-act fp-act-dispatch" onclick="event.stopPropagation();patchReport('${r.id}','dispatch');hideIncidentPreview()"><i class="fa-solid fa-hands-helping"></i> Send Help</button>` : ''}
+            ${((r.status === 'PENDING' || r.status === 'VERIFIED') && (r.reviewer_verdict || 'NOT_REVIEWED') !== 'REJECTED') ? `<button class="fp-act fp-act-dispatch" onclick="event.stopPropagation();patchReport('${r.id}','dispatch');hideIncidentPreview()"><i class="fa-solid fa-bell-concierge"></i> Notify Responders</button>` : ''}
             ${r.status !== 'FALSE_ALARM' ? `<button class="fp-act fp-act-false" onclick="event.stopPropagation();patchReport('${r.id}','false-alarm');hideIncidentPreview()"><i class="fa-solid fa-ban"></i> False</button>` : ''}
             <button class="fp-act fp-act-detail" onclick="event.stopPropagation();window.openIncident('${r.id}');hideIncidentPreview()"><i class="fa-solid fa-expand"></i></button>
         </div>
@@ -4445,9 +6055,29 @@ window.playPreviewAudio = function (url, btn) {
 
 // ── Detail Panel ─────────────────────────────────────────────────────────────
 // skipFly=true when called from poll loop - avoids jarring map movement on auto-refresh
+// Detail-only report cache: lets the detail panel open a MERGED (feed-hidden)
+// duplicate report WITHOUT re-adding it to allReports (which would un-collapse it
+// in the feed). Backs the "switch to a duplicate report" affordance in the
+// Related Duplicate Reports panel - the LEFT feed stays one collapsed card while
+// the RIGHT detail flips between the primary and its duplicates.
+let _detailOnlyReport = null;
+async function _fetchReportByIdRaw(id) {
+    try { const res = await fetch(`${API}/${encodeURIComponent(id)}`); if (res.ok) return await res.json(); } catch (_e) {}
+    return null;
+}
+window._switchToReport = async (id) => {
+    if (!id) return;
+    let r = (allReports || []).find((x) => x && x.id === id);
+    if (!r) r = await _fetchReportByIdRaw(id);   // merged/hidden report → fetch by id, do NOT add it to the feed
+    if (!r) { showToast('Could not open report', 'error'); return; }
+    _detailOnlyReport = r;
+    try { window.selectReport(id); } catch (_e) {}
+};
+
 window.selectReport = (id, skipFly = false) => {
     selectedId = id;
-    const r = allReports.find(x => x.id === id);
+    const r = allReports.find(x => x.id === id)
+        || (_detailOnlyReport && _detailOnlyReport.id === id ? _detailOnlyReport : null);
     if (!r) return;
 
     const panel = document.getElementById('detail-panel');
@@ -4456,6 +6086,8 @@ window.selectReport = (id, skipFly = false) => {
     // on the operations route; a hidden ancestor would otherwise clip it).
     if (panel.parentElement !== document.body) document.body.appendChild(panel);
     panel.style.display = 'flex';
+    // D2: move focus into the panel so keyboard users can reach + Escape it.
+    try { window.__dpPriorFocus = document.activeElement; panel.setAttribute('tabindex', '-1'); panel.focus({ preventScroll: true }); } catch (_e) {}
 
     // P1.5 - fire-and-forget tier-status refresh so the tier switcher /
     // gallery thumbs show post-poll-cycle fresh state instead of waiting
@@ -4586,25 +6218,11 @@ window.selectReport = (id, skipFly = false) => {
             : `<div class="dp-img dp-img-placeholder"><i class="fa-solid fa-camera-slash" style="font-size:16px;color:#334155;"></i></div>`
     );
 
-    // ── Satellite image HTML (with alt source toggle) ──
-    // May 2026 - getMediaUrl() routes both relative `/api/v1/...` URLs
-    // (prepends BACKEND_HOST) and absolute https (pass-through). See
-    // the hover-preview comment above for the full HAR-driven story.
-    const satSrc    = v?.satellite_image_url ? getMediaUrl(v.satellite_image_url) : '';
-    const satAltSrc = v?.satellite_image_url_alt ? getMediaUrl(v.satellite_image_url_alt) : '';
-    const satPrimaryLabel = (v?.satellite_source || 'Satellite').split('(')[0].trim();
-    const satAltLabel     = (v?.satellite_source_alt || 'Alt').split('(')[0].trim();
-    const satHtml = satSrc
-        ? `<div class="dp-sat-wrap">
-               ${satAltSrc ? `<div class="dp-sat-tabs">
-                   <button class="dp-sat-tab active" onclick="switchSatSource('${r.id}','primary',this,'${satSrc}')">${satPrimaryLabel}</button>
-                   <button class="dp-sat-tab" onclick="switchSatSource('${r.id}','alt',this,'${satAltSrc}')">${satAltLabel}</button>
-               </div>` : ''}
-               <div class="dp-img" onclick="openLightbox(document.getElementById('dp-sat-img-${r.id}').src,'Satellite')">
-                   <img id="dp-sat-img-${r.id}" src="${satSrc}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">
-               </div>
-           </div>`
-        : `<div class="dp-img dp-img-placeholder"><i class="fa-solid fa-satellite" style="font-size:16px;color:#334155;"></i><span style="font-size:12px;color:#475569;">Not verified</span></div>`;
+    // Satellite imagery + verification analysis now render inside the Confidence
+    // Assessment breakdown (window._renderSatelliteAnalysis), NOT in this Evidence
+    // section - so credibility lives in one workspace. (Removed: the inline
+    // satSrc/satHtml/imgMatchHtml/vGaugeHtml builders + the Photo/Satellite/Compare
+    // view-toggle.)
 
     // ── Audio HTML (compact inline strip) ──
     const aPct = (audio?.completion_pct ?? 0);
@@ -4612,147 +6230,6 @@ window.selectReport = (id, skipFly = false) => {
     const aPartialUrl = audio?.thumbnail_url ? _withCacheBust(getMediaUrl(audio.thumbnail_url), '_cb', Math.round(aPct/5)*5) : '';
     const audioPlayUrl = aComplete ? getMediaUrl(audio.url) : aPartialUrl;
 
-    // ── Image match score (shown below image section) ──
-    const imgMatchHtml = v ? (() => {
-        const total = v.total_score || 0;
-        const gc = total >= 80 ? '#22c55e' : total >= 60 ? '#86efac' : total >= 40 ? '#eab308' : total >= 20 ? '#f97316' : '#ef4444';
-        const damageScore = v.scores?.damage_corroboration || 0;
-        const matchPct = Math.round((damageScore / 25) * 100);
-        return `<div class="dp-img-match"><i class="fa-solid fa-brain" style="color:${gc};"></i> Image Match Score: <strong style="color:${gc};">${matchPct}%</strong> <span style="color:var(--text-dim);">· Overall: ${total}/100</span></div>`;
-    })() : '';
-
-    // ── Satellite verification: score + metadata + 1-paragraph summary ──
-    //
-    // Phase B (May 2026, UNDP-grade rebuild) - surface the metadata
-    // analysts actually need: acquisition date with sign-aware days-gap,
-    // cloud cover with traffic-light colour code, sources used count,
-    // and a "Last verified Xm ago" timestamp + re-verify CTA so analysts
-    // know when the Claude run happened and can refresh on demand.
-    const vGaugeHtml = (() => {
-        if (!v) return '';
-        const total = v.total_score || 0;
-        const gc = total >= 80 ? '#22c55e' : total >= 60 ? '#86efac' : total >= 40 ? '#eab308' : total >= 20 ? '#f97316' : '#ef4444';
-        const verdictLabels = { STRONGLY_CORROBORATED:'Corroborated', LIKELY_AUTHENTIC:'Likely Authentic', PARTIALLY_VERIFIED:'Partial', LOW_CONFIDENCE:'Low Confidence', UNVERIFIED:'Unverified' };
-        const vLabel = verdictLabels[v.verdict] || v.verdict || '';
-        // Build 1-paragraph summary from available data
-        const parts = [];
-        if (v.photo_analysis) parts.push(v.photo_analysis);
-        else if (v.satellite_scene_description) parts.push(v.satellite_scene_description);
-        if (v.key_findings?.length) parts.push(v.key_findings[0]);
-        if (v.caveats?.length) parts.push('Caveat: ' + v.caveats[0]);
-        const paragraph = parts.join(' ').substring(0, 250) || 'Satellite comparison completed.';
-
-        // ── Acquisition date + sign-aware days-gap ──
-        // days-gap convention (server-side): positive = satellite captured
-        // BEFORE incident; negative = AFTER. Render in plain English so
-        // analysts don't have to remember the sign.
-        let acqHtml = '';
-        if (v.satellite_acquisition_date) {
-            const acq = formatShortDate(v.satellite_acquisition_date);
-            const gap = (typeof v.satellite_days_gap === 'number') ? v.satellite_days_gap : null;
-            let gapLabel = '';
-            let gapColor = '#94a3b8'; // default neutral
-            if (gap !== null) {
-                if (gap === 0) {
-                    gapLabel = 'same day as incident';
-                    gapColor = '#22c55e';
-                } else if (gap > 0) {
-                    gapLabel = `${gap}d before incident`;
-                    // Older imagery → less reliable for damage corroboration.
-                    gapColor = gap <= 3 ? '#22c55e' : gap <= 14 ? '#eab308' : '#f97316';
-                } else {
-                    const after = Math.abs(gap);
-                    gapLabel = `${after}d after incident`;
-                    // Post-incident imagery is the gold standard for damage.
-                    gapColor = after <= 7 ? '#22c55e' : after <= 30 ? '#eab308' : '#f97316';
-                }
-            }
-            acqHtml = `<span class="dp-sat-meta-chip" style="border-color:${gapColor}40;">
-                <i class="fa-regular fa-calendar"></i>
-                <span style="color:#cbd5e1;">${acq}</span>
-                ${gapLabel ? `<span style="color:${gapColor};font-weight:600;">· ${gapLabel}</span>` : ''}
-            </span>`;
-        }
-
-        // ── Cloud cover (colour-coded badge) ──
-        let cloudHtml = '';
-        if (typeof v.satellite_cloud_cover_pct === 'number') {
-            const c = v.satellite_cloud_cover_pct;
-            const cloudColor = c <= 30 ? '#22c55e' : c <= 70 ? '#eab308' : '#ef4444';
-            cloudHtml = `<span class="dp-sat-meta-chip" style="border-color:${cloudColor}40;">
-                <i class="fa-solid fa-cloud" style="color:${cloudColor};"></i>
-                <span style="color:#cbd5e1;font-weight:600;">${c.toFixed(0)}% cloud</span>
-            </span>`;
-        }
-
-        // ── Sources used (multi-provider count) ──
-        let sourcesHtml = '';
-        const allSources = Array.isArray(v.satellite_images) ? v.satellite_images : [];
-        if (allSources.length >= 2) {
-            sourcesHtml = `<span class="dp-sat-meta-chip" title="${allSources.map(s => s.source || '').filter(Boolean).join(' · ')}">
-                <i class="fa-solid fa-layer-group"></i>
-                <span style="color:#cbd5e1;font-weight:600;">${allSources.length} sources</span>
-            </span>`;
-        } else if (v.satellite_source) {
-            // Single-source legacy verification - show the one source.
-            const shortSrc = v.satellite_source.split('(')[0].trim();
-            sourcesHtml = `<span class="dp-sat-meta-chip" title="${v.satellite_source}">
-                <i class="fa-solid fa-satellite-dish"></i>
-                <span style="color:#cbd5e1;font-weight:600;">${shortSrc}</span>
-            </span>`;
-        }
-
-        // ── "Last verified" timestamp + re-verify CTA ──
-        // `scored_at` is set server-side (Phase B.2). Falls back to a
-        // generic "Verified" label if older rows lack the timestamp.
-        const scoredAt = v.scored_at;
-        const lastVerifiedHtml = scoredAt
-            ? `<span class="dp-sat-meta-chip" title="Last AI verification run: ${new Date(ensureUTC(scoredAt)).toLocaleString()}">
-                <i class="fa-solid fa-clock-rotate-left"></i>
-                <span style="color:#cbd5e1;">${timeAgo(scoredAt)}</span>
-              </span>`
-            : `<span class="dp-sat-meta-chip">
-                <i class="fa-solid fa-circle-check" style="color:${gc};"></i>
-                <span style="color:#cbd5e1;">Verified</span>
-              </span>`;
-
-        // ── High-cloud advisory ──
-        // When primary source is heavily clouded AND damage_corroboration
-        // is low, surface a one-liner so analysts don't over-trust the
-        // score. Threshold matches the rubric's typical "weak evidence"
-        // range (damage ≤ 10/25 ≈ 40% confidence on damage).
-        const damageScore = v.scores?.damage_corroboration ?? 25;
-        const cloudPct = v.satellite_cloud_cover_pct ?? 0;
-        const cloudWarning = (cloudPct > 70 && damageScore <= 10)
-            ? `<div class="dp-sat-warning"><i class="fa-solid fa-triangle-exclamation"></i>
-                Heavy cloud cover may have reduced visible damage detection - consider re-verifying after the next clear pass.
-              </div>`
-            : '';
-
-        return `
-        <div class="dp-sat-result">
-            <div class="dp-sat-header-row">
-                <i class="fa-solid fa-satellite" style="color:${gc};font-size:12px;"></i>
-                <span style="font-size:13px;font-weight:800;color:${gc};">${total}/100</span>
-                <span style="font-size:11px;font-weight:700;color:${gc};text-transform:uppercase;">${vLabel}</span>
-                <div class="dp-sat-bar"><div class="dp-sat-bar-fill" style="width:${total}%;background:${gc};"></div></div>
-            </div>
-            ${(acqHtml || cloudHtml || sourcesHtml || lastVerifiedHtml) ? `
-            <div class="dp-sat-meta-row">
-                ${acqHtml}${cloudHtml}${sourcesHtml}${lastVerifiedHtml}
-            </div>` : ''}
-            ${cloudWarning}
-            <p class="dp-sat-para">${paragraph}${parts.join(' ').length > 250 ? '…' : ''}</p>
-            <div class="dp-sat-actions">
-                <button class="dp-reverify-btn" onclick="runVerification('${r.id}')" title="Re-run AI satellite verification (~25s)">
-                    <i class="fa-solid fa-rotate"></i> Re-verify
-                </button>
-                <button class="dp-share-evidence-btn" onclick="copyEvidenceLink('${r.id}')" title="Copy a public link to this verification - share with judges or partners">
-                    <i class="fa-solid fa-share-nodes"></i> Share evidence
-                </button>
-            </div>
-        </div>`;
-    })();
 
     // ── Build decision-first detail panel ──
     // Header: type + severity + status + confidence + time
@@ -4760,18 +6237,38 @@ window.selectReport = (id, skipFly = false) => {
         <i class="fa-solid ${infraIcon}" style="color:${sevColor};"></i>
         ${infraDisplayLabel(r.infrastructure_type, r.infrastructure_sub_type)}
         <span class="detail-sev-badge detail-sev-${r.severity}">${r.severity}</span>
-        <span class="status-badge status-${r.status}">${r.status}</span>
-        <span class="dp-source-badge dp-src-${(r.source || 'APP').toLowerCase()}" title="Reported via ${{APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i> App',ANDROID:'<i class="fa-solid fa-robot"></i> Android',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i> WhatsApp',TELEGRAM:'<i class="fa-brands fa-telegram"></i> Telegram',SMS:'<i class="fa-solid fa-comment-sms"></i> SMS',IVR:'<i class="fa-solid fa-phone"></i> Call'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i> App'}</span>
-        <span class="dp-time-badge">${timeAgo(r.server_created_at)}</span>
+        ${(() => { const ds = _displayStatus(r); const _age = timeAgo(r.server_created_at); return `<span class="dp-display-status dp-ds-${ds.cls}" title="${ds.title}">${ds.label}${_age ? ` · ${_age}` : ''}</span>`; })()}
+        ${(() => {
+            // UX-B: the channel badge IS the source entry-point. Click reveals a popover
+            // with full channel name + Report ID + submitted + media - replacing the
+            // separate "Source Details" section. (The standalone time badge is gone too;
+            // the age now lives on the status pill.)
+            const src = r.source || 'APP';
+            const SHORT = {APP:'<i class="fa-solid fa-mobile-screen-button"></i> App',ANDROID:'<i class="fa-solid fa-robot"></i> Android',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i> WhatsApp',TELEGRAM:'<i class="fa-brands fa-telegram"></i> Telegram',SMS:'<i class="fa-solid fa-comment-sms"></i> SMS',IVR:'<i class="fa-solid fa-phone"></i> Call'};
+            const FULL = {APP:'Progressive Web App',ANDROID:'Android App',WHATSAPP:'WhatsApp Bot',TELEGRAM:'Telegram Bot',SMS:'SMS Gateway',IVR:'IVR Voice Call'};
+            const submitted = new Date(ensureUTC(r.server_created_at)).toLocaleString();
+            return `<span class="dp-src-wrap">
+                <button class="dp-source-badge dp-src-${src.toLowerCase()}" title="Source - click for details"
+                        onclick="event.stopPropagation(); const p=this.nextElementSibling; const open=p.classList.toggle('open'); if(open){const c=ev=>{if(!this.parentElement.contains(ev.target)){p.classList.remove('open');document.removeEventListener('click',c);}}; setTimeout(()=>document.addEventListener('click',c),0);}">
+                    ${SHORT[src]||SHORT.APP} <i class="fa-solid fa-angle-down dp-src-caret"></i></button>
+                <div class="dp-src-pop">
+                    <div class="dp-src-pop-row"><span class="dp-src-pop-k">Channel</span><span>${FULL[src]||FULL.APP}</span></div>
+                    <div class="dp-src-pop-row"><span class="dp-src-pop-k">Report ID</span><span class="dp-src-pop-id">${r.id.substring(0,12)}… <button class="dp-copy-btn" onclick="event.stopPropagation();navigator.clipboard.writeText('${r.id}');showToast('Report ID copied','success')"><i class="fa-solid fa-copy"></i></button></span></div>
+                    <div class="dp-src-pop-row"><span class="dp-src-pop-k">Media</span><span>${r.received_media}/${r.expected_media} received</span></div>
+                    <div class="dp-src-pop-row"><span class="dp-src-pop-k">Submitted</span><span>${submitted}</span></div>
+                </div>
+            </span>`;
+        })()}
     `;
 
     // Urgency alerts
     const urgencyHtml = (() => {
         const alerts = [];
-        if (r.severity === 'CRITICAL') alerts.push('<span class="dp-urgency dp-urgency-red"><i class="fa-solid fa-circle-exclamation"></i> CRITICAL SEVERITY</span>');
+        // Severity is shown ONCE on the header badge - no "CRITICAL SEVERITY" echo here.
         if (isCriticalInfra) alerts.push(`<span class="dp-urgency dp-urgency-red"><i class="fa-solid fa-building-shield"></i> Critical Infrastructure</span>`);
-        if (nearbyCount > 0) alerts.push(`<span class="dp-urgency dp-urgency-amber"><i class="fa-solid fa-layer-group"></i> ${nearbyCount} more report${nearbyCount > 1 ? 's' : ''} nearby</span>`);
-        if (waitMin > 30 && (r.status === 'PENDING' || r.status === 'VERIFIED')) alerts.push(`<span class="dp-urgency dp-urgency-red"><i class="fa-solid fa-clock"></i> Waiting ${waitMin > 60 ? Math.floor(waitMin/60) + 'h ' + (waitMin%60) + 'm' : waitMin + 'm'}</span>`);
+        if (nearbyCount > 0) alerts.push(`<button class="dp-urgency dp-urgency-amber dp-nearby-cta" onclick="event.stopPropagation();_showNearbyModal('${r.id}')" title="Show the nearby incidents"><i class="fa-solid fa-layer-group"></i> ${nearbyCount} more report${nearbyCount > 1 ? 's' : ''} nearby <i class="fa-solid fa-chevron-right dp-nearby-caret"></i></button>`);
+        // UX-A: "Waiting Xm" removed - the status pill now carries the age
+        // ("Needs review · 42m ago"), so this was a third copy of the same fact.
         return alerts.length ? `<div class="dp-urgency-bar">${alerts.join('')}</div>` : '';
     })();
 
@@ -4800,7 +6297,10 @@ window.selectReport = (id, skipFly = false) => {
     const allAudioMedia = r.media?.filter(m => m.type === 'AUDIO') || [];
 
     // ── Conditional evidence visibility ──
-    const hasVisualEvidence = img || (v && satSrc);
+    // Evidence is the CITIZEN'S media only (photo + audio). Satellite analysis
+    // now lives entirely inside the Confidence Assessment breakdown, so the
+    // operator never leaves the assessment to review satellite evidence.
+    const hasVisualEvidence = !!img;
     const isVoiceOrText = ['IVR','SMS'].includes(r.source);
 
     // Quick summary text for top bar (for data-rich sources only)
@@ -4837,7 +6337,12 @@ window.selectReport = (id, skipFly = false) => {
             : r.status === 'RESPONDING' ? ' · responder on the way'
             : r.status === 'FALSE_ALARM' ? ' · false alarm'
             : '';
-        return `${infraLbl}${locShort ? ' at ' + locShort : ''} - ${sevLbl}${waitChunk || respChunk}.`;
+        // Header is IDENTITY-ONLY: severity lives on the header badge and elapsed
+        // on the time badge / Waiting chip, so neither is repeated here (kills the
+        // CRITICAL-3x / waiting-2x duplication). waitChunk/respChunk/sevLbl retained
+        // above only as documentation of what used to live here.
+        void sevLbl; void waitChunk; void respChunk;
+        return `${infraLbl}${locShort ? ' at ' + locShort : ''}`;
     })();
 
     // Breadcrumb (P3b) - keeps the Global vs Operation context visible while the
@@ -4845,12 +6350,20 @@ window.selectReport = (id, skipFly = false) => {
     // Incident". Segments are clickable to step back out to that scope.
     const _bcArrow = '<i class="fa-solid fa-angle-right dp-bc-sep" aria-hidden="true"></i>';
     const _gSeg = '<a class="dp-bc-seg" onclick="window.__crispRouter&&window.__crispRouter.navigate(\'/incidents\')">Global</a>';
-    const _bc = r.crisis_event_id
-        ? _gSeg + _bcArrow
-          + '<a class="dp-bc-seg" onclick="window.__crispRouter&&window.__crispRouter.navigate(\'/operations\')">Operations</a>' + _bcArrow
-          + `<a class="dp-bc-seg dp-bc-op" onclick="window.location.hash='#/operations/'+encodeURIComponent('${r.crisis_event_id}')">${escapeHtml(r.crisis_event_name || 'Operation')}</a>` + _bcArrow
-          + '<span class="dp-bc-cur">Incident</span>'
-        : _gSeg + _bcArrow + '<span class="dp-bc-cur">Incident</span>';
+    // Full operational hierarchy: Global › [Operation] › [Building] › Incident.
+    // The Operation segment shows when the report is claimed by an operation
+    // (→ its dashboard); the Building segment shows when the report is tagged to
+    // a building (→ the Building Console). Both are optional, so an unassigned
+    // report with no building is just "Global › #id". (The building also still
+    // appears in the Location & Building section - the crumb is the nav spine.)
+    const _idSeg = `<span class="dp-bc-cur" title="Incident report ${escapeHtml(r.id)}">#${escapeHtml(String(r.id).slice(0, 8))}</span>`;
+    const _opSeg = r.crisis_event_id
+        ? `<a class="dp-bc-seg dp-bc-op" onclick="window.location.hash='#/operations/'+encodeURIComponent('${r.crisis_event_id}')">${escapeHtml(r.crisis_event_name || 'Operation')}</a>` + _bcArrow
+        : '';
+    const _bldgSeg = r.building_id
+        ? `<a class="dp-bc-seg dp-bc-bldg" onclick="window.openBuildingConsole&&window.openBuildingConsole(decodeURIComponent('${encodeURIComponent(r.building_id)}'))">${escapeHtml(r.infrastructure_name || 'Building')}</a>` + _bcArrow
+        : '';
+    const _bc = _gSeg + _bcArrow + _opSeg + _bldgSeg + _idSeg;
 
     document.getElementById('detail-body').innerHTML = `
         <!-- Phase J.2 - operator headline + 6-section restructure.
@@ -4862,71 +6375,56 @@ window.selectReport = (id, skipFly = false) => {
              (Incident Summary + Response Actions) per operator
              confirmation. -->
         <nav class="dp-breadcrumb" aria-label="Breadcrumb">${_bc}</nav>
-        <div class="dp-headline" title="${escapeHtml(_headline)}">${escapeHtml(_headline)}</div>
+        <!-- Dedup: the old dp-headline ("{type} at {place}") is REMOVED - the type
+             lives once in the header title and the place lives once in the
+             Location & Building section. -->
         ${(() => { const _sc = _incidentStatusChips(r); return _sc ? `<div class="dp-status-chips">${_sc}</div>` : ''; })()}
+        <!-- Report Assessment: the ONE Confidence Score card. Clicking it opens
+             the investigative workspace (composition · satellite · duplicates ·
+             evidence · AI reasoning) - duplicate analysis lives there now, not as
+             a separate panel section. -->
+        ${_renderIncidentAssessment(r)}
         <!-- ① TOP: Credibility Check result OR "Credibility Check" button -->
         <div class="dp-action-bar">
-            <div class="dp-top-row">
-                <div class="dp-quick-summary">
-                    ${cachedAA ? (() => {
-                        const ac = aaAction.includes('Dispatch') ? '#22c55e' : aaAction.includes('False') ? '#ef4444' : aaAction.includes('Suspicious') ? '#f97316' : '#eab308';
-                        const cc = aaScore >= 70 ? '#22c55e' : aaScore >= 50 ? '#eab308' : aaScore >= 30 ? '#f97316' : '#ef4444';
-                        const priority = cachedAA.priority_level || '';
-                        const pColor = priority.includes('P1') ? '#ef4444' : priority.includes('P2') ? '#f97316' : priority.includes('P3') ? '#eab308' : priority.includes('P4') ? '#3b82f6' : '#64748b';
-                        const lives = cachedAA.lives_at_risk_estimate || '';
-                        const keyFactors = cachedAA.key_factors || [];
-                        const riskFlags = cachedAA.risk_flags || [];
-                        return `<div class="dp-top-ai">
-                            <div class="dp-top-ai-row">
-                                ${priority ? `<span class="dp-priority-badge" style="background:${pColor};">${priority.replace('_',' ')}</span>` : ''}
-                                <span class="dp-top-ai-score" style="color:${cc};">${aaScore}<small>/100</small></span>
-                                <span class="dp-top-ai-action" style="color:${ac};">${aaAction}</span>
-                                <button class="dp-ai-info-btn" onclick="event.stopPropagation();showAILogic('${r.id}')" title="View credibility reasoning"><i class="fa-solid fa-circle-info"></i></button>
-                            </div>
-                            ${lives ? `<div class="dp-lives-risk"><i class="fa-solid fa-people-group"></i> <strong>${lives}</strong> lives at risk</div>` : ''}
-                            <p class="dp-summary-text">${aaSummary}</p>
-                            ${keyFactors.length ? `<div class="dp-key-factors">${keyFactors.slice(0,3).map(f => `<span class="dp-factor-chip"><i class="fa-solid fa-check-circle"></i> ${escapeHtml(f)}</span>`).join('')}</div>` : ''}
-                            ${riskFlags.length ? `<div class="dp-risk-flags">${riskFlags.map(f => `<span class="dp-flag-chip"><i class="fa-solid fa-exclamation-triangle"></i> ${escapeHtml(f)}</span>`).join('')}</div>` : ''}
-                        </div>`;
-                    })() : `<button class="dp-run-ai-btn" onclick="runAIAssessment('${r.id}')"><i class="fa-solid fa-shield-halved"></i> Credibility Check</button>`}
-                </div>
-                <button class="dp-pdf-btn" onclick="exportPDF('${r.id}')" title="Export PDF"><i class="fa-solid fa-file-pdf"></i></button>
-                <button class="dp-pdf-btn" onclick="downloadEvidenceBundle('${r.id}')" title="Evidence bundle (ZIP) - photos, audio, satellite snapshots + verification JSON for offline review"><i class="fa-solid fa-file-zipper"></i></button>
-            </div>
-            <!-- Phase 5 (Apr 2026) - Reviewer actions + response-time strip.
-                 Lives above the existing dispatch/resolve/false-alarm row so
-                 analysts see the verdict + response-time context before
-                 deciding to send help. -->
-            ${_renderReviewerActions(r)}
-            <!-- Phase J.2 (May 2026) - primary CTA + overflow.
-                 Send Help is the always-visible primary action.
-                 False Alarm now lives inside the Verdict dropdown
-                 above. Delete moves into the overflow menu so the
-                 always-visible button cluster reads as a calm
-                 action surface, not a noisy command palette. -->
-            <div class="dp-action-buttons">
-                ${r.status === 'PENDING' || r.status === 'VERIFIED'
-                    ? `<button class="dp-act-main dp-act-dispatch" onclick="patchReport('${r.id}','dispatch')"><i class="fa-solid fa-hands-helping"></i> Send Help</button>`
-                    : `<span class="dp-act-status"><i class="fa-solid fa-circle-check"></i> Help Sent</span>`}
-                <div class="dp-overflow-wrap" id="dp-overflow-${r.id}" style="position:relative;display:inline-flex;">
-                    <button class="dp-overflow-btn"
-                            onclick="event.stopPropagation();this.parentElement.classList.toggle('open')"
-                            title="More actions">
-                        <i class="fa-solid fa-ellipsis"></i>
-                    </button>
-                    <div class="dp-overflow-menu">
-                        <button onclick="exportPDF('${r.id}');this.closest('.dp-overflow-wrap').classList.remove('open')">
-                            <i class="fa-regular fa-file-pdf"></i> Export PDF
-                        </button>
-                        ${r.status !== 'FALSE_ALARM'
-                            ? `<button onclick="patchReport('${r.id}','false-alarm');this.closest('.dp-overflow-wrap').classList.remove('open')">
-                                  <i class="fa-solid fa-ban"></i> Mark false alarm
-                              </button>` : ''}
-                        <button class="dp-overflow-danger"
-                                onclick="if(confirm('Delete this report?'))deleteReport('${r.id}');this.closest('.dp-overflow-wrap').classList.remove('open')">
-                            <i class="fa-solid fa-trash-can"></i> Delete report
-                        </button>
+            <!-- Credibility now lives in the single Incident Assessment section
+                 above; PDF/ZIP export stays here until the Export & Share
+                 section lands (Phase D). -->
+            <!-- UX-I: single-incident Export menu - only the formats that apply to ONE
+                 incident; the aggregate formats live in the full Export Center (link). -->
+            <div class="dp-top-row dp-top-row-export">
+                <div class="dp-export-wrap">
+                    <button class="dp-export-btn" title="Export this incident"
+                            onclick="event.stopPropagation(); const mn=this.nextElementSibling; const o=mn.classList.toggle('open'); if(o){const c=ev=>{if(!this.parentElement.contains(ev.target)){mn.classList.remove('open');document.removeEventListener('click',c);}};setTimeout(()=>document.addEventListener('click',c),0);}">
+                        <i class="fa-solid fa-file-export"></i> Export <i class="fa-solid fa-angle-down dp-export-caret"></i></button>
+                    <div class="dp-export-menu">
+                        <div class="dp-export-grp">This incident</div>
+                        <button onclick="exportPDF('${r.id}');this.closest('.dp-export-menu').classList.remove('open')"><i class="fa-regular fa-file-pdf"></i> Incident PDF</button>
+                        <button onclick="downloadEvidenceBundle('${r.id}');this.closest('.dp-export-menu').classList.remove('open')"><i class="fa-solid fa-file-zipper"></i> Evidence bundle (ZIP)</button>
+                        <button onclick="exportIncidentFormat('${r.id}','geojson');this.closest('.dp-export-menu').classList.remove('open')"><i class="fa-solid fa-earth-americas"></i> GeoJSON</button>
+                        <button onclick="exportIncidentFormat('${r.id}','kml');this.closest('.dp-export-menu').classList.remove('open')"><i class="fa-solid fa-globe"></i> KML</button>
+                        <button onclick="exportIncidentFormat('${r.id}','csv');this.closest('.dp-export-menu').classList.remove('open')"><i class="fa-solid fa-table-list"></i> CSV</button>
+                        <div class="dp-export-div"></div>
+                        <button class="dp-export-link" onclick="(window.__crispRouter&&window.__crispRouter.navigate)?window.__crispRouter.navigate('/exports'):(window.location.hash='#/exports');this.closest('.dp-export-menu').classList.remove('open')"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open full Export Center…</button>
                     </div>
+                </div>
+            </div>
+            <!-- Actions (Jun 2026 simplification): ONE state-aware primary
+                 (Notify Response Team = always dispatch + notify the reporter's
+                 PWA, a dummy responder set) + exactly two decision buttons,
+                 Reject and Delete. The verdict dropdown, Mark dispatched / on-site,
+                 lives counter, false-alarm and the overflow menu were dropped for
+                 least cognitive load. -->
+            <div class="dp-actions">
+                ${r.status === 'PENDING' || r.status === 'VERIFIED'
+                    ? `<button class="dp-act-primary dp-act-respond" onclick="notifyResponseTeam('${r.id}')"><i class="fa-solid fa-tower-broadcast"></i> Notify Response Team</button>`
+                    : r.status === 'RESPONDING'
+                        ? `<button class="dp-act-primary dp-act-resolve" onclick="patchReport('${r.id}','resolve')"><i class="fa-solid fa-circle-check"></i> Mark Resolved</button>`
+                        : r.status === 'RESOLVED'
+                            ? `<div class="dp-act-done"><i class="fa-solid fa-circle-check"></i> Resolved</div>`
+                            : `<div class="dp-act-done dp-act-done-muted"><i class="fa-solid fa-ban"></i> ${escapeHtml(_displayStatus(r).label)}</div>`}
+                <div class="dp-actions-row2">
+                    <button class="dp-act-2 dp-act-reject" onclick="openRejectModal('${r.id}')"><i class="fa-solid fa-circle-xmark"></i> Reject</button>
+                    <button class="dp-act-2 dp-act-delete" onclick="openDeleteModal('${r.id}')"><i class="fa-solid fa-trash-can"></i> Delete</button>
                 </div>
             </div>
         </div>
@@ -4939,93 +6437,53 @@ window.selectReport = (id, skipFly = false) => {
              keep the panel compact on first open; click "Timeline" to
              expand. Pure dashboard-side render from the data the LIST
              endpoint already returns - no backend changes. -->
-        <!-- Phase J.2 (May 2026) - collapsible Activity Log section.
-             Wraps F.2.b's audit ribbon into a default-collapsed
-             card so admin actions are one click away but don't add
-             to the always-visible CTA inventory. Hidden entirely
-             when the ribbon has no entries (set by
-             _fetchReportAuditTrail). -->
-        <details class="dp-section dp-section-activity" id="dp-section-activity-${r.id}">
+        <!-- UX-E: ONE "History" accordion = the lifecycle timeline + the admin
+             audit ribbon (was two separate Timeline / Activity Log accordions -
+             both are chronological "what happened + who acted"). The audit ribbon
+             self-hides when empty (via _fetchReportAuditTrail); the timeline is
+             always present, so the History section itself is never auto-hidden
+             (no dp-section-activity id here). -->
+        <details class="dp-section dp-section-history" open>
             <summary class="dp-section-header">
-                <i class="fa-solid fa-user-shield"></i>
-                <span data-i18n="detail_admin_actions">Activity Log</span>
+                <i class="fa-solid fa-clock-rotate-left"></i>
+                <span data-i18n="detail_history">History</span>
                 <i class="fa-solid fa-chevron-down dp-section-caret"></i>
             </summary>
             <div class="dp-section-body">
+                ${_renderIncidentTimeline(r)}
                 <div class="dp-audit-ribbon" id="dp-audit-ribbon-${r.id}" data-report-id="${r.id}">
                     <div class="dp-audit-loading"><i class="fa-regular fa-clock"></i> Loading admin actions…</div>
                 </div>
             </div>
         </details>
 
-        <!-- Phase J.2 - collapsible Timeline section. Was always-visible
-             before; now collapsed by default so the panel reads calmer.
-             Click summary to expand. -->
-        <details class="dp-section dp-section-timeline">
-            <summary class="dp-section-header">
-                <i class="fa-solid fa-timeline"></i>
-                <span data-i18n="detail_timeline">Timeline</span>
-                <i class="fa-solid fa-chevron-down dp-section-caret"></i>
-            </summary>
-            <div class="dp-section-body">
-                ${_renderIncidentTimeline(r)}
-            </div>
-        </details>
-
         <!-- ② Urgency alerts -->
         ${urgencyHtml}
 
-        <!-- ②b UNDP fields -->
-        ${r.crisis_type || r.damage_classification || r.infrastructure_name || r.building_id || r.service_status || r.form_pack_id ? `
+        <!-- ②b Incident attributes ONLY (crisis type / damage / debris / reporter /
+             crisis-form). Building + location items (infrastructure_name, building
+             history, version, needs-mapping) moved to the Location & Building
+             section so each appears exactly once. -->
+        ${r.crisis_type || r.damage_classification || r.debris_clearing_needed || r.service_status || r.form_pack_id || r.reporter_badge ? `
+        <!-- Wider panel: attributes are a calm, always-visible chip row in the Summary
+             glance (no longer a collapsed accordion) - fewer clicks, less scroll. -->
+        <div class="dp-attrs">
         <div class="dp-undp-fields" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;">
-            ${r.crisis_type ? `<span class="dp-field-badge" style="background:rgba(124,58,237,0.15);color:#a78bfa;"><i class="fa-solid fa-cloud-bolt"></i> ${crisisLabel(r.crisis_type)}</span>` : ''}
-            ${r.damage_classification ? `<span class="dp-field-badge" style="background:${r.damage_classification==='COMPLETE'?'rgba(239,68,68,0.15);color:#f87171':r.damage_classification==='PARTIAL'?'rgba(249,115,22,0.15);color:#fb923c':'rgba(34,197,94,0.15);color:#4ade80'};"><i class="fa-solid fa-building-circle-xmark"></i> ${r.damage_classification.replace(/_/g,' ')}</span>` : ''}
-            ${r.infrastructure_name ? `<span class="dp-field-badge" style="background:rgba(59,130,246,0.15);color:#93c5fd;"><i class="fa-solid fa-building"></i> ${escapeHtml(r.infrastructure_name)}</span>` : ''}
-            ${r.debris_clearing_needed ? `<span class="dp-field-badge" style="background:rgba(245,158,11,0.15);color:#fbbf24;"><i class="fa-solid fa-truck-pickup"></i> Debris clearing</span>` : ''}
-            ${r.building_id ? `<span class="dp-field-badge dp-building-link" style="background:rgba(99,102,241,0.15);color:#a5b4fc;cursor:pointer;" onclick="filterByBuilding('${r.building_id}')"><i class="fa-solid fa-timeline"></i> Building history</span>` : ''}
-            <!-- Phase 1 reporter badge: masked "User abc12345" derived server-side
-                 in ReportResponse._compute_identity_badge. Anonymous rows skip
-                 this span entirely. ADMIN clicks open the profile drawer. -->
-            ${r.reporter_badge ? `<span class="dp-field-badge dp-reporter-badge" style="background:rgba(34,197,94,0.12);color:#86efac;cursor:${r.user_id ? 'pointer' : 'default'};" ${r.user_id ? `onclick="openReporterProfile('${r.user_id}')"` : ''} title="${r.user_id ? 'Click to view reporter details (admin only)' : ''}"><i class="fa-solid fa-user-check"></i> ${escapeHtml(r.reporter_badge)}</span>` : ''}
+            <!-- UX-F: attribute chips are CALM-neutral. Saturated colour is reserved for
+                 the two decision signals only - severity (header) + credibility (Assessment). -->
+            ${r.crisis_type ? `<span class="dp-field-badge dp-attr"><i class="fa-solid fa-cloud-bolt"></i> ${crisisLabel(r.crisis_type)}</span>` : ''}
+            ${r.damage_classification ? `<span class="dp-field-badge dp-attr"><i class="fa-solid fa-building-circle-xmark"></i> ${r.damage_classification.replace(/_/g,' ')}</span>` : ''}
+            ${r.debris_clearing_needed ? `<span class="dp-field-badge dp-attr"><i class="fa-solid fa-truck-pickup"></i> Debris clearing</span>` : ''}
+            <!-- masked reporter identity badge (neutral). Reporter TRUST (tier/score) is
+                 NOT a chip here - it lives once in the Assessment "Reporter" segment (UX-C). -->
+            ${r.reporter_badge ? `<span class="dp-field-badge dp-attr dp-reporter-badge" style="cursor:${r.user_id ? 'pointer' : 'default'};" ${r.user_id ? `onclick="openReporterProfile('${r.user_id}')"` : ''} title="${r.user_id ? 'Click to view reporter details (admin only)' : ''}"><i class="fa-solid fa-user-check"></i> ${escapeHtml(r.reporter_badge)}</span>` : ''}
             ${_isStaleArrival(r) ? `<span class="dp-field-badge dp-stale-arrival" title="Reporter captured this offline. The report was drained from the device's pending queue on reconnect ${timeAgo(r.server_created_at)}."><i class="fa-solid fa-cloud-arrow-up"></i> Offline-queued · Captured ${timeAgo(r.client_created_at)}</span>` : ''}
-            <!-- Phase 1.6 (May 2026) - Reporter tier badge. Surfaces the
-                 V4 gamification ladder (T1_SCOUT to T4_LIFEKEEPER) so
-                 analysts can see at a glance whether the reporter is a
-                 newcomer or a trusted veteran. The tier is server-derived
-                 from the linked ReporterProfile (see _attach_reporter_tier
-                 in backend/app/api/endpoints/reports.py). NULL = no
-                 profile yet OR legacy badge_level - we explicitly do NOT
-                 render T1_SCOUT-by-default to avoid visual confusion.
-                 Phase 2.1 - reads metadata from the shared canonical
-                 config at window.CRISP_TIERS_BY_ID (sourced from
-                 shared/tier-config.json). -->
-            ${r.reporter_tier ? (() => {
-                const meta = (window.CRISP_TIERS_BY_ID || {})[r.reporter_tier];
-                if (!meta) return '';
-                return `<span class="dp-field-badge dp-reporter-tier" data-tier="${r.reporter_tier}" style="background:rgba(255,255,255,0.06);color:${meta.color};" title="Reporter tier: ${meta.label} - ${meta.criterion}">${meta.emoji} ${meta.label}</span>`;
-            })() : ''}
-            <!-- Phase E (Apr 2026 UI v3) - "Needs mapping" badge.
-                 Fires when the reporter typed a building name in their
-                 native language (PWA free-text fallback, RN TextInput,
-                 Telegram STEP_BUILDING_NAME) without an OSM footprint
-                 resolving the row. Operators click the row to open detail,
-                 use the existing building-footprint picker on the dashboard
-                 to resolve it to an osm:way:<id>, and the badge drops.
-                 Derived server-side (see ReportResponse._compute_needs_manual_mapping)
-                 so every response surface stays consistent. -->
-            ${r.needs_manual_mapping === true ? `<span class="dp-field-badge dp-needs-mapping" style="background:rgba(239,68,68,0.16);color:#fca5a5;" title="The reporter typed the building name in their native language; resolve it to an OSM footprint."><i class="fa-solid fa-map-location-dot"></i> Needs mapping</span>` : ''}
-            <!-- W4 versioning ribbon (Apr 2026 UI v2.1). Static placeholder that's
-                 filled by dp-version-ribbon-${id} once ensureBuildingVersionIndex
-                 resolves. UNDP Appendix asks the system to bias display to the
-                 latest complete report for a given building; this ribbon makes
-                 the version ordinal + latest/older state visible on the detail
-                 panel. Green = latest, amber = older. Only rendered for reports
-                 with a building_id. -->
-            ${r.building_id ? `<span id="dp-version-ribbon-${r.id}" class="dp-field-badge dp-version-ribbon" style="background:rgba(148,163,184,0.12);color:#cbd5e1;"><i class="fa-solid fa-code-branch"></i> V …</span>` : ''}
+            <!-- Dedup: "Needs mapping" + the version ribbon moved to the
+                 Location & Building section (the single home for building facts). -->
             <!-- B3 - Dynamic Crisis Form provenance tag. Shows when the report came
                  through a geo-gated crisis pack; the pack title + event name are
                  resolved asynchronously post-render (see selectReport). -->
-            ${r.form_pack_id ? `<span id="dp-form-tag-${r.id}" class="dp-field-badge dp-crisis-form-tag" style="background:rgba(34,211,238,0.14);color:#67e8f9;" title="Submitted via a Dynamic Crisis Form pack"><i class="fa-solid fa-clipboard-list"></i> Crisis form${r.form_pack_version ? ` · v${r.form_pack_version}` : ''}</span>` : ''}
+            ${r.form_pack_id ? `<span id="dp-form-tag-${r.id}" class="dp-field-badge dp-attr dp-crisis-form-tag" title="Submitted via a Dynamic Crisis Form pack"><i class="fa-solid fa-clipboard-list"></i> Crisis form${r.form_pack_version ? ` · v${r.form_pack_version}` : ''}</span>` : ''}
         </div>
         ${r.service_status ? (() => {
             const ss = r.service_status;
@@ -5086,6 +6544,7 @@ window.selectReport = (id, skipFly = false) => {
             html += '</div>';
             return html;
         })() : ''}
+        </div>
         ` : ''}
 
         <!-- ②c Crisis-pack curated answers (Report.form_data) -->
@@ -5202,17 +6661,7 @@ window.selectReport = (id, skipFly = false) => {
                 </div>
             </div>`;
             })() : ''}
-            ${v && satSrc ? `<div class="dp-view-toggle">
-                <button class="dp-vt-btn active" onclick="dpSwitchView('${r.id}','photo',this)"><i class="fa-solid fa-camera"></i> Photo</button>
-                <button class="dp-vt-btn" onclick="dpSwitchView('${r.id}','sat',this)"><i class="fa-solid fa-satellite"></i> Satellite</button>
-                ${satAltSrc ? `<button class="dp-vt-btn" onclick="dpSwitchView('${r.id}','alt',this)"><i class="fa-solid fa-globe"></i> ${satAltLabel}</button>` : ''}
-                <button class="dp-vt-btn dp-vt-compare" onclick="dpSwitchView('${r.id}','compare',this)"><i class="fa-solid fa-columns"></i> Compare</button>
-            </div>` : ''}
-            ${v ? vGaugeHtml : _renderVerifyEmptyCTA(r.id)}
-        </div>` : `
-        <div class="dp-no-image-verify">
-            ${v ? vGaugeHtml : _renderVerifyEmptyCTA(r.id)}
-        </div>`}
+        </div>` : ''}
 
         <!-- ④ Audio + User Transcription -->
         ${displayText || allAudioMedia.length ? `
@@ -5249,7 +6698,11 @@ window.selectReport = (id, skipFly = false) => {
         ${loc || r.caller_info ? (() => {
             const mismatch = loc?.is_user_corrected && loc?.device_latitude && loc?.device_longitude;
             const distKm = mismatch ? Math.round(haversineKm(loc.latitude, loc.longitude, loc.device_latitude, loc.device_longitude)) : 0;
-            const userName = loc ? (loc.user_location_name || `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`) : '';
+            // Dedup: the place NAME (which used to live only in the deleted
+            // headline) and the COORDS are shown TOGETHER here. Name = user-entered
+            // else device reverse-geocoded; coords always shown beneath it.
+            const placeName = loc ? (loc.user_location_name || loc.device_location_name || '') : '';
+            const coordsStr = loc ? `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}` : '';
             const devName  = mismatch ? (loc.device_location_name || `${loc.device_latitude?.toFixed(4)}, ${loc.device_longitude?.toFixed(4)}`) : '';
             const ci = r.caller_info || {};
             const phone = ci.phone || '';
@@ -5267,17 +6720,30 @@ window.selectReport = (id, skipFly = false) => {
                 : gcConf >= 0.45 ? 'dp-geoconf-med'
                 : 'dp-geoconf-low';
             return `<div class="dp-loc-card ${mismatch ? 'dp-loc-mismatch' : ''}">
-                <div class="dp-section-label"><i class="fa-solid fa-location-dot"></i> Location${hasCallerInfo ? ' & Contact' : ''}</div>
-                ${loc ? `<div class="dp-loc-row">
+                <div class="dp-section-label"><i class="fa-solid fa-location-dot"></i> Location &amp; Building${hasCallerInfo ? ' · Contact' : ''}</div>
+                ${loc ? `
+                ${placeName ? `<div class="dp-loc-row">
                     <i class="fa-solid fa-map-pin" style="color:${sevColor};"></i>
-                    <span class="dp-loc-name">${userName}</span>
+                    <span class="dp-loc-name">${escapeHtml(placeName)}</span>
                     ${gcPct !== null ? `<span class="dp-geoconf ${gcCls}" title="Geocoded from voice/text via ${escapeHtml(gcSrc || 'unknown')} - ${gcPct}% confidence"><i class="fa-solid fa-wand-magic-sparkles"></i> ${gcPct}%${gcSrc ? ` · ${escapeHtml(gcSrc)}` : ''}</span>` : ''}
-                    <button class="dp-copy-btn" onclick="navigator.clipboard.writeText('${loc.latitude}, ${loc.longitude}'); showToast('Coords copied','success')"><i class="fa-solid fa-copy"></i></button>
+                </div>` : ''}
+                <div class="dp-loc-row dp-loc-coords">
+                    <i class="fa-solid fa-location-crosshairs" style="color:#94a3b8;"></i>
+                    <span class="dp-loc-coordval">${coordsStr}</span>
+                    <button class="dp-copy-btn" onclick="navigator.clipboard.writeText('${coordsStr}'); showToast('Coords copied','success')"><i class="fa-solid fa-copy"></i></button>
                 </div>` : ''}
                 ${mismatch ? `<div class="dp-loc-row dp-loc-device">
                     <i class="fa-solid fa-mobile-screen" style="color:#94a3b8;"></i>
                     <span class="dp-loc-name" style="color:var(--text-sub);">${devName}</span>
                     <span class="dp-loc-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${distKm}km mismatch</span>
+                </div>` : ''}
+                ${(r.building_id || r.infrastructure_name) ? `<div class="dp-loc-divider"></div>
+                <div class="dp-loc-row dp-loc-building">
+                    <i class="fa-solid fa-building" style="color:#93c5fd;"></i>
+                    ${r.building_id
+                        ? `<button class="dp-loc-name dp-bldg-link" title="Open the Building Console - all reports for this building" onclick="window.openBuildingConsole&&window.openBuildingConsole(decodeURIComponent('${encodeURIComponent(r.building_id)}'))">${r.infrastructure_name ? escapeHtml(r.infrastructure_name) : 'Building'} <i class="fa-solid fa-arrow-up-right-from-square dp-bldg-link-ic"></i></button>`
+                        : `<span class="dp-loc-name">${r.infrastructure_name ? escapeHtml(r.infrastructure_name) : 'Building'}</span>`}
+                    ${r.needs_manual_mapping === true ? `<span class="dp-loc-needsmap" title="Reporter typed the building name; resolve it to an OSM footprint."><i class="fa-solid fa-map-location-dot"></i> Needs mapping</span>` : ''}
                 </div>` : ''}
                 ${hasCallerInfo ? `<div class="dp-loc-divider"></div>` : ''}
                 ${phone ? `<div class="dp-loc-row">
@@ -5292,18 +6758,9 @@ window.selectReport = (id, skipFly = false) => {
             </div>`;
         })() : ''}
 
-        <!-- ⑥ Source Details (collapsible) -->
-        <div class="dp-source-details">
-            <button class="dp-expand-btn" onclick="const el=document.getElementById('dp-source-body');const ic=this.querySelector('i');if(el.style.display==='none'){el.style.display='block';ic.classList.replace('fa-chevron-down','fa-chevron-up');}else{el.style.display='none';ic.classList.replace('fa-chevron-up','fa-chevron-down');}">
-                <i class="fa-solid fa-chevron-down"></i> <span style="color:${{APP:'#7c3aed',WHATSAPP:'#25d366',TELEGRAM:'#26a5e4',SMS:'#f59e0b',IVR:'#ec4899'}[r.source] || '#94a3b8'};">Source Details - ${{APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || r.source}</span>
-            </button>
-            <div id="dp-source-body" style="display:none;" class="dp-source-detail-body">
-                <div class="dp-meta-row"><span class="dp-meta-key">Channel</span><span>${{APP:'Progressive Web App',WHATSAPP:'WhatsApp Bot',TELEGRAM:'Telegram Bot',SMS:'SMS Gateway',IVR:'IVR Voice Call'}[r.source] || r.source}</span></div>
-                <div class="dp-meta-row"><span class="dp-meta-key">Report ID</span><span style="font-family:monospace;font-size:11px;">${r.id.substring(0,12)}…</span></div>
-                <div class="dp-meta-row"><span class="dp-meta-key">Media</span><span>${r.received_media}/${r.expected_media} received</span></div>
-                <div class="dp-meta-row"><span class="dp-meta-key">Submitted</span><span>${new Date(ensureUTC(r.server_created_at)).toLocaleString()}</span></div>
-            </div>
-        </div>
+        <!-- UX-B: the standalone "Source Details" section is REMOVED - its
+             channel / Report ID / media / submitted metadata now lives in the
+             header channel-badge popover (click the source badge). -->
     `;
 
     // ── Action dock hidden - actions now in top bar ──
@@ -5312,43 +6769,11 @@ window.selectReport = (id, skipFly = false) => {
     // Phase F.2.b - async-load the admin-action ribbon for this report.
     _fetchReportAuditTrail(r.id);
 
-    // W4 versioning ribbon fill (Apr 2026 UI v2.1). Async because we
-    // may need to hit /reports/building/{id} the first time. Guarded
-    // against the panel having been closed or switched mid-fetch
-    // (document.getElementById returns null if the ribbon element was
-    // replaced by a subsequent selectReport). Green = latest, amber =
-    // older. If the building has only one report, the ribbon collapses
-    // to "Only report" instead of "V 1 of 1" which is confusing.
-    (async () => {
-        if (!r.building_id) return;
-        const el = document.getElementById(`dp-version-ribbon-${r.id}`);
-        if (!el) return;
-        const idx = await (window.ensureBuildingVersionIndex
-            ? window.ensureBuildingVersionIndex(r)
-            : null);
-        if (!idx) {
-            el.style.display = 'none';   // hide the placeholder on fetch failure
-            return;
-        }
-        if (idx.total <= 1) {
-            el.innerHTML = `<i class="fa-solid fa-code-branch"></i> Only report`;
-            el.style.background = 'rgba(148,163,184,0.12)';
-            el.style.color      = '#cbd5e1';
-            return;
-        }
-        if (idx.is_latest) {
-            el.innerHTML = `<i class="fa-solid fa-code-branch"></i> V ${idx.ordinal} of ${idx.total} · Latest`;
-            el.style.background = 'rgba(34,197,94,0.15)';
-            el.style.color      = '#4ade80';
-        } else {
-            el.innerHTML = `<i class="fa-solid fa-code-branch"></i> V ${idx.ordinal} of ${idx.total} · Older`;
-            el.style.background = 'rgba(245,158,11,0.15)';
-            el.style.color      = '#fbbf24';
-        }
-        el.style.cursor = 'pointer';
-        el.onclick = () => window.filterByBuilding(r.building_id);
-        el.title = `Click to highlight all ${idx.total} reports for this building on the map`;
-    })();
+    // The per-report "V N of M · Older" building-version ribbon was REMOVED from
+    // the incident detail (operator feedback: version/duplicate state is a
+    // BUILDING-level concern, not an incident-level one - it added cognitive load
+    // here). Building versioning + the report stack now live in the Building
+    // Console, reached by clicking the building name in the Location & Building row.
 
     // B3 - resolve the crisis-form pack title + event name for the detail tag +
     // answers header. Async (admin lists, cached); guarded against panel close.
@@ -5378,6 +6803,154 @@ window.selectReport = (id, skipFly = false) => {
     if (loc && !skipFly) map.flyTo([loc.latitude, loc.longitude], 15);
     highlightMarker(id);   // reverse map↔feed sync: light up the selected marker
     renderFeed();
+};
+
+// ── Incident Intelligence P3 - duplicate surfacing in the detail panel ────────
+function _ensureDupStyles() {
+    if (document.getElementById('dp-dup-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'dp-dup-styles';
+    s.textContent = `
+      .dp-duplicates{margin:6px 0}
+      .dp-dup-box{background:rgba(148,163,184,.06);border:1px solid #233149;border-radius:10px;padding:6px 10px;margin:6px 0}
+      .dp-dup-box>summary{cursor:pointer;font-size:12px;color:#cbd9ef;display:flex;align-items:center;gap:8px;list-style:none}
+      .dp-dup-count{background:rgba(148,163,184,.2);border-radius:8px;padding:0 7px;font-size:11px}
+      .dp-dup-row{display:flex;flex-direction:column;gap:3px;padding:6px 0;border-top:1px solid rgba(148,163,184,.12)}
+      .dp-dup-main{display:flex;align-items:center;gap:8px}
+      .dp-dup-sub{font-size:10px;color:#8aa0c0;padding-left:2px}
+      .dp-dup-reasons{display:flex;flex-wrap:wrap;gap:4px;padding-left:2px}
+      .dp-dup-reason{font-size:10px;color:#86efac;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:5px;padding:0 5px}
+      .dp-dup-conf{font-size:10px;font-weight:700;border:1px solid;border-radius:6px;padding:1px 6px;flex:none}
+      .dp-dup-open{flex:1;min-width:0;color:#9fb3d1;font-size:12px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .dp-dup-open:hover{color:#e6eefb}
+      .dp-dup-controls{display:flex;gap:4px;flex:none}
+      .dp-dup-btn{background:#1b2942;border:1px solid #2b3b56;color:#cbd9ef;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer}
+      .dp-dup-btn:hover{background:#23314e}
+      .dp-dup-yes{color:#86efac}
+      .dp-dup-primary{margin-left:auto}
+      .dp-dup-primary.is-primary{color:#fbbf24;border-color:#fbbf24}`;
+    document.head.appendChild(s);
+}
+function _dupTitle(s) { s = String(s || ''); return s ? s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' ') : ''; }
+
+// Fetch + render the within-cluster probable duplicates of report `r` into
+// #dp-duplicates. No-op for singleton/no-building reports (no cluster peers).
+async function _loadDuplicates(r) {
+    const host = document.getElementById('dp-duplicates');
+    if (!host) return;
+    if (!r || !r.building_id) { host.innerHTML = ''; return; }
+    _ensureDupStyles();
+    let data;
+    try {
+        const res = await fetch(`${API}/${encodeURIComponent(r.id)}/duplicates`);
+        if (!res.ok) { host.innerHTML = ''; return; }
+        data = await res.json();
+    } catch (_e) { host.innerHTML = ''; return; }
+    if (selectedId !== r.id) return;   // a newer selection superseded this load
+    const cands = (data && data.candidates) || [];
+    if (!cands.length) { host.innerHTML = ''; return; }
+    const chip = (lvl) => {
+        const c = lvl === 'HIGH' ? '#f87171' : lvl === 'MEDIUM' ? '#fb923c' : '#9fb3d1';
+        return `<span class="dp-dup-conf" style="color:${c};border-color:${c}">${lvl}</span>`;
+    };
+    // White-box "why": render the per-factor breakdown the engine returned so the
+    // analyst sees exactly why two reports were flagged (no black-box scoring).
+    const reasonsHtml = (reasons) => (reasons || []).map((x) =>
+        `<span class="dp-dup-reason" title="+${x.weight} pts">✓ ${escapeHtml(x.label)}${x.detail ? ' (' + escapeHtml(x.detail) + ')' : ''}</span>`).join('');
+    // READ-ONLY rows: confidence + white-box reasons + an open-to-see-evidence
+    // link. The merge DECISIONS (confirm / not / set-primary / remove / unmerge)
+    // moved to the Building Console - the incident stays a clean single-incident
+    // view, while each report's unique evidence (photos / audio / description /
+    // timestamp) is one click away.
+    const rowHtml = (c) => {
+        const meta = [_dupTitle(c.crisis_type), _dupTitle(c.infrastructure_type), c.location_name].filter(Boolean).join(' · ');
+        const idJs = `decodeURIComponent('${encodeURIComponent(c.report_id)}')`;
+        const sub = [c.reporter, c.server_created_at ? timeAgo(c.server_created_at) : '',
+                     'Confidence ' + (c.score != null ? c.score + '%' : c.confidence)].filter(Boolean).join(' · ');
+        const primaryTag = (data.primary_report_id && c.report_id === data.primary_report_id)
+            ? '<span title="Primary report of this incident" style="color:#fbbf24;flex:none">⭐</span> ' : '';
+        return `<div class="dp-dup-row"><div class="dp-dup-main">${chip(c.confidence)}${primaryTag}` +
+            `<a class="dp-dup-open" onclick="window._switchToReport(${idJs})" title="Open this report to see its evidence (photos / audio / description)">${escapeHtml(meta || 'Report')} <span style="opacity:.6">↗</span></a></div>` +
+            (sub ? `<div class="dp-dup-sub">${escapeHtml(sub)}</div>` : '') +
+            (reasonsHtml(c.reasons) ? `<div class="dp-dup-reasons">${reasonsHtml(c.reasons)}</div>` : '') +
+            `</div>`;
+    };
+    // Reports merged beneath this primary (corroborating) + unconfirmed candidates.
+    // Both READ-ONLY here; the actual review/merge happens once, at the building.
+    const _bidJs = `decodeURIComponent('${encodeURIComponent(r.building_id)}')`;
+    const reviewBtn = `<button class="dp-dup-review" style="margin-left:auto" onclick="event.preventDefault();window.openBuildingConsole&&window.openBuildingConsole(${_bidJs})" title="Review + merge duplicates for this building"><i class="fa-solid fa-arrow-up-right-from-square"></i> Review &amp; merge in Building Console</button>`;
+    const merged = cands.filter((c) => c.confirmed);
+    const possible = cands.filter((c) => !c.confirmed);
+    let html = '';
+    if (merged.length) {
+        html += `<details class="dp-dup-box" open><summary><i class="fa-solid fa-link"></i> Corroborating reports ` +
+            `<span class="dp-dup-count">${merged.length}</span><span class="dp-dup-hint">evidence from each merged report</span>` +
+            `</summary><div class="dp-dup-list">${merged.map((c) => rowHtml(c)).join('')}</div></details>`;
+    }
+    if (possible.length) {
+        html += `<details class="dp-dup-box"${merged.length ? '' : ' open'}><summary><i class="fa-solid fa-clone"></i> Possible duplicates ` +
+            `<span class="dp-dup-count">${possible.length}</span>${reviewBtn}` +
+            `</summary><div class="dp-dup-list">${possible.map((c) => rowHtml(c)).join('')}</div></details>`;
+    }
+    host.innerHTML = html;
+}
+// Unmerge every confirmed duplicate under `reportId` - restores them all to the
+// feed. Reversible (each was an undoable decision); nothing is deleted.
+window._dupUnmergeAll = (reportId) => {
+    // D6: capture the inline-onclick button so it disables during the multi-call
+    // unmerge loop (no double-fire); null btn just runs the body unguarded.
+    const _btn = (window.event && (window.event.currentTarget || window.event.target)) || null;
+    return withBusy(_btn, async () => {
+        try {
+            const res = await fetch(`${API}/${encodeURIComponent(reportId)}/duplicates`);
+            const data = res.ok ? await res.json() : { candidates: [] };
+            const merged = ((data && data.candidates) || []).filter((c) => c.confirmed);
+            for (const c of merged) {
+                await fetch(`${API}/${encodeURIComponent(reportId)}/duplicate-decision`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ decision: 'UNDO', related_report_id: c.report_id }),
+                });
+            }
+            showToast('Unmerged ' + merged.length + ' report' + (merged.length !== 1 ? 's' : ''), 'success');
+            if (selectedId) _loadDuplicates({ id: selectedId, building_id: true });
+            try { _lastServerTime = null; _lastReportsEtag = null; } catch (_e) {}
+            try { fetchReports(); } catch (_e) {}
+        } catch (_e) { showToast('Could not unmerge', 'error'); }
+    });
+};
+window._dupDecision = (reportId, relatedId, decision) => {
+    // D6: disable the clicked Merge/Not/Remove/Make-primary button for the round-trip.
+    const _btn = (window.event && (window.event.currentTarget || window.event.target)) || null;
+    return withBusy(_btn, async () => {
+    try {
+        const res = await fetch(`${API}/${encodeURIComponent(reportId)}/duplicate-decision`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision, related_report_id: relatedId || undefined }),
+        });
+        if (!res.ok) { showToast(res.status === 403 ? 'Not authorized (analyst required)' : 'Could not save decision', 'error'); return; }
+        showToast(decision === 'UNDO' ? 'Reverted'
+            : decision === 'SET_PRIMARY' ? 'Set as primary report'
+            : decision === 'CONFIRMED_DUP' ? 'Marked as duplicate' : 'Marked not a duplicate', 'success');
+        // Optimistic collapse: a just-confirmed duplicate vanishes from the feed/map
+        // immediately (the next full refresh below makes it durable). Bump the
+        // primary's merged badge so the count is right before the round-trip lands.
+        if (decision === 'CONFIRMED_DUP' && relatedId) {
+            const _i = allReports.findIndex(x => x.id === relatedId);
+            if (_i >= 0) allReports.splice(_i, 1);
+            const _p = allReports.find(x => x.id === reportId);
+            if (_p) _p.duplicate_count = (_p.duplicate_count || 0) + 1;
+            try { renderFeed(); } catch (_e) {}
+            try { updateMapMarkers(); } catch (_e) {}
+        }
+        if (selectedId) _loadDuplicates({ id: selectedId, building_id: true });   // refresh against the open report
+        // Reconcile the feed with the server's hidden-set authoritatively. Forcing a
+        // full refresh (reset the delta cursor + ETag) re-collapses confirmed dups and
+        // brings back any report an UNDO/Set-primary just un-hid - a delta poll can't
+        // signal a removal, so this is the robust path for every decision type.
+        try { _lastServerTime = null; _lastReportsEtag = null; } catch (_e) {}
+        try { fetchReports(); } catch (_e) {}
+    } catch (_e) { showToast('Could not save decision', 'error'); }
+    });
 };
 
 // Highlight the selected incident's map marker (the reverse of marker→feed).
@@ -5667,6 +7240,8 @@ window.closeDetail = () => {
     // next time the panel opens it starts in its docked size.
     document.body.classList.remove('dp-fullscreen');
     document.getElementById('detail-panel').style.display = 'none';
+    // D2: restore focus to whatever was focused before the panel opened.
+    try { const pf = window.__dpPriorFocus; window.__dpPriorFocus = null; if (pf && typeof pf.focus === 'function' && document.contains(pf)) pf.focus({ preventScroll: true }); } catch (_e) {}
     // Deep-link: strip ?incident= from the URL so a refresh/Back doesn't reopen
     // this just-closed detail. Suppressed when closeDetail is itself driven by
     // the router's Back restoration (the browser already changed the hash).
@@ -5880,7 +7455,11 @@ function _updateBuildingUrlHash(buildingId) {
     try {
         const hash = (window.location.hash || '').replace(/^#/, '');
         const parts = hash.split(';').filter(p => p && !p.startsWith('building='));
-        if (buildingId) parts.unshift(`building=${encodeURIComponent(buildingId)}`);
+        // Append (route-first), NOT unshift: the route path must stay the first
+        // segment so the hash is well-formed + routable, e.g.
+        // `#/incidents;op=<id>;building=<bid>`. Prepending produced the malformed
+        // `#building=<bid>;/incidents;...` that left the building deep-link unroutable.
+        if (buildingId) parts.push(`building=${encodeURIComponent(buildingId)}`);
         const newHash = parts.length ? `#${parts.join(';')}` : '';
         if (window.location.hash !== newHash) {
             history.replaceState(null, '', window.location.pathname + window.location.search + newHash);
@@ -5896,8 +7475,16 @@ window.openBuildingConsole = async (buildingId) => {
     _updateBuildingUrlHash(buildingId);
 
     const panel = document.getElementById('detail-panel');
+    // Reparent to <body> so the console is a GLOBAL overlay (z 100000) visible
+    // over any route overlay - the operations/home overlays (z 99990) included.
+    // Mirrors selectReport(); without it the panel stays inside the hidden
+    // #view-incidents container, so opening a building card off the Incidents
+    // page silently did nothing (D1).
+    if (panel.parentElement !== document.body) document.body.appendChild(panel);
     panel.style.display = 'flex';
     panel.classList.add('detail-panel--building');
+    // D2: move focus into the console so keyboard users can reach + Escape it.
+    try { window.__dpPriorFocus = document.activeElement; panel.setAttribute('tabindex', '-1'); panel.focus({ preventScroll: true }); } catch (_e) {}
 
     // Show a loading placeholder while the fetch lands.
     document.getElementById('detail-title').textContent = 'Loading building…';
@@ -6020,6 +7607,64 @@ function _deriveBuildingHeaderInfo(b) {
     return { name, city, coords, osmHint };
 }
 
+// The operation a building/cluster belongs to = the most common crisis_event_id
+// among its constituent reports (named via the ops cache). null = unassigned.
+function _buildingOperation(b) {
+    const counts = {};
+    for (const r of (b.reports || [])) {
+        if (r.crisis_event_id) counts[r.crisis_event_id] = (counts[r.crisis_event_id] || 0) + 1;
+    }
+    let opId = null, max = 0;
+    for (const k in counts) { if (counts[k] > max) { max = counts[k]; opId = k; } }
+    if (!opId) return null;
+    const meta = (typeof _opMeta === 'function') ? _opMeta(opId) : null;
+    return { id: opId, name: (meta && meta.name) || 'Operation', count: max };
+}
+
+// Per-building duplicate scan for the Building Console - reuses the within-building
+// engine scoped by building_id. Shows "Potential Duplicates: N" + Merge-All buttons;
+// per-pair review (confidence + reasons + individual Merge/Unmerge) is done by opening
+// a report in the building's report list (the shipped incident-detail duplicate UI).
+async function _loadBuildingDuplicates(bid) {
+    const body = document.getElementById('bc-dup-body-' + bid);
+    const countEl = document.getElementById('bc-dup-count-' + bid);
+    if (!body) return;
+    let d;
+    try {
+        const res = await fetch(`${API}/duplicate-summary?building_id=${encodeURIComponent(bid)}`);
+        if (!res.ok) { body.innerHTML = '<div class="bc-empty">Could not scan for duplicates.</div>'; if (countEl) countEl.textContent = '-'; return; }
+        d = await res.json();
+    } catch (_e) { body.innerHTML = '<div class="bc-empty">Could not scan for duplicates.</div>'; if (countEl) countEl.textContent = '-'; return; }
+    const total = (d && d.total) || 0;
+    if (countEl) countEl.textContent = total;
+    if (!total) { body.innerHTML = '<div class="bc-empty">No potential duplicates in this building.</div>'; return; }
+    let role = ''; try { role = (JSON.parse(localStorage.getItem('crisp_user') || '{}').role) || ''; } catch (_e) {}
+    const canMerge = role === 'ANALYST' || role === 'ADMIN' || role === 'SUPER_ADMIN';
+    const bidJs = `decodeURIComponent('${encodeURIComponent(bid)}')`;
+    const btn = (lvl, n, label) => (n > 0 && canMerge)
+        ? `<button class="dp-dup-btn dp-dup-yes" style="margin-right:6px" onclick="window._dupMergeAllBuilding(${bidJs},'${lvl}')">${label} (${n})</button>` : '';
+    body.innerHTML =
+        `<div style="font-size:12px;color:#cbd9ef;margin-bottom:6px">High <b>${d.high || 0}</b> · Medium <b>${d.medium || 0}</b> · Low <b>${d.low || 0}</b> · Total <b>${total}</b></div>` +
+        `<div style="margin-bottom:6px">${btn('HIGH', d.high || 0, 'Merge All High')}${btn('MEDIUM', d.medium || 0, 'Merge All Medium')}</div>` +
+        `<div style="font-size:10.5px;color:#8aa0bf">Open a report below to review each pair (confidence + reasons) and Merge / Unmerge individually.</div>`;
+}
+window._dupMergeAllBuilding = async (bid, level) => {
+    try {
+        const res = await fetch(`${API}/duplicate-merge`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (localStorage.getItem('crisp_token') || '') },
+            body: JSON.stringify({ confidence: level, building_id: bid }),
+        });
+        if (!res.ok) { showToast(res.status === 403 ? 'Not authorized (analyst required)' : 'Could not merge', 'error'); return; }
+        const out = await res.json();
+        const n = out.merged || 0;
+        showToast('Merged ' + n + ' duplicate' + (n !== 1 ? 's' : ''), 'success');
+        _loadBuildingDuplicates(bid);
+        try { _lastServerTime = null; _lastReportsEtag = null; } catch (_e) {}
+        try { fetchReports(); } catch (_e) {}
+    } catch (_e) { showToast('Could not merge', 'error'); }
+};
+
 function _renderBuildingConsole(b) {
     // Helper formatters
     const scoreColor = (v) => {
@@ -6053,6 +7698,18 @@ function _renderBuildingConsole(b) {
         `<i class="fa-solid fa-building" style="margin-right:6px;color:${sevColor};"></i>` +
         escapeHtml(_bcInfo.name);
 
+    // P2: the Building Console IS the Cluster View. Breadcrumb keeps the
+    // Operation context visible (Global › [Operations › {op} ›] Cluster) + an
+    // assigned-operation chip, both derived from the constituent reports.
+    const _op = _buildingOperation(b);
+    const _bcArrow = '<i class="fa-solid fa-angle-right dp-bc-sep" aria-hidden="true"></i>';
+    const _consoleBc = '<a class="dp-bc-seg" onclick="window.__crispRouter&&window.__crispRouter.navigate(\'/incidents\')">Global</a>'
+        + (_op
+            ? _bcArrow + '<a class="dp-bc-seg" onclick="window.__crispRouter&&window.__crispRouter.navigate(\'/operations\')">Operations</a>'
+              + _bcArrow + `<a class="dp-bc-seg dp-bc-op" onclick="window.location.hash='#/operations/'+encodeURIComponent('${_op.id}')">${escapeHtml(_op.name)}</a>`
+            : '')
+        + _bcArrow + '<span class="dp-bc-cur">' + escapeHtml(b.osm_name || 'Building') + '</span>';
+
     // Crisis-type chips + damage distribution
     const crisisChips = (b.crisis_types_top3 || [])
         .map(ct => `<span class="bc-crisis-chip">${escapeHtml(crisisLabel(ct))}</span>`)
@@ -6072,6 +7729,7 @@ function _renderBuildingConsole(b) {
     // Build the console HTML.
     document.getElementById('detail-body').innerHTML = `
         <div class="bc">
+            <nav class="dp-breadcrumb" aria-label="Breadcrumb">${_consoleBc}</nav>
             <!-- Top bar: Name · City · Location (coords) + explicit
                  export buttons (CSV · GeoJSON · PDF) + monitor +
                  state-machine actions. Matches operator request from
@@ -6099,6 +7757,11 @@ function _renderBuildingConsole(b) {
                     <span class="bc-count-chip" title="Reports with responder dispatched">
                         <i class="fa-solid fa-truck-medical"></i> ${b.responding_report_count || 0}
                     </span>
+                    ${_op
+                        ? `<span class="bc-count-chip" title="Assigned operation (${escapeHtml(String(_op.count))} report(s))" style="cursor:pointer" onclick="window.location.hash='#/operations/'+encodeURIComponent('${_op.id}')">
+                               <i class="fa-solid fa-bullseye"></i> ${escapeHtml(_op.name)}
+                           </span>`
+                        : ''}
                     ${b.debris_clearing_needed_count
                         ? `<span class="bc-count-chip bc-count-chip-warn" title="Reports flagged as needing debris clearing">
                                <i class="fa-solid fa-broom"></i> ${b.debris_clearing_needed_count} debris
@@ -6154,6 +7817,29 @@ function _renderBuildingConsole(b) {
                     </div>
                 `).join('')}
             </div>
+
+            <!-- Health "why" - white-box: the priority number is humanitarian_priority,
+                 a published weighted blend. Show the formula + this building's component
+                 contributions so analysts see WHY it ranks high (no black box). -->
+            ${(() => {
+                const f = [
+                    ['Severity', b.severity_score, 0.40],
+                    ['Confidence', b.confidence_score, 0.25],
+                    ['Escalation', b.escalation_risk, 0.20],
+                    ['People affected', Math.min((b.estimated_people_affected || 0), 100), 0.10],
+                    ['Activity', b.activity_score, 0.05],
+                ];
+                const rows = f.map(([lbl, v, w]) =>
+                    `<li><span>${lbl}</span><span>${v != null ? Number(v).toFixed(0) : '0'} × ${w.toFixed(2)} = <b>${(((v || 0)) * w).toFixed(1)}</b></span></li>`).join('');
+                return `<details class="bc-health-why" style="margin:-4px 0 10px;font-size:11px">
+                    <summary style="cursor:pointer;color:#9fb3d1;user-select:none">ⓘ Why this priority?</summary>
+                    <div style="margin-top:6px;color:#8aa0bf;line-height:1.6">
+                        Priority = 0.40·Severity + 0.25·Confidence + 0.20·Escalation + 0.10·People + 0.05·Activity
+                        <ul style="list-style:none;padding:6px 0 0;margin:0">${rows
+                            .replace(/<li>/g, '<li style="display:flex;justify-content:space-between;gap:12px;padding:1px 0">')}</ul>
+                    </div>
+                </details>`;
+            })()}
 
             <!-- Crisis breakdown + damage distribution -->
             <div class="bc-section">
@@ -6226,6 +7912,16 @@ function _renderBuildingConsole(b) {
             </div>
 
             <!-- Phase H.3 - Responder coordination -->
+            <!-- Per-building Duplicates (intelligence metadata on this building - NOT a
+                 cluster). Reuses the within-building duplicate engine scoped by building_id. -->
+            <div class="bc-section bc-section-duplicates">
+                <div class="bc-section-title">
+                    <i class="fa-solid fa-link"></i> Potential Duplicates
+                    <span class="bc-section-count" id="bc-dup-count-${escapeHtml(b.id)}">…</span>
+                </div>
+                <div id="bc-dup-body-${escapeHtml(b.id)}" class="bc-dup-body"><div class="bc-empty">Scanning for duplicates…</div></div>
+            </div>
+
             <div class="bc-section bc-section-responders">
                 <div class="bc-section-title">
                     <i class="fa-solid fa-truck-medical"></i> Responders
@@ -6297,6 +7993,8 @@ function _renderBuildingConsole(b) {
     // of the timeline fetch; either can fail without blocking the
     // other.
     setTimeout(() => _refreshRelatedBuildings(b.id), 80);
+    // Per-building duplicate scan (async; reuses the within-building engine).
+    setTimeout(() => _loadBuildingDuplicates(b.id), 30);
     // Clear the bottom action dock (the building console manages its own
     // actions inside .bc-header / .bc-actions).
     const dock = document.getElementById('dp-action-dock');
@@ -7737,9 +9435,7 @@ function _renderIncidentTimeline(r) {
         // Shouldn't normally happen - server_created_at is always set.
         // Render an explicit empty state rather than nothing so the
         // section's presence is consistent.
-        return `<details class="dp-timeline">
-            <summary><i class="fa-solid fa-timeline"></i> Timeline (no events)</summary>
-        </details>`;
+        return '';   // no events - History shows just the audit ribbon
     }
 
     const rows = events.map(e => `
@@ -7754,10 +9450,9 @@ function _renderIncidentTimeline(r) {
         </li>
     `).join('');
 
-    return `<details class="dp-timeline">
-        <summary><i class="fa-solid fa-timeline"></i> Timeline <span class="dp-timeline-count">${events.length}</span></summary>
-        <ul class="dp-timeline-list">${rows}</ul>
-    </details>`;
+    // No inner accordion / "Timeline" header - this renders directly inside the
+    // History accordion (avoids a redundant accordion-in-an-accordion).
+    return `<ul class="dp-timeline-list">${rows}</ul>`;
 }
 
 function _renderReviewerActions(r) {
@@ -7866,9 +9561,13 @@ function _renderReviewerActions(r) {
               <span>Mark on-site</span>
            </button>`;
 
+    // Dedup: the standalone verdict chip is REMOVED - the header's combined status
+    // pill (_displayStatus: Needs review / Accepted / Rejected …) already states it,
+    // and the "Set verdict" dropdown below is the control. void keeps the now-unused
+    // builders honest without reintroducing the duplicate label.
+    void verdictLabel; void verdictClass;
     return `<div class="dp-reviewer is-sticky">
         <div class="dp-reviewer-top">
-            <span class="dp-reviewer-chip dp-reviewer-${verdictClass}">${verdictLabel}</span>
             ${reviewedAgo ? `<span class="dp-reviewer-meta">${reviewedAgo}</span>` : ''}
             ${responseStr ? `<span class="dp-reviewer-meta dp-reviewer-response">${responseStr}</span>` : ''}
             ${livesInlineHtml}
@@ -7996,19 +9695,157 @@ window.setReviewVerdict = async (reportId, verdict, actionTaken = null) => {
     }
 };
 
+// ── Shared action-confirmation modal ──────────────────────────────────────────
+// A single overlay used by Reject + Delete (and reusable for any confirm-with-
+// reason flow). Closes on ×, Cancel, click-outside, or Escape. opts.onConfirm
+// receives (overlay, close) so it can read inputs + validate before closing.
+window._crispActionModal = (opts) => {
+    document.querySelectorAll('.crisp-action-overlay').forEach(n => n.remove());
+    const ov = document.createElement('div');
+    ov.className = 'crisp-action-overlay';
+    const onKey = (e) => { if (e.key === 'Escape') { ov.remove(); document.removeEventListener('keydown', onKey); } };
+    document.addEventListener('keydown', onKey);
+    const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+    ov.onclick = (e) => { if (e.target === ov) close(); };
+    ov.innerHTML = `<div class="crisp-action-modal crisp-action-${opts.tone || 'default'}" role="dialog" aria-modal="true" aria-label="${escapeHtml(opts.title || '')}">
+        <div class="crisp-action-head"><i class="fa-solid ${opts.icon || 'fa-circle-question'}"></i><span>${escapeHtml(opts.title || '')}</span>
+            <button class="crisp-action-x" aria-label="Close">&times;</button></div>
+        <div class="crisp-action-body">${opts.bodyHtml || ''}</div>
+        <div class="crisp-action-foot">
+            <button class="crisp-action-cancel">Cancel</button>
+            <button class="crisp-action-confirm crisp-action-confirm-${opts.confirmTone || 'primary'}">${escapeHtml(opts.confirmLabel || 'Confirm')}</button>
+        </div>
+    </div>`;
+    ov.querySelector('.crisp-action-x').onclick = close;
+    ov.querySelector('.crisp-action-cancel').onclick = close;
+    ov.querySelector('.crisp-action-confirm').onclick = () => { try { opts.onConfirm(ov, close); } catch (_e) {} };
+    document.body.appendChild(ov);
+    const f = ov.querySelector('textarea, input:not([type=checkbox]), .crisp-action-confirm');
+    if (f) { try { f.focus(); } catch (_e) {} }
+    return ov;
+};
+
 window.openRejectModal = (reportId) => {
-    const note = prompt(
-        'Reject this report - please describe why (required).\n\n' +
-        'This note is logged against the report so future responders see the rationale.',
-        ''
-    );
-    if (note === null) return;   // user cancelled
-    const trimmed = note.trim();
-    if (!trimmed) {
-        showToast('Rejection reason required', 'error');
-        return;
+    _crispActionModal({
+        title: 'Reject report', icon: 'fa-circle-xmark', tone: 'warn', confirmLabel: 'Reject report', confirmTone: 'warn',
+        bodyHtml: `<p class="crisp-action-msg">Rejecting marks this report invalid and removes it from the active feed and the review/response queues. It stays accessible under the <strong>Rejected</strong> filter for audit.</p>
+            <label class="crisp-action-label">Reason for rejection <span class="crisp-req">*</span></label>
+            <textarea class="crisp-action-reason" id="crisp-reject-reason" rows="3" placeholder="e.g. Duplicate of an existing incident · spam · not actionable…"></textarea>`,
+        onConfirm: (ov, close) => {
+            const ta = ov.querySelector('#crisp-reject-reason');
+            const reason = (ta.value || '').trim();
+            if (!reason) { ta.classList.add('crisp-action-invalid'); ta.focus(); showToast('Rejection reason required', 'error'); return; }
+            close();
+            window.setReviewVerdict(reportId, 'REJECTED', reason);
+        },
+    });
+};
+
+window.openDeleteModal = (reportId) => {
+    _crispActionModal({
+        title: 'Delete report', icon: 'fa-triangle-exclamation', tone: 'danger', confirmLabel: 'Delete report', confirmTone: 'danger',
+        bodyHtml: `<p class="crisp-action-msg crisp-action-msg-danger"><strong>This is a permanent administrative action.</strong> The report enters a 24-hour deletion grace window, then is permanently purged from all feeds, queues, and search. Use only for spam, test data, policy violations, or duplicate cleanup.</p>
+            <label class="crisp-action-label">Reason for deletion <span class="crisp-req">*</span></label>
+            <textarea class="crisp-action-reason" id="crisp-delete-reason" rows="3" placeholder="e.g. Spam / test submission · policy violation · duplicate cleanup…"></textarea>`,
+        onConfirm: (ov, close) => {
+            const ta = ov.querySelector('#crisp-delete-reason');
+            const reason = (ta.value || '').trim();
+            if (!reason) { ta.classList.add('crisp-action-invalid'); ta.focus(); showToast('Deletion reason required', 'error'); return; }
+            close();
+            window.deleteReport(reportId, reason);
+        },
+    });
+};
+
+// ── Notify Response Team ──────────────────────────────────────────────────────
+// Opens a modal listing the responders linked to the incident (building +
+// operation), lets the analyst multi-select + pick channels, then POSTs
+// /notify-responders (SMS/Email + audit + Active Response + reporter push).
+window.openNotifyModal = async (reportId) => {
+    const ov = _crispActionModal({
+        title: 'Notify Response Team', icon: 'fa-tower-broadcast', tone: 'default', confirmLabel: 'Notify responders', confirmTone: 'primary',
+        bodyHtml: `<div id="crisp-notify-host"><div class="crisp-action-msg"><i class="fa-solid fa-spinner fa-spin"></i> Loading linked responders…</div></div>`,
+        onConfirm: (ov2, close) => window._doNotifyResponders(reportId, ov2, close),
+    });
+    ov.querySelector('.crisp-action-confirm').disabled = true;
+    try {
+        const res = await fetch(`${API}/${encodeURIComponent(reportId)}/responders`);
+        const data = res.ok ? await res.json() : { responders: [] };
+        const host = ov.querySelector('#crisp-notify-host');
+        if (!host) return;
+        const rs = data.responders || [];
+        if (!rs.length) {
+            host.innerHTML = `<div class="notify-empty">
+                <i class="fa-solid fa-user-plus notify-empty-icon"></i>
+                <p>No responders are linked to this incident's ${data.building_id ? 'building' : 'location'} yet.</p>
+                <p class="notify-empty-sub">Assign response organizations, responders, volunteers or emergency contacts${data.building_id ? ' in the Building Console' : ''}${data.crisis_event_id ? ' or the Operation' : ''}, then notify them here.</p>
+                <div class="notify-empty-actions">
+                    ${data.building_id ? `<button class="assess-mini-btn" onclick="document.querySelectorAll('.crisp-action-overlay').forEach(n=>n.remove());window.openBuildingConsole&&window.openBuildingConsole(decodeURIComponent('${encodeURIComponent(data.building_id)}'))"><i class="fa-solid fa-building"></i> Open Building Console</button>` : ''}
+                    <button class="crisp-action-cancel" onclick="document.querySelectorAll('.crisp-action-overlay').forEach(n=>n.remove());patchReport('${reportId}','dispatch')"><i class="fa-solid fa-hand-holding-medical"></i> Mark responding anyway</button>
+                </div>
+            </div>`;
+            return;
+        }
+        const chBadge = (ch) => ch === 'email' ? '<span class="notify-ch notify-ch-email"><i class="fa-solid fa-envelope"></i> Email</span>'
+            : ch === 'sms' ? '<span class="notify-ch notify-ch-sms"><i class="fa-solid fa-comment-sms"></i> SMS</span>'
+                : '<span class="notify-ch notify-ch-none">No contact</span>';
+        host.innerHTML = `
+            <p class="crisp-action-msg">Select responders to alert. Each is messaged on the channel its contact supports.</p>
+            <div class="notify-list">${rs.map(rr => {
+                const disabled = !rr.channel;
+                const meta = [rr.org, (rr.org_type || '').replace(/_/g, ' ').toLowerCase()].filter(Boolean).join(' · ');
+                return `<label class="notify-row ${disabled ? 'notify-row-disabled' : ''}">
+                    <input type="checkbox" class="notify-cb" value="${rr.id}" data-ch="${rr.channel || ''}" ${disabled ? 'disabled' : 'checked'}>
+                    <span class="notify-main"><span class="notify-name">${escapeHtml(rr.name)}</span>
+                    <span class="notify-sub">${escapeHtml(meta)}${rr.contact ? (meta ? ' · ' : '') + escapeHtml(rr.contact) : ''}</span></span>
+                    ${chBadge(rr.channel)}</label>`;
+            }).join('')}</div>
+            <div class="notify-channels"><span class="notify-channels-l">Send via:</span>
+                <label class="notify-chk"><input type="checkbox" id="crisp-notify-sms" checked> SMS</label>
+                <label class="notify-chk"><input type="checkbox" id="crisp-notify-email" checked> Email</label></div>`;
+        ov.querySelector('.crisp-action-confirm').disabled = false;
+    } catch (e) {
+        const host = ov.querySelector('#crisp-notify-host');
+        if (host) host.innerHTML = `<div class="crisp-action-msg">Could not load responders. ${escapeHtml(e.message || '')}</div>`;
     }
-    window.setReviewVerdict(reportId, 'REJECTED', trimmed);
+};
+
+window._doNotifyResponders = async (reportId, ov, close) => {
+    const ids = Array.from(ov.querySelectorAll('.notify-cb:checked')).map(cb => cb.value);
+    if (!ids.length) { showToast('Select at least one responder', 'error'); return; }
+    const channels = [];
+    if (ov.querySelector('#crisp-notify-sms')?.checked) channels.push('sms');
+    if (ov.querySelector('#crisp-notify-email')?.checked) channels.push('email');
+    if (!channels.length) { showToast('Select at least one channel (SMS / Email)', 'error'); return; }
+    const btn = ov.querySelector('.crisp-action-confirm');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Notifying…'; }
+    try {
+        const res = await fetch(`${API}/${encodeURIComponent(reportId)}/notify-responders`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ responder_ids: ids, channels }),
+        });
+        if (!res.ok) {
+            const d = await res.json().catch(() => ({}));
+            showToast(`Notify failed: ${d.detail || ('HTTP ' + res.status)}`, 'error');
+            if (btn) { btn.disabled = false; btn.innerHTML = 'Notify responders'; }
+            return;
+        }
+        const data = await res.json();
+        const idx = allReports.findIndex(x => x.id === reportId);
+        if (idx >= 0 && data.status) allReports[idx].status = data.status;
+        if (_detailOnlyReport && _detailOnlyReport.id === reportId && data.status) _detailOnlyReport.status = data.status;
+        close();
+        const parts = [`${data.notified} responder${data.notified === 1 ? '' : 's'} notified`];
+        if (data.sms) parts.push(`${data.sms} SMS`);
+        if (data.email) parts.push(`${data.email} email`);
+        showToast(`${parts.join(' · ')}. Reporter informed; incident now in Active Response.`, 'success');
+        if ((data.failures || []).length) showToast(`${data.failures.length} responder(s) could not be reached on the selected channel.`, 'info');
+        if (selectedId === reportId) selectReport(reportId, true);
+        renderFeed();
+    } catch (e) {
+        showToast('Notify request failed - check connectivity', 'error');
+        if (btn) { btn.disabled = false; btn.innerHTML = 'Notify responders'; }
+    }
 };
 
 window.stampResponderTime = async (reportId, which) => {
@@ -8707,33 +10544,8 @@ window.runAIAssessment = async (id) => {
         topBtn.innerHTML = '<i class="fa-solid fa-brain fa-spin"></i> Analyzing…';
     }
 
-    // Count nearby corroborating reports
-    const loc = r.location;
-    const nearbyReports = loc ? allReports.filter(rr => rr.id !== r.id && rr.location &&
-        haversineKm(loc.latitude, loc.longitude, rr.location.latitude, rr.location.longitude) < 5).length : 0;
-
-    // Build full multi-signal payload for AI
-    const payload = {
-        id: r.id, source: r.source, severity: r.severity,
-        infrastructure_type: r.infrastructure_type, status: r.status,
-        description: r.description || '',
-        transcription: r.ai_analysis?.transcription || '',
-        ai_summary: r.ai_analysis?.ai_summary || '',
-        location: loc ? { lat: loc.latitude, lng: loc.longitude, name: loc.user_location_name || loc.device_location_name || '' } : null,
-        media_count: r.media?.length || 0,
-        has_image: !!r.media?.find(m => m.type === 'IMAGE'),
-        has_audio: !!r.media?.find(m => m.type === 'AUDIO'),
-        verification: r.verification ? {
-            score: r.verification.total_score, verdict: r.verification.verdict,
-            scores: r.verification.scores || {},
-            photo_analysis: r.verification.photo_analysis || '',
-            satellite_scene: r.verification.satellite_scene_description || '',
-            key_findings: r.verification.key_findings || [],
-            caveats: r.verification.caveats || [],
-        } : null,
-        caller_info: r.caller_info || null,
-        nearby_reports: nearbyReports,
-    };
+    // Build full multi-signal payload for AI (shared with runFullAssessment).
+    const payload = _buildAiAssessPayload(r);
 
     try {
         const res = await fetch(`${BACKEND_HOST}/api/v1/reports/${id}/ai-assess`, {
@@ -8769,116 +10581,322 @@ window.runAIAssessment = async (id) => {
 };
 
 // ── PDF Export ────────────────────────────────────────────────────────────────
-window.exportPDF = (id) => {
-    const r = allReports.find(x => x.id === id);
-    if (!r) return;
-    const loc = r.location;
-    const ai = r.ai_analysis;
-    const v = r.verification;
-    const ci = r.caller_info;
-    const locName = loc?.user_location_name || loc?.device_location_name || (loc ? `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}` : 'Unknown');
-    const srcLabel = {APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || r.source;
-    const ts = fmtDateTime(r.server_created_at);
+// Fetch an image URL and inline it as a data: URI so it is EMBEDDED in the
+// printed / "Save as PDF" output at full quality with no load race. Falls back
+// to the original URL if the fetch is blocked (e.g. S3 CORS in prod) - a plain
+// <img src> still prints, just without the embed guarantee.
+async function _imgToDataUrl(url) {
+    if (!url) return '';
+    if (url.startsWith('data:')) return url;
+    try {
+        const res = await fetch(url, { headers: _authHeaders() });
+        if (!res.ok) return url;
+        const blob = await res.blob();
+        if (blob.size > 14 * 1024 * 1024) return url;   // don't inline huge originals
+        return await new Promise((resolve) => {
+            const fr = new FileReader();
+            fr.onload = () => resolve(fr.result || url);
+            fr.onerror = () => resolve(url);
+            fr.readAsDataURL(blob);
+        });
+    } catch (_e) { return url; }
+}
 
-    // Gather all image URLs: user photo + primary satellite + alt satellite
-    // May 2026 - getMediaUrl() handles all four cases now: relative
-    // `/static/...` (LocalStorage), relative `/api/v1/.../satellite/...`
-    // (S3-backed stable URLs), absolute https (legacy/external),
-    // data: URLs (rare inline). Previously hard-coded BACKEND_HOST
-    // concat broke `s3://...` and stable-URL paths alike.
-    const imgMedia = r.media?.find(m => m.type === 'IMAGE' && m.assembly_status === 'complete' && m.url);
-    const userImgUrl = imgMedia ? getMediaUrl(imgMedia.url) : '';
-    const satImgUrl = v?.satellite_image_url ? getMediaUrl(v.satellite_image_url) : '';
-    const satAltImgUrl = v?.satellite_image_url_alt ? getMediaUrl(v.satellite_image_url_alt) : '';
-    const satSource1 = (v?.satellite_source || 'Satellite').split('(')[0].trim();
-    const satSource2 = (v?.satellite_source_alt || 'Alt Satellite').split('(')[0].trim();
-    // Date-only acquisition dates go through fmtDateOnly - bare
-    // YYYY-MM-DD strings parse as UTC midnight and shift a day for
-    // viewers west of UTC if fed to the Date parser directly.
-    const satDate1 = v?.satellite_acquisition_date ? fmtDateOnly(v.satellite_acquisition_date) : '';
-    const satDate2 = v?.satellite_acquisition_date_alt ? fmtDateOnly(v.satellite_acquisition_date_alt) : '';
-    const satRes1 = v?.satellite_resolution_m ? `${v.satellite_resolution_m}m` : '';
-    const satRes2 = v?.satellite_resolution_m_alt ? `${v.satellite_resolution_m_alt}m` : '';
-    const hasAnyImage = userImgUrl || satImgUrl || satAltImgUrl;
+// Full, printable A4-portrait incident report. Captures 100% of the captured /
+// generated / stored information section-by-section: overview, the Confidence
+// Assessment (score + per-check breakdown), the AI dossier, full satellite
+// analysis, location & building, description / transcript, crisis-pack answers,
+// service status, evidence & metadata checks, corroboration / duplicates, all
+// images (embedded), media summary, and the history / audit trail. Async: pulls
+// the FULL report by id + the audit trail + duplicate candidates, and embeds
+// images as data URIs before writing the document.
+window.exportPDF = async (id) => {
+    // Open the window synchronously to keep the click gesture (popup-blocker safe).
+    const w = window.open('', '_blank', 'width=900,height=1200');
+    if (w) { try { w.document.write('<!doctype html><meta charset="utf-8"><title>Generating…</title><body style="font-family:-apple-system,sans-serif;padding:48px;color:#475569;font-size:15px">Generating full incident report… one moment.</body>'); } catch (_e) {} }
 
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>CRISP Incident Report - ${r.id.substring(0,8)}</title>
+    // Pull the FULL report (form_data, all media variants, ai_assessment,
+    // verification, location detail…) so the PDF isn't limited to list-view fields.
+    let r = allReports.find(x => x.id === id) || (_detailOnlyReport && _detailOnlyReport.id === id ? _detailOnlyReport : null);
+    const full = await _fetchReportByIdRaw(id);
+    if (full) r = Object.assign({}, r || {}, full);
+    if (!r || !r.id) { if (w) w.close(); showToast('Could not load report for export', 'error'); return; }
+
+    // Audit trail + duplicate candidates (best-effort).
+    const [auditRes, dupRes] = await Promise.all([
+        fetch(`${API}/${encodeURIComponent(id)}/audit?limit=50`, { headers: _authHeaders() }).then(x => x.ok ? x.json() : { items: [] }).catch(() => ({ items: [] })),
+        r.building_id ? fetch(`${API}/${encodeURIComponent(id)}/duplicates`).then(x => x.ok ? x.json() : { candidates: [] }).catch(() => ({ candidates: [] })) : Promise.resolve({ candidates: [] }),
+    ]);
+    const auditItems = (auditRes && auditRes.items) || [];
+    const dupCands = (dupRes && dupRes.candidates) || [];
+
+    const loc = r.location, v = r.verification, aa = r.ai_assessment, ic = r.incident_credibility, ai = r.ai_analysis, ci = r.caller_info, ss = r.service_status || {};
+    const srcLabel = { APP: 'Mobile App', ANDROID: 'Android App', WHATSAPP: 'WhatsApp', TELEGRAM: 'Telegram', SMS: 'SMS', IVR: 'Voice Call' }[r.source] || r.source || '';
+
+    // Images: highest-quality complete variant per photo group + satellite, embedded.
+    const photoGroups = groupPhotos((r.media || []).filter(m => m.type === 'IMAGE'));
+    const photoSrcs = photoGroups.map(g => highestCompleteVariant(g)).filter(Boolean).map(x => x.src);
+    const satMeta = [];
+    if (v && v.satellite_image_url) satMeta.push({ src: getMediaUrl(v.satellite_image_url), label: (v.satellite_source || 'Satellite').split('(')[0].trim(), ts: v.satellite_acquisition_date ? fmtDateOnly(v.satellite_acquisition_date) : '' });
+    if (v && v.satellite_image_url_alt) satMeta.push({ src: getMediaUrl(v.satellite_image_url_alt), label: (v.satellite_source_alt || 'Alt satellite').split('(')[0].trim(), ts: v.satellite_acquisition_date_alt ? fmtDateOnly(v.satellite_acquisition_date_alt) : '' });
+    const [photoData, satData] = await Promise.all([
+        Promise.all(photoSrcs.map(_imgToDataUrl)),
+        Promise.all(satMeta.map(s => _imgToDataUrl(s.src))),
+    ]);
+
+    // ── builders ──
+    const esc = escapeHtml;
+    const row = (k, val) => (val !== '' && val != null) ? `<div class="row"><span class="k">${esc(k)}</span><span class="v">${val}</span></div>` : '';
+    const sec = (title, body) => (body && String(body).trim()) ? `<div class="section"><div class="section-title">${esc(title)}</div>${body}</div>` : '';
+    const ul = (arr) => (Array.isArray(arr) && arr.length) ? `<ul class="lst">${arr.map(x => `<li>${esc(String(x))}</li>`).join('')}</ul>` : '';
+    const yn = (b) => b === true ? 'Yes' : (b === false ? 'No' : '');
+    const ds = (typeof _displayStatus === 'function') ? _displayStatus(r) : { label: r.status };
+
+    // 1 · Overview
+    const overview =
+        row('Incident type', esc(infraDisplayLabel(r.infrastructure_type, r.infrastructure_sub_type)))
+        + row('Severity', esc(r.severity || ''))
+        + row('Status', esc(ds.label || r.status || ''))
+        + (r.reviewer_verdict && r.reviewer_verdict !== 'NOT_REVIEWED' ? row('Review verdict', esc(r.reviewer_verdict)) : '')
+        + row('Channel', esc(srcLabel))
+        + (r.crisis_type ? row('Crisis type', esc(_dupTitle(r.crisis_type))) : '')
+        + (r.damage_classification ? row('Damage classification', esc(_dupTitle(r.damage_classification))) : '')
+        + (r.debris_clearing_needed != null ? row('Debris clearing needed', yn(r.debris_clearing_needed)) : '')
+        + row('Reporter', esc(r.reporter_badge || r.reporter_tier || (r.user_id ? 'User ' + String(r.user_id).replace(/-/g, '').slice(0, 8) : 'Anonymous')))
+        + row('Reported', esc(fmtDateTime(r.server_created_at)))
+        + (r.client_created_at ? row('Captured on device', esc(fmtDateTime(r.client_created_at))) : '')
+        + (r.reviewed_at ? row('Reviewed', esc(fmtDateTime(r.reviewed_at))) : '')
+        + (r.reviewed_by ? row('Reviewer', esc(String(r.reviewed_by).replace(/-/g, '').slice(0, 8))) : '')
+        + (Number.isFinite(r.response_time_seconds) ? row('Response time', esc(_fmtDuration(r.response_time_seconds))) : '')
+        + (ci && ci.phone ? row('Caller', esc(ci.phone)) : '')
+        + (ci && ci.network_location ? row('Telecom circle', esc(ci.network_location)) : '');
+
+    // 2 · Confidence assessment (the system-only automated score)
+    let assessHtml;
+    if (ic && ic.assessed && ic.score != null) {
+        const meta = _credBandMeta(ic.band);
+        const fr = (ic.factors || []).map(f => `<tr><td>${esc(f.label)}</td><td class="num">${f.ran ? '+' + f.awarded : '—'} / ${f.max}</td><td class="rsn">${esc(f.reason || '')}</td></tr>`).join('');
+        const eq = (ic.factors || []).filter(f => f.ran && f.awarded > 0).map(f => '+' + f.awarded).join('  ') || '+0';
+        assessHtml =
+            `<div class="score-hd"><span class="score-big" style="color:${meta.color}">${ic.score}<span class="score-den">/100</span></span><span class="score-band" style="color:${meta.color}">${esc(meta.word)}</span><span class="score-sub">${ic.ran_count} of ${ic.total_checks} checks ran${ic.assessed_at ? ' · assessed ' + esc(fmtDateTime(ic.assessed_at)) : ''}</span></div>`
+            + `<table class="tbl"><thead><tr><th>Automated check</th><th class="num">Points</th><th>Evidence</th></tr></thead><tbody>${fr}</tbody></table>`
+            + `<div class="eq">${eq} = <strong>${ic.score}</strong> / 100</div>`
+            + `<div class="note">System-only automated score (AI content 30 · Satellite 25 · Location 15 · Corroboration 15 · Reporter 15 = 100). An analyst's accept/reject verdict never changes it.</div>`;
+    } else {
+        assessHtml = `<div class="muted">Not yet assessed — run "AI-Assisted Report Assessment" in the dashboard to compute the Confidence Score.</div>`;
+    }
+
+    // 3 · AI dossier
+    let aiHtml = '';
+    if (aa && (aa.summary || aa.confidence_score != null || aa.reasoning)) {
+        const sb = aa.score_breakdown || {};
+        const sbRows = Object.keys(sb).map(k => row(_humanizeFormKey(k), esc(String(sb[k])))).join('');
+        aiHtml =
+            (aa.confidence_score != null ? row('AI confidence', esc(aa.confidence_score + '/100')) : '')
+            + (aa.priority_level ? row('Priority', esc(String(aa.priority_level).replace(/_/g, ' '))) : '')
+            + (aa.suggested_action ? row('Suggested action', esc(aa.suggested_action)) : '')
+            + (aa.lives_at_risk_estimate ? row('Lives at risk (est.)', esc(String(aa.lives_at_risk_estimate))) : '')
+            + (aa.inferred_severity ? row('Inferred severity', esc(aa.inferred_severity)) : '')
+            + (aa.inferred_crisis_type ? row('Inferred crisis type', esc(aa.inferred_crisis_type)) : '')
+            + (aa.inferred_damage_class ? row('Inferred damage', esc(aa.inferred_damage_class)) : '')
+            + (aa.summary ? `<div class="sub-t">Executive summary</div><div class="desc">${esc(aa.summary)}</div>` : '')
+            + (aa.reasoning ? `<div class="sub-t">Reasoning</div><div class="desc">${esc(aa.reasoning)}</div>` : '')
+            + (Array.isArray(aa.key_factors) && aa.key_factors.length ? `<div class="sub-t">Key factors</div>${ul(aa.key_factors)}` : '')
+            + (Array.isArray(aa.risk_flags) && aa.risk_flags.length ? `<div class="sub-t">Risk flags</div>${ul(aa.risk_flags)}` : '')
+            + (sbRows ? `<div class="sub-t">Score breakdown</div>${sbRows}` : '');
+    }
+
+    // 4 · Satellite verification (full)
+    let satHtml = '';
+    if (v) {
+        if (v.error) satHtml = `<div class="muted">Could not run: ${esc(v.error)}</div>`;
+        else {
+            const sc = v.scores || {};
+            const gapTxt = (typeof v.satellite_days_gap === 'number') ? (v.satellite_days_gap === 0 ? 'same day' : v.satellite_days_gap > 0 ? v.satellite_days_gap + 'd before' : Math.abs(v.satellite_days_gap) + 'd after') + ' incident' : '';
+            satHtml =
+                row('Truth score', esc((v.total_score ?? 0) + '/100'))
+                + (v.verdict ? row('Verdict', esc(String(v.verdict).replace(/_/g, ' '))) : '')
+                + (typeof sc.location_authenticity === 'number' ? row('Location authenticity', esc(sc.location_authenticity + '/25')) : '')
+                + (typeof sc.damage_corroboration === 'number' ? row('Damage corroboration', esc(sc.damage_corroboration + '/25')) : '')
+                + (typeof sc.description_coherence === 'number' ? row('Description coherence', esc(sc.description_coherence + '/25')) : '')
+                + (typeof sc.data_quality === 'number' ? row('Data quality', esc(sc.data_quality + '/25')) : '')
+                + (typeof v.satellite_cloud_cover_pct === 'number' ? row('Cloud cover', esc(v.satellite_cloud_cover_pct.toFixed(0) + '%')) : '')
+                + (v.satellite_acquisition_date ? row('Imagery date', esc(fmtDateOnly(v.satellite_acquisition_date) + (gapTxt ? ' (' + gapTxt + ')' : ''))) : '')
+                + (v.satellite_source ? row('Source', esc(v.satellite_source)) : '')
+                + (v.satellite_scene_description ? `<div class="sub-t">Scene</div><div class="desc">${esc(v.satellite_scene_description)}</div>` : '')
+                + (v.reasoning ? `<div class="sub-t">Analysis</div><div class="desc">${esc(v.reasoning)}</div>` : '')
+                + (v.photo_analysis ? `<div class="sub-t">Photo vs satellite</div><div class="desc">${esc(v.photo_analysis)}</div>` : '')
+                + (Array.isArray(v.key_findings) && v.key_findings.length ? `<div class="sub-t">Key findings</div>${ul(v.key_findings)}` : '')
+                + (Array.isArray(v.caveats) && v.caveats.length ? `<div class="sub-t">Caveats</div>${ul(v.caveats)}` : '');
+        }
+    }
+
+    // 5 · Location & building
+    const locName = loc ? (loc.user_location_name || loc.device_location_name || ((loc.latitude != null) ? `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}` : 'Unknown')) : 'Unknown';
+    const locHtml =
+        row('Location name', esc(locName))
+        + (loc && loc.latitude != null ? row('Coordinates', esc(loc.latitude.toFixed(5) + ', ' + loc.longitude.toFixed(5))) : '')
+        + (loc && typeof loc.accuracy_meters === 'number' ? row('GPS accuracy', esc('±' + Math.round(loc.accuracy_meters) + ' m')) : '')
+        + (loc && loc.device_location_name && loc.device_location_name !== loc.user_location_name ? row('Device GPS place', esc(loc.device_location_name)) : '')
+        + (loc && loc.is_user_corrected ? row('Pin adjusted by reporter', 'Yes') : '')
+        + (loc && typeof loc.geocoding_confidence === 'number' ? row('Geocoding confidence', esc(Math.round(loc.geocoding_confidence * 100) + '%' + (loc.geocoding_source ? ' · ' + loc.geocoding_source : ''))) : '')
+        + (loc && loc.h3_idx ? row('H3 cell', esc(loc.h3_idx)) : '')
+        + (r.infrastructure_name ? row('Building / structure', esc(r.infrastructure_name)) : '')
+        + (r.building_id ? row('Building ID', esc(String(r.building_id).slice(0, 12))) : '')
+        + (r.infrastructure_name_from_osm === false ? row('Building mapping', 'Needs mapping (free-text, not OSM)') : '');
+
+    // 6 · Description & transcript
+    let descBody =
+        (r.description ? `<div class="desc">${esc(r.description)}</div>` : '')
+        + (ai && ai.transcription && ai.transcription !== r.description ? `<div class="sub-t">Voice transcription</div><div class="desc">${esc(ai.transcription)}</div>` : '')
+        + (ai && ai.ai_summary ? `<div class="sub-t">AI summary</div><div class="desc">${esc(ai.ai_summary)}</div>` : '');
+    if (!descBody.trim()) descBody = '<div class="muted">No description provided.</div>';
+
+    // 7 · Crisis-pack answers (form_data)
+    let cfHtml = '';
+    if (r.form_data && typeof r.form_data === 'object' && !Array.isArray(r.form_data)) {
+        const ks = Object.keys(r.form_data);
+        if (ks.length) cfHtml = ks.map(k => row(_humanizeFormKey(k), _formatFormValue(r.form_data[k]))).join('');
+    }
+
+    // 8 · Service status (app-only)
+    const ssHtml = (ss.electricity || ss.water || ss.health || (Array.isArray(ss.pressing_needs) && ss.pressing_needs.length))
+        ? row('Electricity', esc(ss.electricity || '')) + row('Water', esc(ss.water || '')) + row('Health', esc(ss.health || ''))
+          + (Array.isArray(ss.pressing_needs) && ss.pressing_needs.length ? row('Pressing needs', esc(ss.pressing_needs.join(', '))) : '')
+        : '';
+
+    // 9 · Evidence & metadata checks (real signals)
+    let metaHtml = '';
+    const im0 = (r.media || []).find(m => m.type === 'IMAGE');
+    if (im0) {
+        if (im0.assembly_status) metaHtml += row('Photo upload', esc(im0.assembly_status));
+        if (im0.full_asset_checksum) metaHtml += row('Integrity checksum', 'Recorded (' + esc(String(im0.full_asset_checksum).slice(0, 12)) + '…)');
+        if (im0.client_blur_applied) metaHtml += row('Client-side face blur', 'Applied on device');
+        if (im0.pii_blur_status) metaHtml += row('PII redaction', esc(String(im0.pii_blur_status).replace(/_/g, ' ')));
+    }
+    if (r.client_created_at && r.server_created_at) {
+        let delay = '';
+        try { const dmin = (new Date(ensureUTC(r.server_created_at)) - new Date(ensureUTC(r.client_created_at))) / 60000; if (isFinite(dmin)) delay = dmin < 2 ? 'received in real time' : Math.round(dmin) + ' min capture → receipt'; } catch (_e) {}
+        if (delay) metaHtml += row('Timing', esc(delay));
+    }
+
+    // 10 · Corroboration & duplicates
+    let dupHtml = row('Corroborating reports merged', String(r.duplicate_count || 0));
+    if (dupCands.length) {
+        dupHtml += `<table class="tbl"><thead><tr><th>Related report</th><th class="num">Match</th><th>Why</th></tr></thead><tbody>`
+            + dupCands.map(c => `<tr><td>${esc([_dupTitle(c.crisis_type), _dupTitle(c.infrastructure_type), c.location_name].filter(Boolean).join(' · ') || String(c.report_id).slice(0, 8))}</td><td class="num">${esc((c.score != null ? c.score + '% ' : '') + (c.confidence || ''))}</td><td class="rsn">${esc((c.reasons || []).map(x => x.label || x.factor).filter(Boolean).join(', '))}</td></tr>`).join('')
+            + `</tbody></table>`;
+    }
+
+    // 11 · Visual evidence (embedded)
+    let imgCards = '';
+    photoData.forEach((src, i) => { imgCards += `<div class="img-card"><img src="${src}" alt="Reported photo"><div class="img-label">Reported photo${photoData.length > 1 ? ' ' + (i + 1) : ''}</div></div>`; });
+    satData.forEach((src, i) => { const s = satMeta[i]; imgCards += `<div class="img-card"><img src="${src}" alt="Satellite"><div class="img-label">${esc(s.label)}</div>${s.ts ? `<div class="img-ts">${esc(s.ts)}</div>` : ''}</div>`; });
+    const visualHtml = imgCards ? `<div class="img-grid">${imgCards}</div>` : '';
+
+    // 12 · Media summary
+    const imgs = (r.media || []).filter(m => m.type === 'IMAGE');
+    const auds = (r.media || []).filter(m => m.type === 'AUDIO');
+    const mediaHtml =
+        row('Attachments', esc((r.received_media ?? '?') + ' of ' + (r.expected_media ?? '?') + ' received'))
+        + row('Photos', String(imgs.length))
+        + row('Audio recordings', String(auds.length))
+        + (auds.length ? `<div class="sub-t">Audio (not embeddable in PDF)</div>` + auds.map((a, i) => row('Recording ' + (i + 1), esc((a.assembly_status || '') + (a.duration_seconds ? ' · ' + a.duration_seconds + 's' : '')))).join('') : '');
+
+    // 13 · History & activity
+    const tl = [];
+    if (r.server_created_at) tl.push({ t: r.server_created_at, label: 'Reported via ' + srcLabel });
+    if (r.reviewed_at) tl.push({ t: r.reviewed_at, label: 'Reviewed' + (r.reviewer_verdict && r.reviewer_verdict !== 'NOT_REVIEWED' ? ' (' + r.reviewer_verdict + ')' : '') });
+    if (r.dispatched_at) tl.push({ t: r.dispatched_at, label: 'Help dispatched' });
+    if (r.resolved_at) tl.push({ t: r.resolved_at, label: 'Resolved' });
+    let histHtml = tl.length ? `<div class="sub-t">Lifecycle</div>` + tl.map(e => `<div class="row"><span class="k">${esc(fmtDateTime(e.t))}</span><span class="v">${esc(e.label)}</span></div>`).join('') : '';
+    if (auditItems.length) {
+        const lbl = { REPORT_DISPATCH: 'Dispatched', REPORT_RESOLVE: 'Resolved', REPORT_FALSE_ALARM: 'False alarm', REPORT_ACCEPT: 'Accepted', REPORT_REJECT: 'Rejected', REPORT_DELETE: 'Deleted', REPORT_VERIFY: 'Verified' };
+        histHtml += `<div class="sub-t">Admin actions (audit trail)</div>` + auditItems.map(e => {
+            const who = e.user_email ? String(e.user_email).split('@')[0] : 'system';
+            const reason = (e.details && e.details.action_taken) ? ' — ' + e.details.action_taken : '';
+            return `<div class="row"><span class="k">${esc(e.created_at ? fmtDateTime(e.created_at) : '')}</span><span class="v">${esc((lbl[e.action] || e.action) + ' by ' + who + reason)}</span></div>`;
+        }).join('');
+    }
+
+    const body =
+        sec('Incident overview', overview)
+        + sec('Confidence assessment', assessHtml)
+        + sec('AI dossier', aiHtml)
+        + sec('Satellite verification', satHtml)
+        + sec('Location & building', locHtml)
+        + sec('Description & transcript', descBody)
+        + sec('Crisis-pack answers', cfHtml)
+        + sec('Service status', ssHtml)
+        + sec('Evidence & metadata checks', metaHtml)
+        + sec('Corroboration & duplicates', dupHtml)
+        + sec('Visual evidence', visualHtml)
+        + sec('Media summary', mediaHtml)
+        + sec('History & activity', histHtml);
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>CRISP Incident Report - ${esc(String(r.id).substring(0, 8))}</title>
     <style>
+      @page { size: A4 portrait; margin: 12mm; }
       *{margin:0;padding:0;box-sizing:border-box;}
-      body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:28px 32px;max-width:800px;margin:0 auto;color:#1e293b;font-size:13px;}
-      .hdr{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #7c3aed;padding-bottom:12px;margin-bottom:18px;}
-      .hdr h1{font-size:20px;color:#7c3aed;letter-spacing:-0.3px;}.hdr .rid{font-size:11px;color:#64748b;font-family:monospace;display:block;margin-top:2px;}
-      .badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;margin-right:4px;}
+      body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1e293b;font-size:11.5px;line-height:1.5;background:#fff;}
+      @media screen{body{max-width:820px;margin:0 auto;padding:24px;}}
+      .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #7c3aed;padding-bottom:12px;margin-bottom:16px;}
+      .hdr h1{font-size:19px;color:#7c3aed;letter-spacing:-0.3px;}
+      .hdr .rid{font-size:10px;color:#64748b;font-family:monospace;display:block;margin-top:2px;}
+      .badge{display:inline-block;padding:3px 9px;border-radius:12px;font-size:10px;font-weight:700;margin-left:4px;}
       .sev-CRITICAL,.sev-SEVERE{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;}
-      .sev-MODERATE{background:#fffbeb;color:#d97706;border:1px solid #fde68a;}.sev-MINOR{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;}
-      .section{margin-bottom:14px;padding:12px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;}
-      .section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#475569;margin-bottom:8px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;}
-      .row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px;}.row .k{color:#64748b;font-weight:600;}.row .v{color:#1e293b;}
-      .desc{font-size:13px;line-height:1.6;color:#334155;white-space:pre-wrap;}
-      .img-grid{display:flex;gap:10px;margin-top:8px;}
-      .img-card{flex:1;text-align:center;min-width:0;}
-      .img-card img{width:100%;height:180px;border-radius:6px;border:1px solid #e2e8f0;object-fit:cover;}
-      .img-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#475569;margin-top:5px;}
-      .img-ts{font-size:9px;color:#94a3b8;margin-top:1px;}
+      .sev-MODERATE{background:#fffbeb;color:#d97706;border:1px solid #fde68a;}
+      .sev-MINOR,.sev-MINIMAL{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;}
+      .section{margin-bottom:11px;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;break-inside:avoid;}
+      .section-title{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#7c3aed;margin-bottom:7px;border-bottom:1px solid #ede9fe;padding-bottom:4px;}
+      .row{display:flex;justify-content:space-between;gap:16px;padding:2.5px 0;}
+      .row .k{color:#64748b;font-weight:600;flex:0 0 auto;}
+      .row .v{color:#1e293b;text-align:right;word-break:break-word;}
+      .desc{white-space:pre-wrap;color:#334155;margin:2px 0 6px;}
+      .sub-t{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;color:#475569;margin:9px 0 3px;}
+      .muted{color:#94a3b8;font-style:italic;}
+      .tbl{width:100%;border-collapse:collapse;margin-top:5px;font-size:10.5px;}
+      .tbl th{text-align:left;color:#64748b;font-weight:700;border-bottom:1px solid #e2e8f0;padding:4px 6px;}
+      .tbl td{border-bottom:1px solid #f1f5f9;padding:4px 6px;vertical-align:top;}
+      .tbl td.num{white-space:nowrap;font-weight:700;text-align:right;}
+      .tbl td.rsn{color:#475569;}
+      .eq{margin-top:8px;font-weight:800;color:#1e293b;}
+      .score-hd{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px;}
+      .score-big{font-size:30px;font-weight:800;line-height:1;}
+      .score-den{font-size:14px;opacity:.6;font-weight:700;}
+      .score-band{font-size:13px;font-weight:800;text-transform:uppercase;}
+      .score-sub{font-size:10px;color:#64748b;}
+      .lst{margin:3px 0 4px 18px;}.lst li{margin:2px 0;}
+      .note{margin-top:8px;font-size:9.5px;color:#5b21b6;background:#f5f3ff;border:1px solid #ede9fe;border-radius:6px;padding:6px 8px;}
+      .img-grid{display:flex;flex-wrap:wrap;gap:10px;}
+      .img-card{flex:1 1 46%;min-width:0;text-align:center;break-inside:avoid;}
+      .img-card img{width:100%;max-height:115mm;object-fit:contain;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;}
+      .img-label{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#475569;margin-top:4px;}
+      .img-ts{font-size:8.5px;color:#94a3b8;}
       .print-bar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:16px;}
       .print-bar button{padding:8px 18px;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;}
       .btn-print{background:#7c3aed;color:#fff;}.btn-save{background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;}
-      .footer{margin-top:24px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;text-align:center;}
-      @media print{.print-bar{display:none !important;}body{padding:12px;}}
+      .footer{margin-top:18px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:9.5px;color:#94a3b8;text-align:center;}
+      @media print{.print-bar{display:none !important;}body{max-width:none;padding:0;}.section{break-inside:avoid;}}
     </style></head><body>
 
     <div class="print-bar">
-      <button class="btn-save" onclick="document.title='CRISP-Report-${r.id.substring(0,8)}';window.print();">Save as PDF</button>
+      <button class="btn-save" onclick="document.title='CRISP-Incident-${esc(String(r.id).substring(0, 8))}';window.print();">Save as PDF</button>
       <button class="btn-print" onclick="window.print();">Print</button>
     </div>
 
-    <div class="hdr"><div><h1>CRISP Incident Report</h1><span class="rid">ID: ${r.id}</span></div><div style="text-align:right;"><div style="font-size:13px;font-weight:700;">${infraDisplayLabel(r.infrastructure_type, r.infrastructure_sub_type)}</div><span class="badge sev-${r.severity}">${r.severity}</span><span class="badge" style="background:#f1f5f9;border:1px solid #cbd5e1;">${r.status}</span></div></div>
-
-    <div class="section"><div class="section-title">Incident Overview</div>
-      <div class="row"><span class="k">Type</span><span class="v">${infraDisplayLabel(r.infrastructure_type, r.infrastructure_sub_type)}</span></div>
-      <div class="row"><span class="k">Severity</span><span class="v">${r.severity}</span></div>
-      <div class="row"><span class="k">Status</span><span class="v">${r.status}</span></div>
-      <div class="row"><span class="k">Source</span><span class="v">${srcLabel}</span></div>
-      <div class="row"><span class="k">Reported</span><span class="v">${ts}</span></div>
-      ${ci?.phone ? `<div class="row"><span class="k">Caller</span><span class="v">${escapeHtml(ci.phone)}</span></div>` : ''}
+    <div class="hdr">
+      <div><h1>CRISP Incident Report</h1><span class="rid">ID: ${esc(r.id)}</span></div>
+      <div style="text-align:right;"><div style="font-size:13px;font-weight:700;">${esc(infraDisplayLabel(r.infrastructure_type, r.infrastructure_sub_type))}</div><span class="badge sev-${esc(r.severity || '')}">${esc(r.severity || '')}</span><span class="badge" style="background:#f1f5f9;border:1px solid #cbd5e1;color:#334155;">${esc(ds.label || r.status || '')}</span></div>
     </div>
 
-    <div class="section"><div class="section-title">Location</div>
-      <div class="row"><span class="k">Name</span><span class="v">${escapeHtml(locName)}</span></div>
-      ${loc ? `<div class="row"><span class="k">Coordinates</span><span class="v">${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}</span></div>` : ''}
-      ${ci?.network_location ? `<div class="row"><span class="k">Telecom Circle</span><span class="v">${escapeHtml(ci.network_location)}</span></div>` : ''}
-    </div>
+    ${body}
 
-    <div class="section"><div class="section-title">Description</div>
-      <div class="desc">${escapeHtml(r.description || ai?.transcription || 'No description available.')}</div>
-    </div>
-
-    ${hasAnyImage ? `
-    <div class="section"><div class="section-title">Visual Evidence</div>
-      <div class="img-grid">
-        ${userImgUrl ? `<div class="img-card"><img src="${userImgUrl}" onerror="this.parentElement.style.display='none'"><div class="img-label">Reported Photo</div><div class="img-ts">${ts}</div></div>` : ''}
-        ${satImgUrl ? `<div class="img-card"><img src="${satImgUrl}" onerror="this.parentElement.style.display='none'"><div class="img-label">${satSource1}</div><div class="img-ts">${satDate1}${satRes1 ? ' · ' + satRes1 + ' res' : ''}</div></div>` : ''}
-        ${satAltImgUrl ? `<div class="img-card"><img src="${satAltImgUrl}" onerror="this.parentElement.style.display='none'"><div class="img-label">${satSource2}</div><div class="img-ts">${satDate2}${satRes2 ? ' · ' + satRes2 + ' res' : ''}</div></div>` : ''}
-      </div>
-    </div>` : ''}
-
-    ${ai?.ai_summary ? `<div class="section"><div class="section-title">AI Analysis</div><div class="desc">${ai.ai_summary}</div></div>` : ''}
-
-    ${v ? `<div class="section"><div class="section-title">Satellite Verification</div>
-      <div class="row"><span class="k">Score</span><span class="v" style="font-weight:700;">${v.total_score}/100</span></div>
-      <div class="row"><span class="k">Verdict</span><span class="v">${(v.verdict || '').replace(/_/g,' ')}</span></div>
-      ${v.key_findings?.length ? `<div style="margin-top:6px;font-size:12px;"><strong>Findings:</strong><ul style="margin:4px 0 0 16px;">${v.key_findings.map(f=>'<li>'+f+'</li>').join('')}</ul></div>` : ''}
-    </div>` : ''}
-
-    <div class="section"><div class="section-title">Media Summary</div>
-      <div class="row"><span class="k">Attachments</span><span class="v">${r.received_media} of ${r.expected_media} received</span></div>
-      <div class="row"><span class="k">Images</span><span class="v">${r.media?.filter(m=>m.type==='IMAGE').length || 0}</span></div>
-      <div class="row"><span class="k">Audio Recordings</span><span class="v">${r.media?.filter(m=>m.type==='AUDIO').length || 0}</span></div>
-    </div>
-
-    <div class="footer">Generated by CRISP - Crisis Response Intelligence & Situation Platform · ${new Date().toLocaleString()}</div>
+    <div class="footer">Generated by CRISP · Crisis Response Intelligence &amp; Situation Platform · ${esc(new Date().toLocaleString())}</div>
     </body></html>`;
 
-    const w = window.open('', '_blank', 'width=850,height=1100');
+    if (!w) { showToast('Allow pop-ups to export the incident PDF.', 'error'); return; }
+    w.document.open();
     w.document.write(html);
     w.document.close();
 };
@@ -8898,9 +10916,27 @@ window.patchReport = async (id, action) => {
     } catch (e) { showToast('Action failed - check internet connection', 'error'); }
 };
 
-window.deleteReport = async (id) => {
+// Notify Response Team - the one-click "responding" action (dummy responder set):
+// it always dispatches the response and notifies the reporter's PWA (the /dispatch
+// endpoint sets RESPONDING + fires the reporter push). No responder-selection modal.
+window.notifyResponseTeam = async (id) => {
     try {
-        const res = await fetch(`${API}/${id}`, { method: 'DELETE' });
+        const res = await fetch(`${API}/${id}/dispatch`, { method: 'PATCH' });
+        if (!res.ok) { showToast('Could not notify the response team', 'error'); return; }
+        const updated = await res.json();
+        const idx = allReports.findIndex(r => r.id === id);
+        if (idx >= 0) allReports[idx] = { ...allReports[idx], ...updated };
+        if (_detailOnlyReport && _detailOnlyReport.id === id) _detailOnlyReport = { ..._detailOnlyReport, ...updated };
+        showToast('Response team notified · reporter informed in the app', 'success');
+        if (selectedId === id) selectReport(id, true);
+        renderFeed();
+    } catch (e) { showToast('Notify failed - check internet connection', 'error'); }
+};
+
+window.deleteReport = async (id, reason) => {
+    try {
+        const qs = reason ? `?reason=${encodeURIComponent(reason)}` : '';
+        const res = await fetch(`${API}/${id}${qs}`, { method: 'DELETE' });
         if (res.ok || res.status === 204) {
             allReports = allReports.filter(r => r.id !== id);
             knownIds.delete(id);
@@ -10038,10 +12074,17 @@ function updateMapMarkers() {
 
         // Marker with infrastructure category icon
         const infraIc = INFRA_ICONS[r.infrastructure_type] || 'fa-circle';
+        // Duplicate collapse: ONE pin per incident. When duplicates are merged
+        // beneath this primary, the pin wears a "N reports" count (primary + dups)
+        // instead of N overlapping pins.
+        const _dupN = r.duplicate_count || 0;
+        const _dupBadge = _dupN > 0
+            ? `<span class="crisp-marker-count" title="${_dupN + 1} corroborating reports (${_dupN} merged)" style="position:absolute;top:-6px;right:-6px;background:#0ea5e9;color:#fff;border:1.5px solid #0b1220;border-radius:9px;min-width:16px;height:16px;padding:0 3px;font-size:10px;font-weight:700;line-height:13px;text-align:center;">${_dupN + 1}</span>`
+            : '';
         const markerIcon = L.divIcon({
             className: 'crisp-marker',
-            html: `<div class="crisp-marker-pin" style="background:${color};box-shadow:0 2px 12px ${color}aa;">
-                <i class="fa-solid ${infraIc}"></i>
+            html: `<div class="crisp-marker-pin" style="position:relative;background:${color};box-shadow:0 2px 12px ${color}aa;">
+                <i class="fa-solid ${infraIc}"></i>${_dupBadge}
             </div>`,
             iconSize: [28, 28],
             iconAnchor: [14, 14],
@@ -10058,6 +12101,7 @@ function updateMapMarkers() {
                 ${img ? `<img src="${getMediaUrl(img.url)}" style="width:100%;height:70px;object-fit:cover;border-radius:6px;margin-bottom:6px;">` : ''}
                 <div style="font-weight:700;font-size:14px;color:${color};">${r.severity} - ${r.infrastructure_type}</div>
                 <div style="font-size:13px;color:#94a3b8;margin-top:2px;">${(r.description || '').substring(0, 60)}</div>
+                ${_dupN > 0 ? `<div style="font-size:12px;color:#7dd3fc;margin-top:4px;">🔗 ${_dupN + 1} corroborating reports (${_dupN} merged)</div>` : ''}
                 <div style="font-size:12px;color:#475569;margin-top:4px;">${timeAgo(r.server_created_at)}</div>
             </div>`;
         }, { className: 'rich-tooltip', direction: 'top', offset: [0, -8] });
@@ -10218,34 +12262,138 @@ window.closeDeletionsPanel = function () {
     if (panel) panel.style.display = 'none';
 };
 
-// P1.8 - admin endpoints now require X-Admin-Key. Cache the key in localStorage
-// so the operator only pastes it once. If absent, prompt. If the server later
-// returns 403 (key rotated), wipe the cached copy and prompt again.
-function _getAdminKey(forcePrompt = false) {
-    let key = !forcePrompt ? (localStorage.getItem('crisp_admin_key') || '') : '';
-    if (!key) {
-        key = prompt(
-            'Admin key required for this action.\n\n' +
-            '(Set CRISP_ADMIN_KEY on the backend and paste the same value here. ' +
-            'It stays in your browser\'s localStorage.)'
-        ) || '';
-        if (key) localStorage.setItem('crisp_admin_key', key.trim());
-    }
-    return key.trim();
+// Step-up ("sudo mode") for IRREVERSIBLE actions (the hard-purge). Replaces the
+// old shared CRISP_ADMIN_KEY + window.prompt: we re-confirm the operator's
+// identity ONCE via their authenticator (TOTP) code - or account password if no
+// MFA - then cache a short-lived step-up token (~10 min) in sessionStorage. The
+// server (POST /auth/step-up) issues + the purge endpoints enforce the real expiry.
+const _STEPUP_TOKEN_KEY = 'crisp_stepup_token';
+const _STEPUP_EXP_KEY = 'crisp_stepup_exp';
+
+function _ensureStepUpStyles() {
+    if (document.getElementById('stepup-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'stepup-styles';
+    s.textContent = `
+      .stepup-overlay{position:fixed;inset:0;z-index:100048;display:flex;align-items:center;
+        justify-content:center;background:rgba(4,10,20,.62);backdrop-filter:blur(2px)}
+      .stepup-card{width:380px;max-width:92vw;background:#101a2e;border:1px solid #233149;
+        border-radius:14px;padding:20px 22px;box-shadow:0 18px 60px rgba(0,0,0,.5);color:#e6eefb}
+      .stepup-card h3{margin:0 0 8px;font-size:16px}
+      .stepup-card p{margin:0 0 14px;font-size:13px;color:#9fb3d1;line-height:1.45}
+      .stepup-hint{color:#6b7d99;font-size:12px}
+      .stepup-card input{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;
+        border:1px solid #2b3b56;background:#0b1422;color:#e6eefb;font-size:15px;letter-spacing:.04em}
+      .stepup-card input:focus{outline:none;border-color:#418FDE}
+      .stepup-err{color:#f87171;font-size:12px;min-height:16px;margin-top:6px}
+      .stepup-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+      .stepup-actions button{padding:8px 16px;border-radius:9px;border:1px solid #2b3b56;
+        background:#1b2942;color:#cbd9ef;font-size:13px;cursor:pointer}
+      .stepup-actions .stepup-ok{background:#418FDE;border-color:#418FDE;color:#fff;font-weight:600}`;
+    document.head.appendChild(s);
 }
 
-async function _adminFetch(url, init = {}) {
-    const key = _getAdminKey();
-    if (!key) return null;
-    const headers = Object.assign({}, init.headers || {}, { 'X-Admin-Key': key });
-    const res = await fetch(url, Object.assign({}, init, { headers }));
-    if (res.status === 403) {
-        // Cached key is stale/wrong. Clear and try once more.
-        localStorage.removeItem('crisp_admin_key');
-        const newKey = _getAdminKey(true);
-        if (!newKey) return res;
-        const retryHeaders = Object.assign({}, init.headers || {}, { 'X-Admin-Key': newKey });
-        return fetch(url, Object.assign({}, init, { headers: retryHeaders }));
+// Promise<string|null> - the entered code, or null on cancel. In-app modal (no
+// native prompt()), focus-managed, Enter to confirm / Esc to cancel.
+function _promptStepUp(errMsg) {
+    _ensureStepUpStyles();
+    return new Promise((resolve) => {
+        const old = document.getElementById('stepup-overlay');
+        if (old) old.remove();
+        const ov = document.createElement('div');
+        ov.id = 'stepup-overlay';
+        ov.className = 'stepup-overlay';
+        ov.innerHTML =
+            '<div class="stepup-card" role="dialog" aria-modal="true" aria-label="Confirm your identity">' +
+            '<h3>Confirm it’s you</h3>' +
+            '<p>This permanently deletes report data and cannot be undone. Enter your ' +
+            'authenticator code to continue.<br><span class="stepup-hint">No authenticator set up? ' +
+            'Enter your account password.</span></p>' +
+            '<input id="stepup-input" type="password" inputmode="numeric" autocomplete="one-time-code" ' +
+            'placeholder="6-digit code or password" />' +
+            '<div class="stepup-err" id="stepup-err">' + (errMsg ? escapeHtml(errMsg) : '') + '</div>' +
+            '<div class="stepup-actions"><button id="stepup-cancel">Cancel</button>' +
+            '<button class="stepup-ok" id="stepup-ok">Confirm</button></div></div>';
+        document.body.appendChild(ov);
+        const input = ov.querySelector('#stepup-input');
+        const done = (val) => { try { ov.remove(); } catch (_e) {} resolve(val); };
+        ov.querySelector('#stepup-cancel').addEventListener('click', () => done(null));
+        ov.addEventListener('click', (e) => { if (e.target === ov) done(null); });
+        ov.querySelector('#stepup-ok').addEventListener('click', () => done((input.value || '').trim() || null));
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); done((input.value || '').trim() || null); }
+            else if (e.key === 'Escape') done(null);
+        });
+        setTimeout(() => { try { input.focus(); } catch (_e) {} }, 30);
+    });
+}
+
+// Resolve a valid step-up token: reuse the cached one within its window, else
+// re-confirm via the modal + POST /auth/step-up. Returns the token or null.
+//
+// NOTE: these calls deliberately use _origFetch (the raw, pre-interceptor fetch)
+// and attach the JWT by hand. The global fetch wrapper (top of this file) treats
+// ANY /api/ 401 as "session dead → wipe token + redirect to login". A wrong
+// authenticator code (step-up POST → 401) or an expired step-up token (purge →
+// 401) must NOT log the operator out - we want to re-prompt in place.
+async function _ensureStepUp(forcePrompt = false, errMsg = '') {
+    if (!forcePrompt) {
+        try {
+            const tok = sessionStorage.getItem(_STEPUP_TOKEN_KEY);
+            const exp = parseInt(sessionStorage.getItem(_STEPUP_EXP_KEY) || '0', 10);
+            if (tok && exp && Date.now() < exp - 15000) return tok;   // 15s safety buffer
+        } catch (_e) {}
+    }
+    const base = API.replace('/api/v1/reports', '/api/v1/auth/step-up');
+    for (let attempt = 0; attempt < 4; attempt++) {   // bounded so a persistent 401 can't loop forever
+        const code = await _promptStepUp(errMsg);
+        if (!code) return null;   // cancelled
+        try {
+            const res = await _origFetch(base, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('crisp_token') || ''}`,
+                },
+                body: JSON.stringify({ code }),
+            });
+            if (res.ok) {
+                const body = await res.json();
+                const ttl = (Number(body.expires_in) || 600) * 1000;
+                try {
+                    sessionStorage.setItem(_STEPUP_TOKEN_KEY, body.step_up_token);
+                    sessionStorage.setItem(_STEPUP_EXP_KEY, String(Date.now() + ttl));
+                } catch (_e) {}
+                return body.step_up_token;
+            }
+            errMsg = res.status === 401
+                ? 'Incorrect code - please try again.'
+                : 'Confirmation failed - please try again.';
+        } catch (_e) {
+            errMsg = 'Network error - please try again.';
+        }
+    }
+    showToast('Too many attempts - identity not confirmed.', 'error');
+    return null;
+}
+
+// Fetch wrapper for step-up-gated endpoints: attaches X-Step-Up (+ JWT) via the
+// raw fetch; on a 401 it clears the cached step-up token and re-confirms once.
+async function _stepUpFetch(url, init = {}) {
+    let tok = await _ensureStepUp();
+    if (!tok) return null;
+    const go = (t) => _origFetch(url, Object.assign({}, init, {
+        headers: Object.assign({}, init.headers || {}, {
+            'X-Step-Up': t,
+            'Authorization': `Bearer ${localStorage.getItem('crisp_token') || ''}`,
+        }),
+    }));
+    let res = await go(tok);
+    if (res.status === 401) {
+        try { sessionStorage.removeItem(_STEPUP_TOKEN_KEY); sessionStorage.removeItem(_STEPUP_EXP_KEY); } catch (_e) {}
+        tok = await _ensureStepUp(true, 'Your confirmation expired - please re-confirm.');
+        if (!tok) return res;
+        res = await go(tok);
     }
     return res;
 }
@@ -10253,8 +12401,8 @@ async function _adminFetch(url, init = {}) {
 window.purgeAllDeletions = async function () {
     if (!confirm(`Permanently delete all ${_pendingDeletions.length} pending deletion(s)? This cannot be undone.`)) return;
     try {
-        const res = await _adminFetch(`${API}/purge-all-pending`, { method: 'POST' });
-        if (!res) { showToast('Purge cancelled - admin key required', 'error'); return; }
+        const res = await _stepUpFetch(`${API}/purge-all-pending`, { method: 'POST' });
+        if (!res) { showToast('Purge cancelled - identity not confirmed', 'error'); return; }
         if (res.ok) {
             const result = await res.json();
             showToast(`${result.purged} report(s) permanently deleted`, 'success');
@@ -10266,10 +12414,10 @@ window.purgeAllDeletions = async function () {
             await _checkPendingDeletions();
             showPendingDeletions();
             fetchReports();
-        } else if (res.status === 503) {
-            showToast('Purge disabled: backend is missing CRISP_ADMIN_KEY env var', 'error');
         } else if (res.status === 403) {
-            showToast('Purge refused: invalid admin key', 'error');
+            showToast('Purge refused: your account is not authorized', 'error');
+        } else if (res.status === 401) {
+            showToast('Purge refused: identity confirmation required', 'error');
         } else {
             showToast(`Purge failed (HTTP ${res.status})`, 'error');
         }
@@ -10281,18 +12429,18 @@ window.purgeAllDeletions = async function () {
 window.purgeExpiredOnly = async function () {
     if (!confirm('Permanently delete all expired deletion requests?')) return;
     try {
-        const res = await _adminFetch(`${API}/purge-expired`, { method: 'POST' });
-        if (!res) { showToast('Purge cancelled - admin key required', 'error'); return; }
+        const res = await _stepUpFetch(`${API}/purge-expired`, { method: 'POST' });
+        if (!res) { showToast('Purge cancelled - identity not confirmed', 'error'); return; }
         if (res.ok) {
             const result = await res.json();
             showToast(`Purged ${result.purged} expired report(s)`, 'success');
             _checkPendingDeletions();
             setTimeout(() => showPendingDeletions(), 1000);
             fetchReports();
-        } else if (res.status === 503) {
-            showToast('Purge disabled: backend is missing CRISP_ADMIN_KEY env var', 'error');
         } else if (res.status === 403) {
-            showToast('Purge refused: invalid admin key', 'error');
+            showToast('Purge refused: your account is not authorized', 'error');
+        } else if (res.status === 401) {
+            showToast('Purge refused: identity confirmation required', 'error');
         } else {
             showToast(`Purge failed (HTTP ${res.status})`, 'error');
         }
@@ -10357,6 +12505,30 @@ window.downloadEvidenceBundle = async function (reportId) {
     } catch (e) {
         showToast(`Evidence bundle failed: ${e.message}`, 'error');
     }
+};
+
+// UX-I: single-incident export. Reuses the export endpoints scoped to one report
+// (?report_id=) - only the formats that make sense for ONE incident (CSV/GeoJSON/
+// KML; PDF + Evidence ZIP have their own per-report routes). The aggregate formats
+// (Sitrep / Analytics summary / Shapefile / Data dictionary) are NOT offered here -
+// they live in the full Export Center.
+window.exportIncidentFormat = async function (id, fmt) {
+    const base = API.replace('/api/v1/reports', '/api/v1/exports');
+    const url = `${base}/${fmt}?report_id=${encodeURIComponent(id)}`;
+    showToast(`Preparing ${fmt.toUpperCase()}…`, 'info');
+    try {
+        const res = await fetch(url);   // auth header injected by the fetch interceptor
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        const cd = res.headers.get('content-disposition') || '';
+        const m = /filename=([^;]+)/.exec(cd);
+        const name = m ? m[1].trim().replace(/^"|"$/g, '') : `crisp_incident_${String(id).slice(0, 8)}.${fmt}`;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+        showToast(`${fmt.toUpperCase()} downloaded`, 'success');
+    } catch (e) { showToast(`Export failed: ${e.message}`, 'error'); }
 };
 
 window.exportData = async function (format) {
@@ -10608,27 +12780,22 @@ async function updateGeodata(reports) {
 }
 
 async function reverseGeocode(r, lat, lng, cacheKey) {
+    // Reverse-geocode coords to a place-name label for the feed. geocode.maps.co
+    // was the former primary, but it REQUIRES an API key we don't ship - every
+    // call 401'd and fell straight through to the Nominatim fallback, so we were
+    // making TWO requests per report (one always-doomed) for one result. Go
+    // straight to OpenStreetMap Nominatim (no key; usage policy honored via the
+    // page Referer). The browser ignores a custom User-Agent header, so it's
+    // dropped. On failure the row keeps its coordinate label - never blocks.
     try {
-        const res = await fetch(`https://geocode.maps.co/reverse?lat=${lat}&lon=${lng}&format=json`, { mode: 'cors' });
-        if (res.ok) {
-            const data = await res.json();
-            if (data && data.address) {
-                applyGeoResult(r, data.address, cacheKey);
-                return;
-            }
-        }
-    } catch (e) {}
-
-    // Fallback to nominatim
-    try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=10`, { headers: { 'User-Agent': 'CRISP' } });
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=10`);
         if (res.ok) {
             const data = await res.json();
             if (data && data.address) {
                 applyGeoResult(r, data.address, cacheKey);
             }
         }
-    } catch (e) {}
+    } catch (e) { /* offline / rate-limited - keep the coordinate label */ }
 }
 
 function applyGeoResult(r, address, cacheKey) {
@@ -10698,7 +12865,11 @@ function _applyReportData(data) {
             if (idx >= 0) {
                 const geo = { _region: allReports[idx]._region, _country: allReports[idx]._country, _continent_code: allReports[idx]._continent_code };
                 const prev = allReports[idx];
-                allReports[idx] = { ...r, ...geo };
+                // Preserve prior fields the incoming poll row may omit (e.g. a
+                // transient response where `incident_credibility` serialized as
+                // null) so a background poll never silently wipes the just-run
+                // assessment. Present keys in `r` (incl. explicit values) still win.
+                allReports[idx] = { ...prev, ...r, ...geo };
                 if (r.id === selectedId) {
                     const prevImg = prev.media?.find(m => m.type === 'IMAGE');
                     const newImg  = r.media?.find(m => m.type === 'IMAGE');
@@ -10893,6 +13064,7 @@ async function fetchReports() {
         // (the backend filters before X-Total-Count, so the count stays scoped).
         const scopeParam = _activeCrisisEventId
             ? '&crisis_event_id=' + encodeURIComponent(_activeCrisisEventId) : '';
+        const fetchScope = _activeCrisisEventId;   // scope this request was issued for (validated on response)
         const listUrl = (wantFullRefresh
             ? baseUrl + '?' + limitParam
             : baseUrl + '?since=' + encodeURIComponent(_lastServerTime) + '&' + limitParam)
@@ -10937,6 +13109,17 @@ async function fetchReports() {
         const data = await res.json();
         console.log('[CRISP] Loaded', data.length, wantFullRefresh ? 'reports (full)' : 'delta updates');
 
+        // Scope guard: if the operation scope CHANGED while this request was in
+        // flight (e.g. a global poll started just before the operator opened an
+        // operation), DISCARD it - applying it would paint the wrong-scope dataset
+        // for a frame. The fresh scoped fetch that setOperationScope kicked owns
+        // the correct data. This is what guarantees a SINGLE, correct render.
+        if (fetchScope !== _activeCrisisEventId) {
+            console.debug('[CRISP] discarding stale-scope reports response (scope changed mid-flight)');
+            _reschedulePoller();
+            return;
+        }
+
         // Scale-out signal - if the backend says there are more rows
         // than the page-limit we asked for, log a warning so we know
         // proper pagination is needed BEFORE the truncation becomes an
@@ -10968,7 +13151,7 @@ async function fetchReports() {
         } else if (typeof _hideTruncationBanner === 'function') {
             // No shortfall - clear the banner + drop the server aggregates so the
             // client compute (exact at small scale) drives the strip + map.
-            if (wantFullRefresh) { _hideTruncationBanner(); _scopeSummary = null; _scopeMarkers = null; }
+            if (wantFullRefresh) { _hideTruncationBanner(true); _scopeSummary = null; _scopeMarkers = null; }
         }
 
         try {
@@ -10993,10 +13176,15 @@ async function fetchReports() {
             } else {
                 _applyReportData(data);
             }
+            _scopeLoading = false;   // data for the active scope has landed → loading state clears, real list renders
+            try { window.__crispRouteTrace && window.__crispRouteTrace('dataset loaded', { scope: _activeCrisisEventId || 'GLOBAL', loaded: allReports.length, total: _scopeTotalCount }); } catch (_e) {}
             if (!_initialLoadDone) {
                 _initialLoadDone = true;
                 _persistSeenIds();  // K.5.c - LRU cap + safe persist
                 console.log('[CRISP] Initial load complete - future reports will trigger notifications');
+                // Once-per-session "since your last visit" summary instead of
+                // replaying the boot batch as individual toasts.
+                try { _maybeShowSessionSummary(); } catch (_e) {}
             }
             console.log('[CRISP] Rendered', allReports.length, 'reports on map');
         } catch (e) {
@@ -11014,6 +13202,7 @@ async function fetchReports() {
         // Manual triggers (admin purge buttons) still call it directly.
     } catch (e) {
         console.error('[CRISP] FETCH ERROR:', e);
+        _scopeLoading = false;   // don't spin forever on a failed fetch - fall through to the error/empty state
         _updateCacheBadge(true);
         const feed = document.getElementById('report-feed-list');
         if (feed && !allReports.length) feed.innerHTML = `<div style="padding:20px;color:#f59e0b;font-size:13px;"><b>Connection Error:</b> ${e.message}<br><br>API: ${API}<br>Check if backend is running on port 8000.</div>`;
@@ -11073,7 +13262,21 @@ function _replaceReportData(data) {
     //        - _initialLoadDone   → _addNotification (subject to dedup)
     //    This is exactly the semantics we want. No suppression flag.
     _notifLog('replace-data', { incoming: data.length, deleted: 0 /* counted above */, initialLoadDone: _initialLoadDone });
+    // A full refresh can surface a BACKLOG of historical-but-unseen reports - most
+    // commonly when opening an Operation loads its hours-old reports into the
+    // working set. Those are age-gated to silent bell entries (no per-card toasts);
+    // if enough land at once, show ONE lightweight "since your last visit" banner
+    // (auto-dismiss ~5s) instead of N pop-ups. Guarded on _initialLoadDone so the
+    // first boot load (which silently seeds _seenIds, never notifies) shows nothing
+    // here - the boot path has its own _maybeShowSessionSummary.
+    const _silentBefore = _backlogSilent;
     _applyReportData(data);
+    const _silentNew = _backlogSilent - _silentBefore;
+    if (_initialLoadDone && _silentNew >= _BACKLOG_BANNER_MIN) {
+        try {
+            _showSessionSummaryBanner('+' + _silentNew + ' new report' + (_silentNew === 1 ? '' : 's') + ' received while you were away', false);
+        } catch (_e) { /* banner is best-effort */ }
+    }
 }
 
 // Operator-visible state inspector. Always available regardless of the
@@ -11084,7 +13287,8 @@ window.__crispNotifDebug = function () {
         initialLoadDone: _initialLoadDone,
         knownIds: knownIds.size,
         seenIds: _seenIds.size,
-        unseenBell: _unseenReports.map(n => ({ id: n.id, sev: n.severity, type: n.type, addedAt: n.addedAt })),
+        unreadCount: _notifUnreadCount(),
+        center: _notifCenter.map(n => ({ id: n.id, sev: n.severity, cat: n.cat, read: !!n.read, acknowledged: !!n.acknowledged, type: n.type, body: n.body })),
         stack: _notificationStack.map(n => ({ id: n.id, sev: n.severity, type: n.type, addedAt: n.addedAt, upgraded: !!n._upgraded })),
         burstArrivals: _burstArrivals.length,
         burstActive: _burstBannerActive,
@@ -11246,13 +13450,22 @@ let _modAppealsStatusFilter = 'open';  // 'open' | 'all'
 let _modTimelineGroupId = null;
 let _modLastBadgeRefreshAt = 0;
 
-/** Reveal the Moderation button only to admins. */
+/** Reveal the admin-only account-menu items (Moderation + the User Management /
+ *  Organisation Settings entries that moved out of the primary nav) to admins. */
 function _maybeShowModerationButton() {
     const u = _crispUser;
     const role = (u && u.role) || '';
+    const isAdmin = (role === 'ADMIN' || role === 'SUPER_ADMIN');
     const btn = document.getElementById('btn-moderation');
-    if (btn && (role === 'ADMIN' || role === 'SUPER_ADMIN')) {
+    if (btn && isAdmin) {
         btn.style.display = 'inline-flex';
+    }
+    // Admin config items relocated from the header nav into the account dropdown.
+    if (isAdmin) {
+        for (const id of ['btn-user-mgmt', 'btn-org-settings']) {
+            const b = document.getElementById(id);
+            if (b) b.style.display = 'inline-flex';
+        }
     }
 }
 window._maybeShowModerationButton = _maybeShowModerationButton;
@@ -11646,7 +13859,7 @@ function _initUserMenu() {
 // 30 s; cheap DOM-only.
 
 function _refreshUserMenuAdminState() {
-    const ids = ['btn-moderation', 'btn-pending-deletions'];
+    const ids = ['btn-moderation', 'btn-pending-deletions', 'btn-user-mgmt', 'btn-org-settings'];
     const visible = ids.map(id => {
         const el = document.getElementById(id);
         return el && el.style.display !== 'none';
@@ -11723,22 +13936,18 @@ function _initToolsActiveDot() {
     }
 }
 
-// ── Token auto-refresh (5 min before expiry) ─────────────────────────────────
-async function _autoRefreshToken() {
-    const refresh = localStorage.getItem('crisp_refresh');
-    if (!refresh) return;
-    try {
-        const res = await _origFetch(`${BACKEND_HOST}/api/v1/auth/refresh`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refresh_token: refresh }),
-        });
-        if (res.ok) {
-            const data = await res.json();
-            localStorage.setItem('crisp_token', data.access_token);
-        }
-    } catch (_) {}
-}
-setInterval(_autoRefreshToken, 25 * 60 * 1000); // Refresh every 25 min
+// ── Token auto-refresh ───────────────────────────────────────────────────────
+// PROACTIVE refresh, routed through the shared in-flight _tryRefreshToken (so it
+// never races the reactive refresh-on-401 in the fetch wrapper). Access tokens
+// live ~30 min; refresh well inside that. Also refresh when a BACKGROUNDED tab
+// regains focus - browsers throttle/pause setInterval in hidden tabs, so a single
+// long interval could fire AFTER the token already expired. The reactive
+// refresh-on-401 is the real safety net; this just avoids the extra 401 round-trip.
+const _autoRefreshToken = () => { try { _tryRefreshToken(); } catch (_e) {} };
+setInterval(_autoRefreshToken, 10 * 60 * 1000);   // every 10 min (well under the ~30 min TTL)
+try {
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) _autoRefreshToken(); });
+} catch (_e) {}
 
 document.addEventListener('DOMContentLoaded', async () => {
     _initUserMenu();
@@ -11774,20 +13983,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     initMap();
     await loadWorldData();
 
-    // Show loading state in feed while data loads
+    // Determine context BEFORE the first fetch. If the URL already carries an
+    // operation scope (deep-link / refresh of #/incidents;op=X), set it now so the
+    // FIRST fetch is scoped - there is never a global fetch+render before the
+    // router re-applies the scope (kills the global-first flash on refresh).
+    const _bootOp = _scopeFromHash();
+    if (_bootOp) { _activeCrisisEventId = _bootOp; _scopeLoading = true; }
+    try { window.__crispRouteTrace && window.__crispRouteTrace('boot', { scope: _bootOp || 'GLOBAL', hash: location.hash }); } catch (_e) {}
+
+    // Show the (scope-aware) loading state in the feed while data loads.
     const feedList = document.getElementById('report-feed-list');
     if (feedList && !allReports.length) {
-        feedList.innerHTML = `<div class="feed-empty-state">
-            <i class="fa-solid fa-spinner fa-spin" style="color:var(--info);"></i>
-            <div class="feed-empty-title">Connecting to server...</div>
-            <div class="feed-empty-sub">Loading incident reports</div>
-        </div>`;
+        feedList.innerHTML = _loadingFeedHtml();
     }
 
-    // Show cached data instantly (zero network needed)
-    _loadCachedReports();
+    // Show cached data instantly (zero network) - but NOT for a scoped deep-link,
+    // where the cache (a previous GLOBAL / other-scope session) is the WRONG
+    // dataset and would flash the wrong incidents before the scoped fetch lands.
+    if (!_bootOp) _loadCachedReports();
 
-    // Fetch fresh data, then adaptive polling takes over
+    // Fetch fresh data (scoped when _bootOp is set), then adaptive polling takes over.
     fetchReports();
 
     // Apr 2026 - pending-deletions check runs on its own slow timer

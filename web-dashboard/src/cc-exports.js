@@ -292,6 +292,7 @@
           <div class="cc-ex-scope">
             <p class="cc-ex-sec">Scope</p>
             ${S.crisisEventId ? '<div class="cc-ex-opscope">📍 This operation only - the scope below filters within it.</div>' : ''}
+            ${(S.from === '/operations' && !S.crisisEventId) ? '<div class="cc-ex-opscope" style="background:rgba(217,119,6,.15);border-color:rgba(217,119,6,.5);color:#fbbf24">⚠ Operation scope unavailable - this will export ALL data, not just this operation. Re-open Export from the operation dashboard to scope it.</div>' : ''}
             ${radio('all', S.crisisEventId ? 'All of this operation' : 'All data')}
             ${S.from === '/incidents' ? radio('current', 'Current filters (what I see)') : ''}
             ${radio('24h', 'Last 24 hours')}

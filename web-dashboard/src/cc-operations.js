@@ -215,6 +215,30 @@
       details[open] .opc-grp-sum::before{transform:rotate(90deg)}
       .opc-grp-n{font-weight:700;color:#6b7d99;background:#1b2942;border-radius:999px;padding:0 7px;font-size:10px}
       .opc-ended-body{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+      /* ── COMPACT density row: one line, health dot + name/place + critical. No
+            KPI strip, no SVG map, no trend - used by the home rail shortlist and
+            the /operations dense mode so 50+ ops scan without a scroll wall. ── */
+      .opc-c{display:flex;align-items:center;gap:9px;padding:8px 11px;background:#101a2e;border:1px solid #233149;
+        border-radius:10px;cursor:pointer;transition:border-color .12s,background .12s}
+      .opc-c:hover{border-color:#418FDE;background:#13203a}
+      .opc-c:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
+      .opc-c-unatt{box-shadow:inset 3px 0 0 0 #f87171;border-color:#5a1f1f}
+      .opc-c-unatt:hover{border-color:#f87171}
+      .opc-c-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+      .opc-c-id{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .opc-c-name{font-size:13.5px;font-weight:700;color:#e6edf7}
+      .opc-c-place,.opc-c-age{font-size:11.5px;color:#7d8ba3;font-weight:400}
+      .opc-c-warn{color:#fbbf24;font-size:13px;flex:0 0 auto}
+      .opc-c-crit{flex:0 0 auto;font-size:11px;font-weight:700;color:#f87171;background:#1d1113;border:1px solid #7f1d1d;
+        border-radius:7px;padding:2px 8px;white-space:nowrap;font-variant-numeric:tabular-nums}
+      .opc-c-crit b{font-size:12.5px;font-weight:800}
+      .opc-c-crit.zero{color:#5b6b86;background:#0d1626;border-color:#1f2c44}
+      .opc-c-cluster{border-style:dashed;border-color:#7f1d1d;background:#1b1113}
+      .opc-c-cluster .opc-c-name{color:#fca5a5}
+      .opc-c-newop{border-style:dashed;border-color:#33476a;background:#0e1726}
+      .opc-c-newop:hover{border-color:#418FDE}
+      .opc-c-plus{width:20px;height:20px;display:grid;place-items:center;color:#7fa9d8;font-size:16px;flex:0 0 auto;
+        border-radius:6px;background:#13203a;border:1px dashed #33476a}
       `;
       const st = document.createElement('style');
       st.id = 'crisp-opcard-styles';
@@ -351,6 +375,40 @@
         + `<div class="opc-kpis opc-kpis-empty" aria-hidden="true"></div>`
         + `<div class="opc-sit"><span class="opc-ar">›</span></div></div>`;
     },
+    // COMPACT row - the same data + click target as card(), at ~half the height
+    // and with NO inline SVG map / KPI strip / trend. Triage signals only:
+    // health dot (+ "why" title), name · place · age, an unattended flag, the
+    // Critical count, chevron. Used by the home rail shortlist + dense list mode.
+    _compactCard(o) {
+      if (o.is_cluster) {
+        return `<div class="opc-c opc-c-cluster" data-cluster="1" data-critical="${Number(o.critical) || 0}" role="link" tabindex="0"
+            aria-label="${fmtNum(o.critical)} unassigned critical reports, no operation - view reports or create an operation">
+          <span class="opc-c-dot" style="background:#f87171"></span>
+          <span class="opc-c-id"><span class="opc-c-name">${fmtNum(o.critical)} critical, no operation</span></span>
+          <span class="opc-c-crit"><b>${fmtNum(o.critical)}</b> crit</span>
+          <span class="opc-ar">›</span></div>`;
+      }
+      const hc = healthColor(o);
+      const fl = this._flags(o);
+      const isLive = String(o && o.status || '').toUpperCase() === 'LIVE';
+      const unatt = isLive && fl.unattended;
+      const place = o.place_name ? esc(o.place_name) : '';
+      const age = this._opAge(o);
+      const critN = Number(o.critical) || 0;
+      return `<div class="opc-c${unatt ? ' opc-c-unatt' : ''}" data-op="${esc(o.id)}" role="link" tabindex="0"
+          aria-label="${esc(o.name)} - ${esc(o.health || '')} health, ${fmtNum(o.critical)} critical${unatt ? ', unattended critical' : ''} - open operation">
+        <span class="opc-c-dot" style="background:${hc}" title="${esc(o.health_reason || o.health || '')}"></span>
+        <span class="opc-c-id"><span class="opc-c-name">${esc(o.name)}</span>${place ? `<span class="opc-c-place"> · ${place}</span>` : ''}${age ? `<span class="opc-c-age"> · ${esc(age.toLowerCase())}</span>` : ''}</span>
+        ${unatt ? '<span class="opc-c-warn" title="Unattended critical">⚠</span>' : ''}
+        <span class="opc-c-crit${critN === 0 ? ' zero' : ''}"><b>${fmtNum(o.critical)}</b> crit</span>
+        <span class="opc-ar">›</span></div>`;
+    },
+    _compactStartNew() {
+      return `<div class="opc-c opc-c-newop" data-new="1" role="button" tabindex="0" aria-label="Start a new operation">`
+        + `<span class="opc-c-plus" aria-hidden="true">+</span>`
+        + `<span class="opc-c-id"><span class="opc-c-name">Start new operation</span></span>`
+        + `<span class="opc-ar">›</span></div>`;
+    },
     // Render + wire a whole list/rail into `host`. Shared by both surfaces.
     // opts: { empty, grouped (default true), liveHeader, startNew }
     //   grouped   → split LIVE (first) vs ENDED (collapsed <details>)
@@ -362,6 +420,8 @@
       this._injectCss();
       opts = opts || {};
       const grouped = opts.grouped !== false;
+      const compact = !!opts.compact;                       // dense one-line rows
+      const mk = (o) => compact ? this._compactCard(o) : this.card(o);
       const all = (ops || []).slice();
       const _utc = window.__ccEnsureUTC || ((x) => x);
       const isEnded = (o) => !o.is_cluster && String(o && o.status || '').toUpperCase() === 'ENDED';
@@ -375,18 +435,22 @@
       }
 
       let html = '';
-      if (opts.startNew) html += this._startNewCard();
+      if (opts.startNew) html += compact ? this._compactStartNew() : this._startNewCard();
       if (grouped) {
         if (opts.liveHeader) html += `<div class="opc-grp-t">LIVE OPERATIONS</div>`;
-        html += live.map((o) => this.card(o)).join('');
+        html += live.map(mk).join('');
         if (!live.length && !opts.startNew) html += `<div class="cco-empty">${esc(opts.empty || 'No live operations.')}</div>`;
         if (ended.length) {
           html += `<details class="opc-ended"><summary class="opc-grp-t opc-grp-sum">ENDED OPERATIONS`
             + ` <span class="opc-grp-n">${ended.length}</span></summary>`
-            + `<div class="opc-ended-body">${ended.map((o) => this.card(o)).join('')}</div></details>`;
+            + `<div class="opc-ended-body">${ended.map(mk).join('')}</div></details>`;
         }
       } else {
-        html += live.concat(ended).map((o) => this.card(o)).join('');
+        // presorted: caller already filtered + ordered (e.g. the /operations
+        // registry's name / recent sort) - render `all` verbatim so we don't
+        // override it with the internal worst-first sort.
+        const seq = opts.presorted ? all : live.concat(ended);
+        html += seq.map(mk).join('');
       }
       host.innerHTML = html;
 
@@ -424,6 +488,31 @@
     .cco-sub{font-size:12px;color:#8aa0bf;margin:0 0 16px}
     .cco-sec-t{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#8aa0bf;margin:18px 0 8px}
     .cco-card{background:#101a2e;border:1px solid #233149;border-radius:12px}
+    /* registry controls (search · status segment · health chips · sort · density) */
+    .cco-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px}
+    .cco-search{position:relative;flex:1 1 230px;min-width:190px}
+    .cco-search-ic{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:12px;opacity:.6;pointer-events:none}
+    .cco-search input{width:100%;box-sizing:border-box;padding:8px 12px 8px 30px;background:#0d1626;border:1px solid #233149;
+      border-radius:9px;color:#e6edf7;font-size:13px;font-family:inherit}
+    .cco-search input:focus{outline:none;border-color:#418FDE}
+    .cco-seg-grp{display:inline-flex;border:1px solid #233149;border-radius:9px;overflow:hidden}
+    .cco-seg{background:#0d1626;border:none;border-right:1px solid #233149;color:#9fb3d1;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+    .cco-seg:last-child{border-right:none}
+    .cco-seg.active{background:#13203a;color:#e6edf7}
+    .cco-fchips{display:inline-flex;gap:6px;flex-wrap:wrap}
+    .cco-fchip{background:#0d1626;border:1px solid #233149;color:#9fb3d1;border-radius:999px;padding:5px 11px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit}
+    .cco-fchip:hover{border-color:#418FDE}
+    .cco-fchip.red.active{color:#f87171;border-color:#7f1d1d;background:#1d1113}
+    .cco-fchip.amber.active,.cco-fchip.unatt.active{color:#fbbf24;border-color:#5a4410;background:#181206}
+    .cco-fchip.green.active{color:#34D399;border-color:#14532d;background:#0c1f16}
+    .cco-sel{background:#0d1626;border:1px solid #233149;color:#cdd8ec;border-radius:9px;padding:7px 10px;font-size:12px;font-family:inherit;cursor:pointer}
+    .cco-dens,.cco-newbtn{background:#1b2942;border:1px solid #33476a;color:#cdd8ec;border-radius:9px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+    .cco-dens:hover,.cco-newbtn:hover{border-color:#418FDE;color:#fff}
+    .cco-newbtn{background:#1d4ed8;border-color:#2563eb;color:#fff}
+    .cco-listfoot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:8px}
+    .cco-count{font-size:11.5px;color:#7d8ba3}
+    .cco-more{background:#1b2942;border:1px solid #33476a;color:#cdd8ec;border-radius:9px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+    .cco-more:hover{border-color:#418FDE;color:#fff}
     /* operation rows (list + rail share this) */
     .cco-list{display:flex;flex-direction:column;gap:8px}
     .cco-op{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#101a2e;
@@ -469,7 +558,16 @@
     .cco-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
     @media(max-width:1000px){.cco-grid{grid-template-columns:1fr}.cco-vitals{grid-template-columns:repeat(2,1fr)}}
     #cco-map{height:360px;border-radius:10px;overflow:hidden;background:#0d1422;isolation:isolate}
+    .cco-wl-tabs{display:inline-flex;gap:4px;margin-right:8px}
+    .cco-tab{background:#0d1626;border:1px solid #1f2c44;color:#9fb3d1;border-radius:7px;padding:2px 11px;font-size:11px;font-weight:700;cursor:pointer}
+    .cco-tab.active{background:#13203a;border-color:#418FDE;color:#e6edf7}
     .cco-wl{max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:2px}
+    /* Operation Buildings worklist: a local scroll height-matched to the map
+       (max-height:360px from .cco-wl). De-congest so ~5 buildings show at a time
+       (taller cards + a touch more gap); the rest lazy-load on scroll (renderInto
+       pageSize). overscroll-behavior keeps the page from scrolling past the list. */
+    #cco-bld{gap:8px;overscroll-behavior:contain}
+    #cco-bld .bic{min-height:58px}
     .cco-wl-row{display:flex;align-items:center;gap:10px;padding:9px 11px;background:#0d1626;border:1px solid #1f2c44;
       border-radius:10px;cursor:pointer}
     .cco-wl-row:hover{border-color:#418FDE;background:#13203a}
@@ -531,29 +629,125 @@
     _map = null; _cluster = null;
   }
 
-  // ── LIST view ──────────────────────────────────────────────────────────────
+  // ── LIST view (the scalable REGISTRY: search · filter · sort · density ·
+  //    windowing). The home rail is the worst-first shortlist; THIS is where the
+  //    full 50-500-operation portfolio lives without a scroll wall. ───────────
+  const OPS_PAGE = 30;
+  let _opsAll = [];
+  const _opsView = { q: '', status: 'live', health: '', sort: 'worst', density: 'comfortable', shown: OPS_PAGE };
+  try { if (localStorage.getItem('crisp_ops_density') === 'compact') _opsView.density = 'compact'; } catch (_e) {}
+  const _unattended = (o) => (o && o.unattended_critical != null)
+    ? Number(o.unattended_critical) > 0
+    : ((Number(o && o.critical) || 0) > 0 && (Number(o && o.responders_active) || 0) === 0);
+
+  function _opsControlsHtml() {
+    const v = _opsView;
+    const seg = (val, label) => `<button type="button" class="cco-seg${v.status === val ? ' active' : ''}" data-status="${val}">${label}</button>`;
+    const hchip = (val, label, cls) => `<button type="button" class="cco-fchip ${cls}${v.health === val ? ' active' : ''}" data-health="${val}">${label}</button>`;
+    return `<div class="cco-controls">
+      <div class="cco-search"><span class="cco-search-ic" aria-hidden="true">🔍</span><input id="cco-search" type="search" placeholder="Search by name or place…" value="${esc(v.q)}" autocomplete="off" aria-label="Search operations"></div>
+      <div class="cco-seg-grp" role="group" aria-label="Status filter">${seg('live', 'Live')}${seg('ended', 'Ended')}${seg('all', 'All')}</div>
+      <div class="cco-fchips" role="group" aria-label="Health filter">${hchip('RED', 'Critical', 'red')}${hchip('AMBER', 'Rising', 'amber')}${hchip('GREEN', 'Stable', 'green')}${hchip('UNATT', 'Unattended', 'unatt')}</div>
+      <select id="cco-sort" class="cco-sel" aria-label="Sort operations">
+        <option value="worst"${v.sort === 'worst' ? ' selected' : ''}>Worst first</option>
+        <option value="new"${v.sort === 'new' ? ' selected' : ''}>Recent activity</option>
+        <option value="name"${v.sort === 'name' ? ' selected' : ''}>Name (A-Z)</option>
+      </select>
+      <button type="button" id="cco-density" class="cco-dens" title="Toggle row density">${v.density === 'compact' ? '☰ Compact' : '▤ Comfortable'}</button>
+      <button type="button" id="cco-newop" class="cco-newbtn">+ New operation</button>
+    </div>`;
+  }
+
+  function _wireOpsControls() {
+    const wrap = el('cco-wrap'); if (!wrap) return;
+    const s = el('cco-search');
+    if (s) s.addEventListener('input', () => { _opsView.q = s.value || ''; _opsView.shown = OPS_PAGE; _applyOpsView(); });
+    wrap.querySelectorAll('[data-status]').forEach((b) => b.addEventListener('click', () => {
+      _opsView.status = b.getAttribute('data-status'); _opsView.shown = OPS_PAGE; _applyOpsView(); _syncOpsControls();
+    }));
+    wrap.querySelectorAll('[data-health]').forEach((b) => b.addEventListener('click', () => {
+      const h = b.getAttribute('data-health'); _opsView.health = (_opsView.health === h) ? '' : h; _opsView.shown = OPS_PAGE; _applyOpsView(); _syncOpsControls();
+    }));
+    const so = el('cco-sort'); if (so) so.addEventListener('change', () => { _opsView.sort = so.value; _applyOpsView(); });
+    const d = el('cco-density');
+    if (d) d.addEventListener('click', () => {
+      _opsView.density = _opsView.density === 'compact' ? 'comfortable' : 'compact';
+      try { localStorage.setItem('crisp_ops_density', _opsView.density); } catch (_e) {}
+      d.textContent = _opsView.density === 'compact' ? '☰ Compact' : '▤ Comfortable';
+      _applyOpsView();
+    });
+    const n = el('cco-newop'); if (n) n.addEventListener('click', () => { try { (window.openOperationWizard || function () {})(); } catch (_e) {} });
+  }
+  function _syncOpsControls() {
+    const wrap = el('cco-wrap'); if (!wrap) return;
+    wrap.querySelectorAll('[data-status]').forEach((b) => b.classList.toggle('active', b.getAttribute('data-status') === _opsView.status));
+    wrap.querySelectorAll('[data-health]').forEach((b) => b.classList.toggle('active', b.getAttribute('data-health') === _opsView.health));
+  }
+
+  function _applyOpsView() {
+    const host = el('cco-list'); if (!host) return;
+    const v = _opsView;
+    const _utc = window.__ccEnsureUTC || ((x) => x);
+    const isEnded = (o) => String(o && o.status || '').toUpperCase() === 'ENDED';
+    const real = (_opsAll || []).filter((o) => !o.is_cluster);
+    const cluster = (_opsAll || []).find((o) => o.is_cluster) || null;
+    const q = v.q.trim().toLowerCase();
+    let list = real.filter((o) => {
+      if (v.status === 'live' && isEnded(o)) return false;
+      if (v.status === 'ended' && !isEnded(o)) return false;
+      if ((v.health === 'RED' || v.health === 'AMBER' || v.health === 'GREEN') && o.health !== v.health) return false;
+      if (v.health === 'UNATT' && !(String(o.status || '').toUpperCase() === 'LIVE' && _unattended(o))) return false;
+      if (q && !String(o.name || '').toLowerCase().includes(q) && !String(o.place_name || '').toLowerCase().includes(q)) return false;
+      return true;
+    });
+    if (v.sort === 'name') list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    else if (v.sort === 'new') list.sort((a, b) => new Date(_utc(b.last_activity || 0)) - new Date(_utc(a.last_activity || 0)));
+    else list.sort(worstFirst);
+
+    const total = list.length;
+    // Pin the orphan-critical CTA only in the default, unfiltered live view.
+    const showCluster = cluster && Number(cluster.critical) > 0 && v.status !== 'ended' && !v.health && !q;
+    const rows = (showCluster ? [cluster] : []).concat(list.slice(0, v.shown));
+
+    if (!rows.length) {
+      host.innerHTML = `<div class="cco-empty">No operations match these filters.</div>`;
+      return;
+    }
+    CrispOpCard.renderInto(host, rows, { grouped: false, presorted: true, compact: v.density === 'compact', startNew: false });
+
+    const shownN = Math.min(v.shown, total);
+    const foot = document.createElement('div');
+    foot.className = 'cco-listfoot';
+    foot.innerHTML = `<span class="cco-count">${fmtNum(shownN)} of ${fmtNum(total)} operation${total === 1 ? '' : 's'}</span>`
+      + (total > v.shown ? `<button type="button" class="cco-more" id="cco-more">Load more (${fmtNum(total - v.shown)})</button>` : '');
+    host.appendChild(foot);
+    const more = el('cco-more');
+    if (more) more.addEventListener('click', () => { _opsView.shown += OPS_PAGE; _applyOpsView(); });
+  }
+
   async function renderList() {
     const wrap = el('cco-wrap');
     if (!wrap) return;
+    // Pre-apply a filter handed over from the home rail's summary chips.
+    let handoff = null;
+    try { handoff = sessionStorage.getItem('crisp_ops_filter'); sessionStorage.removeItem('crisp_ops_filter'); } catch (_e) {}
+    if (handoff === 'red') { _opsView.health = 'RED'; _opsView.status = 'live'; }
+    else if (handoff === 'amber') { _opsView.health = 'AMBER'; _opsView.status = 'live'; }
+    else if (handoff === 'green') { _opsView.health = 'GREEN'; _opsView.status = 'live'; }
+    else if (handoff === 'unattended') { _opsView.health = 'UNATT'; _opsView.status = 'live'; }
+    else if (handoff === 'all') { _opsView.health = ''; _opsView.status = 'all'; }
+    _opsView.shown = OPS_PAGE;
+
     wrap.innerHTML = '<h1 class="cco-h">Operations</h1>'
-      + '<p class="cco-sub">Live operations first, worst-first. Ended operations are collapsed below.</p>'
+      + '<p class="cco-sub">Search, filter and sort the full portfolio. Worst-first by default.</p>'
+      + _opsControlsHtml()
       + '<div class="cco-list" id="cco-list"><div class="cco-empty">Loading operations…</div></div>';
-    let ops = [];
-    try { ops = await jget('/operations'); } catch (_e) {
+    _wireOpsControls();
+    try { _opsAll = await jget('/operations'); } catch (_e) {
       el('cco-list').innerHTML = '<div class="cco-empty">Could not load operations.</div>';
       return;
     }
-    renderRows(el('cco-list'), ops);
-  }
-
-  // Thin wrapper over the shared card (CrispOpCard) - the list + the home rail
-  // render the SAME card now (was a separate, drifted implementation). The
-  // /operations page shows the LIVE header + the Start-New card.
-  function renderRows(host, ops) {
-    CrispOpCard.renderInto(host, ops, {
-      empty: 'No operations yet. Start one to coordinate a response.',
-      grouped: true, liveHeader: true, startNew: true,
-    });
+    _applyOpsView();
   }
 
   // ── DETAIL view ──────────────────────────────────────────────────────────────
@@ -621,14 +815,15 @@
           <div class="cco-card" style="padding:8px"><div id="cco-map"></div></div>
         </div>
         <div>
-          <div class="cco-sec-t">Operation incidents <span class="cco-src">only this operation · critical first</span></div>
-          <div class="cco-wl" id="cco-wl"></div>
+          <div class="cco-sec-t"><span class="cco-wl-tabs" id="cco-wl-tabs"><button type="button" class="cco-tab active" data-wl="buildings">Buildings</button><button type="button" class="cco-tab" data-wl="reports">Reports</button></span> <span class="cco-src" id="cco-wl-src">affected buildings · priority first</span></div>
+          <div class="cco-wl" id="cco-bld"></div>
+          <div class="cco-wl" id="cco-wl" style="display:none"></div>
         </div>
       </div>
       <div class="cco-sec-t">Local conditions <span class="cco-src">weather · hazard alerts</span></div>
       <div class="cco-card" id="cco-weather"><div class="cco-empty">Loading local conditions…</div></div>
       <div class="cco-actions">
-        <button class="cco-btn primary" id="cco-act-feed">Open full incident feed</button>
+        <button class="cco-btn primary" id="cco-act-feed">Open Incident Feed</button>
         <button class="cco-btn" id="cco-act-export">Export</button>
         <button class="cco-btn" id="cco-act-forms">Deploy form pack</button>
         <button class="cco-btn cco-undo" id="cco-act-undo" title="Reverse the most recent cluster claim on this operation">↩ Undo claim</button>
@@ -641,7 +836,7 @@
       // the op scope is carried so the analyst keeps context on the feed.
       v.addEventListener('click', () => go('#/incidents;op=' + encodeURIComponent(_detailOpId) + ';queue=' + v.getAttribute('data-q')));
     });
-    // Open the full incident feed SCOPED to this operation (context persists).
+    // Open the Incident Feed SCOPED to this operation (context persists).
     el('cco-act-feed').addEventListener('click', () => go('#/incidents;op=' + encodeURIComponent(_detailOpId)));
     el('cco-act-export').addEventListener('click', () => {
       // Stash THIS operation's id so the Export Center scopes the download to it.
@@ -652,11 +847,55 @@
       navTo('/exports');
     });
     el('cco-act-forms').addEventListener('click', () => navTo('/reporting'));
-    el('cco-act-undo').addEventListener('click', () => { (window.unclaimOperation || function () {})(id); });
+    el('cco-act-undo').addEventListener('click', (ev) => {
+      // D4: confirm the (claim-reversing) action + pass the button so the handler
+      // disables it during the request (no spam-click) and defers the redirect.
+      const btn = ev.currentTarget;
+      if (!window.confirm('Reverse the most recent claim for this operation? The reports it claimed are released back to the global queue.')) return;
+      (window.unclaimOperation || function () {})(id, btn);
+    });
 
     renderWorklist(reports);
+    renderOpBuildings(reports);
+    // Reports | Buildings worklist toggle (Buildings is the default operational
+    // worklist - the real places help is sent). Reports stays one click away.
+    const tabs = el('cco-wl-tabs');
+    if (tabs) tabs.querySelectorAll('[data-wl]').forEach((btn) => btn.addEventListener('click', () => {
+      const mode = btn.getAttribute('data-wl');
+      tabs.querySelectorAll('[data-wl]').forEach((b) => b.classList.toggle('active', b === btn));
+      const wl = el('cco-wl'), bld = el('cco-bld'), src = el('cco-wl-src');
+      const showReports = mode === 'reports';
+      if (wl) wl.style.display = showReports ? '' : 'none';
+      if (bld) bld.style.display = showReports ? 'none' : '';
+      if (src) src.textContent = showReports ? 'only this operation · critical first' : 'affected buildings · priority first';
+    }));
     renderOpMap(reports);
     loadWeather(id);
+  }
+
+  // Operation Buildings worklist: the buildings that have a report in THIS operation,
+  // ranked by humanitarian_priority, using the SAME shared card as the global view.
+  // Scoped by the op's report building-ids (client filter of the priority-ranked list)
+  // - zero backend change; the op-scoped /buildings endpoint is a P2 refinement.
+  async function renderOpBuildings(reports) {
+    const box = el('cco-bld');
+    if (!box) return;
+    const ids = new Set((reports || []).map((r) => r && r.building_id).filter(Boolean));
+    if (!ids.size) { box.innerHTML = '<div class="cco-empty">No building-tagged reports in this operation yet.</div>'; return; }
+    box.innerHTML = '<div class="cco-empty">Loading buildings…</div>';
+    try {
+      const body = await jget('/buildings?order_by=humanitarian_priority&order_dir=desc&limit=300');
+      const items = (((body && body.items) || []).filter((b) => ids.has(b.id)));
+      if (!box.isConnected) return;
+      // Lazy-load: show ~5 buildings (the worklist is height-matched to the map),
+      // stream the rest as the operator scrolls - no congested wall at 50+ buildings.
+      // openBuildingConsole (the card default) now reparents #detail-panel to <body>,
+      // so the console shows as a global overlay over this operations overlay - the
+      // same way the incident detail panel already does from the op-map markers.
+      if (window.CrispBuildingCard) window.CrispBuildingCard.renderInto(box, items, { emptyText: 'No buildings for this operation.', pageSize: 8 });
+    } catch (_e) {
+      box.innerHTML = '<div class="cco-empty">Buildings unavailable.</div>';
+    }
   }
 
   // ── local conditions (weather + hazard alerts) - backend-proxied + cached ──
@@ -731,9 +970,14 @@
         <div class="cco-ar">›</div></div>`;
     }).join('');
     host.querySelectorAll('[data-id]').forEach((row) => {
-      // Pass the operation id so the incident opens INSIDE this op
-      // (#/operations/{opId}?incident={id}) and keeps the op banner.
-      const open = () => { try { (window.openIncident || function () {})(row.getAttribute('data-id'), { operationId: _detailOpId, source: 'op-worklist' }); } catch (_e) {} };
+      // Clicking an incident leaves the operation dashboard for the full Incident
+      // Feed page, SCOPED to this operation, with the report selected:
+      //   #/incidents;op={opId}?incident={id}
+      // -> router.dispatch() applies setOperationScope(opId), then
+      //    CrispNav.restoreFromHash() runs selectReport + markSelected, so the
+      //    feed list shows on the LEFT (this row highlighted + scrolled into view)
+      //    and the detail report opens on the RIGHT. Deep-linkable / refresh-safe.
+      const open = () => go('#/incidents;op=' + encodeURIComponent(_detailOpId) + '?incident=' + encodeURIComponent(row.getAttribute('data-id')));
       row.addEventListener('click', open);
       row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
     });
@@ -757,7 +1001,10 @@
       pts.forEach(([lat, lng, r]) => {
         const sev = String(r.severity || 'UNKNOWN').toUpperCase();
         L.circleMarker([lat, lng], { radius: 7, color: SEV_COLOR[sev] || SEV_COLOR.UNKNOWN, weight: 2, fillOpacity: .65 })
-          .on('click', () => { try { (window.openIncident || function () {})(r.id, { operationId: _detailOpId, source: 'op-map' }); } catch (_e) {} })
+          // Route the SAME way a worklist report row does, so the operation id is
+          // retained in the hash (#/incidents;op={id}?incident={rid}) instead of
+          // dropping to #/operations?incident=… and losing op context (D3).
+          .on('click', () => { try { go('#/incidents;op=' + encodeURIComponent(_detailOpId) + '?incident=' + encodeURIComponent(r.id)); } catch (_e) {} })
           .addTo(_cluster);
       });
       if (pts.length) {

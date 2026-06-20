@@ -38,6 +38,7 @@
   "chip_has_media": "С медиа",
   "chip_verified": "Проверено",
   "chip_building_tagged": "Здание отмечено",
+  "chip_needs_review": "На проверку",
   "chip_clear_all": "Сбросить фильтры",
   "feed_no_reports": "Нет отчётов, соответствующих фильтрам.",
   "card_send_help": "Отправить помощь",

@@ -1039,44 +1039,12 @@
     } catch (err) { toast('Action failed: ' + err.message, 'err'); }
   }
 
-  // ── launcher (injects an admin-only item into the existing user-menu) ──────────
-  function mountLauncher() {
-    try {
-      const dropdown = el('user-menu-dropdown');
-      if (!dropdown || el('btn-crisis-forms')) return;
-      const btn = document.createElement('button');
-      btn.className = 'user-menu-item';
-      btn.id = 'btn-crisis-forms';
-      btn.type = 'button';
-      btn.innerHTML = `<i class="fa-solid fa-clipboard-list"></i><span>Crisis Forms</span>`;
-      btn.addEventListener('click', () => {
-        if (window._toggleUserMenu) { try { window._toggleUserMenu(false); } catch (_e) { } }
-        openOverlay();
-      });
-      // gate to admins (app.js toggles the sibling admin items by id; ours we gate ourselves)
-      btn.style.display = isAdmin() ? '' : 'none';
-      const divider = el('user-menu-admin-divider');
-      if (divider && divider.parentNode === dropdown) dropdown.insertBefore(btn, divider);
-      else dropdown.insertBefore(btn, dropdown.firstChild);
-    } catch (_e) { /* never break the dashboard */ }
-  }
-
-  function boot() {
-    try {
-      mountLauncher();
-      // re-check after a short delay in case the user chip renders late post-auth
-      setTimeout(() => {
-        const b = el('btn-crisis-forms');
-        if (b) b.style.display = isAdmin() ? '' : 'none';
-        else mountLauncher();
-      }, 1500);
-    } catch (_e) { /* swallow - additive module must not break boot */ }
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else { boot(); }
-
-  // expose a tiny hook for manual open (debug / future deep-link)
+  // NOTE: Crisis Forms is reached from the PRIMARY nav button (crisp-shell.js
+  // `b('/reporting', '🧩', 'Crisis Forms', true)`), the operation dashboard
+  // "Deploy form pack" action, and the #/reporting deep-link - all via the
+  // router. The old account-dropdown injection here was REMOVED (it duplicated
+  // the nav entry and bypassed the router, so it never set the #/reporting URL).
+  // The route is the single, deep-linkable entry point.
   window.openCrisisForms = openOverlay;
 
   // Debug/test hook (mirrors the app.js window.__crisp* convention) - lets the

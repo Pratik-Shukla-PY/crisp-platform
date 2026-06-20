@@ -273,7 +273,7 @@
     if (wiz.step === 1) next = '';                                   // Step 1 advances on selection
     else if (wiz.step === 2) next = `<button class="cc-wiz-btn primary" id="cc-wiz-next">Preview →</button>`;
     else if (wiz.step === 3) next = `<button class="cc-wiz-btn primary" id="cc-wiz-next">Continue →</button>`;
-    else next = `<button class="cc-wiz-btn go" id="cc-wiz-launch">${wiz.busy ? 'Launching…' : '🚀 Launch operation'}</button>`;
+    else next = `<button class="cc-wiz-btn go" id="cc-wiz-launch"${wiz.busy ? ' disabled aria-busy="true"' : ''}>${wiz.busy ? '<span class="cc-busy-spin" aria-hidden="true"></span> Launching…' : '🚀 Launch operation'}</button>`;
     f.innerHTML = `${back}<div class="cc-wiz-sp"></div>${next}`;
     if (el('cc-wiz-back')) el('cc-wiz-back').addEventListener('click', goBack);
     if (el('cc-wiz-next')) el('cc-wiz-next').addEventListener('click', goNext);

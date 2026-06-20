@@ -43,6 +43,10 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
   const el = (id) => document.getElementById(id);
+  // D6: shared busy/double-submit guard from app.js (disables the control + spins
+  // a button label during an async action). Falls back to a bare call if app.js
+  // hasn't exposed it yet, so settings never hard-depends on load order.
+  const busy = (b, fn) => (typeof window.withBusy === 'function' ? window.withBusy(b, fn) : (typeof fn === 'function' ? fn() : undefined));
   function fmtDate(s) {
     if (!s) return '-';
     // Shared dashboard format (app.js __ccFmtDateTime: "11 Jun 2026,
@@ -319,7 +323,7 @@
         toast('Account data downloaded.', 'ok');
       } catch (e) { toast('Export failed: ' + e.message, 'err'); }
     });
-    el('cc-st-save-profile').addEventListener('click', async () => {
+    el('cc-st-save-profile').addEventListener('click', (ev) => busy(ev.currentTarget, async () => {
       const full_name = el('cc-st-name').value.trim();
       if (!full_name) { toast('Name cannot be empty.', 'err'); return; }
       try {
@@ -328,7 +332,7 @@
         try { const u = currentUser(); u.full_name = full_name; localStorage.setItem('crisp_user', JSON.stringify(u)); } catch (_) {}
         toast('Profile saved.', 'ok');
       } catch (e) { toast('Save failed: ' + e.message, 'err'); }
-    });
+    }));
   }
 
   // ── ACCOUNT · Security ──────────────────────────────────────────────────────
@@ -355,7 +359,7 @@
           ? 'Your account requires a 6-digit code at login.'
           : 'MFA enrolment is managed during sign-in. Contact your administrator to enable TOTP for this account.'}</p>
       </div>`;
-    el('cc-st-save-pw').addEventListener('click', async () => {
+    el('cc-st-save-pw').addEventListener('click', (ev) => busy(ev.currentTarget, async () => {
       const cur = el('cc-st-cur-pw').value, np = el('cc-st-new-pw').value, np2 = el('cc-st-new-pw2').value;
       if (!cur || !np) { toast('Enter your current and new password.', 'err'); return; }
       if (np !== np2) { toast('New passwords do not match.', 'err'); return; }
@@ -364,7 +368,7 @@
         el('cc-st-cur-pw').value = el('cc-st-new-pw').value = el('cc-st-new-pw2').value = '';
         toast('Password updated.', 'ok');
       } catch (e) { toast(e.message || 'Update failed.', 'err'); }
-    });
+    }));
   }
 
   // ── ACCOUNT · Sessions ──────────────────────────────────────────────────────
@@ -388,11 +392,13 @@
           <tbody>${list}</tbody></table>
         <p class="cc-st-hint">Revoking signs that device out on its next request.</p>
       </div>`;
-    body.querySelectorAll('[data-revoke]').forEach((b) => b.addEventListener('click', async () => {
+    body.querySelectorAll('[data-revoke]').forEach((b) => b.addEventListener('click', () => {
       const id = b.getAttribute('data-revoke');
       if (!window.confirm('Revoke this session?')) return;
-      try { await api('DELETE', '/sessions/' + encodeURIComponent(id)); toast('Session revoked.', 'ok'); render(); }
-      catch (e) { toast('Revoke failed: ' + e.message, 'err'); }
+      return busy(b, async () => {
+        try { await api('DELETE', '/sessions/' + encodeURIComponent(id)); toast('Session revoked.', 'ok'); render(); }
+        catch (e) { toast('Revoke failed: ' + e.message, 'err'); }
+      });
     }));
   }
 
@@ -459,23 +465,25 @@
           <tbody>${list || `<tr><td colspan="5"><div class="cc-st-empty">No users.</div></td></tr>`}</tbody></table>
         <p class="cc-st-hint">In-organisation user management. Changing a role takes effect on the user's next request.</p>
       </div>`;
-    body.querySelectorAll('.cc-st-role').forEach((sel) => sel.addEventListener('change', async () => {
+    body.querySelectorAll('.cc-st-role').forEach((sel) => sel.addEventListener('change', () => busy(sel, async () => {
       const id = sel.getAttribute('data-id');
       try { await api('PATCH', '/users/' + encodeURIComponent(id), { role: sel.value }); toast('Role updated.', 'ok'); }
       catch (e) { toast('Update failed: ' + e.message, 'err'); render(); }
-    }));
-    body.querySelectorAll('[data-toggle]').forEach((b) => b.addEventListener('click', async () => {
+    })));
+    body.querySelectorAll('[data-toggle]').forEach((b) => b.addEventListener('click', () => busy(b, async () => {
       const id = b.getAttribute('data-toggle');
       const u = S.users.find((x) => x.id === id); if (!u) return;
       try { await api('PATCH', '/users/' + encodeURIComponent(id), { is_active: !u.is_active }); toast('User updated.', 'ok'); S.users = null; render(); }
       catch (e) { toast('Update failed: ' + e.message, 'err'); }
-    }));
-    body.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
+    })));
+    body.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => {
       const id = b.getAttribute('data-del');
       const u = S.users.find((x) => x.id === id); if (!u) return;
       if (!window.confirm(`Delete user ${u.email}? This cannot be undone.`)) return;
-      try { await api('DELETE', '/users/' + encodeURIComponent(id)); toast('User deleted.', 'ok'); S.users = null; render(); }
-      catch (e) { toast('Delete failed: ' + e.message, 'err'); }
+      return busy(b, async () => {
+        try { await api('DELETE', '/users/' + encodeURIComponent(id)); toast('User deleted.', 'ok'); S.users = null; render(); }
+        catch (e) { toast('Delete failed: ' + e.message, 'err'); }
+      });
     }));
   }
 
@@ -517,7 +525,7 @@
     const cp = el('cc-st-org-color'), hex = el('cc-st-org-color-hex');
     cp.addEventListener('input', () => { hex.value = cp.value; });
     hex.addEventListener('input', () => { if (/^#[0-9a-fA-F]{6}$/.test(hex.value)) cp.value = hex.value; });
-    el('cc-st-org-save').addEventListener('click', saveOrgBranding);
+    el('cc-st-org-save').addEventListener('click', (ev) => busy(ev.currentTarget, saveOrgBranding));
     el('cc-st-logo-file').addEventListener('change', uploadOrgLogo);
   }
 
@@ -589,38 +597,16 @@
       </div>`;
   }
 
-  // ── launcher (injects admin/user items into the existing user-menu) ──────────
-  function injectLauncher() {
-    try {
-      const dropdown = el('user-menu-dropdown');
-      if (!dropdown || el('cc-st-launch-account')) return;
-      const mk = (id, label, icon, fn) => {
-        const btn = document.createElement('button');
-        btn.id = id; btn.className = 'user-menu-item';
-        btn.innerHTML = `<i class="fa-solid ${icon}"></i> ${label}`;
-        btn.addEventListener('click', () => {
-          try { dropdown.classList.remove('open'); dropdown.style.display = ''; } catch (_) {}
-          fn();
-        });
-        return btn;
-      };
-      // Insert near the top of the menu (before the admin divider if present).
-      const anchor = el('user-menu-admin-divider') || dropdown.firstChild;
-      const acct = mk('cc-st-launch-account', 'Account settings', 'fa-user-gear', () => openOverlay('account'));
-      dropdown.insertBefore(acct, anchor);
-      if (isAdmin()) {
-        const org = mk('cc-st-launch-org', 'Organisation settings', 'fa-building-shield', () => openOverlay('org'));
-        dropdown.insertBefore(org, anchor);
-      }
-    } catch (_e) { /* never break the dashboard */ }
-  }
+  // The account / organisation user-menu items are now STATIC + router-driven in
+  // index.html (#btn-account-settings → /users, #btn-org-settings → /org; the
+  // router opens these overlays via openAccountSettings / openOrgSettings). This
+  // module no longer injects its OWN "Account settings" / "Organisation settings"
+  // buttons - that left a duplicate of each in the dropdown after the header
+  // consolidation. The overlay machinery (openOverlay + the public API below) is
+  // unchanged and still backs both the menu items and the /users + /org routes.
 
   function boot() {
     injectStyles();
-    injectLauncher();
-    // The user-menu may render after us; retry a few times defensively.
-    let tries = 0;
-    const iv = setInterval(() => { injectLauncher(); if (el('cc-st-launch-account') || ++tries > 20) clearInterval(iv); }, 400);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();

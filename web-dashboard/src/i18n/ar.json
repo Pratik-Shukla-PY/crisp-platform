@@ -38,6 +38,7 @@
   "chip_has_media": "يحتوي على وسائط",
   "chip_verified": "تم التحقق",
   "chip_building_tagged": "مبنى محدد",
+  "chip_needs_review": "بحاجة لمراجعة",
   "chip_clear_all": "مسح عوامل التصفية",
   "feed_no_reports": "لا توجد تقارير مطابقة لعوامل التصفية الحالية.",
   "card_send_help": "إرسال مساعدة",

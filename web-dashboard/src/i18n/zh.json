@@ -38,6 +38,7 @@
   "chip_has_media": "包含媒体",
   "chip_verified": "已验证",
   "chip_building_tagged": "建筑物已标记",
+  "chip_needs_review": "待审核",
   "chip_clear_all": "清除筛选",
   "feed_no_reports": "没有符合当前筛选条件的报告。",
   "card_send_help": "派遣救援",

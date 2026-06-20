@@ -142,7 +142,28 @@
        the global map drops below into the MONITORING zone (was a side-by-side
        grid that conflated the two). */
     /* active-operations rail */
-    #cc-ops-rail{display:flex;flex-direction:column;gap:8px;max-height:540px;overflow-y:auto}
+    #cc-ops-rail{display:flex;flex-direction:column;gap:9px;max-height:560px;overflow-y:auto}
+    #cc-ops-rail-list{display:flex;flex-direction:column;gap:8px}
+    /* portfolio summary - scales the rail to 50+ ops (top-N shortlist + summary) */
+    .cc-ops-sum{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+    .cc-ops-chip{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid #233149;
+      background:#0d1626;color:#9fb3d1;cursor:pointer;font-family:inherit;font-variant-numeric:tabular-nums}
+    .cc-ops-chip:hover{border-color:#418FDE}
+    .cc-ops-chip b{font-weight:800}
+    .cc-ops-chip.red{color:#f87171;border-color:#7f1d1d;background:#1d1113}
+    .cc-ops-chip.amber{color:#fbbf24;border-color:#5a4410;background:#181206}
+    .cc-ops-chip.green{color:#34D399;border-color:#14532d;background:#0c1f16}
+    .cc-ops-chip.muted{cursor:default;color:#8aa0bf}
+    .cc-ops-chip.muted:hover{border-color:#233149}
+    .cc-ops-alert{display:flex;align-items:center;gap:9px;padding:7px 11px;border-radius:9px;background:#1b1113;
+      border:1px solid #7f1d1d;color:#fca5a5;font-size:12.5px;cursor:pointer}
+    .cc-ops-alert:hover{border-color:#f87171}
+    .cc-ops-alert b{color:#f87171;font-weight:800}
+    .cc-ops-alert .cta{margin-left:auto;font-size:11.5px;color:#fca5a5;text-decoration:underline;white-space:nowrap}
+    .cc-ops-more{display:flex;align-items:center;justify-content:center;gap:6px;padding:7px;font-size:12px;
+      color:#8aa0bf;cursor:pointer;border:1px dashed #233149;border-radius:9px;background:#0d1626}
+    .cc-ops-more:hover{color:#cdd8ec;border-color:#418FDE}
+    .cc-ops-more a{color:#7db8ef;text-decoration:underline}
     .cc-op-row{display:flex;align-items:center;gap:11px;padding:11px 13px;background:#121A2A;border:1px solid #243149;border-radius:11px;cursor:pointer}
     .cc-op-row:hover{border-color:#418FDE;background:#16213a}
     .cc-op-row:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
@@ -347,7 +368,7 @@
              The old side-by-side ops|map row (which conflated the two) is split:
              the rail is full-width in Zone A, the map drops full-width into Zone B. -->
         <div class="cc-zone cc-zone-response">
-          <div class="cc-sec-t cc-band">⚡ Active Operations <span class="cc-band-sub">- operations you are running</span> <span class="cc-stale" id="cc-sum-stale"></span><button type="button" id="cc-ops-expand" class="cc-expand-btn" title="Open the full operations view" aria-label="Expand to the full operations management view">⤢ <span class="cc-expand-l">View all</span></button></div>
+          <div class="cc-sec-t cc-band">⚡ Active Operations <span class="cc-band-sub">- operations you are running</span> <span class="cc-stale" id="cc-sum-stale"></span><button type="button" id="cc-ops-new" class="cc-expand-btn" title="Start a new operation" aria-label="Start a new operation">+ <span class="cc-expand-l">New</span></button><button type="button" id="cc-ops-expand" class="cc-expand-btn" title="Open the full operations view" aria-label="Expand to the full operations management view">⤢ <span class="cc-expand-l">View all</span></button></div>
           <div id="cc-ops-rail"><div class="cc-empty">Loading operations…</div></div>
         </div>
 
@@ -366,6 +387,12 @@
               <div id="cc-att" class="cc-att-col"><div class="cc-empty">Loading…</div></div>
             </div>
           </div>
+
+          <!-- Building Intelligence: buildings ranked by operational priority - the
+               real places help is sent. Same shared card used in the Operation
+               worklist (no second mental model). Report volume stays visible. -->
+          <div class="cc-sec-t cc-band">🏢 Building Intelligence <span class="cc-band-sub">- buildings ranked by priority · where to send help next</span> <button type="button" id="cc-bld-expand" class="cc-expand-btn" title="See all buildings in the incident feed">⤢ <span class="cc-expand-l">View all</span></button></div>
+          <div id="cc-buildings"><div class="cc-empty">Loading buildings…</div></div>
 
           <div class="cc-sec-t">Operational Intelligence</div>
           <div class="cc-grid3">
@@ -391,6 +418,17 @@
     // replaces the removed standalone "Operations" nav button).
     const expand = el('cc-ops-expand');
     if (expand) expand.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); go('/operations'); });
+    // "+ New" → the Start-New-Operation wizard (moved off a full-width rail card
+    // into the band header so the rail is pure triage at 50+ ops).
+    const opsNew = el('cc-ops-new');
+    if (opsNew) opsNew.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      try { (window.openOperationWizard || function () { go('/operations'); })(); } catch (_e) { go('/operations'); }
+    });
+    // "View all" buildings → the incident feed, where the Buildings grouping view
+    // lists every building (no separate buildings route by design).
+    const bldExp = el('cc-bld-expand');
+    if (bldExp) bldExp.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); go('/incidents'); });
 
     // Org branding + clock are rendered by the shell (crisp-shell.js) now.
     refreshAll();
@@ -401,9 +439,27 @@
   function refreshAll() {
     loadSummary();
     loadOperations();
+    loadBuildings();
     loadFeed();
     loadSparkline();
     loadBriefing();
+  }
+
+  // ── data: Building Intelligence (top buildings by humanitarian_priority) ──
+  async function loadBuildings() {
+    const box = el('cc-buildings');
+    if (!box) return;
+    try {
+      const { body } = await jget('/buildings?order_by=humanitarian_priority&order_dir=desc&limit=8');
+      const items = (body && body.items) || [];
+      if (window.CrispBuildingCard) {
+        window.CrispBuildingCard.renderInto(box, items, { emptyText: 'No buildings with reports yet.' });
+      }
+    } catch (e) {
+      box.innerHTML = (String(e.message) === '401' || String(e.message) === '403')
+        ? '<div class="cc-empty">Sign in to view buildings.</div>'
+        : '<div class="cc-empty">Buildings unavailable.</div>';
+    }
   }
 
   // ── data: summary (KPIs, distributions, impact) ──
@@ -512,6 +568,19 @@
   const _OP_HEALTH = { RED: '#f87171', AMBER: '#fbbf24', GREEN: '#34D399' };
   const _opWorst = (a, b) => (b.critical || 0) - (a.critical || 0)
     || (b.new_24h || 0) - (a.new_24h || 0) || (b.total || 0) - (a.total || 0);
+  // The home rail is a TRIAGE SHORTLIST, not the registry: it shows only the
+  // worst-first top-N operations + a portfolio summary, and routes the long tail
+  // to #/operations. This is what keeps the rail scannable at 50+ operations.
+  const RAIL_TOP_N = 6;
+  const _opUnattended = (o) => (o && o.unattended_critical != null)
+    ? Number(o.unattended_critical) > 0
+    : ((Number(o && o.critical) || 0) > 0 && (Number(o && o.responders_active) || 0) === 0);
+  // Open the full registry, optionally pre-applying a filter the /operations page
+  // reads once from sessionStorage (avoids a router/query change for P0).
+  function _openOpsFiltered(filter) {
+    try { if (filter) sessionStorage.setItem('crisp_ops_filter', filter); else sessionStorage.removeItem('crisp_ops_filter'); } catch (_e) {}
+    go('/operations');
+  }
 
   function renderOpsRail(ops) {
     const box = el('cc-ops-rail');
@@ -520,13 +589,71 @@
     // render the SAME card. Fallback to a minimal inline row if that module hasn't
     // loaded (defensive; both ship in index.html).
     if (window.CrispOpCard && typeof window.CrispOpCard.renderInto === 'function') {
-      // Active Operations zone: Start-New card first, LIVE ops, then a collapsed
-      // ENDED group. No "LIVE OPERATIONS" sub-header - the zone band already
-      // reads "⚡ Active Operations".
-      window.CrispOpCard.renderInto(box, ops, {
-        empty: 'No active operations. Start one to coordinate a response.',
-        grouped: true, liveHeader: false, startNew: true,
+      const all = (ops || []).slice();
+      const cluster = all.find((o) => o.is_cluster) || null;
+      const real = all.filter((o) => !o.is_cluster);
+      const isEnded = (o) => String(o && o.status || '').toUpperCase() === 'ENDED';
+      const live = real.filter((o) => !isEnded(o)).sort(_opWorst);
+
+      // Portfolio summary - the one-line "do I need to act?" answer at any scale,
+      // each chip click-throughs into the filtered registry.
+      const red = live.filter((o) => o.health === 'RED').length;
+      const amber = live.filter((o) => o.health === 'AMBER').length;
+      const green = Math.max(0, live.length - red - amber);
+      const unatt = live.filter(_opUnattended).length;
+      const critTotal = live.reduce((s, o) => s + (Number(o.critical) || 0), 0);
+      const chip = (cls, n, label, f) => (n > 0)
+        ? `<button type="button" class="cc-ops-chip ${cls}"${f ? ` data-opf="${f}"` : ''}><b>${fmtNum(n)}</b> ${label}</button>` : '';
+      const summary = `<div class="cc-ops-sum">`
+        + `<button type="button" class="cc-ops-chip muted" data-opf="all"><b>${fmtNum(live.length)}</b> live</button>`
+        + chip('red', red, 'critical state', 'red')
+        + chip('amber', amber, 'rising', 'amber')
+        + chip('green', green, 'stable', 'green')
+        + chip('', unatt, 'unattended', 'unattended')
+        + (critTotal > 0 ? `<span class="cc-ops-chip muted"><b>${fmtNum(critTotal)}</b> critical reports</span>` : '')
+        + `</div>`;
+
+      // Orphan-critical: a slim one-line alert (was a full-width card).
+      let alert = '';
+      if (cluster && Number(cluster.critical) > 0) {
+        alert = `<div class="cc-ops-alert" id="cc-ops-alert" data-critical="${Number(cluster.critical) || 0}" role="button" tabindex="0">`
+          + `<span>🚨 <b>${fmtNum(cluster.critical)}</b> critical reports not yet in an operation</span>`
+          + `<span class="cta">Triage →</span></div>`;
+      }
+
+      const topN = live.slice(0, RAIL_TOP_N);
+      const moreN = real.length - topN.length;   // remaining live + all ended
+      const more = moreN > 0
+        ? `<div class="cc-ops-more" id="cc-ops-more" role="button" tabindex="0">+ ${fmtNum(moreN)} more operation${moreN === 1 ? '' : 's'} · <a>View all ${fmtNum(real.length)} →</a></div>`
+        : '';
+
+      box.innerHTML = summary + alert + '<div id="cc-ops-rail-list"></div>' + more;
+      window.CrispOpCard.renderInto(el('cc-ops-rail-list'), topN, {
+        empty: 'No active operations. Use “+ New” to start one.',
+        grouped: false, compact: true, startNew: false,
       });
+
+      // Reflect the real op count on the band's "View all" affordance.
+      try {
+        const l = el('cc-ops-expand') && el('cc-ops-expand').querySelector('.cc-expand-l');
+        if (l) l.textContent = 'View all' + (real.length ? ' ' + real.length : '');
+      } catch (_e) {}
+
+      box.querySelectorAll('[data-opf]').forEach((b) => b.addEventListener('click',
+        () => _openOpsFiltered(b.getAttribute('data-opf') === 'all' ? null : b.getAttribute('data-opf'))));
+      const al = el('cc-ops-alert');
+      if (al) {
+        const critical = Number(al.getAttribute('data-critical')) || 0;
+        const choose = () => { try { (window.openClusterChooser || function () {})({ critical }); } catch (_e) {} };
+        al.addEventListener('click', choose);
+        al.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(); } });
+      }
+      const mo = el('cc-ops-more');
+      if (mo) {
+        const open = () => _openOpsFiltered(null);
+        mo.addEventListener('click', open);
+        mo.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+      }
       return;
     }
     const sorted = (ops || []).slice().sort(_opWorst);
@@ -882,6 +1009,22 @@
   }
 
   // ── launcher (user-menu item) + boot ──
+  // The "Crisis Intelligence" launcher takes you back to the home landing, so it
+  // is only useful FROM another page. Hide it when you are already ON the Crisis
+  // Intelligence page (route '/'); re-evaluated on every route change.
+  function _onHomeRoute() {
+    try {
+      const p = window.__crispRouter && window.__crispRouter.parseHash && window.__crispRouter.parseHash();
+      if (p && p.route) return p.route === '/';
+    } catch (_e) {}
+    const h = (location.hash || '').split('?')[0].split(';')[0].replace(/^#/, '');
+    return h === '' || h === '/';
+  }
+  function _syncLauncherVisibility() {
+    const btn = el('cc-home-launch');
+    if (btn) btn.style.display = _onHomeRoute() ? 'none' : '';
+  }
+
   function injectLauncher() {
     try {
       const dropdown = el('user-menu-dropdown');
@@ -894,6 +1037,7 @@
         try { (window.__crispRouter ? window.__crispRouter.navigate('/') : openLanding()); } catch (_e) { openLanding(); }
       });
       dropdown.insertBefore(btn, dropdown.firstChild);
+      _syncLauncherVisibility();
     } catch (_e) { /* never break the dashboard */ }
   }
 
@@ -902,6 +1046,7 @@
     injectLauncher();
     let tries = 0;
     const iv = setInterval(() => { injectLauncher(); if (el('cc-home-launch') || ++tries > 20) clearInterval(iv); }, 400);
+    try { window.addEventListener('hashchange', _syncLauncherVisibility); } catch (_e) {}
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();

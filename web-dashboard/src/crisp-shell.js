@@ -238,6 +238,12 @@
       background:rgba(11,18,32,.97);border-bottom:2px solid var(--op-color,#418FDE);
       font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
     body.crisp-op-scoped #cgn-context-banner{display:flex}
+    /* On the INCIDENTS page the in-feed context banner (#queue-banner) already
+       names the operation + carries a "Global" exit, so the shell breadcrumb bar
+       is redundant clutter - hide it there. (It stays on /operations/{id}, where
+       it's the primary op chrome. The colored nav accent + scope chip remain, so
+       the shell never silently reads GLOBAL while the feed reads OPERATION.) */
+    body.crisp-op-scoped[data-route="/incidents"] #cgn-context-banner{display:none}
     #cgn-context-banner .cgn-cb-dot{width:8px;height:8px;border-radius:50%;background:var(--op-color,#418FDE);flex:none}
     #cgn-context-banner .cgn-cb-crumb{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9fb3d1}
     #cgn-context-banner .cgn-cb-crumb b{color:#E6EDF7;font-weight:700}
@@ -299,9 +305,11 @@
       b('/incidents', '🛰', 'Incidents', false),
       b('/exports', '⬇', 'Exports', false),
       b('/reporting', '🧩', 'Crisis Forms', true),
-      b('/org', '🏛', 'Organisation', true),
-      b('/users', '👥', 'Users', true, 'users'),
-      b('/users', '👤', 'Account', false),
+      // Organisation / Users / Account were moved OUT of the primary nav into the
+      // account-chip dropdown (they're config/identity surfaces, not operational
+      // nav). See index.html #user-menu-dropdown: "Account settings" (all users)
+      // + admin-gated "User Management" / "Organisation Settings" - all
+      // router-driven so /users + /org stay deep-linkable.
     ].join('');
   }
 
@@ -426,9 +434,10 @@
   }
 
   // ── Home "new incidents" alert ───────────────────────────────────────────
-  // One shared source: app.js owns the notifications (single _unseenReports +
-  // bell), exposes window.__crispNotifSummary(), and fires 'crisp:notif-change'
-  // on every render. The shell surfaces that on the Home route so an operator
+  // One shared source: app.js owns the notifications (the durable
+  // _notifCenter + bell), exposes window.__crispNotifSummary() (UNREAD count +
+  // critical), and fires 'crisp:notif-change' on every render. The shell
+  // surfaces that on the Home route so an operator
   // who never opened Operations still sees incoming reports. Counts are
   // inherently synced (same source) - no duplicates possible.
   let _homeAlertDismissed = 0;   // suppress until MORE arrive than were dismissed

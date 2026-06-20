@@ -145,6 +145,9 @@
     // scope (_activeCrisisEventId) to global - so any non-/operations route
     // dispatched after this never inherits a stale crisis_event_id filter.
     try { window.__ccOperations && window.__ccOperations.closeOverlay && window.__ccOperations.closeOverlay(); } catch (_e) {}
+    // D5: also tear down in-page panels (analytics/predictions/deletions/
+    // moderation) + transient modals so they don't orphan onto the next route.
+    try { window.__ccCloseTransientOverlays && window.__ccCloseTransientOverlays(); } catch (_e) {}
   }
   function showIncidents() {
     const inc = incidentsEl();
@@ -177,21 +180,26 @@
 
     hideAll();
     if (route === '/incidents') {
-      showIncidents();
-      // ROUTE-08 (Phase-3): apply the ;queue= state seg HERE, inside the ordered
-      // dispatch - it used to be a SEPARATE hashchange listener racing this one
-      // (double render, no ordering). Queue first, then op scope, so the scoped
-      // fetch renders with the queue already applied.
-      try { if (window._syncQueueFromHash) window._syncQueueFromHash(); } catch (_e) {}
-      // Operation scope from the hash (#/incidents;op={id}) - applied AFTER
-      // hideAll() cleared it, so a scoped feed (e.g. arriving from an operation
-      // dashboard) survives and the context banner can name the operation.
+      // Determine operation CONTEXT from the route BEFORE rendering, so the feed
+      // never paints the global dataset first. setOperationScope() clears the
+      // stale set, paints a scope-named "Loading…" state, and kicks the SCOPED
+      // fetch; only THEN do we reveal the view (showIncidents). This is the fix
+      // for the global-incidents flash on Operation → Incident navigation.
+      // Operation scope is re-applied AFTER hideAll() cleared it.
       try {
         const opSeg = (parsed.stateSegs || []).find((s) => s.startsWith('op='));
         const opId = opSeg ? decodeURIComponent(opSeg.slice(3)) : null;
+        const incId = parsed && parsed.query && parsed.query.incident;
+        try { window.__crispRouteTrace && window.__crispRouteTrace('dispatch /incidents', { opId: opId || 'GLOBAL', incidentId: incId || null, stateSegs: parsed.stateSegs }); } catch (_e) {}
         if (window.setOperationScope) window.setOperationScope(opId);
         if (window.__crispOnIncidentOpScope) window.__crispOnIncidentOpScope(opId);
       } catch (_e) {}
+      showIncidents();
+      // ROUTE-08 (Phase-3): apply the ;queue= state seg HERE, inside the ordered
+      // dispatch (it used to be a SEPARATE hashchange listener racing this one).
+      // Runs synchronously right after the scope is set, so the queue is in effect
+      // BEFORE the async scoped fetch resolves + renders.
+      try { if (window._syncQueueFromHash) window._syncQueueFromHash(); } catch (_e) {}
     } else if (route === '/users') {
       try { (window.openAccountSettings || function () {})(); } catch (_e) {}
     } else if (route === '/org') {
@@ -247,6 +255,6 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 
-  window.__crispRouter = { navigate, navigateWithIncident, setIncidentSeg, dispatch, parseHash, canRoute, ROUTE_ROLES };
+  window.__crispRouter = { navigate, navigateWithIncident, setIncidentSeg, buildHash, dispatch, parseHash, canRoute, ROUTE_ROLES };
   if (typeof window.navigate !== 'function') window.navigate = navigate;
 })();

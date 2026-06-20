@@ -38,6 +38,7 @@
   "chip_has_media": "Has media",
   "chip_verified": "Verified",
   "chip_building_tagged": "Building-tagged",
+  "chip_needs_review": "Needs review",
   "chip_clear_all": "Clear filters",
   "feed_no_reports": "No reports match the active filters.",
   "card_send_help": "Send Help",

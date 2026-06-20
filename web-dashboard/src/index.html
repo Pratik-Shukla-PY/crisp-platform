@@ -11,7 +11,7 @@
          empty in source; deploy pipeline patches with the real DSN
          (public-safe write-only key). -->
     <meta name="crisp-sentry-dsn" content="">
-    <meta name="crisp-release" content="crisp-dashboard@v60">
+    <meta name="crisp-release" content="crisp-dashboard@v101">
     <meta name="description" content="United Nations Crisis Response Intelligence System - hierarchical incident monitoring and strategic command center.">
     <meta name="theme-color" content="#7c3aed">
     <!-- May 2026 - favicon. SVG works in modern browsers (Chrome 80+,
@@ -98,6 +98,29 @@
                     <i class="fa-solid fa-caret-down" style="font-size:9px;opacity:0.65;margin-left:4px;"></i>
                 </button>
                 <div class="user-menu-dropdown" id="user-menu-dropdown" style="display:none;">
+                    <!-- Account / identity + admin config, moved out of the
+                         primary nav. "Account settings" is for ALL users;
+                         "User Management" + "Organisation Settings" are
+                         admin-gated (shown by _maybeShowModerationButton) and
+                         route through the router so /users + /org stay
+                         deep-linkable + Back-button friendly. -->
+                    <button class="user-menu-item" id="btn-account-settings"
+                            onclick="window.__crispRouter&amp;&amp;window.__crispRouter.navigate('/users');_toggleUserMenu(false);">
+                        <i class="fa-solid fa-user-gear"></i>
+                        <span>Account settings</span>
+                    </button>
+                    <button class="user-menu-item" id="btn-user-mgmt"
+                            onclick="window.__ccSettingsInitialTab='users';window.__crispRouter&amp;&amp;window.__crispRouter.navigate('/users');_toggleUserMenu(false);"
+                            style="display:none;">
+                        <i class="fa-solid fa-users-gear"></i>
+                        <span>User Management</span>
+                    </button>
+                    <button class="user-menu-item" id="btn-org-settings"
+                            onclick="window.__crispRouter&amp;&amp;window.__crispRouter.navigate('/org');_toggleUserMenu(false);"
+                            style="display:none;">
+                        <i class="fa-solid fa-building"></i>
+                        <span>Organisation Settings</span>
+                    </button>
                     <!-- Phase 5.1 - Admin Moderation overlay. Visibility
                          gated to ADMIN/SUPER_ADMIN by
                          _maybeShowModerationButton(). The badge counter is
@@ -255,8 +278,11 @@
                 </button>
                 <div class="notif-panel" id="notif-panel" style="display:none;">
                     <div class="notif-header">
-                        <span><i class="fa-solid fa-bolt"></i> New Incidents</span>
-                        <button class="notif-clear" onclick="clearAllNotifs()" title="Clear all">Clear</button>
+                        <span><i class="fa-solid fa-bell"></i> Notifications</span>
+                        <span class="notif-header-actions">
+                            <button class="notif-clear" onclick="clearAllNotifs()" title="Mark all as read (history kept)">Mark all read</button>
+                            <button class="notif-clear notif-clear-hist" onclick="clearNotifHistory()" title="Remove read history">Clear</button>
+                        </span>
                     </div>
                     <div class="notif-list" id="notif-list">
                         <div class="notif-empty">No new incidents</div>
@@ -287,6 +313,11 @@
          / _restoreChipFiltersFromStorage() in app.js. -->
     <div class="cmd-filter-row" id="cmd-filter-row" role="group" aria-label="Additional filters">
         <span class="cmd-filter-label"><i class="fa-solid fa-filter"></i> <span data-i18n="filter_label">Filters</span></span>
+        <button class="cmd-filter-chip" data-chip="needs-review"
+                onclick="toggleChipFilter('needs-review')"
+                title="Unreviewed incidents awaiting a triage decision">
+            <i class="fa-solid fa-circle-dot"></i><span data-i18n="chip_needs_review">Needs review</span>
+        </button>
         <button class="cmd-filter-chip" data-chip="debris"
                 onclick="toggleChipFilter('debris')"
                 title="Reports flagged as needing debris clearing">
@@ -309,8 +340,8 @@
         </button>
         <button class="cmd-filter-chip" data-chip="verified"
                 onclick="toggleChipFilter('verified')"
-                title="AI-verified (truth score &ge; 60)">
-            <i class="fa-solid fa-satellite"></i><span data-i18n="chip_verified">Verified</span>
+                title="Credible - Confidence Score band Verified or Likely">
+            <i class="fa-solid fa-shield-halved"></i><span data-i18n="chip_verified">Verified</span>
         </button>
         <button class="cmd-filter-chip" data-chip="building"
                 onclick="toggleChipFilter('building')"
@@ -537,8 +568,9 @@
                     </div>
                 </div>
                 <div class="view-toggle">
-                    <button class="view-btn active" data-mode="queue" onclick="setViewMode('queue')"><i class="fa-solid fa-layer-group"></i></button>
-                    <button class="view-btn" data-mode="tree" onclick="setViewMode('tree')"><i class="fa-solid fa-sitemap"></i></button>
+                    <button class="view-btn active" data-mode="queue" onclick="setViewMode('queue')" title="Queue (triage)"><i class="fa-solid fa-layer-group"></i></button>
+                    <button class="view-btn" data-mode="clusters" onclick="setViewMode('clusters')" title="Buildings (group reports by building)"><i class="fa-solid fa-building"></i></button>
+                    <button class="view-btn" data-mode="tree" onclick="setViewMode('tree')" title="Tree (region hierarchy)"><i class="fa-solid fa-sitemap"></i></button>
                 </div>
             </div>
         </div>
@@ -556,8 +588,8 @@
                 <span class="cmd-status-seg-count" id="count-critical">0</span><span class="cmd-status-seg-label">Critical</span></button>
             <button class="cmd-status-seg-item k-pend" id="stat-pending" role="tab" onclick="filterByPill('pending')" title="Pending incidents">
                 <span class="cmd-status-seg-count" id="count-pending">0</span><span class="cmd-status-seg-label">Pending</span></button>
-            <button class="cmd-status-seg-item k-help" id="stat-responding" role="tab" onclick="filterByPill('responding')" title="Helped (responder dispatched)">
-                <span class="cmd-status-seg-count" id="count-responding">0</span><span class="cmd-status-seg-label">Helped</span></button>
+            <button class="cmd-status-seg-item k-help" id="stat-responding" role="tab" onclick="filterByPill('responding')" title="Responding - responders dispatched, response in progress">
+                <span class="cmd-status-seg-count" id="count-responding">0</span><span class="cmd-status-seg-label">Responding</span></button>
             <button class="cmd-status-seg-item k-total" id="stat-total" role="tab" onclick="filterByPill('all')" title="Show all incidents">
                 <span class="cmd-status-seg-count" id="count-total">0</span><span class="cmd-status-seg-label">Total</span></button>
         </div>
@@ -568,8 +600,8 @@
                 <input type="text" id="tree-search" class="tree-search" placeholder="Search by location, type, description..." oninput="window._onIncidentSearch(this.value)">
             </div>
             <div class="status-tabs">
-                <button class="stab active" id="stab-active" onclick="setStatusFilter('active')">Needs Help</button>
-                <button class="stab" id="stab-responding" onclick="setStatusFilter('responding')">Helped</button>
+                <button class="stab active" id="stab-active" onclick="setStatusFilter('active')">Needs action</button>
+                <button class="stab" id="stab-responding" onclick="setStatusFilter('responding')">Responding</button>
                 <button class="stab" id="stab-resolved" onclick="setStatusFilter('resolved')">Closed</button>
                 <button class="stab" id="stab-all" onclick="setStatusFilter('all')">All</button>
             </div>
@@ -657,35 +689,37 @@
      Defines window.CRISP_TIERS{,BY_ID,LEGACY_ALIASES}; must load BEFORE
      app.js so the reporter_tier-badge renderer can read it synchronously. -->
 <script src="tier-config.js?v=1"></script>
-<script src="app.js?v=800"></script>
+<script src="app.js?v=822"></script>
 <script src="predictions.js?v=112"></script>
 <!-- Dynamic Crisis Forms admin panel (geo-scoped Stage 2/3 question packs).
      Self-contained + additive: injects an admin-only "Crisis Forms" item into
      the user-menu and opens its own overlay. Does not touch app.js / styles.css. -->
-<script src="cc-crisis.js?v=3"></script>
+<script src="cc-crisis.js?v=4"></script>
 <!-- Account + Organisation Settings (self-contained; injects user-menu items; B6). -->
-<script src="cc-settings.js?v=4"></script>
-<script src="cc-exports.js?v=2"></script>
+<script src="cc-settings.js?v=6"></script>
+<script src="cc-exports.js?v=3"></script>
+<!-- Shared Building Intelligence card (Global home + Operation worklist). -->
+<script src="crisp-building-card.js?v=3"></script>
 <!-- Control Center landing (self-contained additive overlay; B7). -->
-<script src="cc-home.js?v=19"></script>
+<script src="cc-home.js?v=22"></script>
 <!-- Operations workspace: #/operations list + #/operations/{id} worklist dashboard
      (self-contained overlay; defines window.openOperations before the router runs). -->
-<script src="cc-operations.js?v=9"></script>
+<script src="cc-operations.js?v=14"></script>
 <!-- Start-New-Operation wizard (redesign v2): 4-step modal; defines
      window.openOperationWizard, reuses window.CrispFormKit from cc-crisis.js. -->
-<script src="cc-wizard.js?v=1"></script>
+<script src="cc-wizard.js?v=2"></script>
 <!-- Unified incident-navigation helper (window.CrispNav): every incident click
      deep-links + opens the detail inside its operation/global context. Loaded
      AFTER app.js/cc-* (needs selectReport + __crispGetReport) and BEFORE router.js
      (router.dispatch() calls CrispNav.restoreFromHash). -->
-<script src="crisp-nav.js?v=3"></script>
+<script src="crisp-nav.js?v=6"></script>
 <!-- Navigation hub: mandatory Control Center root + hash router (loaded last). -->
-<script src="router.js?v=5"></script>
+<script src="router.js?v=8"></script>
 <!-- Unified Command Center shell: one persistent global nav bar on every
      surface (brand · Home/Operations/Exports/Crisis Forms/Organisation/Users/
      Account · re-parented LIVE badge + profile menu). Loaded after router.js so
      window.__crispRouter exists. -->
-<script src="crisp-shell.js?v=10"></script>
+<script src="crisp-shell.js?v=13"></script>
 
 <!-- Offline status banner. Phase F image-reliability (May 2026): the
      banner now requires ≥ 3 consecutive fetch failures before lighting,
