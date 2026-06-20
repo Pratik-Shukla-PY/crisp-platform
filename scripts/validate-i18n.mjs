@@ -195,6 +195,59 @@ if (orphans.length > 0) {
     );
 }
 
+// ── UI-appearance guard for spoken / onboarding guidance (Jun 2026) ──────
+//
+// Spoken audio = the live i18n string (voice-readout.js reads it via
+// SpeechSynthesis). A regression shipped "tap the ORANGE button" in all 21
+// non-EN locales after the CTA turned teal - because the EN string was changed
+// to a COLOUR ("green") and the translations were never backfilled. Guidance
+// must NOT reference an appearance (colour / shape) a re-theme can silently
+// invalidate. Fail CI if any guidance key names a colour in ANY locale.
+//
+// Mapping (UI element ↔ instruction) is documented in
+// mobile-app/src/AUDIO_GUIDANCE_MAP.md - keep this list in sync with it.
+const VOICE_GUIDANCE_KEYS = ["home_voice_hint", "home_channel_coming_soon"];
+const APPEARANCE_WORDS = [
+    /orange/i, /\bgreen\b/i, /\bblue\b/i, /\bred\b/i, /yellow/i, /teal/i,
+    /naranja/, /laranja/, /verde/, /\bvert\b/, /turuncu/, /yeşil/, /оранжев/i, /зелён/i, /зелен/i,
+    /नारंगी/, /केशरी/, /संतरी/, /हरा/, /हरे/, /નારંગી/, /કેસરી/, /నారింజ/, /పచ్చ/,
+    /ஆரஞ்சு/, /பச்ச/, /ഓറഞ്ച്/, /പച്ച/, /ಕಿತ್ತಳೆ/, /ಹಸಿರು/, /ਸੰਤਰੀ/, /ਹਰਾ/,
+    /برتقال/, /نارنجی/, /سبز/, /أخضر/, /オレンジ/, /緑/, /주황/, /초록/, /녹색/, /\bcam\b/i, /\bxanh\b/, /jeruk/, /hijau/, /橙/, /绿/,
+];
+let appearanceHits = 0;
+for (const f of files) {
+    const content = parsed[f];
+    if (!content) continue;
+    for (const k of VOICE_GUIDANCE_KEYS) {
+        const v = content[k];
+        if (typeof v !== "string") continue;
+        const bad = APPEARANCE_WORDS.find((re) => re.test(v));
+        if (bad) {
+            fail(`${f}[${k}] names an appearance/colour (${bad}) - spoken/onboarding guidance must reference the action or label, never a colour/shape (a re-theme silently breaks it).`);
+            appearanceHits++;
+        }
+    }
+}
+if (!appearanceHits) ok(`voice/onboarding guidance (${VOICE_GUIDANCE_KEYS.join(", ")}) contains no appearance/colour references in any locale`);
+
+// ── TTS speech-code coverage (Jun 2026) ──────────────────────────────────
+// A locale with no SPEECH_MAP[lang] entry falls back to its bare code, which
+// rarely matches an installed voice → SILENT audio. Every shipped locale MUST
+// have a BCP-47 entry in voice-readout.js.
+try {
+    const vr = readFileSync(join(__dirname, "..", "mobile-app", "src", "voice-readout.js"), "utf8");
+    const mapBlock = (vr.match(/const SPEECH_MAP\s*=\s*\{([\s\S]*?)\};/) || [])[1] || "";
+    const mapped = new Set([...mapBlock.matchAll(/\b([a-z]{2}):\s*['"]/g)].map((m) => m[1]));
+    const uncovered = files.map((f) => f.replace(/\.json$/, "")).filter((l) => !mapped.has(l));
+    if (uncovered.length) {
+        fail(`SPEECH_MAP (voice-readout.js) is missing ${uncovered.length} shipped locale(s): ${uncovered.join(", ")} - audio guidance is SILENT for them. Add BCP-47 codes.`);
+    } else {
+        ok(`SPEECH_MAP covers all ${files.length} shipped locales (TTS audio available for every language)`);
+    }
+} catch (e) {
+    warn(`could not verify SPEECH_MAP coverage: ${e.message}`);
+}
+
 console.log("");
 if (problems) {
     console.error(`${RED}FAIL${RESET} - ${problems} validation problem(s).`);
