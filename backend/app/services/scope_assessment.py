@@ -13,6 +13,8 @@ operator can act on a slice in one click. Mirrors the building_ai_summary patter
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
 from datetime import datetime, timezone
@@ -39,8 +41,27 @@ _TOP_N = 15
 S = ReportStatusEnum
 _CLOSED = [S.RESOLVED, S.FALSE_ALARM]
 # Cascade actions/queues a recommended action may map to (validated post-parse).
-_ALLOWED_ACTIONS = {"dispatch", "resolve", "reject"}
+_ALLOWED_ACTIONS = {"dispatch", "resolve", "reject", "false_alarm"}
 _ALLOWED_QUEUES = {"critical", "unattended_critical", "needs_response", "needs_review"}
+
+
+def _inputs_hash(agg: dict) -> str:
+    """Stable digest of the deterministic roll-up that drives the narrative. Two runs
+    with the same hash have unchanged inputs → reuse the cached narrative (#7)."""
+    basis = {k: agg.get(k) for k in ("counts", "distribution", "coverage", "score", "band")}
+    try:
+        blob = json.dumps(basis, sort_keys=True, default=str)
+    except Exception:
+        blob = repr(basis)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _scope_report_count(db: Session, scope_type: str, scope_id, *extra) -> int:
+    """Non-deleted report count for a scope, with optional extra filters (#6)."""
+    q = db.query(func.count(Report.id)).filter(Report.deletion_requested_at.is_(None), *extra)
+    if scope_type == "operation":
+        q = q.filter(Report.crisis_event_id == scope_id)
+    return int(q.scalar() or 0)
 
 
 def _band_for(score):
@@ -178,12 +199,29 @@ def _bld_brief(b: Building) -> dict:
 
 
 async def generate_scope_assessment(db: Session, scope_type: str,
-                                    scope_id: Optional[str] = None) -> dict:
+                                    scope_id: Optional[str] = None,
+                                    force: bool = False) -> dict:
     """Aggregate the scope, then ONE Claude synthesis call. Raises SummaryUnavailable
     on any AI failure (the caller maps it to 503); the deterministic roll-up is always
-    valid even if the narrative can't be produced."""
+    valid even if the narrative can't be produced.
+
+    #7 caching: when the inputs are UNCHANGED since the latest stored assessment, the
+    cached narrative is returned without re-billing Claude (set ``_from_cache``).
+    ``force=True`` (explicit Re-analyze, or new reports arrived) bypasses the cache."""
     agg = (aggregate_operation(db, scope_id) if scope_type == "operation"
            else aggregate_global(db))
+    h = _inputs_hash(agg)
+    report_count = _scope_report_count(db, scope_type, scope_id)
+
+    if not force:
+        from app.models.report import ScopeAssessment
+        q = db.query(ScopeAssessment).filter(ScopeAssessment.scope_type == scope_type)
+        q = (q.filter(ScopeAssessment.scope_id == scope_id) if scope_id
+             else q.filter(ScopeAssessment.scope_id.is_(None)))
+        last = q.order_by(ScopeAssessment.created_at.desc()).first()
+        if last and last.inputs_hash and last.inputs_hash == h and last.situation_summary:
+            return _payload_from_row(last, agg, from_cache=True)
+
     if not is_configured():
         raise SummaryUnavailable("ANTHROPIC_API_KEY not configured")
     prompt = _compose_prompt(scope_type, agg)
@@ -195,7 +233,11 @@ async def generate_scope_assessment(db: Session, scope_type: str,
     try:
         resp = await asyncio.wait_for(client.messages.create(
             model=_MODEL, max_tokens=_MAX_TOKENS,
-            messages=[{"role": "user", "content": prompt}], system=_SYSTEM_PROMPT),
+            messages=[{"role": "user", "content": prompt}],
+            # Ephemeral prompt caching: the (large, static) system prompt is reused
+            # across calls so only the per-scope user message is billed in full (#7).
+            system=[{"type": "text", "text": _SYSTEM_PROMPT,
+                     "cache_control": {"type": "ephemeral"}}]),
             timeout=_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
         raise SummaryUnavailable("Claude call timed out")
@@ -208,10 +250,11 @@ async def generate_scope_assessment(db: Session, scope_type: str,
     if not summary:
         raise SummaryUnavailable("Claude response missing 'situation_summary'")
 
-    return _shape(agg, parsed, summary)
+    return _shape(agg, parsed, summary, inputs_hash=h, report_count=report_count)
 
 
-def _shape(agg: dict, parsed: dict, summary: str) -> dict:
+def _shape(agg: dict, parsed: dict, summary: str,
+           inputs_hash: Optional[str] = None, report_count: Optional[int] = None) -> dict:
     esc = parsed.get("escalation_likelihood")
     if isinstance(esc, str):
         esc = {"level": esc.strip().upper()[:20], "rationale": ""}
@@ -238,7 +281,30 @@ def _shape(agg: dict, parsed: dict, summary: str) -> dict:
             parsed.get("resource_recommendations"), max_items=6, max_len=240),
         "model": _MODEL,
         "assessed_at": datetime.now(timezone.utc).isoformat(),
+        "inputs_hash": inputs_hash,
+        "report_count_at_assessment": report_count,
     }
+
+
+def _payload_from_row(row, agg: dict, from_cache: bool = False) -> dict:
+    """Build an assessment payload from a STORED row + the FRESH deterministic metrics
+    (cache-hit path: same narrative, current numbers, no Claude call)."""
+    base = {k: agg[k] for k in ("scope_type", "scope_id", "score", "band",
+                                "distribution", "coverage", "counts")}
+    base.update({
+        "situation_summary": row.situation_summary,
+        "key_risks": row.key_risks or [],
+        "escalation_likelihood": row.escalation_likelihood,
+        "recommended_actions": row.recommended_actions or [],
+        "priority_score": row.priority_score,
+        "resource_recommendations": row.resource_recommendations or [],
+        "model": row.model,
+        "assessed_at": row.created_at.isoformat() if row.created_at else None,
+        "inputs_hash": row.inputs_hash,
+        "report_count_at_assessment": row.report_count_at_assessment,
+        "_from_cache": from_cache,
+    })
+    return base
 
 
 def _shape_actions(val, scope_type, scope_id) -> list:
@@ -288,7 +354,10 @@ def persist(db: Session, user, payload: dict):
         recommended_actions=payload.get("recommended_actions"),
         priority_score=payload.get("priority_score"),
         resource_recommendations=payload.get("resource_recommendations"),
-        model=payload.get("model"), actor_user_id=getattr(user, "id", None))
+        model=payload.get("model"),
+        report_count_at_assessment=payload.get("report_count_at_assessment"),
+        inputs_hash=payload.get("inputs_hash"),
+        actor_user_id=getattr(user, "id", None))
     db.add(row)
     db.commit()
     return row
@@ -306,6 +375,20 @@ def get_payload(db: Session, scope_type: str, scope_id: Optional[str] = None) ->
          else q.filter(ScopeAssessment.scope_id.is_(None)))
     row = q.order_by(ScopeAssessment.created_at.desc()).first()
     if row:
+        # #6 staleness: PENDING (un-actioned) reports that ARRIVED after the last
+        # assessment. Only pending new arrivals count — already-actioned reports never
+        # make the assessment "stale" (we assess pending work, not resolved history).
+        new_pending = 0
+        mins = None
+        if row.created_at:
+            new_pending = _scope_report_count(
+                db, scope_type, scope_id,
+                Report.server_created_at > row.created_at,
+                Report.status == ReportStatusEnum.PENDING)
+            try:
+                mins = int((datetime.now(timezone.utc) - row.created_at).total_seconds() / 60)
+            except Exception:
+                mins = None
         base.update({
             "assessed": True,
             "situation_summary": row.situation_summary, "key_risks": row.key_risks,
@@ -315,12 +398,17 @@ def get_payload(db: Session, scope_type: str, scope_id: Optional[str] = None) ->
             "resource_recommendations": row.resource_recommendations,
             "model": row.model,
             "assessed_at": row.created_at.isoformat() if row.created_at else None,
+            "new_reports_since_assessment": new_pending,
+            "assessed_stale": new_pending > 0,
+            "assessed_minutes_ago": mins,
         })
     else:
         base.update({"assessed": False, "situation_summary": None, "key_risks": [],
                      "escalation_likelihood": None, "recommended_actions": [],
                      "priority_score": None, "resource_recommendations": [],
-                     "model": None, "assessed_at": None})
+                     "model": None, "assessed_at": None,
+                     "new_reports_since_assessment": 0, "assessed_stale": False,
+                     "assessed_minutes_ago": None})
     return base
 
 
@@ -334,12 +422,13 @@ Produce VALID JSON only (no markdown, no prose around it) with these keys:
   escalation_likelihood   - {"level": one of LOW|MODERATE|HIGH, "rationale": short}.
   recommended_actions     - 1-4 objects, each an EXECUTABLE next step:
                               {"label": short imperative, "action": one of
-                               dispatch|resolve|reject, "queue": one of
+                               dispatch|resolve|reject|false_alarm, "queue": one of
                                critical|unattended_critical|needs_response|needs_review}
                             Use 'dispatch' on unattended_critical/needs_response to
                             send help; 'resolve' only when a slice is clearly handled;
-                            'reject' only for confirmed noise. The operator executes
-                            these as ONE set-based cascade over that slice.
+                            'reject' only for confirmed noise; 'false_alarm' when a
+                            slice is a confirmed non-event (no real incident). The
+                            operator executes these as ONE set-based cascade.
   priority_score          - integer 0-100 (how urgently this scope needs attention).
   resource_recommendations- 2-6 short strings (responder types / quantities / supplies).
 Ground everything in the provided numbers. If coverage is low (few buildings

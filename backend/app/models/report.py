@@ -1835,6 +1835,12 @@ class ScopeAssessment(Base):
     priority_score = Column(Integer, nullable=True)
     resource_recommendations = Column(JSON, nullable=True) # [str]
     model = Column(String(60), nullable=True)
+    # #6 staleness: how many reports the scope held when this assessment ran, so the
+    # dashboard can surface "X new reports since you last analysed".
+    report_count_at_assessment = Column(Integer, nullable=True)
+    # #7 caching: stable digest of the deterministic roll-up the narrative was built
+    # from. A re-run whose inputs match the latest row reuses it (no Claude re-bill).
+    inputs_hash = Column(String(64), nullable=True)
     actor_user_id = Column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
     )

@@ -35,7 +35,7 @@ def _seed_into_op(client, db, *, cid, building_id, op_id, severity="CRITICAL", c
     return rid
 
 
-async def _fake_generate(db, scope_type, scope_id=None):
+async def _fake_generate(db, scope_type, scope_id=None, force=False):
     """Stand-in for the Claude call: real aggregate + a canned narrative through the
     REAL _shape (so output shaping + executable-action mapping are exercised)."""
     from app.services.scope_assessment import aggregate_operation, aggregate_global, _shape
@@ -139,3 +139,54 @@ def test_global_assess_get_aggregates(client, viewer_token, admin_user, db):
     body = g.json()
     assert body["scope_type"] == "global"
     assert "counts" in body and "operations" in body["counts"]
+
+
+# ── #6 re-run staleness + #7 input-hash cache ────────────────────────────────
+def test_assessment_staleness_counts_only_new_pending_reports(client, admin_user, db):
+    """#6: the cached card flags assessed_stale only when PENDING reports arrived AFTER
+    the last assessment — old/pre-assessment reports never make it stale."""
+    from datetime import datetime, timezone, timedelta
+    from app.services.scope_assessment import get_payload
+    op = _mk_op(db, admin_user, name="Stale Op")
+    old = _seed_into_op(client, db, cid="c-stale-old", building_id="osm:way:stale-old", op_id=op.id)
+    db.query(Report).filter(Report.id == old).update(
+        {Report.server_created_at: datetime.now(timezone.utc) - timedelta(minutes=30)},
+        synchronize_session=False)
+    db.add(ScopeAssessment(scope_type="operation", scope_id=op.id, situation_summary="prior",
+                           report_count_at_assessment=1,
+                           created_at=datetime.now(timezone.utc) - timedelta(minutes=5)))
+    db.commit()
+    p = get_payload(db, "operation", op.id)
+    assert p["assessed"] is True
+    assert p["assessed_stale"] is False
+    assert p["new_reports_since_assessment"] == 0
+    # A NEW pending report after the assessment → stale.
+    _seed_into_op(client, db, cid="c-stale-new", building_id="osm:way:stale-new", op_id=op.id)
+    p2 = get_payload(db, "operation", op.id)
+    assert p2["assessed_stale"] is True
+    assert p2["new_reports_since_assessment"] >= 1
+
+
+def test_assessment_cache_skips_claude_when_inputs_unchanged(client, admin_user, db, monkeypatch):
+    """#7: a re-run whose inputs match the latest stored assessment returns the cached
+    narrative WITHOUT a Claude call (proved by it succeeding with no API key); force=True
+    bypasses the cache and would re-bill (raises here because no key is configured)."""
+    import asyncio
+    import pytest
+    from app.services.scope_assessment import (
+        aggregate_operation, _inputs_hash, generate_scope_assessment)
+    from app.services.building_ai_summary import SummaryUnavailable
+    # No key → any path that reaches Claude must raise; the cache path returns first.
+    monkeypatch.setattr("app.services.scope_assessment.is_configured", lambda: False)
+    op = _mk_op(db, admin_user, name="Cache Op")
+    _seed_into_op(client, db, cid="c-cache-1", building_id="osm:way:cache1", op_id=op.id)
+    h = _inputs_hash(aggregate_operation(db, op.id))
+    db.add(ScopeAssessment(scope_type="operation", scope_id=op.id,
+                           situation_summary="cached narrative", inputs_hash=h,
+                           key_risks=[], recommended_actions=[]))
+    db.commit()
+    payload = asyncio.run(generate_scope_assessment(db, "operation", op.id))
+    assert payload.get("_from_cache") is True
+    assert payload["situation_summary"] == "cached narrative"
+    with pytest.raises(SummaryUnavailable):
+        asyncio.run(generate_scope_assessment(db, "operation", op.id, force=True))
