@@ -178,7 +178,7 @@
       if (el('crisp-opcard-styles')) return;
       const css = `
       /* === Operation card - full-width 3-col grid: identity | KPI strip(grows) | situation === */
-      .opc{display:grid;grid-template-columns:minmax(196px,1.05fr) minmax(0,2.4fr) auto;
+      .opc{display:grid;grid-template-columns:minmax(230px,1.5fr) minmax(0,2.3fr) auto;
         align-items:center;gap:16px;padding:11px 14px;background:#101a2e;border:1px solid #233149;
         border-radius:12px;cursor:pointer;position:relative;overflow:hidden;transition:border-color .12s,background .12s}
       .opc:hover{border-color:#418FDE;background:#13203a}
@@ -191,21 +191,23 @@
       .opc-inact:hover{border-color:#fbbf24}
       /* LEFT - identity */
       .opc-id{min-width:0;display:flex;flex-direction:column;gap:3px}
-      .opc-id-r1{display:flex;align-items:center;gap:7px;min-width:0}
+      .opc-id-r1{display:flex;align-items:center;gap:7px;min-width:0;flex-wrap:wrap}
       .opc-ic{font-size:15px;flex:0 0 auto}
-      .opc-name{font-size:14.5px;font-weight:700;color:#e6edf7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+      /* Show the FULL operation name (wrap, never ellipsis) - the identity column was
+         widened (the health pill + mini-map were removed from the right). */
+      .opc-name{font-size:14.5px;font-weight:700;color:#e6edf7;white-space:normal;overflow-wrap:anywhere;min-width:0}
       .opc-badge{font-size:9.5px;font-weight:800;letter-spacing:.05em;padding:1px 7px;border-radius:999px;
         border:1px solid #33476a;background:rgba(255,255,255,.03);flex:0 0 auto}
       .opc-age{font-size:8.5px;font-weight:800;letter-spacing:.04em;padding:1px 6px;border-radius:999px;border:1px solid;flex:0 0 auto;white-space:nowrap}
-      .opc-meta{font-size:11px;color:#8aa0bf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .opc-meta{font-size:11px;color:#8aa0bf;white-space:normal;overflow-wrap:anywhere}
       .opc-flag{font-weight:600}
       .opc-flag.flag-att{color:#f87171}
       .opc-flag.flag-idle{color:#fb923c}
       /* CENTER - equal-width KPI chip strip that grows to fill the row */
-      .opc-kpis{display:flex;gap:7px;min-width:0;flex-wrap:wrap}
+      .opc-kpis{display:flex;gap:8px;min-width:0;flex-wrap:nowrap}
       .opc-kpis-empty{visibility:hidden}
-      .opc-chip{flex:1 1 0;min-width:46px;display:flex;flex-direction:column;align-items:center;
-        padding:5px 4px;background:#0d1626;border:1px solid #1f2c44;border-radius:9px;font-variant-numeric:tabular-nums}
+      .opc-chip{flex:1 1 0;min-width:52px;display:flex;flex-direction:column;align-items:center;
+        padding:7px 6px;background:#0d1626;border:1px solid #1f2c44;border-radius:9px;font-variant-numeric:tabular-nums}
       .opc-chip b{font-size:15px;font-weight:800;line-height:1;color:#dce6f5}
       .opc-chip span{font-size:8.5px;letter-spacing:.03em;text-transform:uppercase;color:#7d8ba3;margin-top:3px;white-space:nowrap}
       .opc-chip.crit{background:#1d1113;border-color:#7f1d1d}
@@ -226,6 +228,8 @@
       .opc-pill-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
       .opc-trend{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:800}
       .opc-trend-l{font-size:8px;letter-spacing:.03em;text-transform:uppercase;font-weight:700}
+      /* Coverage radius as plain text (replaced the red/green/amber pill + the mini-map). */
+      .opc-radius{font-size:12.5px;font-weight:700;color:#9fb2d4;font-variant-numeric:tabular-nums;white-space:nowrap;flex:0 0 auto}
       .opc-mm{width:50px;height:50px;flex:0 0 auto;display:block}
       .opc-ar{color:#5b6b86;font-size:18px;flex:0 0 auto}
       /* cluster + start-new keep the SAME grid + height */
@@ -314,15 +318,33 @@
       document.head.appendChild(st);
     },
     typeIcon(o) { return TYPE_ICON[String(o && o.crisis_type || '').toUpperCase()] || '⚠'; },
+    // An operation is "effectively ended" when its lifecycle is over OR its
+    // end-window has closed. Backend parity: the form-pack matcher
+    // (crisis_forms.py) SKIPS any event whose `ended_at` is in the past, so a
+    // still-LIVE op past its window no longer accepts new reports - it reads as
+    // ENDED to the operator. `is_active === false` is the backend's
+    // authoritative live/ended discriminator (the /operations ?status filter
+    // keys on it). This is the ONE source of truth for live-vs-ended across the
+    // badge, the rail grouping, and the registry segment filter.
+    isEffectivelyEnded(o) {
+      if (!o || o.is_cluster) return false;
+      if (String(o.status || '').toUpperCase() === 'ENDED') return true;
+      if (o.is_active === false) return true;
+      if (o.ended_at) {
+        const t = Date.parse((window.__ccEnsureUTC || ((x) => x))(o.ended_at));
+        if (isFinite(t) && t < Date.now()) return true;
+      }
+      return false;
+    },
     statusBadge(o) {
       const s = String(o && o.status || '').toUpperCase();
-      const sty = STATUS_STYLE[s] || [s || '-', '#9fb3d1'];
       if (!STATUS_STYLE[s] && s) console.warn('[ops] unexpected operation status:', s);
-      // A LIVE op past its ended_at window is matcher-inactive but not yet ENDED -
-      // surface that genuine state without re-introducing a third badge colour.
-      const windowClosed = (s === 'LIVE' && o && o.ended_at &&
-        new Date((window.__ccEnsureUTC || ((x) => x))(o.ended_at)) < new Date());
-      const hint = windowClosed ? ' title="window closed"' : '';
+      const ended = this.isEffectivelyEnded(o);
+      // A LIVE-in-DB op whose end-window has passed is matcher-inactive: badge it
+      // ENDED (honest) instead of a green LIVE pill, with a tooltip explaining why.
+      const windowClosed = ended && s === 'LIVE' && o && o.is_active !== false;
+      const sty = ended ? STATUS_STYLE.ENDED : (STATUS_STYLE[s] || [s || '-', '#9fb3d1']);
+      const hint = windowClosed ? ' title="Operation window has closed - no longer accepting new reports"' : '';
       return `<span class="opc-badge" style="color:${sty[1]};border-color:${sty[1]}66"${hint}>${esc(sty[0])}</span>`;
     },
     // Inline-SVG schematic: centre dot + radius ring (sized by radius_km), in the
@@ -393,18 +415,22 @@
       const tr = this._trend(o);
       const fl = this._flags(o);
       const age = this._opAge(o);
-      const isLive = String(o && o.status || '').toUpperCase() === 'LIVE';
+      const ended = this.isEffectivelyEnded(o);
+      const isLive = !ended;
       const total = Number(o && o.total) || 0, ver = Number(o && o.verified) || 0;
       const unver = Math.max(0, total - ver);                 // client math - no backend
       const unatt = isLive && fl.unattended;                  // never flag ENDED ops
       const inactive = isLive && fl.inactive;
       const attn = unatt || inactive;
       const ageCol = age === 'Day 1' ? '#fbbf24' : '#8aa0bf';
-      // Identity line 3 - unattended > inactive > last-activity (precedence).
+      // Identity line 3 - unattended > quiet (no recent reports) > last-activity.
+      // "Quiet" (not "Inactive") so it never reads as a lifecycle contradiction
+      // against the green LIVE badge: the operation is open, just without new
+      // reports lately. Ended ops show no activity line (the dates carry "Ended").
       let line3 = '';
       if (unatt) line3 = `<div class="opc-meta opc-flag flag-att">⚠ Unattended${fl.sinceTxt ? ' · ' + esc(fl.sinceTxt) : ''}</div>`;
-      else if (inactive) line3 = `<div class="opc-meta opc-flag flag-idle">◷ Inactive · ${esc(fl.sinceTxt)}</div>`;
-      else if (fl.sinceTxt) line3 = `<div class="opc-meta">Active ${esc(fl.sinceTxt)}</div>`;
+      else if (inactive) line3 = `<div class="opc-meta opc-flag flag-idle">◷ Quiet · ${esc(fl.sinceTxt)}</div>`;
+      else if (!ended && fl.sinceTxt) line3 = `<div class="opc-meta">Active ${esc(fl.sinceTxt)}</div>`;
       const ageBadge = age ? `<span class="opc-age" style="color:${ageCol};border-color:${ageCol}40;background:${ageCol}14">${esc(age)}</span>` : '';
       const chip = (cls, val, label) => `<span class="opc-chip ${cls}"><b>${fmtNum(val)}</b><span>${label}</span></span>`;
       const critChip = `<span class="opc-chip crit${(Number(o.critical) || 0) === 0 ? ' zero' : ''}"><b>${fmtNum(o.critical)}</b><span>Critical</span></span>`;
@@ -425,9 +451,8 @@
           ${chip('rej', Number(o.rejected) || 0, 'Rejected')}
         </div>
         <div class="opc-sit">
-          <span class="opc-pill" style="--hc:${hc}" title="${esc(o.health_reason || o.health || '')}"><span class="opc-pill-dot" style="background:${hc}"></span><span class="opc-pill-l">${esc(o.health || 'GREEN')}</span></span>
           <span class="opc-trend" style="color:${tr.col}" title="24h trend vs prior 24h">${tr.gly}<span class="opc-trend-l">${esc(tr.label)}</span></span>
-          ${this.miniMap(o)}
+          <span class="opc-radius" title="Operation coverage radius">${o.radius_km != null ? fmtNum(Math.round(Number(o.radius_km))) + ' Km' : '—'}</span>
           <span class="opc-ar">›</span>
         </div>
       </div>`;
@@ -456,7 +481,7 @@
       }
       const hc = healthColor(o);
       const fl = this._flags(o);
-      const isLive = String(o && o.status || '').toUpperCase() === 'LIVE';
+      const isLive = !this.isEffectivelyEnded(o);
       const unatt = isLive && fl.unattended;
       const place = o.place_name ? esc(o.place_name) : '';
       const age = this._opAge(o);
@@ -490,7 +515,7 @@
       const mk = (o) => compact ? this._compactCard(o) : this.card(o);
       const all = (ops || []).slice();
       const _utc = window.__ccEnsureUTC || ((x) => x);
-      const isEnded = (o) => !o.is_cluster && String(o && o.status || '').toUpperCase() === 'ENDED';
+      const isEnded = (o) => this.isEffectivelyEnded(o);
       const live = all.filter((o) => !isEnded(o)).sort(worstFirst);                 // cluster + LIVE
       const ended = all.filter(isEnded)
         .sort((a, b) => new Date(_utc(b.ended_at || 0)) - new Date(_utc(a.ended_at || 0)));
@@ -632,6 +657,17 @@
     .cco-ru-mut{color:#8aa0bf}
     .cco-ru-dup{background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.3);color:#7dd3fc;border-radius:7px;padding:3px 10px;font-size:12px;cursor:pointer}
     .cco-ru-dup:hover{background:rgba(56,189,248,.16)}
+    /* Op-scoped duplicate-review strip (mirrors the global home strip) */
+    .cco-dupcheck{display:flex;align-items:center;gap:10px;margin:0 0 14px;padding:9px 13px;border:1px solid #233149;border-radius:10px;background:#0f1726;font-size:12.5px;color:#cdd8ec;flex-wrap:wrap}
+    .cco-dupcheck:empty{display:none}
+    .cco-dupcheck.clear{color:#9fb2d4}
+    .cco-dupcheck .ccd-ic{font-size:14px;flex:none}
+    .cco-dupcheck .ccd-t{min-width:0}
+    .cco-dupcheck .ccd-chips{display:inline-flex;gap:5px;flex-wrap:wrap;margin-left:auto}
+    .cco-dupcheck .ccd-chip{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;border:1px solid #2b3b56}
+    .cco-dupcheck .ccd-chip.high{color:#fca5a5;border-color:#7f1d1d;background:rgba(239,68,68,.10)}
+    .cco-dupcheck .ccd-chip.med{color:#fcd34d;border-color:#78350f;background:rgba(245,158,11,.10)}
+    .cco-dupcheck .ccd-chip.low{color:#9fb2d4}
     /* detail grid: map | worklist */
     .cco-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
     @media(max-width:1000px){.cco-grid{grid-template-columns:1fr}.cco-vitals{grid-template-columns:repeat(2,1fr)}}
@@ -786,7 +822,7 @@
     const host = el('cco-list'); if (!host) return;
     const v = _opsView;
     const _utc = window.__ccEnsureUTC || ((x) => x);
-    const isEnded = (o) => String(o && o.status || '').toUpperCase() === 'ENDED';
+    const isEnded = (o) => CrispOpCard.isEffectivelyEnded(o);
     const real = (_opsAll || []).filter((o) => !o.is_cluster);
     const cluster = (_opsAll || []).find((o) => o.is_cluster) || null;
     const q = v.q.trim().toLowerCase();
@@ -794,7 +830,7 @@
       if (v.status === 'live' && isEnded(o)) return false;
       if (v.status === 'ended' && !isEnded(o)) return false;
       if ((v.health === 'RED' || v.health === 'AMBER' || v.health === 'GREEN') && o.health !== v.health) return false;
-      if (v.health === 'UNATT' && !(String(o.status || '').toUpperCase() === 'LIVE' && _unattended(o))) return false;
+      if (v.health === 'UNATT' && !(!CrispOpCard.isEffectivelyEnded(o) && _unattended(o))) return false;
       if (q && !String(o.name || '').toLowerCase().includes(q) && !String(o.place_name || '').toLowerCase().includes(q)) return false;
       return true;
     });
@@ -887,7 +923,7 @@
       if (back) back.addEventListener('click', () => go('#/operations'));
       return;
     }
-    const isEnded = String(op.status || '').toUpperCase() === 'ENDED';
+    const isEnded = CrispOpCard.isEffectivelyEnded(op);
     const accent = opColor(op);
     const c = (summary && summary.counts) || {};
     // 2e - drive the shell's operation context (colored chrome + banner).
@@ -901,50 +937,23 @@
       { n: c.active_operations, l: 'In response', q: 'active-ops' },
     ];
 
+    // Redesigned operation console (Jun 2026): mirrors the incident-detail decision
+    // stack for consistency + lower cognitive load. The shell already carries the
+    // op context/breadcrumb + the panel's ✕ closes it, so the old LIVE/breadcrumb/
+    // exit row, the vitals counts, the rollup, the operation map and the buildings/
+    // reports worklist are removed. What remains: AI analysis + scoped actions
+    // (incl. Merge duplicates), an op-scoped duplicate-review strip, local conditions,
+    // and the export / form / undo actions.
     wrap.innerHTML = `
       <div id="cco-command"></div>
-      <div class="cco-banner" style="--op-accent:${accent}">
-        <span class="cco-hs-pill" style="--hc:${healthColor(op)}" title="${esc(op.health_reason || op.health || '')}"><span class="cco-hs-dot"></span>${esc(op.status || (op.is_active ? 'LIVE' : 'ENDED'))}</span>
-        <div class="cco-bc"><a class="cco-bc-global" style="cursor:pointer;text-decoration:none" onclick="window.__crispRouter&&window.__crispRouter.navigate('/incidents')">Global</a> › <b>${esc(op.name)}</b>${op.place_name ? ' · <span class="cco-bc-region">' + esc(op.place_name) + '</span>' : ''}</div>
-        ${isEnded ? '<span class="cco-ended-note" style="font-size:10px;font-weight:700;color:#fbbf24;letter-spacing:.05em" title="This operation has ended - shown for historical reference">READ-ONLY</span>' : ''}
-        ${_unattended(op) ? '<span class="cco-unatt-flag" title="This operation has unattended critical reports">🚨 Unattended</span>' : ''}
-        <span class="cco-resp">🚑 ${fmtNum(op.responders_active || 0)} responder${(op.responders_active || 0) === 1 ? '' : 's'}</span>
-        <button class="cco-exit" id="cco-exit">← Exit to global</button>
-      </div>
-      <div class="cco-vitals" id="cco-vitals">
-        ${vitals.map((v) => `<div class="cco-vital ${v.crit ? 'crit' : ''}" data-q="${v.q}">
-            <div class="n cco-num">${fmtNum(v.n)}</div><div class="l">${esc(v.l)}</div></div>`).join('')}
-      </div>
-      <div class="cco-rollup" id="cco-rollup">
-        <span class="cco-ru"><b>${fmtNum(op.incident_count || 0)}</b> incident${(op.incident_count || 0) === 1 ? '' : 's'}</span>
-        <span class="cco-ru-sep">·</span>
-        <span class="cco-ru"><b>${fmtNum(op.total || 0)}</b> report${(op.total || 0) === 1 ? '' : 's'}</span>
-        <span class="cco-ru-sep">·</span>
-        <span class="cco-ru"><b>${fmtNum(op.verified || 0)}</b> verified</span>
-        <span class="cco-ru-sep">·</span>
-        <span class="cco-ru cco-ru-mut"><b>${fmtNum(op.new_24h || 0)}</b> new&nbsp;24h</span>
-        ${(dupRev && dupRev.total_buildings) ? `<span class="cco-ru-sep">·</span><button type="button" class="cco-ru-dup" id="cco-ru-dup" title="Review &amp; merge duplicates building-by-building for this operation">🔗 ${fmtNum(dupRev.total_buildings)} building${dupRev.total_buildings === 1 ? '' : 's'} need duplicate review</button>` : ''}
-        ${(op.unreviewed_count || 0) ? `<span class="cco-ru-sep">·</span><span class="cco-ru cco-ru-mut">${fmtNum(op.unreviewed_count)} unreviewed</span>` : ''}
-      </div>
-      <div class="cco-grid">
-        <div>
-          <div class="cco-sec-t">Operation map</div>
-          <div class="cco-card" style="padding:8px"><div id="cco-map"></div></div>
-        </div>
-        <div>
-          <div class="cco-sec-t"><span class="cco-wl-tabs" id="cco-wl-tabs"><button type="button" class="cco-tab active" data-wl="buildings">Buildings</button><button type="button" class="cco-tab" data-wl="reports">Reports</button></span> <span class="cco-src" id="cco-wl-src">affected buildings · priority first</span></div>
-          <div class="cco-wl" id="cco-bld"></div>
-          <div class="cco-wl" id="cco-wl" style="display:none"></div>
-        </div>
-      </div>
+      <div class="cco-dupcheck" id="cco-dupcheck"></div>
       <div class="cco-sec-t">Local conditions <span class="cco-src">weather · hazard alerts</span></div>
       <div class="cco-card" id="cco-weather"><div class="cco-empty">Loading local conditions…</div></div>
       <div class="cco-actions">
-        <button class="cco-btn primary" id="cco-act-feed">Open Incident Feed</button>
         <button class="cco-btn" id="cco-act-oprep" title="Download a multi-section Operation Summary PDF">📄 Download Summary PDF</button>
         <button class="cco-btn" id="cco-act-export" title="Export this operation's reports (CSV / GeoJSON / Shapefile / KML / PDF)">Export Reports</button>
-        ${op.form_pack_id ? `<button class="cco-btn" id="cco-act-editform" title="Edit this operation's crisis-form questions">Edit Operation Form</button>
-        <button class="cco-btn" id="cco-act-viewcfg" title="View the active form configuration (read-only)">View Form Configuration</button>` : ''}
+        ${op.form_pack_id ? `<button class="cco-btn" id="cco-act-viewcfg" title="View the deployed crisis form (read-only)">View deployed crisis form</button>
+        <button class="cco-btn" id="cco-act-editform" title="Edit this operation's crisis-form questions">Edit Operation Form</button>` : ''}
         <button class="cco-btn" id="cco-act-forms" title="Activate / deploy a crisis-form pack for a zone">Deploy form pack</button>
         <button class="cco-btn cco-undo" id="cco-act-undo" title="Reverse the most recent cluster claim on this operation">↩ Undo claim</button>
       </div>`;
@@ -957,42 +966,16 @@
       }
     } catch (_e) {}
 
-    // In the panel the scoped feed is already behind the console, so "Exit to global"
-    // closes the panel + drops the op scope; full-page keeps the old home nav.
-    const exit = inPanel
-      ? () => {
-          try { window.setOperationScope && window.setOperationScope(null); } catch (_e) {}
-          try { window._writeScopeHash && window._writeScopeHash(); } catch (_e) {}   // drop ;op= from the URL
-          try { window.closeDetail && window.closeDetail(); } catch (_e) {}
-        }
-      : () => navTo('/');
-    el('cco-exit').addEventListener('click', exit);
-    el('cco-vitals').querySelectorAll('[data-q]').forEach((v) => {
-      // Drill into THIS operation's incidents, filtered by the vital's queue -
-      // the op scope is carried so the analyst keeps context on the feed.
-      v.addEventListener('click', () => go('#/incidents;op=' + encodeURIComponent(_detailOpId) + ';queue=' + v.getAttribute('data-q')));
-    });
-    // Building-scoped duplicate-review entry: jump to the Buildings worklist (the
-    // per-building review surface) - merge happens IN each building's workspace,
-    // never globally. The worst-first building cards are already shown there.
-    const ruDup = el('cco-ru-dup');
-    if (ruDup) ruDup.addEventListener('click', () => {
-      const tabs = el('cco-wl-tabs');
-      const bTab = tabs && tabs.querySelector('[data-wl="buildings"]');
-      if (bTab) bTab.click();
-      const bld = el('cco-bld');
-      if (bld && bld.scrollIntoView) bld.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
-    // Open the Incident Feed SCOPED to this operation (context persists). In the panel
-    // the scoped feed is already showing behind the console, so this just closes the panel.
-    el('cco-act-feed').addEventListener('click', inPanel
-      ? () => { try { window.closeDetail && window.closeDetail(); } catch (_e) {} }
-      : () => go('#/incidents;op=' + encodeURIComponent(_detailOpId)));
+    // Op-scoped duplicate review (#6): the algorithm-based candidate-pair count for
+    // THIS operation. The MERGE action lives in the command panel above ("Merge
+    // duplicates") — mirrors the global level (review strip + command-panel merge).
+    renderOpDupChecks(dupRev);
+    loadWeather(id);   // local conditions (kept)
+
     el('cco-act-export').addEventListener('click', () => {
       // Stash THIS operation's id so the Export Center scopes the download to it.
-      // The router's global hideAll() clears the live op scope (setOperationScope
-      // null) BEFORE /exports opens, so getOperationScope() is already null there -
-      // capture it at click time instead.
+      // The router's global hideAll() clears the live op scope BEFORE /exports opens,
+      // so capture it at click time instead.
       try { window.__crispExportCtx = { crisis_event_id: id }; } catch (_e) {}
       // In the panel, close the console first so the route overlay (z 99992) isn't
       // hidden behind the detail-panel (z 100000).
@@ -1009,7 +992,7 @@
       if (op.form_pack_id && typeof window.openCrisisFormBuilder === 'function') window.openCrisisFormBuilder(op.form_pack_id);
       else navTo('/reporting');
     });
-    // View the active form configuration read-only.
+    // View the deployed crisis form (read-only).
     const viewCfg = el('cco-act-viewcfg');
     if (viewCfg) viewCfg.addEventListener('click', () => _showFormConfig(op.form_pack_id, op.form_name));
     el('cco-act-undo').addEventListener('click', (ev) => {
@@ -1019,23 +1002,31 @@
       if (!window.confirm('Reverse the most recent claim for this operation? The reports it claimed are released back to the global queue.')) return;
       (window.unclaimOperation || function () {})(id, btn);
     });
+  }
 
-    renderWorklist(reports);
-    renderOpBuildings(reports);
-    // Reports | Buildings worklist toggle (Buildings is the default operational
-    // worklist - the real places help is sent). Reports stays one click away.
-    const tabs = el('cco-wl-tabs');
-    if (tabs) tabs.querySelectorAll('[data-wl]').forEach((btn) => btn.addEventListener('click', () => {
-      const mode = btn.getAttribute('data-wl');
-      tabs.querySelectorAll('[data-wl]').forEach((b) => b.classList.toggle('active', b === btn));
-      const wl = el('cco-wl'), bld = el('cco-bld'), src = el('cco-wl-src');
-      const showReports = mode === 'reports';
-      if (wl) wl.style.display = showReports ? '' : 'none';
-      if (bld) bld.style.display = showReports ? 'none' : '';
-      if (src) src.textContent = showReports ? 'only this operation · critical first' : 'affected buildings · priority first';
-    }));
-    renderOpMap(reports);
-    loadWeather(id);
+  // Op-scoped duplicate-review strip — same shape as the global home strip, sourced
+  // from the already-fetched buildings-needing-review roll-up (candidate pairs +
+  // per-building confidence). Informational; the one-click merge is the command
+  // panel's "Merge duplicates" action above.
+  function renderOpDupChecks(dupRev) {
+    const box = el('cco-dupcheck');
+    if (!box) return;
+    const blds = (dupRev && dupRev.buildings) || [];
+    const total = (dupRev && dupRev.total_pairs) || 0;
+    if (!total) {
+      box.className = 'cco-dupcheck clear';
+      box.innerHTML = '<span class="ccd-ic">🔍</span><span class="ccd-t"><b>Duplicate review</b> · all clear — no probable duplicates in this operation</span>';
+      return;
+    }
+    const sum = (k) => blds.reduce((s, b) => s + (Number(b[k]) || 0), 0);
+    const high = sum('high'), med = sum('medium'), low = sum('low');
+    const nBld = (dupRev && dupRev.total_buildings) || blds.length;
+    const chip = (n, label, cls) => n > 0 ? `<span class="ccd-chip ${cls}">${fmtNum(n)} ${label}</span>` : '';
+    box.className = 'cco-dupcheck has-dups';
+    box.innerHTML =
+      '<span class="ccd-ic">🔍</span>'
+      + `<span class="ccd-t"><b>Duplicate review</b> · ${fmtNum(total)} probable pair${total === 1 ? '' : 's'} across ${fmtNum(nBld)} building${nBld === 1 ? '' : 's'} — use <b>Merge duplicates</b> above</span>`
+      + `<span class="ccd-chips">${chip(high, 'high', 'high')}${chip(med, 'med', 'med')}${chip(low, 'low', 'low')}</span>`;
   }
 
   // Operation Buildings worklist: the buildings that have a report in THIS operation,
