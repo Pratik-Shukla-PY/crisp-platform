@@ -110,6 +110,12 @@ def main() -> None:
         help="If set, also save the TOTP QR as a PNG at this path (e.g. /app/backend/demo-qr.png). "
              "Useful for submission packages - judges scan the PNG with their phone.",
     )
+    ap.add_argument(
+        "--no-mfa",
+        action="store_true",
+        help="Provision the account WITHOUT two-factor. Login is email + password only "
+             "(no authenticator code). Use for a read-only demo/evaluator account.",
+    )
     args = ap.parse_args()
 
     # Late imports - only do them once the CLI has parsed, so --help works
@@ -142,13 +148,15 @@ def main() -> None:
             )
             sys.exit(2)
 
-        # Generate fresh TOTP secret on every run (160 random bits, base32).
-        totp_secret = pyotp.random_base32()
+        # Generate a fresh TOTP secret on every run (160 random bits, base32),
+        # unless --no-mfa was passed (then the account logs in with password only).
+        no_mfa = args.no_mfa
+        totp_secret = None if no_mfa else pyotp.random_base32()
 
         if existing:
             existing.password_hash = hash_password(pw)
             existing.mfa_secret = totp_secret
-            existing.mfa_enabled = True
+            existing.mfa_enabled = not no_mfa
             existing.is_active = True
             existing.is_verified = True
             existing.role = RoleEnum.SUPER_ADMIN.value
@@ -166,7 +174,7 @@ def main() -> None:
                 role=RoleEnum.SUPER_ADMIN.value,
                 is_active=True,
                 is_verified=True,
-                mfa_enabled=True,
+                mfa_enabled=not no_mfa,
                 mfa_secret=totp_secret,
                 gdpr_consent_at=datetime.now(timezone.utc),
             )
@@ -175,13 +183,6 @@ def main() -> None:
 
         db.commit()
         db.refresh(user)
-
-        # Build the otpauth:// URI per RFC 6238. The "issuer" goes to
-        # "CRISP" so the entry shows up sensibly in the authenticator app.
-        otp_uri = pyotp.totp.TOTP(totp_secret).provisioning_uri(
-            name=email,
-            issuer_name="CRISP Dashboard",
-        )
 
         print()
         print("=" * 70)
@@ -192,29 +193,42 @@ def main() -> None:
         print(f"  Role       : {user.role}")
         print(f"  MFA enabled: {user.mfa_enabled}")
         print()
-        print("  Scan this QR code with Google Authenticator / Authy / 1Password:")
-        print()
-        _print_qr_ascii(otp_uri)
-        print()
-        if args.qr_png_path:
-            _save_qr_png(otp_uri, args.qr_png_path)
-            print(f"  QR also saved as PNG: {args.qr_png_path}")
+
+        if no_mfa:
+            print("  MFA is DISABLED for this account.")
+            print("  Sign in with email + password only - leave the authenticator")
+            print("  code field on the login page blank.")
+            print("=" * 70)
+        else:
+            # Build the otpauth:// URI per RFC 6238. The "issuer" goes to
+            # "CRISP Dashboard" so the entry shows up sensibly in the app.
+            otp_uri = pyotp.totp.TOTP(totp_secret).provisioning_uri(
+                name=email,
+                issuer_name="CRISP Dashboard",
+            )
+            print("  Scan this QR code with Google Authenticator / Authy / 1Password:")
             print()
-        print("  Or enter the secret manually in your authenticator app:")
-        print()
-        print(f"    Account : CRISP Dashboard ({email})")
-        print(f"    Secret  : {totp_secret}")
-        print(f"    Type    : Time-based (TOTP)")
-        print(f"    Digits  : 6")
-        print(f"    Period  : 30 seconds")
-        print()
-        print("  otpauth URI (for password managers that accept it directly):")
-        print(f"    {otp_uri}")
-        print()
-        print("=" * 70)
-        print("  IMPORTANT: this secret is shown ONCE. Store it in 1Password")
-        print("  /Bitwarden as a backup. To rotate, re-run with --update.")
-        print("=" * 70)
+            _print_qr_ascii(otp_uri)
+            print()
+            if args.qr_png_path:
+                _save_qr_png(otp_uri, args.qr_png_path)
+                print(f"  QR also saved as PNG: {args.qr_png_path}")
+                print()
+            print("  Or enter the secret manually in your authenticator app:")
+            print()
+            print(f"    Account : CRISP Dashboard ({email})")
+            print(f"    Secret  : {totp_secret}")
+            print(f"    Type    : Time-based (TOTP)")
+            print(f"    Digits  : 6")
+            print(f"    Period  : 30 seconds")
+            print()
+            print("  otpauth URI (for password managers that accept it directly):")
+            print(f"    {otp_uri}")
+            print()
+            print("=" * 70)
+            print("  IMPORTANT: this secret is shown ONCE. Store it in 1Password")
+            print("  /Bitwarden as a backup. To rotate, re-run with --update.")
+            print("=" * 70)
     finally:
         db.close()
 
