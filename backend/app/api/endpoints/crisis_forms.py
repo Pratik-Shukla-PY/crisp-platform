@@ -736,21 +736,26 @@ def cascade_operation(event_id: str, action: str, body: Optional[dict] = None,
 
 
 @operations_router.post("/{event_id}/assess", summary="AI Analyze an operation (synthesis)")
-async def assess_operation(event_id: str, db: Session = Depends(get_db),
+async def assess_operation(event_id: str,
+                           force: bool = Query(False, description="bypass the unchanged-inputs cache and re-bill Claude"),
+                           db: Session = Depends(get_db),
                            user=Depends(require_analyst)):
     """Command Center 'Analyze Operation': aggregate the operation's child confidence
     scores + ONE Claude synthesis call → situation summary, key risks, escalation
-    likelihood, EXECUTABLE recommended actions, priority score, resource needs."""
+    likelihood, EXECUTABLE recommended actions, priority score, resource needs.
+
+    Unchanged inputs return the cached narrative (no re-bill) unless force=true."""
     ev = db.query(CrisisEvent).filter(CrisisEvent.id == event_id).first()
     if not ev:
         raise HTTPException(status_code=404, detail="Operation not found")
     from app.services.scope_assessment import generate_scope_assessment, persist
     from app.services.building_ai_summary import SummaryUnavailable
     try:
-        payload = await generate_scope_assessment(db, "operation", event_id)
+        payload = await generate_scope_assessment(db, "operation", event_id, force=force)
     except SummaryUnavailable as e:
         raise HTTPException(status_code=503, detail=f"AI assessment unavailable: {e}")
-    persist(db, user, payload)
+    if not payload.get("_from_cache"):   # cache hit → already persisted, don't duplicate
+        persist(db, user, payload)
     payload["assessed"] = True
     return payload
 
@@ -885,7 +890,24 @@ def update_pack(pack_id: str, payload: CrisisFormPackUpdate, db: Session = Depen
     pack = db.query(CrisisFormPack).filter(CrisisFormPack.id == pack_id).first()
     if not pack:
         raise HTTPException(status_code=404, detail="Pack not found")
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    # Guard (archive-only integrity gate): a form pack bound to a LIVE operation cannot
+    # be archived out from under it — the operator must end or reassign those operations
+    # first. Packs are never hard-deleted; archiving is the only removal, so this is the
+    # "can't remove a form a running operation depends on" protection.
+    if data.get("is_archived") is True and not pack.is_archived:
+        live = (db.query(CrisisEvent.id, CrisisEvent.name)
+                  .filter(CrisisEvent.form_pack_id == pack_id,
+                          CrisisEvent.is_active == True)  # noqa: E712
+                  .all())
+        if live:
+            raise HTTPException(status_code=409, detail={
+                "error": "pack_in_use",
+                "message": ("This form pack is in use by %d live operation(s). End or "
+                            "reassign them before archiving the pack." % len(live)),
+                "operations": [{"id": o.id, "name": o.name} for o in live],
+            })
+    for k, v in data.items():
         setattr(pack, k, v)
     db.commit(); db.refresh(pack)
     return pack

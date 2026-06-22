@@ -753,18 +753,22 @@ def operational_summary(
 
 # ── Command Center: GLOBAL AI Analyze ───────────────────────────────────────────
 @router.post("/assess", summary="AI Analyze the GLOBAL response (synthesis)")
-async def assess_global(db: Session = Depends(get_db), user=Depends(require_analyst)):
+async def assess_global(force: bool = Query(False, description="bypass the unchanged-inputs cache and re-bill Claude"),
+                        db: Session = Depends(get_db), user=Depends(require_analyst)):
     """Command Center 'Analyze Global': aggregate every operation's child confidence
     scores + ONE Claude synthesis call → situation summary, key risks, escalation
     likelihood, EXECUTABLE recommended actions (each a scoped cascade), priority
-    score, resource needs. Exactly one Claude call regardless of crisis size."""
+    score, resource needs. Exactly one Claude call regardless of crisis size.
+
+    Unchanged inputs return the cached narrative (no re-bill) unless force=true."""
     from app.services.scope_assessment import generate_scope_assessment, persist
     from app.services.building_ai_summary import SummaryUnavailable
     try:
-        payload = await generate_scope_assessment(db, "global", None)
+        payload = await generate_scope_assessment(db, "global", None, force=force)
     except SummaryUnavailable as e:
         raise HTTPException(status_code=503, detail=f"AI assessment unavailable: {e}")
-    persist(db, user, payload)
+    if not payload.get("_from_cache"):   # cache hit → already persisted, don't duplicate
+        persist(db, user, payload)
     payload["assessed"] = True
     return payload
 

@@ -82,6 +82,28 @@ def test_lint_endpoint(client, admin_token):
     assert r.status_code == 200 and r.json()["valid"] is True and r.json()["errors"] == []
 
 
+def test_pack_archive_blocked_while_live_operation_uses_it(client, admin_token):
+    """Stream D guardrail: a form pack bound to a LIVE operation cannot be archived —
+    the operator must end/reassign the operation first. Archiving succeeds once no live
+    operation references the pack."""
+    pid = _publish_pack(client, admin_token, key="guard-pack")
+    eid = _make_event(client, admin_token, pid)
+    # Archiving while a LIVE op uses it → 409 with the blocking operation named.
+    r = client.patch(f"/api/v1/admin/crisis-forms/packs/{pid}",
+                     json={"is_archived": True}, headers=_h(admin_token))
+    assert r.status_code == 409, r.text
+    detail = r.json()["detail"]
+    assert detail["error"] == "pack_in_use"
+    assert any(o["id"] == eid for o in detail["operations"])
+    # End the operation, then archiving the now-unused pack succeeds.
+    end = client.patch(f"/api/v1/admin/crisis-forms/events/{eid}",
+                       json={"status": "ENDED"}, headers=_h(admin_token))
+    assert end.status_code == 200, end.text
+    ok = client.patch(f"/api/v1/admin/crisis-forms/packs/{pid}",
+                      json={"is_archived": True}, headers=_h(admin_token))
+    assert ok.status_code == 200, ok.text
+
+
 # ── M7 (Phase-2): a LIVE operation must have a form pack bound ────────────────
 def test_live_event_without_pack_rejected(client, admin_token):
     """A LIVE op with no form pack is skipped by resolve_active_event, so reports
