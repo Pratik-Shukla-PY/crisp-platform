@@ -324,6 +324,28 @@ def auth_header(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limit_buckets():
+    """Per-test isolation for the process-global rate limiter.
+
+    The in-memory rate-limit buckets (e.g. ``meta:<device_hash>`` → 30 reports/min)
+    are module-level and persist for the whole pytest session. Without a reset they
+    accumulate across every test that POSTs a report on the shared
+    ``TEST-DEVICE-001`` device, so once the suite has created >30 within the 60 s
+    window the NEXT ``sample_report`` POST 429s — surfacing as a setup ERROR in a
+    later file (e.g. test_api_reports_state_patches) even though that file passes in
+    isolation. Clearing before each test gives every test a clean window; tests that
+    exercise the limiter itself (test_rate_limit / channel tests) build their own
+    counts up within a single test body, so this does not weaken them.
+    """
+    try:
+        from app.services.rate_limit import _inmemory_buckets
+        _inmemory_buckets.clear()
+    except Exception:
+        pass
+    yield
+
+
 # ── Sample Data ───────────────────────────────────────────────────────────────
 
 @pytest.fixture
@@ -341,5 +363,5 @@ def sample_report(client):
         "damage_classification": "PARTIAL",
         "location": {"latitude": 12.97, "longitude": 77.59},
     })
-    assert res.status_code == 201
+    assert res.status_code == 201, f"sample_report POST failed: {res.status_code} {res.text[:400]}"
     return res.json()

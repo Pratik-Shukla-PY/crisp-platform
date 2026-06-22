@@ -194,6 +194,35 @@ def test_mark_deferred_with_invalid_reason_returns_422(client, db):
     assert res.status_code == 422
 
 
+def test_mark_deferred_storage_evicted_accepted(client, db):
+    """R6 (Jun 2026): the PWA evicts an ORIGINAL whose SMALL preview already
+    delivered (to free device storage under indefinite retention) and signals
+    mark-deferred(storage_evicted). The endpoint MUST accept this reason — it was
+    added to valid_reasons — and stamp the failed placeholder with it so the
+    dashboard renders the distinct 'deferred - storage' chip (a retryable deferral,
+    not a hard failure, and not a 422)."""
+    r, photo_group_id = _seed_report_with_small_landed(
+        db, device_hash="r6-storage-evicted"
+    )
+    res = client.post(
+        f"/api/v1/reports/{r.id}/media/mark-deferred",
+        json={
+            "tiers_by_group": {photo_group_id: ["ORIGINAL"]},
+            "reason": "storage_evicted",
+        },
+    )
+    assert res.status_code == 200, f"got {res.status_code} body={res.text}"
+    assert res.json()["newly_stamped"] == 1
+    db.expire_all()
+    failed = [
+        m for m in db.query(Media).filter_by(report_id=r.id).all()
+        if m.assembly_status == "failed"
+    ]
+    assert len(failed) == 1
+    assert failed[0].abandon_reason == "storage_evicted"
+    assert failed[0].abandoned_at is not None
+
+
 def test_mark_deferred_with_empty_tiers_by_group_returns_422(client, db):
     """Empty payload → 422."""
     r, _ = _seed_report_with_small_landed(db, device_hash="k2d-empty-payload")

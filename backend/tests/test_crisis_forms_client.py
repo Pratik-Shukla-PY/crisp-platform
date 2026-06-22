@@ -97,3 +97,42 @@ def test_passes_lat_lng_as_query_params(monkeypatch):
     _run(cfc.resolve_active_event_id(1.5, 2.5))
     assert seen["url"].endswith("/api/v1/crisis-forms/active")
     assert seen["params"] == {"lat": 1.5, "lng": 2.5}
+
+
+# ── resolve_active_pack (chat-channel pack questions) ────────────────────────
+
+def test_resolve_active_pack_returns_full_subset(monkeypatch):
+    resp = _Resp(200, {"active": True, "event_id": "evt-1", "pack_id": "pk-1",
+                       "pack_version": 3, "schema_json": {"sections": []}})
+    monkeypatch.setattr(cfc.httpx, "AsyncClient", _client_factory(resp))
+    out = _run(cfc.resolve_active_pack(12.97, 77.59))
+    assert out == {"event_id": "evt-1", "pack_id": "pk-1",
+                   "pack_version": 3, "schema_json": {"sections": []}}
+
+
+def test_resolve_active_pack_inactive_returns_none(monkeypatch):
+    monkeypatch.setattr(cfc.httpx, "AsyncClient", _client_factory(_Resp(200, {"active": False})))
+    assert _run(cfc.resolve_active_pack(12.97, 77.59)) is None
+
+
+def test_resolve_active_pack_active_but_no_pack_returns_none(monkeypatch):
+    # an active EVENT with no pack (event-only linkage) is not a pack → None
+    resp = _Resp(200, {"active": True, "event_id": "evt-1"})
+    monkeypatch.setattr(cfc.httpx, "AsyncClient", _client_factory(resp))
+    assert _run(cfc.resolve_active_pack(12.97, 77.59)) is None
+
+
+def test_resolve_active_pack_non_200_and_network_error_return_none(monkeypatch):
+    monkeypatch.setattr(cfc.httpx, "AsyncClient", _client_factory(_Resp(503, {})))
+    assert _run(cfc.resolve_active_pack(12.97, 77.59)) is None
+    monkeypatch.setattr(cfc.httpx, "AsyncClient", _client_factory(raise_get=True))
+    assert _run(cfc.resolve_active_pack(12.97, 77.59)) is None
+
+
+def test_resolve_active_pack_missing_coords_never_calls_network(monkeypatch):
+    class _Boom:
+        def __init__(self, *a, **k):
+            raise AssertionError("must not open a client without coords")
+
+    monkeypatch.setattr(cfc.httpx, "AsyncClient", _Boom)
+    assert _run(cfc.resolve_active_pack(None, None)) is None

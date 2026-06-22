@@ -253,6 +253,49 @@ class TestStepUp:
         assert res.status_code == 401
 
 
+class TestStepUpProdStrict:
+    """Production purge requires a TIME-BASED authenticator (TOTP); the password
+    fallback + mock code are dev/CI only. APP_ENV is monkeypatched per-test (read at
+    request time by the endpoint + the purge gate)."""
+
+    def test_prod_no_mfa_password_is_rejected_with_enrol_hint(self, client, admin_token, monkeypatch):
+        # The test admin has no MFA enrolled → in prod, step-up cannot succeed.
+        monkeypatch.setenv("APP_ENV", "production")
+        res = client.post("/api/v1/auth/step-up", json={"code": "Admin@1234"},
+                          headers={"Authorization": f"Bearer {admin_token}"})
+        assert res.status_code == 403
+        assert "Multi-factor" in res.json()["detail"]
+
+    def test_prod_purge_rejects_password_method_token_accepts_totp(self, client, admin_token, monkeypatch):
+        from app.core.security import create_step_up_token, decode_token
+        uid = decode_token(admin_token)["sub"]
+        monkeypatch.setenv("APP_ENV", "production")
+        # A password-method step-up token must NOT authorize a prod purge.
+        pw = client.post("/api/v1/reports/purge-expired",
+                         headers={"Authorization": f"Bearer {admin_token}",
+                                  "X-Step-Up": create_step_up_token(uid, method="password")})
+        assert pw.status_code == 403
+        # A totp-method token does.
+        ok = client.post("/api/v1/reports/purge-expired",
+                         headers={"Authorization": f"Bearer {admin_token}",
+                                  "X-Step-Up": create_step_up_token(uid, method="totp")})
+        assert ok.status_code == 200
+
+    def test_dev_mock_code_accepted(self, client, admin_token, monkeypatch):
+        monkeypatch.setenv("APP_ENV", "dev")
+        monkeypatch.setenv("CRISP_TESTING", "1")
+        monkeypatch.setenv("CRISP_DEV_STEPUP_CODE", "424242")
+        res = client.post("/api/v1/auth/step-up", json={"code": "424242"},
+                          headers={"Authorization": f"Bearer {admin_token}"})
+        assert res.status_code == 200, res.text
+        assert res.json().get("step_up_token")
+        # The mock-method token authorizes a purge in dev.
+        ok = client.post("/api/v1/reports/purge-expired",
+                         headers={"Authorization": f"Bearer {admin_token}",
+                                  "X-Step-Up": res.json()["step_up_token"]})
+        assert ok.status_code == 200
+
+
 class TestDuplicateDecisions:
     """Incident Intelligence P3 - within-cluster duplicate surfacing + reversible
     analyst decisions (CONFIRMED_DUP / NOT_DUP / SET_PRIMARY / UNDO)."""
@@ -372,11 +415,16 @@ class TestDuplicateDecisions:
         markers = {m["id"]: m for m in client.get("/api/v1/reports/markers", headers=auth_header(viewer_token)).json()}
         assert b["id"] not in markers and markers[a["id"]]["duplicate_count"] == 1
 
-        # Analytics: total reports unchanged (corroboration kept), incidents -1.
+        # Analytics: confirming a duplicate hides it from the DEDUPED report total, which
+        # now mirrors the feed's X-Total-Count (= total0-1 asserted above) → reports -1
+        # (Jun 2026 dedup-consistency fix; pre-fix counts.reports stayed flat while the
+        # feed dropped — the operator's "home 71 / Critical 1 vs feed 52 / 0"). The
+        # incident count is UNCHANGED: a & b are the same building, so intake already
+        # grouped them into ONE incident — collapsing b leaves a's incident in place.
         _an._summary_cache.clear()
         c_after = client.get("/api/v1/analytics/summary", headers=auth_header(viewer_token)).json()["counts"]
-        assert c_after["reports"] == c_before["reports"]
-        assert c_after["incidents"] == c_before["incidents"] - 1
+        assert c_after["reports"] == c_before["reports"] - 1
+        assert c_after["incidents"] == c_before["incidents"]
 
         # UNDO → b restored to the feed; the badge resets.
         client.post(f"/api/v1/reports/{a['id']}/duplicate-decision",

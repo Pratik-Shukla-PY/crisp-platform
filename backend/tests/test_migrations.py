@@ -216,11 +216,15 @@ def test_0005_adds_pii_blur_status_column_and_backfills():
             conn.execute(text("DROP INDEX IF EXISTS ix_reports_building_id_is_latest"))
             conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS building_version_ordinal"))
             conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS building_is_latest"))
+            # 0061 — Command Center: cascade audit/undo + scope assessment tables.
+            conn.execute(text("DROP TABLE IF EXISTS cascade_action_log CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS scope_assessment CASCADE"))
             # 0028-0031 — Phase H building entity + 4 satellite tables.
             # Drop CASCADE to wipe FKs; the migration recreates them.
             conn.execute(text("DROP TABLE IF EXISTS building_notes CASCADE"))
             conn.execute(text("DROP TABLE IF EXISTS building_responders CASCADE"))
             conn.execute(text("DROP TABLE IF EXISTS building_monitors CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS building_assessments CASCADE"))
             conn.execute(text("DROP TABLE IF EXISTS building_events CASCADE"))
             conn.execute(text("DROP TABLE IF EXISTS buildings CASCADE"))
             # 0032 — Phase F image-reliability: media abandon columns.
@@ -306,6 +310,13 @@ def test_0005_adds_pii_blur_status_column_and_backfills():
             conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS reviewed_by"))
             # 0057 — deletion_audit_log.deletion_reason column.
             conn.execute(text("ALTER TABLE deletion_audit_log DROP COLUMN IF EXISTS deletion_reason"))
+            # 0058 — incidents table + reports.incident_id (Building-centric
+            # Incident-Feed redesign Phase 2A). create_all built both; drop the
+            # column first (its FK + index ride with it) then the table so 0058's
+            # plain create_table/add_column replay cleanly. (0059 is a data-only
+            # backfill - no schema objects to drop.)
+            conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS incident_id"))
+            conn.execute(text("DROP TABLE IF EXISTS incidents CASCADE"))
             # 0056 — DROPS dead AIAnalysis stub columns + the legacy cluster tables,
             # all removed from the current model (so absent from create_all). Re-create
             # minimal stand-ins so 0056's plain drops have something to drop (same
@@ -410,10 +421,14 @@ def test_legacy_db_is_upgraded_without_data_loss():
             conn.execute(text("DROP INDEX IF EXISTS ix_reports_building_id_is_latest"))
             conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS building_version_ordinal"))
             conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS building_is_latest"))
+            # 0061 — Command Center: cascade audit/undo + scope assessment tables.
+            conn.execute(text("DROP TABLE IF EXISTS cascade_action_log CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS scope_assessment CASCADE"))
             # 0028-0031 — Phase H building entity + 4 satellite tables.
             conn.execute(text("DROP TABLE IF EXISTS building_notes CASCADE"))
             conn.execute(text("DROP TABLE IF EXISTS building_responders CASCADE"))
             conn.execute(text("DROP TABLE IF EXISTS building_monitors CASCADE"))
+            conn.execute(text("DROP TABLE IF EXISTS building_assessments CASCADE"))
             conn.execute(text("DROP TABLE IF EXISTS building_events CASCADE"))
             conn.execute(text("DROP TABLE IF EXISTS buildings CASCADE"))
             conn.execute(text("DROP TYPE IF EXISTS building_state CASCADE"))
@@ -484,6 +499,13 @@ def test_legacy_db_is_upgraded_without_data_loss():
             conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS reviewed_by"))
             # 0057 — deletion_audit_log.deletion_reason column.
             conn.execute(text("ALTER TABLE deletion_audit_log DROP COLUMN IF EXISTS deletion_reason"))
+            # 0058 — incidents table + reports.incident_id (Building-centric
+            # Incident-Feed redesign Phase 2A). create_all built both; drop the
+            # column first (its FK + index ride with it) then the table so 0058's
+            # plain create_table/add_column replay cleanly. (0059 is a data-only
+            # backfill - no schema objects to drop.)
+            conn.execute(text("ALTER TABLE reports DROP COLUMN IF EXISTS incident_id"))
+            conn.execute(text("DROP TABLE IF EXISTS incidents CASCADE"))
             # 0056 — DROPS dead AIAnalysis stub columns + the legacy cluster tables,
             # all removed from the current model (absent from create_all). Re-create
             # minimal stand-ins so 0056's plain drops have something to drop.

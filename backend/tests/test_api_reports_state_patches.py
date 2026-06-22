@@ -108,6 +108,52 @@ class TestDispatchPatch:
         assert r.help_dispatched_at is not None
 
 
+class TestReopenPatch:
+    def test_reopen_reverts_responding_to_pending(
+        self, client, sample_report, analyst_token, viewer_token, db,
+    ):
+        """RESPONDING → PENDING via /reopen (the operator's 'undo notify' on the
+        incident detail), clearing the dispatch/arrival timestamps. Role-gated."""
+        from app.models.report import Report
+        rid = sample_report["id"]
+        client.patch(f"/api/v1/reports/{rid}/dispatch", headers=auth_header(analyst_token))
+        client.patch(f"/api/v1/reports/{rid}/timestamps", headers=auth_header(analyst_token),
+                     json={"stamp_dispatched_now": True})
+        # viewer cannot reopen
+        assert client.patch(f"/api/v1/reports/{rid}/reopen", headers=auth_header(viewer_token)).status_code == 403
+        # analyst reopens → PENDING, timestamps cleared
+        assert client.patch(f"/api/v1/reports/{rid}/reopen", headers=auth_header(analyst_token)).status_code == 200
+        db.expire_all()
+        r = db.query(Report).filter(Report.id == rid).first()
+        assert r.status.value == "PENDING"
+        assert r.help_dispatched_at is None
+
+    def test_reopen_reverts_false_alarm_then_resolved(self, client, sample_report, analyst_token, db):
+        from app.models.report import Report
+        rid = sample_report["id"]
+        client.patch(f"/api/v1/reports/{rid}/false-alarm", headers=auth_header(analyst_token))
+        assert client.patch(f"/api/v1/reports/{rid}/reopen", headers=auth_header(analyst_token)).status_code == 200
+        db.expire_all()
+        assert db.query(Report).filter(Report.id == rid).first().status.value == "PENDING"
+        client.patch(f"/api/v1/reports/{rid}/resolve", headers=auth_header(analyst_token))
+        assert client.patch(f"/api/v1/reports/{rid}/reopen", headers=auth_header(analyst_token)).status_code == 200
+        db.expire_all()
+        assert db.query(Report).filter(Report.id == rid).first().status.value == "PENDING"
+
+    def test_revert_rejection_via_review_not_reviewed(self, client, sample_report, analyst_token, db):
+        """Reverting a REJECTED verdict is verdict-based: PATCH /review {NOT_REVIEWED}."""
+        from app.models.report import Report
+        rid = sample_report["id"]
+        client.patch(f"/api/v1/reports/{rid}/review", headers=auth_header(analyst_token),
+                     json={"verdict": "REJECTED", "action_taken": "duplicate of #123"})
+        db.expire_all()
+        assert db.query(Report).filter(Report.id == rid).first().reviewer_verdict == "REJECTED"
+        assert client.patch(f"/api/v1/reports/{rid}/review", headers=auth_header(analyst_token),
+                            json={"verdict": "NOT_REVIEWED"}).status_code == 200
+        db.expire_all()
+        assert db.query(Report).filter(Report.id == rid).first().reviewer_verdict == "NOT_REVIEWED"
+
+
 class TestReviewerVerdictPatch:
     def test_verify_sets_reviewer_verdict_VERIFIED(
         self, client, sample_report, analyst_token, db,

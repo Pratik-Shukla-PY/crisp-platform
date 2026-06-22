@@ -240,7 +240,12 @@ class TestHelperUnit:
         assert res.status_code == 201, f"{res.status_code}: {res.text}"
         body = res.json()
         assert body["building_id"] is None
-        assert body.get("infrastructure_name_from_osm") is False
+        # Building-tag consistency fix (Jun 2026): the FK pre-insert failing is a
+        # TRANSIENT DB issue, not a reason to demote the OSM provenance — the reporter
+        # DID tap an OSM footprint. We KEEP infrastructure_name_from_osm=True so the
+        # dashboard shows the real OSM name (e.g. "University") instead of "Unnamed
+        # Building"; migration 0063 + the proximity re-assign heal the building_id later.
+        assert body.get("infrastructure_name_from_osm") is True
         # infrastructure_name is preserved — the operator still has the
         # OSM-derived name to triage from on the dashboard.
         assert body["infrastructure_name"] == "Some Bldg from OSM"
