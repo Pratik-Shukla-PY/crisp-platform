@@ -390,6 +390,32 @@ function _notifCenterAdd(rec) {
     _persistNotifCenter();
 }
 
+// ── Home-alert "away window" anchor (Stream B, Jun 2026) ────────────────────
+// REUSES the existing per-operator visit watermark (crisp_last_visit_<uid> — see
+// _visitWatermarkKey / _advanceVisitWatermark below) that powers the once-per-
+// session "Since your last visit" summary. We snapshot it at load — BEFORE the
+// session summary advances it — as this session's "you were away until here"
+// anchor, so the always-on Home alert counts only UNREAD arrivals from the
+// away-window, not the operator's whole unread bell history. (ISO format, to
+// match _advanceVisitWatermark; both helpers are hoisted function declarations.)
+let _awayBaselineMs = (() => {
+    try {
+        const wm = Date.parse(localStorage.getItem(_visitWatermarkKey()) || '');
+        const now = Date.now();
+        // Absent / corrupt / in the future / >24h stale → anchor at NOW so a first
+        // or long-idle session never claims "100 reports arrived while you were away".
+        if (!wm || wm > now || (now - wm) > 24 * 3600 * 1000) return now;
+        return wm;
+    } catch (_) { return Date.now(); }
+})();
+// Operator acknowledged the new arrivals (clicked Review): clear the Home alert by
+// advancing both the in-memory anchor and the shared visit watermark.
+window.__crispMarkNotifsSeen = function () {
+    _awayBaselineMs = Date.now();
+    try { _advanceVisitWatermark(); } catch (_) {}
+    try { window.dispatchEvent(new CustomEvent('crisp:notif-change')); } catch (_) {}
+};
+
 let _notifPanelOpen = false;
 let _initialLoadDone = false;  // Suppress notifications on first data load
 let heatLayer = null;
@@ -1429,7 +1455,9 @@ window.__crispToggleOpSwitcher = async function (ev) {
         (active ? '<i class="fa-solid fa-check osw-check"></i>' : '') + '</button>';
     let html = '<div class="osw-h">Switch incidents view</div>';
     html += item(null, '🌐 Global incidents', 'All incidents worldwide', !cur);
-    const live = (_opsCache || []).filter((o) => o && String(o.status || '').toUpperCase() !== 'ENDED');
+    const live = (_opsCache || []).filter((o) => o && !((window.CrispOpCard && window.CrispOpCard.isEffectivelyEnded)
+        ? window.CrispOpCard.isEffectivelyEnded(o)
+        : String(o.status || '').toUpperCase() === 'ENDED'));
     html += '<div class="osw-sec">Operations</div>';
     html += live.length
         ? live.map((o) => item(o.id, o.name || 'Operation',
@@ -3914,10 +3942,14 @@ window.__crispEnsureReport = async (id) => {
 // Single source of truth for the shell's Home alert (unread count + whether any
 // unread incident is CRITICAL). Reads the same durable center the bell renders.
 window.__crispNotifSummary = () => {
-    const unread = _notifUnread();
+    // Only count UNREAD arrivals since the operator was last here (the away-window),
+    // so the Home alert means "you missed these", not "the bell has history".
+    const fresh = _notifUnread().filter(n => (n.addedAt || 0) >= _awayBaselineMs);
+    const criticalCount = fresh.filter(n => String(n.severity).toUpperCase() === 'CRITICAL').length;
     return {
-        count: unread.length,
-        critical: unread.some(n => String(n.severity).toUpperCase() === 'CRITICAL'),
+        count: fresh.length,
+        critical: criticalCount > 0,
+        criticalCount,
     };
 };
 
@@ -4889,8 +4921,13 @@ window.getOpsRegistryMode = () => _opsRegMode;
 function _opsRegFiltered(ops) {
     const v = _opsRegView;
     const q = (v.q || '').trim().toLowerCase();
-    const isEnded = (o) => String(o && o.status || '').toUpperCase() === 'ENDED';
-    const unatt = (o) => String(o.status || '').toUpperCase() === 'LIVE' && Number(o.critical || 0) > 0 && !(Number(o.responders_active || 0) > 0);
+    // Single live-vs-ended rule shared with the home rail (CrispOpCard): a LIVE-in-DB
+    // op whose end-window has passed reads ENDED here too, so "View all" agrees with
+    // the rail it was opened from. Fallback keeps working if that module is late.
+    const isEnded = (o) => (window.CrispOpCard && window.CrispOpCard.isEffectivelyEnded)
+        ? window.CrispOpCard.isEffectivelyEnded(o)
+        : String(o && o.status || '').toUpperCase() === 'ENDED';
+    const unatt = (o) => !isEnded(o) && Number(o.critical || 0) > 0 && !(Number(o.responders_active || 0) > 0);
     return ops.filter((o) => {
         if (v.status === 'live' && isEnded(o)) return false;
         if (v.status === 'ended' && !isEnded(o)) return false;
@@ -6641,6 +6678,10 @@ window.toggleAnalytics = function () {
     if (show) _renderAnalytics();
 };
 
+// Exposed so the home page can render the analytics panel INLINE (it was relocated
+// off the header Tools into a 70/30 home section).
+window.__renderAnalytics = function () { try { _renderAnalytics(); } catch (_e) {} };
+
 function _calcTeamScore(reports) {
     if (!reports.length) return { score: 0, breakdown: {} };
     const total = reports.length;
@@ -6669,12 +6710,17 @@ function _renderAnalytics() {
   try {
     const reports = _getFilteredReports();
     if (!reports.length) return;
+    // REJECTED is a verdict, not a status - those reports keep status PENDING in the DB
+    // but are SET ASIDE. They must NOT count as pending nor drag the response / false-
+    // alarm rates. The KPIs work over the ACTIONABLE set (rejected excluded).
+    const _isRejected = (r) => String(r.reviewer_verdict || '').toUpperCase() === 'REJECTED';
+    const actionable = reports.filter(r => !_isRejected(r));
 
     // ── KPI Cards (Plecto-style hero metrics) ──
     const dateEl = document.getElementById('ac-kpi-date');
     if (dateEl) dateEl.textContent = new Date().toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
 
-    const pendingR = reports.filter(r => r.status === 'PENDING' || r.status === 'VERIFIED');
+    const pendingR = actionable.filter(r => r.status === 'PENDING' || r.status === 'VERIFIED');
     const critPending = pendingR.filter(r => r.severity === 'CRITICAL' || r.severity === 'SEVERE').length;
     const el1 = document.getElementById('kpi-pending');
     if (el1) el1.textContent = pendingR.length;
@@ -6697,28 +6743,28 @@ function _renderAnalytics() {
         if (sub2) sub2.innerHTML = '<span class="up">All responded</span>';
     }
 
-    const resolvedR = reports.filter(r => r.status === 'RESOLVED' || r.status === 'FALSE_ALARM');
+    const resolvedR = actionable.filter(r => r.status === 'RESOLVED' || r.status === 'FALSE_ALARM');
     const el3 = document.getElementById('kpi-resolved');
     if (el3) el3.textContent = resolvedR.length;
     const sub3 = document.getElementById('kpi-resolved-sub');
-    if (sub3) sub3.innerHTML = `of ${reports.length} total`;
+    if (sub3) sub3.innerHTML = `of ${actionable.length} total`;
 
-    const acted = reports.filter(r => r.status === 'RESPONDING' || r.status === 'RESOLVED' || r.status === 'FALSE_ALARM').length;
-    const rate = reports.length > 0 ? Math.round((acted / reports.length) * 100) : 0;
+    const acted = actionable.filter(r => r.status === 'RESPONDING' || r.status === 'RESOLVED' || r.status === 'FALSE_ALARM').length;
+    const rate = actionable.length > 0 ? Math.round((acted / actionable.length) * 100) : 0;
     const el4 = document.getElementById('kpi-response-rate');
     if (el4) el4.textContent = rate + '%';
     const sub4 = document.getElementById('kpi-rate-sub');
     if (sub4) sub4.innerHTML = rate >= 80 ? '<span class="up"><i class="fa-solid fa-arrow-up"></i> Strong</span>' : rate >= 50 ? 'Moderate' : '<span class="down"><i class="fa-solid fa-arrow-down"></i> Needs attention</span>';
 
-    const falseAlarms = reports.filter(r => r.status === 'FALSE_ALARM').length;
-    const faRate = reports.length > 0 ? Math.round((falseAlarms / reports.length) * 100) : 0;
+    const falseAlarms = actionable.filter(r => r.status === 'FALSE_ALARM').length;
+    const faRate = actionable.length > 0 ? Math.round((falseAlarms / actionable.length) * 100) : 0;
     const el5 = document.getElementById('kpi-false-rate');
     if (el5) el5.textContent = faRate + '%';
     const sub5 = document.getElementById('kpi-false-sub');
-    if (sub5) sub5.innerHTML = `${falseAlarms} of ${reports.length} reports`;
+    if (sub5) sub5.innerHTML = `${falseAlarms} of ${actionable.length} reports`;
 
-    // 0. Team Performance Score (hero)
-    const ts = _calcTeamScore(reports);
+    // 0. Team Performance Score (hero) - over the actionable set (rejected set aside).
+    const ts = _calcTeamScore(actionable);
     const sc = ts.score;
     const scColor = sc >= 80 ? '#22c55e' : sc >= 60 ? '#86efac' : sc >= 40 ? '#eab308' : sc >= 20 ? '#f97316' : '#ef4444';
     const scLabel = sc >= 80 ? 'Excellent' : sc >= 60 ? 'Good' : sc >= 40 ? 'Fair' : sc >= 20 ? 'Needs Improvement' : 'Critical';
