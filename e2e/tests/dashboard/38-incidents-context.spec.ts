@@ -66,26 +66,29 @@ async function boot(page, request, reports) {
 test.describe('Incidents page — context awareness (v55)', () => {
     test('GLOBAL context banner is always shown on /incidents', async ({ page, request }) => {
         await boot(page, request, [_stub()]);
-        const banner = page.locator('#queue-banner');
+        const banner = page.locator('#feed-scope-bar');
         await expect(banner).toBeVisible();
-        await expect(banner).toContainText('GLOBAL INCIDENTS');
-        await expect(banner).toContainText('worldwide');
+        // The banner is now a breadcrumb spine; the global leaf is the "Global" crumb.
+        await expect(banner.locator('.qb-crumbs')).toContainText('Global');
     });
 
     test('queue deep-link shows the matching context banner (CRITICAL)', async ({ page, request }) => {
         await boot(page, request, [_stub()]);
         await page.evaluate(() => { location.hash = '#/incidents;queue=critical'; });
-        await expect(page.locator('#queue-banner')).toContainText('CRITICAL INCIDENTS', { timeout: 6000 });
+        await expect(page.locator('#feed-scope-bar')).toContainText('CRITICAL INCIDENTS', { timeout: 6000 });
     });
 
-    test('KPI strip is in the feed panel + the top command-stats strip is gone', async ({ page, request }) => {
+    test('status TABS + Critical filter are in the feed panel; the old KPI strip + view toggle are gone (v111)', async ({ page, request }) => {
         await boot(page, request, [_stub()]);
-        // Relocated, still click-to-filter, inside the feed panel.
-        await expect(page.locator('.feed-panel .feed-kpi #stat-critical')).toBeVisible();
-        await expect(page.locator('.feed-panel .feed-kpi #stat-total')).toBeVisible();
-        // The old top segmented strip + Closed/Avg-Wait are gone.
+        // Row 2 of the feed panel: the three status tabs + the Critical quick-filter.
+        await expect(page.locator('.feed-panel .feed-tabs .feed-tab[data-tab="pending"]')).toBeVisible();
+        await expect(page.locator('.feed-panel .feed-tabs .feed-tab[data-tab="responding"]')).toBeVisible();
+        await expect(page.locator('.feed-panel .feed-tabs .feed-tab[data-tab="resolved"]')).toBeVisible();
+        await expect(page.locator('.feed-panel .feed-tabs #stat-critical')).toBeVisible();
+        // The old top segmented strip, the 4-pill KPI strip, and the view toggle are gone.
         await expect(page.locator('.command-bar .cmd-status-seg')).toHaveCount(0);
-        await expect(page.locator('#count-resolved')).toHaveCount(0);
+        await expect(page.locator('.feed-kpi')).toHaveCount(0);
+        await expect(page.locator('.view-btn')).toHaveCount(0);
         await expect(page.locator('#count-avg-response')).toHaveCount(0);
     });
 
@@ -94,6 +97,9 @@ test.describe('Incidents page — context awareness (v55)', () => {
             verification: { total_score: 82, verdict: 'STRONG_MATCH' },
             incident_credibility: { score: 72, band: 'LIKELY', assessed: true, max_score: 100 },
         })]);
+        // Asserts CARD rendering. The feed is always building-grouped now; this
+        // building-less report sits in the collapsed "Ungrouped" bucket - expand it.
+        await page.locator('.cc-cluster[data-cluster-key="ungrouped"] .cc-cluster-main').click();
         const card = page.locator('.qrt-card[data-report-id="ctx-r1"]');
         await expect(card).toBeVisible({ timeout: 8000 });
         await expect(card.locator('.qrt-data-progress')).toHaveCount(0);
@@ -151,7 +157,7 @@ test.describe('Incidents page — context awareness (v55)', () => {
         await boot(page, request, [_stub()]);
         // The GLOBAL banner carries a switcher CTA so analysts can scope into any
         // operation directly from the Incidents page.
-        await expect(page.locator('#queue-banner .ctx-switch')).toBeVisible();
+        await expect(page.locator('#feed-scope-bar .ctx-switch')).toBeVisible();
     });
 
     test('operation-scoped feed (#/incidents;op=X) shows OPERATION context + Global exit (v58)', async ({ page, request }) => {
@@ -167,40 +173,44 @@ test.describe('Incidents page — context awareness (v55)', () => {
         });
         await boot(page, request, [_stub({ crisis_event_id: 'op-xyz', crisis_event_name: 'Bengaluru Wildfire' })]);
         await page.evaluate(() => { location.hash = '#/incidents;op=op-xyz'; });
-        const banner = page.locator('#queue-banner');
-        await expect(banner).toContainText('OPERATION', { timeout: 6000 });
-        await expect(banner).toContainText('Bengaluru');
+        const banner = page.locator('#feed-scope-bar');
+        // Op scope reads on the breadcrumb spine: Global › {operation name}.
+        await expect(banner.locator('.qb-crumbs')).toContainText('Bengaluru Wildfire', { timeout: 6000 });
         // The redundant shell breadcrumb bar ("CRISP / Operations / …") is hidden
         // on the Incidents page - the in-feed banner above already carries the op.
         await expect(page.locator('#cgn-context-banner')).toBeHidden();
-        // The op-scoped banner offers a one-click return to the global feed.
-        await banner.locator('.qb-clear').click();
-        await expect(banner).toContainText('GLOBAL INCIDENTS', { timeout: 6000 });
+        // The clickable "Global" crumb steps back out to the global feed.
+        await banner.locator('.qb-crumbs .qb-crumb-global').click();
+        await expect(banner.locator('.qb-crumbs')).not.toContainText('Bengaluru', { timeout: 6000 });
         // Returning to global must drop the op= state segment from the hash.
         await expect.poll(() => page.evaluate(() => location.hash)).not.toContain('op=op-xyz');
     });
 
     test('secondary filters wrap (all visible) instead of hidden horizontal scroll (v58)', async ({ page, request }) => {
         await boot(page, request, [_stub()]);
+        // Filters are a popover off the filter icon now; open it, then assert it
+        // wraps (all chips visible, no hidden horizontal scroll).
+        await page.locator('#feed-filter-btn').click();
         const row = page.locator('.cmd-filter-row');
         await expect(row).toBeVisible();
         const fw = await row.evaluate((e) => getComputedStyle(e).flexWrap);
         expect(fw).toBe('wrap');
     });
 
-    test('FILTERS row is collapsible: collapsed by default, the label toggles the chips (v72)', async ({ page, request }) => {
+    test('FILTERS are a popover: hidden by default, the filter icon opens the chips (v111)', async ({ page, request }) => {
         await boot(page, request, [_stub()]);
         const row = page.locator('.cmd-filter-row');
         const chip = row.locator('.cmd-filter-chip[data-chip="debris"]');
-        // Default collapsed: the label/row stays visible but the chips are hidden,
-        // so the incident cards get the vertical space.
+        // Default closed: the popover (and its chips) are hidden so the incident
+        // cards get the vertical space.
+        await expect(row).toBeHidden();
+        // Clicking the filter icon opens the popover.
+        await page.locator('#feed-filter-btn').click();
         await expect(row).toBeVisible();
-        await expect(row).toHaveClass(/cmd-filters-collapsed/);
-        await expect(chip).toBeHidden();
-        // Clicking the "Filters" label expands the chip row.
-        await page.locator('#cmd-filter-toggle').click();
-        await expect(row).not.toHaveClass(/cmd-filters-collapsed/);
         await expect(chip).toBeVisible();
+        // Clicking the icon again closes it.
+        await page.locator('#feed-filter-btn').click();
+        await expect(row).toBeHidden();
     });
 
     test('ROUTE-01: opening an incident on the op-scoped feed stays in place (no eject to the op dashboard)', async ({ page, request }) => {
@@ -229,7 +239,7 @@ test.describe('Incidents page — context awareness (v55)', () => {
         // Land on the GLOBAL feed; the visible report belongs to op-xyz.
         await boot(page, request, [_stub({ crisis_event_id: 'op-xyz', crisis_event_name: 'Bengaluru Wildfire' })]);
         await page.evaluate(() => { location.hash = '#/incidents'; });
-        await expect(page.locator('#queue-banner')).toContainText('GLOBAL INCIDENTS', { timeout: 6000 });
+        await expect(page.locator('#feed-scope-bar .qb-crumbs')).toContainText('Global', { timeout: 6000 });
 
         // Click the op-owned incident from the GLOBAL feed (no explicit operationId,
         // so the op is resolved from the report's crisis_event_id).
@@ -241,9 +251,8 @@ test.describe('Incidents page — context awareness (v55)', () => {
         const h = await page.evaluate(() => location.hash);
         expect(h).not.toContain('/operations/');
         expect(h).toContain('incident=ctx-r1');
-        // The feed header now NAMES the operation, and the detail is open.
-        await expect(page.locator('#queue-banner')).toContainText('OPERATION', { timeout: 6000 });
-        await expect(page.locator('#queue-banner')).toContainText('Bengaluru');
+        // The feed header now NAMES the operation (breadcrumb crumb), and the detail is open.
+        await expect(page.locator('#feed-scope-bar .qb-crumbs')).toContainText('Bengaluru Wildfire', { timeout: 6000 });
         await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 6000 });
     });
 

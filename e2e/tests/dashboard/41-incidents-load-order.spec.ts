@@ -110,7 +110,10 @@ test.describe('Dashboard — Incidents load-order / operation-context integrity'
         // First land on the GLOBAL feed so the feed DOM holds global cards (the
         // stale state that used to flash on the next navigation).
         await page.goto('index.html#/incidents');
-        await expect(page.locator('.qrt-card[data-id="g1"]')).toBeVisible({ timeout: 8000 });
+        // These reports have no building_id → collapsed Ungrouped in buildings-default.
+        // Switch to flat queue so the load-order guard can see individual cards.
+        await page.evaluate(() => (window as any).setViewMode && (window as any).setViewMode('queue'));
+        await expect(page.locator('.qrt-card[data-id="g1"]')).toHaveCount(1, { timeout: 8000 });   // present in the DOM (collapsed Ungrouped cluster; flat queue retired v111)
 
         // From here, navigate to the operation-scoped incident (what the operation
         // worklist click / deep-link produces). Reset the flash recorder first so
@@ -129,8 +132,8 @@ test.describe('Dashboard — Incidents load-order / operation-context integrity'
 
         // Then the operation incident opens (detail on the right) + scoped list left.
         await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 8000 });
-        await expect(page.locator('.qrt-card[data-id="r1"]')).toBeVisible({ timeout: 8000 });
-        await expect(page.locator('.qrt-card[data-id="r2"]')).toBeVisible();
+        await expect(page.locator('.qrt-card[data-id="r1"]')).toHaveCount(1, { timeout: 8000 });   // scoped card present (in its building/Ungrouped cluster); detail auto-opens separately
+        await expect(page.locator('.qrt-card[data-id="r2"]')).toHaveCount(1);
 
         // THE GUARD: no global-only card was ever painted during the navigation.
         const seen = await seenIds(page);
@@ -138,8 +141,9 @@ test.describe('Dashboard — Incidents load-order / operation-context integrity'
         expect(seen).not.toContain('g2');
         expect(seen).toContain('r1');
 
-        // Context banner names the OPERATION before the list (scope is unambiguous).
-        await expect(page.locator('#queue-banner')).toContainText(/operation/i);
+        // The scope-bar header names the OPERATION (v116: breadcrumb shows the op name
+        // + carries the ctx-op scope class) before the list, so the scope is unambiguous.
+        await expect(page.locator('#feed-scope-bar')).toHaveClass(/ctx-op/);
     });
 
     test('@smoke cold refresh of an operation-incident URL: no global request, loading state, auto-open', async ({ page }) => {
@@ -152,7 +156,7 @@ test.describe('Dashboard — Incidents load-order / operation-context integrity'
         // boot its visibility window races world-data load, so here we assert the
         // stronger, deterministic invariants below: no global fetch, no global card
         // ever painted.)
-        await expect(page.locator('.qrt-card[data-id="r1"]')).toBeVisible({ timeout: 8000 });
+        await expect(page.locator('.qrt-card[data-id="r1"]')).toHaveCount(1, { timeout: 8000 });   // scoped card present (in its building/Ungrouped cluster); detail auto-opens separately
         await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 8000 });
 
         // No global card EVER painted.
@@ -178,7 +182,7 @@ test.describe('Dashboard — Incidents load-order / operation-context integrity'
         }, JSON.stringify({ ts: Date.now(), data: GLOBAL_REPORTS }));
 
         await page.goto('index.html#/incidents;op=op-a?incident=r1');
-        await expect(page.locator('.qrt-card[data-id="r1"]')).toBeVisible({ timeout: 8000 });
+        await expect(page.locator('.qrt-card[data-id="r1"]')).toHaveCount(1, { timeout: 8000 });   // scoped card present (in its building/Ungrouped cluster); detail auto-opens separately
 
         // The stale GLOBAL cache (g1/g2) must NEVER paint - the scoped boot skips the
         // cache and the loading state masks it until the operation dataset arrives.
@@ -191,22 +195,25 @@ test.describe('Dashboard — Incidents load-order / operation-context integrity'
     test('@smoke Back/Forward keeps the correct context (op ↔ global) with no cross-scope flash', async ({ page }) => {
         await boot(page, 0);   // no artificial delay for the history walk
         await page.goto('index.html#/incidents');
-        await expect(page.locator('.qrt-card[data-id="g1"]')).toBeVisible({ timeout: 8000 });
+        // Reports have no building_id → collapsed Ungrouped in buildings-default.
+        // One setViewMode call persists across hash-only SPA navigations (no page reload).
+        await page.evaluate(() => (window as any).setViewMode && (window as any).setViewMode('queue'));
+        await expect(page.locator('.qrt-card[data-id="g1"]')).toHaveCount(1, { timeout: 8000 });   // present in the DOM (collapsed Ungrouped cluster; flat queue retired v111)
 
         await page.evaluate(() => { location.hash = '#/incidents;op=op-a'; });
-        await expect(page.locator('.qrt-card[data-id="r1"]')).toBeVisible({ timeout: 8000 });
+        await expect(page.locator('.qrt-card[data-id="r1"]')).toHaveCount(1, { timeout: 8000 });   // scoped card present (in its building/Ungrouped cluster); detail auto-opens separately
         await expect(page.locator('.qrt-card[data-id="g1"]')).toHaveCount(0);   // global gone
 
         // Back → global feed restored.
         await page.evaluate(() => { (window as any).__seenFeedIds.length = 0; });
         await page.goBack();
-        await expect(page.locator('.qrt-card[data-id="g1"]')).toBeVisible({ timeout: 8000 });
+        await expect(page.locator('.qrt-card[data-id="g1"]')).toHaveCount(1, { timeout: 8000 });   // present in the DOM (collapsed Ungrouped cluster; flat queue retired v111)
         await expect(page.locator('.qrt-card[data-id="r1"]')).toHaveCount(0);
 
         // Forward → operation feed restored, and no global id painted on the way.
         await page.evaluate(() => { (window as any).__seenFeedIds.length = 0; });
         await page.goForward();
-        await expect(page.locator('.qrt-card[data-id="r1"]')).toBeVisible({ timeout: 8000 });
+        await expect(page.locator('.qrt-card[data-id="r1"]')).toHaveCount(1, { timeout: 8000 });   // scoped card present (in its building/Ungrouped cluster); detail auto-opens separately
         const seen = await seenIds(page);
         expect(seen).not.toContain('g1');
         expect(seen).not.toContain('g2');

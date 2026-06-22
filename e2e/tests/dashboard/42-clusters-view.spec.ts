@@ -48,6 +48,12 @@ async function boot(page: Page) {
         if (u.includes('/analytics/summary')) return route.fulfill({ json: SUMMARY });
         if (u.includes('/config/')) return route.fulfill({ json: { org: { org_public_name: 'UNDP CRISP' } } });
         if (u.includes('/reports/markers')) return route.fulfill({ json: [] });
+        // 1E awareness feed — MUST precede the generic /reports/ catch (the URL
+        // /reports/buildings-needing-review also contains '/reports/').
+        if (u.includes('/buildings-needing-review')) return route.fulfill({ json: { buildings: [
+            { building_id: 'bld-A', building_name: 'City Hospital', candidate_pairs: 3, report_count: 4, high: 2, medium: 1, low: 0 },
+            { building_id: 'bld-B', building_name: 'Main Road', candidate_pairs: 1, report_count: 2, high: 0, medium: 1, low: 0 },
+        ], total_buildings: 2, total_pairs: 4 } });
         if (u.includes('/duplicate-decision')) return route.fulfill({ json: { ok: true } });
         const dm = u.match(/\/reports\/([^/?]+)\/duplicates/);
         if (dm) {
@@ -58,6 +64,13 @@ async function boot(page: Page) {
                   reporter: 'User a1b2c3d',
                   severity: 'MODERATE', status: 'PENDING', crisis_type: 'FLOOD', infrastructure_type: 'HOSPITAL',
                   server_created_at: NOW, location_name: 'City Hospital' } ] } });
+            // b3 (bld-B) has 2 CONFIRMED merged duplicates → the primary's "2 duplicates"
+            // expander reveals them as nested rows.
+            if (dm[1] === 'b3') return route.fulfill({ json: { report_id: 'b3', cluster_key: 'b:bld-B', primary_report_id: 'b3', candidates: [
+                { report_id: 'b3d1', confidence: 'HIGH', score: 95, confirmed: true, severity: 'SEVERE', status: 'PENDING',
+                  crisis_type: 'FLOOD', infrastructure_type: 'ROAD', server_created_at: NOW, location_name: 'Main Road' },
+                { report_id: 'b3d2', confidence: 'HIGH', score: 91, confirmed: true, severity: 'MODERATE', status: 'PENDING',
+                  crisis_type: 'FLOOD', infrastructure_type: 'ROAD', server_created_at: NOW, location_name: 'Main Road' } ] } });
             return route.fulfill({ json: { report_id: dm[1], cluster_key: null, primary_report_id: null, candidates: [] } });
         }
         if (u.includes('/buildings/')) return route.fulfill({ json: BUILDING_A });
@@ -70,58 +83,108 @@ async function boot(page: Page) {
 }
 
 test.describe('Dashboard — Clusters feed view (P1)', () => {
-    test('@smoke Clusters is OPT-IN: default feed is Queue, not clusters', async ({ page }) => {
+    test('@smoke building-first: default feed groups by building (1B)', async ({ page }) => {
         await boot(page);
-        // A queue card is present; no cluster cards until the operator opts in.
-        await expect(page.locator('.qrt-card[data-id="b1"]')).toBeVisible({ timeout: 8000 });
-        await expect(page.locator('.cc-cluster')).toHaveCount(0);
-        // The Clusters view button exists.
-        await expect(page.locator('.view-btn[data-mode="clusters"]')).toBeVisible();
+        // The feed is ALWAYS building-grouped now → building cards render at the top level.
+        await expect(page.locator('.cc-cluster').first()).toBeVisible({ timeout: 8000 });
+        // The Buildings/All-Incidents view toggle was retired (Jun 2026): status is the
+        // 3-tab axis (Pending/Responding/Resolved) + the feed is always building-grouped.
+        await expect(page.locator('.view-btn')).toHaveCount(0);
+        await expect(page.locator('.feed-tab[data-tab="pending"]')).toBeVisible();
+        await expect(page.locator('.feed-tab[data-tab="responding"]')).toBeVisible();
+        await expect(page.locator('.feed-tab[data-tab="resolved"]')).toBeVisible();
     });
 
-    test('@smoke switching to Clusters groups by building → h3 → singleton; collapsed by default', async ({ page }) => {
+    test('@smoke buildings + ONE Ungrouped bucket; "N incidents · M reports"; collapsed by default (1B)', async ({ page }) => {
         await boot(page);
-        await page.locator('.view-btn[data-mode="clusters"]').click();
+        // 6 reports → bld-A, bld-B, + ONE "Needs mapping / Ungrouped" bucket
+        // (the 2 h3 reports + the singleton all fold into one) = 3 cards.
+        await expect(page.locator('.cc-cluster')).toHaveCount(3);
 
-        // 4 clusters from 6 reports.
-        await expect(page.locator('.cc-cluster')).toHaveCount(4);
-
-        // The building cluster is named + summarised (2 reports incl. 1 critical).
+        // Building card: "N incidents · M reports" (incidents = visible reports after
+        // dup-collapse). bld-A = 2 reports, no merges → "2 incidents" + 1 critical.
         const hosp = page.locator('.cc-cluster[data-cluster-key="b:bld-A"]');
         await expect(hosp.locator('.cc-cluster-title')).toHaveText('City Hospital');
-        await expect(hosp.locator('.cc-cluster-meta')).toContainText('2 reports');
+        await expect(hosp.locator('.cc-cluster-meta')).toContainText('2 incidents');
         await expect(hosp.locator('.cc-cluster-meta')).toContainText('1 critical');
+        // bld-B = 1 incident (b3 has incident_id NULL → its own singleton incident);
+        // its 2 corroborating reports live under the card's "N reports" expander, so the
+        // building header is a single clean "1 incident" (no "· M reports/duplicates" dual).
+        const metaB = page.locator('.cc-cluster[data-cluster-key="b:bld-B"] .cc-cluster-meta');
+        await expect(metaB).toContainText('1 incident');
+        await expect(metaB).not.toContainText('duplicate');
+        await expect(metaB).not.toContainText('reports');
 
-        // The h3-fallback cluster groups the 2 null-building Riverside reports.
-        await expect(page.locator('.cc-cluster[data-cluster-key="h3:hexZ"]')).toHaveCount(1);
-        await expect(page.locator('.cc-cluster[data-cluster-key="h3:hexZ"] .cc-cluster-meta')).toContainText('2 reports');
-        // The lone ungroupable report is its own singleton cluster (nothing lost).
-        await expect(page.locator('.cc-cluster[data-cluster-key="r:s1"].cc-cluster-single')).toHaveCount(1);
+        // The 3 building-less reports collapse into ONE Ungrouped bucket (nothing hidden).
+        await expect(page.locator('.cc-cluster[data-cluster-key="ungrouped"]')).toHaveCount(1);
+        await expect(page.locator('.cc-cluster[data-cluster-key="ungrouped"] .cc-cluster-meta'))
+            .toContainText('3 reports to map');
 
-        // Collapsed by default → report cards inside are not visible yet.
+        // Collapsed by default → report cards inside not visible yet.
         await expect(hosp).toHaveClass(/collapsed/);
         await expect(hosp.locator('.qrt-card[data-id="b1"]')).toBeHidden();
     });
 
-    test('@smoke expanding a cluster reveals its reports as evidence', async ({ page }) => {
+    test('@smoke expanding a building reveals its reports as evidence (1B)', async ({ page }) => {
         await boot(page);
-        await page.locator('.view-btn[data-mode="clusters"]').click();
         const hosp = page.locator('.cc-cluster[data-cluster-key="b:bld-A"]');
-        await hosp.locator('.cc-cluster-main').click();
+        await hosp.locator('.cc-cluster-meta').click();
         await expect(hosp).not.toHaveClass(/collapsed/);
         await expect(hosp.locator('.qrt-card[data-id="b1"]')).toBeVisible();
         await expect(hosp.locator('.qrt-card[data-id="b2"]')).toBeVisible();
-        // Clicking a report inside the cluster opens its detail.
+        // Clicking a report inside the building opens its detail.
         await hosp.locator('.qrt-card[data-id="b1"]').click();
         await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 8000 });
     });
 
+    test('@smoke 1C: Building Console is a flat collapsible dp-section stack (no Overview/Intelligence tabs)', async ({ page }) => {
+        await boot(page);
+        // v116: clicking anywhere on the building card opens its workspace (console).
+        await page.locator('.cc-cluster[data-cluster-key="b:bld-A"] .cc-cluster-name-link').click();
+        const bc = page.locator('#detail-panel .bc');
+        await expect(bc).toBeVisible({ timeout: 8000 });
+        // A2 (Jun 2026): the Overview/Intelligence tabs are retired in favour of one
+        // consistent collapsible stack in the incident-detail visual language.
+        await expect(bc.locator('.bc-tab')).toHaveCount(0);
+        await expect(bc.locator('.dp-section').first()).toBeVisible();
+        // History & lifecycle is open by default; Duplicates + Responders are now
+        // both present as sibling sections (no longer tab-gated), collapsed by default.
+        await expect(bc.locator('.bc-section-history')).toHaveAttribute('open', '');
+        const dup = bc.locator('.bc-section-duplicates');
+        const resp = bc.locator('.bc-section-responders');
+        await expect(dup).toHaveCount(1);
+        await expect(resp).toHaveCount(1);
+        // Collapsed by default → the section body isn't shown until the header expands it.
+        await expect(dup.locator('.dp-section-body')).toBeHidden();
+        await expect(resp.locator('.dp-section-body')).toBeHidden();
+        // Clicking a section header expands just that section (independent collapse).
+        await dup.locator('.dp-section-header').click();
+        await expect(dup.locator('.dp-section-body')).toBeVisible();
+        await expect(resp.locator('.dp-section-body')).toBeHidden();
+    });
+
+    test('@smoke 1E: NO global dup-review panel; each building row shows its dup count → opens the console (merge lives there)', async ({ page }) => {
+        await boot(page);
+        // Jun 2026: the global "Buildings needing duplicate review" top panel is GONE.
+        await expect(page.locator('#dup-review-panel')).toHaveCount(0);
+        // Instead, bld-A (City Hospital, 3 candidate pairs / 2 high) shows a per-building
+        // dup-count badge on its building row in the feed.
+        const badge = page.locator('.cc-cluster[data-cluster-key="b:bld-A"] .cc-cluster-dup');
+        await expect(badge).toBeVisible({ timeout: 8000 });
+        await expect(badge).toContainText('3');
+        await expect(badge).toContainText('high');
+        // Clicking the building row opens the console, whose Potential-Duplicates
+        // section holds the merge controls (duplicate review lives in the building).
+        await page.locator('.cc-cluster[data-cluster-key="b:bld-A"] .cc-cluster-name-link').click();
+        await expect(page.locator('#detail-panel .bc')).toBeVisible({ timeout: 8000 });
+        await expect(page.locator('#detail-panel .bc-section-duplicates')).toHaveCount(1);
+    });
+
     // ── P2: Cluster View + breadcrumb context ────────────────────────────────
     test('@smoke opening a report inside a cluster: breadcrumb follows Global › [Operation] › Building › #{id}', async ({ page }) => {
-        await boot(page);
-        await page.locator('.view-btn[data-mode="clusters"]').click();
+        await boot(page);   // building-first default → .cc-cluster building cards already render
         const hosp = page.locator('.cc-cluster[data-cluster-key="b:bld-A"]');
-        await hosp.locator('.cc-cluster-main').click();   // expand (center of header = the title/meta)
+        await hosp.locator('.cc-cluster-meta').click();   // expand (center of header = the title/meta)
         const b1 = hosp.locator('.qrt-card[data-id="b1"]');
         await expect(b1).toBeVisible();
         await b1.click();
@@ -136,29 +199,25 @@ test.describe('Dashboard — Clusters feed view (P1)', () => {
     });
 
     test('@smoke the cluster card opens the Cluster View (Building Console) with its own breadcrumb', async ({ page }) => {
-        await boot(page);
-        await page.locator('.view-btn[data-mode="clusters"]').click();
+        await boot(page);   // building-first default → .cc-cluster building cards already render
         const hosp = page.locator('.cc-cluster[data-cluster-key="b:bld-A"]');
-        // Building-backed clusters expose an "open cluster view" affordance.
-        await expect(hosp.locator('.cc-cluster-open')).toBeVisible();
-        await hosp.locator('.cc-cluster-open').click();
+        // The building NAME is the click target that opens the console (Cluster View);
+        // the header/chevron toggles the incident list (tree-consistent with the op feed).
+        await expect(hosp.locator('.cc-cluster-title.cc-bldg-link')).toHaveCount(0);
+        await hosp.locator('.cc-cluster-name-link').click();
         // The Building Console opens as the Cluster View.
         await expect(page.locator('#detail-panel.detail-panel--building')).toBeVisible({ timeout: 8000 });
         await expect(page.locator('#detail-panel .bc')).toBeVisible({ timeout: 8000 });
         // Its breadcrumb ends at the BUILDING NAME (the Building Intelligence
         // redesign renamed the "Cluster" crumb to the building it represents).
         await expect(page.locator('#detail-panel .bc .dp-breadcrumb .dp-bc-cur')).toHaveText('City Hospital');
-        // Singleton / h3 clusters have NO open-cluster affordance (no console).
-        await expect(page.locator('.cc-cluster[data-cluster-key="r:s1"] .cc-cluster-open')).toHaveCount(0);
-        await expect(page.locator('.cc-cluster[data-cluster-key="h3:hexZ"] .cc-cluster-open')).toHaveCount(0);
     });
 
     // ── P3: duplicate surfacing + analyst controls ───────────────────────────
     test('@smoke report detail surfaces within-cluster duplicates READ-ONLY (merge lives at the building)', async ({ page }) => {
-        await boot(page);
-        await page.locator('.view-btn[data-mode="clusters"]').click();
+        await boot(page);   // building-first default → .cc-cluster building cards already render
         const hosp = page.locator('.cc-cluster[data-cluster-key="b:bld-A"]');
-        await hosp.locator('.cc-cluster-main').click();
+        await hosp.locator('.cc-cluster-meta').click();
         const b1 = hosp.locator('.qrt-card[data-id="b1"]');
         await expect(b1).toBeVisible();
         await b1.click();
@@ -188,20 +247,34 @@ test.describe('Dashboard — Clusters feed view (P1)', () => {
         await expect(host.locator('.assess-dup-open').first()).toBeVisible();
     });
 
-    // ── Duplicate collapse: the primary feed card wears the merged badge ──────
-    test('@smoke a primary with merged duplicates shows the "N duplicate reports" badge', async ({ page }) => {
-        await boot(page);   // default Queue view
-        const b3 = page.locator('.qrt-card[data-id="b3"]');
+    // ── b3 has incident_id NULL (the auto-assign fallback) + duplicate_count=2, so it
+    //    keeps the confirmed-duplicate path: a neutral "2 duplicates" expander that
+    //    reveals the merged duplicates nested. (Real incident_id grouping → "N reports"
+    //    is covered in 66.) ──
+    test('@smoke an incident-less report keeps the "N duplicates" expander (nested members)', async ({ page }) => {
+        await boot(page);
+        const bldB = page.locator('.cc-cluster[data-cluster-key="b:bld-B"]');
+        await bldB.locator('.cc-cluster-meta').click();
+        const b3 = bldB.locator('.qrt-card[data-id="b3"]');
         await expect(b3).toBeVisible({ timeout: 8000 });
-        await expect(b3.locator('.qrt-dup-merged')).toContainText('2 duplicate reports');
+        const badge = b3.locator('.qrt-dup-merged');
+        await expect(badge).toContainText('2 duplicates');
+        await expect(badge).toHaveAttribute('role', 'button');
+        await expect(badge).toHaveAttribute('aria-expanded', 'false');
+        await badge.click();
+        await expect(page.locator('.qrt-dup-children .qrt-dup-child')).toHaveCount(2, { timeout: 8000 });
+        await expect(badge).toHaveAttribute('aria-expanded', 'true');
+        await expect(page.locator('#detail-panel .bc')).toHaveCount(0);   // did NOT open the console
+        // Collapses again on a second click.
+        await badge.click();
+        await expect(page.locator('.qrt-dup-children .qrt-dup-child')).toHaveCount(0);
     });
 
     // ── White-box scoring: the duplicate review surfaces the per-factor reasons ─
     test('@smoke duplicate review shows the transparent reason breakdown', async ({ page }) => {
-        await boot(page);
-        await page.locator('.view-btn[data-mode="clusters"]').click();
+        await boot(page);   // building-first default → .cc-cluster building cards already render
         const hosp = page.locator('.cc-cluster[data-cluster-key="b:bld-A"]');
-        await hosp.locator('.cc-cluster-main').click();
+        await hosp.locator('.cc-cluster-meta').click();
         await hosp.locator('.qrt-card[data-id="b1"]').click();
         await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 8000 });
         await page.evaluate(() => {

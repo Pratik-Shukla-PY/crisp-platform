@@ -10,7 +10,10 @@
  *   - a verdict-aware status pill (Needs review / Accepted / Rejected / Responding
  *     / Resolved / False alarm) drawn from the same _displayStatus as the detail;
  *   - rejected incidents never render a live dispatch CTA;
- *   - building-tagged incidents show the BUILDING name as the title + a Console link.
+ *   - building-tagged incidents lead with WHAT WAS HIT (the infra label), NOT the
+ *     building name (the card sits under its building cluster, which already names it
+ *     — feedback_no_redundant_parent_context); the building is reached from the
+ *     cluster header, not a per-card link.
  *
  * Self-contained: stubs the /reports/ listing + fakes the admin token (no DB).
  */
@@ -65,33 +68,92 @@ async function boot(page: any, request: any, reports: any[]) {
         null, { timeout: 15000 });
     await page.evaluate(() => { location.hash = '#/incidents'; });
     await page.waitForTimeout(400);
+    // Building-first default: cards live inside collapsed building/ungrouped clusters
+    // (the flat All-Incidents view was retired in v111). Expand the clusters so the
+    // card-level assertions find the cards directly. Click the meta (not the title
+    // button, which opens the building console).
+    await page.evaluate(() => {
+        document.querySelectorAll('.cc-cluster.collapsed .cc-cluster-meta').forEach((e) => (e as HTMLElement).click());
+    });
+    await page.waitForTimeout(200);
 }
 
 test.describe('Incident Feed — workflow parity (P0–P2)', () => {
-    test('open incident card: Notify Responders CTA + Needs review pill + composite Confidence', async ({ page, request }) => {
+    test('open incident card: decluttered (v137) — Confidence kept; status pill + Notify moved off the card', async ({ page, request }) => {
         await boot(page, request, [_stub({
             incident_credibility: { score: 51, band: 'MIXED', assessed: true, max_score: 100 },
         })]);
         const card = page.locator('.qrt-card[data-report-id="ctx-r1"]');
         await expect(card).toBeVisible({ timeout: 8000 });
-        await expect(card.locator('.qrt-dispatch-btn')).toContainText('Notify Responders');
-        await expect(card.locator('.qrt-status-pill.st-needs-review')).toContainText('Needs review');
+        // The composite Confidence Score stays on the card (the one card number).
         const conf = card.locator('.qrt-confidence');
         await expect(conf).toContainText('Mixed');
         await expect(conf).toContainText('51');
+        // v137 declutter: the "Needs review" status pill (redundant inside a status tab)
+        // and the Notify CTA are NO LONGER on the card — they live in the hover preview +
+        // detail panel. (The verdict-aware helpers are still unit-tested below.)
+        await expect(card.locator('.qrt-status-pill')).toHaveCount(0);
+        await expect(card.locator('.qrt-dispatch-btn')).toHaveCount(0);
         // No stale "SEND HELP" anywhere on the card.
         await expect(card).not.toContainText('SEND HELP');
     });
 
-    test('building-tagged incident: building name is the title + Console link', async ({ page, request }) => {
+    test('building-tagged card shows WHAT WAS HIT, not the redundant building name', async ({ page, request }) => {
+        // The card sits under its building in the feed, so it must NOT echo the
+        // building name (feedback_no_redundant_parent_context). It leads with the
+        // infra label ("what was hit") and is plain text (no building link on the card).
         await boot(page, request, [_stub({
             building_id: 'osm:way:123', infrastructure_name: 'Govt. Hospital, Shimla',
-            infrastructure_type: 'HOSPITAL',
+            infrastructure_name_from_osm: true, infrastructure_type: 'HOSPITAL',
         })]);
         const card = page.locator('.qrt-card[data-report-id="ctx-r1"]');
         await expect(card).toBeVisible({ timeout: 8000 });
-        await expect(card.locator('.qrt-infra-name')).toContainText('Govt. Hospital, Shimla');
-        await expect(card.locator('.qrt-bldg-link')).toBeVisible();
+        await expect(card.locator('.qrt-infra-name')).toContainText('Schools & hospitals');
+        await expect(card.locator('.qrt-infra-name')).not.toContainText('Govt. Hospital');
+        await expect(card.locator('.qrt-bldg-link')).toHaveCount(0);
+    });
+
+    test('"Other" free-text is the title TEXT, NOT a building link (from_osm=false)', async ({ page, request }) => {
+        // Reporter typed free-text in "Other / what was hit"; the backend coords-resolved
+        // a building_id but the name is NOT an OSM name (infrastructure_name_from_osm=false).
+        // It must show as the title text, never as a clickable building / Console link.
+        await boot(page, request, [_stub({
+            infrastructure_type: 'OTHER', infrastructure_name: 'ahcvuwhscvuc',
+            infrastructure_name_from_osm: false, building_id: 'osm:way:999',
+        })]);
+        const card = page.locator('.qrt-card[data-report-id="ctx-r1"]');
+        await expect(card).toBeVisible({ timeout: 8000 });
+        await expect(card.locator('.qrt-infra-name')).toContainText('ahcvuwhscvuc');
+        await expect(card.locator('.qrt-bldg-link')).toHaveCount(0);
+        const tagged = await page.evaluate(() => (window as any)._taggedBuildingName(
+            { building_id: 'osm:way:999', infrastructure_name: 'ahcvuwhscvuc', infrastructure_name_from_osm: false }));
+        expect(tagged).toBe(false);
+    });
+
+    test('reporter free-text title is attribute-escaped (no quote-breakout XSS)', async ({ page, request }) => {
+        // infrastructure_name is anonymous reporter free-text. It lands in both the
+        // title="..." attribute and the text node. escapeHtml does NOT escape the
+        // double-quote, so the title attribute must use escapeAttr — otherwise a
+        // value like `x" onmouseover="..."` breaks out and injects a handler.
+        await boot(page, request, [_stub({
+            infrastructure_type: 'OTHER',
+            infrastructure_name: 'x" onmouseover="window.__xss=1',
+            infrastructure_name_from_osm: false,
+        })]);
+        const card = page.locator('.qrt-card[data-report-id="ctx-r1"]');
+        await expect(card).toBeVisible({ timeout: 8000 });
+        const name = card.locator('.qrt-infra-name');
+        // The injected handler attribute must NOT exist on the span (it would if the
+        // quote broke out of title="...").
+        const hasHandler = await name.evaluate((el) => el.hasAttribute('onmouseover'));
+        expect(hasHandler).toBe(false);
+        // The raw quote is stored as the title value (proves it was contained).
+        const titleAttr = await name.getAttribute('title');
+        expect(titleAttr).toContain('x" onmouseover');
+        // Hovering must not have fired any injected handler.
+        await name.hover();
+        const fired = await page.evaluate(() => (window as any).__xss === 1);
+        expect(fired).toBe(false);
     });
 
     test('verdict-aware card helpers: open / accepted / responding / rejected / unrated', async ({ page, request }) => {
@@ -104,15 +166,14 @@ test.describe('Incident Feed — workflow parity (P0–P2)', () => {
                 responding: w._cardActionEl({ id: 'c', status: 'RESPONDING' }),
                 rejected: w._cardActionEl({ id: 'd', status: 'PENDING', reviewer_verdict: 'REJECTED' }),
                 unrated: w._confidenceChip({ id: 'e', incident_credibility: null }),
-                bldgTitle: w._cardTitle({ building_id: 'osm:way:9', infrastructure_name: 'Riverside Apartments', infrastructure_type: 'RESIDENTIAL' }),
             };
         });
         // Open: pill + CTA.
         expect(out.open).toContain('Needs review');
-        expect(out.open).toContain('Notify Responders');
+        expect(out.open).toContain('Notify');
         // Accepted: still offers Notify, but pill says Accepted.
         expect(out.accepted).toContain('Accepted');
-        expect(out.accepted).toContain('Notify Responders');
+        expect(out.accepted).toContain('Notify');
         // Responding: pill only, no live dispatch CTA.
         expect(out.responding).toContain('Responding');
         expect(out.responding).not.toContain('Notify Responders');
@@ -121,7 +182,5 @@ test.describe('Incident Feed — workflow parity (P0–P2)', () => {
         expect(out.rejected).not.toContain('Notify Responders');
         // Confidence suppressed to "Unrated" until assessed.
         expect(out.unrated).toContain('Unrated');
-        // Building name wins the title when building-tagged.
-        expect(out.bldgTitle).toContain('Riverside Apartments');
     });
 });

@@ -59,13 +59,19 @@ test.describe('VALIDATION 03 — 2 KBPS sustained disaster network', () => {
             null, { timeout: 15_000 },
         );
 
-        // ── Apply 2 KBPS throttling via CDP BEFORE any network traffic ────
+        // ── Apply 2 KB/s throttling via CDP BEFORE any network traffic ────
+        // NOTE (units): 2000 BYTES/sec = 16 kbit/s — NOT the colloquial "2 kbps"
+        // (kilobits = ~250 B/s) a field user gets from Chrome's throttle. At
+        // 2000 B/s the 64 KB bandwidth probe completes in ~33 s (< the 45 s
+        // timeout) so the link is correctly measured and this test PASSES — it
+        // does NOT exercise the sub-~5.8 kbit/s wedge. The true ~250 B/s
+        // (2 kbit/s) case is covered by 134-low-bandwidth-2kbit.spec.ts.
         const cdp = await page.context().newCDPSession(page);
         await cdp.send('Network.enable');
         await cdp.send('Network.emulateNetworkConditions', {
             offline: false,
-            downloadThroughput: 2000,   // 2 KBPS down (bytes/sec)
-            uploadThroughput: 2000,     // 2 KBPS up (bytes/sec)
+            downloadThroughput: 2000,   // 2000 B/s = 16 kbit/s
+            uploadThroughput: 2000,     // 2000 B/s = 16 kbit/s
             latency: 1500,              // 1.5 s RTT
         });
         const throttleAppliedAt = Date.now();
@@ -155,8 +161,9 @@ test.describe('VALIDATION 03 — 2 KBPS sustained disaster network', () => {
 
         // ── Phase B: at 2 KBPS, SMALL lands fast; MEDIUM/ORIGINAL upload
         // slowly. Per the v240 delivery design the PWA NO LONGER pre-emptively
-        // defers higher tiers — it keeps trying for up to 24 h and drops a
-        // tier only at the 24 h cap (or on a genuine orphan). So the correct
+        // defers higher tiers — it keeps trying for up to 30 DAYS (v350; was
+        // 24 h) and drops a tier only at the 30-day cap (or on a genuine
+        // orphan). So the correct
         // end-state within a 5-min budget is: SMALL complete + report visible,
         // and every higher tier in a HEALTHY state — complete, explicitly
         // deferred/abandoned, OR pending WITH FORWARD PROGRESS
@@ -201,10 +208,10 @@ test.describe('VALIDATION 03 — 2 KBPS sustained disaster network', () => {
         // (completion_pct > 0). A higher tier wedged `pending` at 0 % after the
         // 5-min budget is the only failure (a true stuck-state).
         //
-        // NOTE (v240): the PWA no longer pre-emptively marks
+        // NOTE (v240/v350): the PWA no longer pre-emptively marks
         // bandwidth_tier_deferred on slow links — it keeps trying every drain
-        // for up to 24 h, dropping a tier only at the 24 h cap or on a genuine
-        // orphan. So a deferred MARKER is NOT required here; that signal path
+        // for up to 30 DAYS (was 24 h), dropping a tier only at the 30-day cap
+        // or on a genuine orphan. So a deferred MARKER is NOT required here; that signal path
         // is exercised by backend test_mark_deferred + 121-offline-queue-
         // resilience instead.
         const fullSynced = truthEnd.sync_status === 'SYNCED'

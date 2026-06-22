@@ -89,8 +89,10 @@ test('op dashboard: clicking a building card opens a VISIBLE console (D1)', asyn
     expect(geo.reparentedToBody, 'detail-panel must be reparented to <body>').toBe(true);
     expect(geo.onScreen, 'console must be on-screen, not off-screen/0-size').toBe(true);
     expect(geo.z, 'console z-index must clear the operations overlay (99990)').toBeGreaterThan(99990);
-    // Well-formed, route-first hash (NOT the malformed `#building=...;/operations`).
-    expect(geo.hash).toMatch(/^#\/operations\/op-a;building=b1$/);
+    // Single-page consolidation: the operation opens in the console (route canonicalised
+    // to /incidents), so a building opened from inside it lands at
+    // #/incidents;op=op-a;building=b1 — well-formed, route-first.
+    expect(geo.hash).toMatch(/^#\/incidents;op=op-a;building=b1$/);
 });
 
 test('the building deep-link hash is route-first (refused the prepend bug)', async ({ page }) => {
@@ -98,9 +100,11 @@ test('the building deep-link hash is route-first (refused the prepend bug)', asy
     await page.goto('index.html#/operations/op-a');
     await page.locator('#cco-bld .bic[data-building-id]').first().click();
     await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 6000 });
-    // Must start with the route, then the building segment.
+    // Must start with the route, then the building segment. The operation opens in the
+    // console (route canonicalised to /incidents;op=), so the building deep-link is
+    // #/incidents;op=op-a;building=b1 — route-first, never the prepended #building= bug.
     const hash = await page.evaluate(() => location.hash);
     expect(hash.startsWith('#building='), 'hash must NOT be prepended with building=').toBe(false);
-    expect(hash).toContain('/operations/op-a');
+    expect(hash).toContain('/incidents;op=op-a');
     expect(hash).toContain('building=b1');
 });

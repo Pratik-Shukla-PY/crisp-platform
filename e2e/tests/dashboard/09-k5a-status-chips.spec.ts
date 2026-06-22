@@ -99,6 +99,9 @@ async function bootDashboard(page, request) {
             && (window as any).allReports.length > 0,
         null, { timeout: 15000 },
     );
+    // Building-first default nests no-building_id reports in a collapsed
+    // Ungrouped bucket. Force queue view so card selectors find them directly.
+    await page.evaluate(() => (window as any).setViewMode && (window as any).setViewMode('queue'));
 }
 
 

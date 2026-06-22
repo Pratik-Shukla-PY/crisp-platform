@@ -75,6 +75,14 @@ function synthReport(reportId: string, dims: Array<{ w: number; h: number }>,
         severity: 'MODERATE',
         infrastructure_type: 'RESIDENTIAL',
         infrastructure_name: opts.building === undefined ? 'Building A — Koramangala' : opts.building,
+        // The photo overlay shows a building name ONLY for an OSM-tagged building
+        // (_taggedBuildingName: building_id set + from_osm !== false). A reporter's
+        // free-text "what was hit" with no OSM link is a "needs mapping" report and
+        // is deliberately NOT surfaced as a building. Give the synth report a real
+        // OSM tag so the building line renders (null-building/coords cases below
+        // still exercise the suppression path).
+        building_id: opts.building === null ? null : `osm:way:e2e-${reportId}`,
+        infrastructure_name_from_osm: true,
         description: 'E2E image-viewer test',
         expected_media: dims.length,
         received_media: dims.length,

@@ -86,86 +86,83 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         // The standalone Operations button was removed - operations live on Home.
         await expect(nav.locator('button[data-route="/operations"]')).toHaveCount(0);
         await expect(nav.locator('button[data-route="/incidents"]')).toContainText('Incidents');
-        // The route remains fully reachable via deep-link (zero orphaned nav path).
+        // P2: #/operations is now the operations REGISTRY rendered as the Console's left
+        // tree (no separate overlay).
         await page.evaluate(() => { location.hash = '#/operations'; });
-        await expect(page.locator('#cc-ops-overlay #cco-list')).toBeVisible({ timeout: 6000 });
+        await expect(page.locator('#report-feed-list .opg-reg-toolbar')).toBeVisible({ timeout: 6000 });
+        await expect(page.locator('#cc-ops-overlay.cc-ops-open')).toHaveCount(0);
     });
 
-    test('Home "Active Operations" rail: heading renamed + Expand opens #/operations', async ({ page }) => {
+    test('Home "Active Operations" rail: heading renamed + Expand opens the operations registry', async ({ page }) => {
         await boot(page);
         await page.goto('index.html');
         await page.waitForTimeout(600);                  // let app.js boot settle
         await page.evaluate(() => (window as any).openControlCenter && (window as any).openControlCenter());
-        // Rename: the section reads "Active Operations" (was "Active Response").
-        await expect(page.locator('.cc-zone-response')).toContainText('Active Operations');
-        // The Expand control opens the full operations management view.
+        await expect(page.locator('#cc-home-overlay')).toContainText('Active Operations');
         const expand = page.locator('#cc-ops-expand');
         await expect(expand).toBeVisible();
         await expand.click();
         await expect(page).toHaveURL(/#\/operations\b/);
-        await expect(page.locator('#cc-ops-overlay #cco-list')).toBeVisible({ timeout: 6000 });
+        // P2: the registry renders in the Console (left tree), not a full-page overlay.
+        await expect(page.locator('#report-feed-list .opg-reg-toolbar')).toBeVisible({ timeout: 6000 });
     });
 
-    test('#/operations lists operations worst-first + cluster CTA; a card opens the detail', async ({ page }) => {
+    test('#/operations registry tree: worst-first operations; name opens the panel', async ({ page }) => {
         await boot(page);
         await page.goto('index.html');
         await page.waitForTimeout(400);
         await page.evaluate(() => { location.hash = '#/operations'; });
-        const list = page.locator('#cc-ops-overlay #cco-list');
-        await expect(list).toContainText('Bihar Floods', { timeout: 6000 });
-        await expect(list).toContainText('no operation');           // un-operationalised cluster CTA
-        // The unified card renders the new fields: status badge, form name, place,
-        // verified count, and an inline-SVG mini-map (no Leaflet per card).
-        const card = page.locator('#cco-list [data-op="op-a"]');
-        await expect(card.locator('.opc-badge')).toContainText('LIVE');
-        await expect(card).toContainText('Flood Assessment v2');
-        await expect(card).toContainText('Patna, India');
-        await expect(card).toContainText('Verified');
-        await expect(card.locator('svg.opc-mm')).toHaveCount(1);
+        const reg = page.locator('#report-feed-list');
+        await expect(reg.locator('.opg-reg-toolbar')).toBeVisible({ timeout: 6000 });
+        await expect(reg.locator('.opg-op').filter({ hasText: 'Bihar Floods' })).toHaveCount(1);
+        await expect(reg.locator('.opg-op').filter({ hasText: 'Patna, India' })).toHaveCount(1);
         // worst-first: Bihar (5 critical) ranks above Assam (0 critical).
-        const names = await page.locator('#cco-list .opc-name').allTextContents();
+        const names = await reg.locator('.opg-reg-opname').allTextContents();
         const bihar = names.findIndex((n) => /Bihar/.test(n));
         const assam = names.findIndex((n) => /Assam/.test(n));
         expect(bihar).toBeGreaterThanOrEqual(0);
         expect(assam).toBeGreaterThan(bihar);
-        await card.click();
-        await expect.poll(() => page.evaluate(() => location.hash)).toContain('/operations/op-a');
+        // Search narrows the registry.
+        await page.locator('.opg-reg-search').fill('bihar');
+        await expect(reg.locator('.opg-op')).toHaveCount(1);
+        await page.locator('.opg-reg-search').fill('');
+        // Clicking an operation NAME opens it in the right panel (single-page console).
+        await reg.locator('.opg-op').filter({ hasText: 'Bihar Floods' }).locator('.opg-reg-opname').click();
+        await expect(page.locator('#detail-panel.detail-panel--operation')).toBeVisible({ timeout: 8000 });
+        // The registry tree stays visible on the left (active op highlighted).
+        await expect(reg.locator('.opg-reg-toolbar')).toBeVisible();
+        await expect(reg.locator('.opg-op.cc-cluster-active')).toHaveCount(1);
     });
 
     test('M4: deep-link to a deleted/unknown operation shows not-found, not a phantom GREEN dashboard', async ({ page }) => {
         await boot(page);
         await page.goto('index.html#/operations/op-zzz');   // id not in the ops list
         await page.waitForTimeout(800);
-        const wrap = page.locator('#cco-wrap');
-        await expect(wrap).toContainText('Operation not found', { timeout: 6000 });
+        // The not-found state renders in the right panel (operations open in-panel now).
+        await expect(page.locator('#detail-panel')).toContainText('Operation not found', { timeout: 8000 });
         // Must NOT render the live-looking vitals dashboard (the "all clear" illusion).
-        await expect(page.locator('#cco-vitals')).toHaveCount(0);
+        await expect(page.locator('.cco-vital')).toHaveCount(0);
     });
 
-    test('#/operations/{id} is a worklist dashboard with the triple-cue context chrome', async ({ page }) => {
+    test('#/operations/{id} opens the operation in the console right-panel (single-page) with context', async ({ page }) => {
         await boot(page);
         await page.goto('index.html#/operations/op-a');
-        await page.waitForTimeout(900);
-        // Cue 1+2+3: op-scoped chrome + persistent context banner + breadcrumb.
-        await expect(page.locator('body')).toHaveClass(/crisp-op-scoped/);
-        const banner = page.locator('#cgn-context-banner');
-        await expect(banner).toBeVisible();
-        await expect(banner).toContainText('Bihar Floods');
-        // Symmetric scope chip flips to OP mode.
-        await expect(page.locator('#cgn-scope')).toContainText('OP', { timeout: 4000 });
+        // Single-page consolidation: the operation opens in the right #detail-panel —
+        // NOT a full-page route. The feed (left) stays the incidents view, scoped to op-a.
+        const panel = page.locator('#detail-panel.detail-panel--operation');
+        await expect(panel).toBeVisible({ timeout: 8000 });
+        await expect(page.locator('#view-incidents')).toBeVisible();
+        // Context: the panel breadcrumb names the operation (always know which op).
+        await expect(panel.locator('.cco-banner')).toContainText('Bihar Floods');
         // 4 vitals from the scoped summary (Critical = 5).
-        await expect(page.locator('.cco-vital.crit')).toContainText('5');
-        await expect(page.locator('#cco-vitals')).toContainText('Needs review');
-        // worklist from the scoped reports.
-        await expect(page.locator('#cco-wl')).toContainText(/Flood/i);
-        // action bar present.
-        await expect(page.locator('#cco-act-feed')).toBeVisible();
-        // Exit to global clears the operation context.
-        await banner.locator('.cgn-cb-exit').click();
-        await expect.poll(() => page.evaluate(() => location.hash)).not.toContain('/operations');
-        await expect(page.locator('body')).not.toHaveClass(/crisp-op-scoped/);
-        // The scope chip returns to its affirmative GLOBAL state.
-        await expect(page.locator('#cgn-scope')).toContainText('GLOBAL', { timeout: 4000 });
+        await expect(panel.locator('.cco-vital.crit')).toContainText('5');
+        await expect(panel.locator('#cco-vitals')).toContainText('Needs review');
+        await expect(panel.locator('#cco-wl')).toContainText(/Flood/i);
+        await expect(panel.locator('#cco-act-feed')).toBeVisible();
+        // "Exit to global" closes the panel + drops the op scope (back to global feed).
+        await panel.locator('#cco-exit').click();
+        await expect(panel).toBeHidden({ timeout: 4000 });
+        await expect.poll(() => page.evaluate(() => location.hash)).not.toContain('op=op-a');
     });
 
     test('operation context is ABSENT on global routes', async ({ page }) => {
@@ -185,13 +182,12 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         await page.goto('index.html');
         await page.waitForTimeout(400);
         await page.evaluate(() => { location.hash = '#/operations'; });
-        const row = page.locator('#cco-list [data-op="op-a"]');
-        await expect(row).toBeVisible({ timeout: 6000 });
-        // Redesigned card: the backend health drives the situation PILL (coloured
-        // dot + R/A/G label) — the "why" is the pill's title (health_reason).
-        const dot = row.locator('.opc-pill-dot');
-        await expect(dot).toHaveCSS('background-color', 'rgb(248, 113, 113)');   // RED
-        await expect(row.locator('.opc-pill')).toHaveAttribute('title', /unattended critical/);
+        await expect(page.locator('#report-feed-list .opg-reg-toolbar')).toBeVisible({ timeout: 6000 });
+        // P2 registry: the backend health drives each op's coloured dot (RED/AMBER/GREEN);
+        // the "why" is the dot's title (health_reason). op-a (Patna) is RED.
+        const dot = page.locator('#report-feed-list .opg-op').filter({ hasText: 'Patna' }).locator('.opg-reg-health');
+        await expect(dot).toHaveClass(/hc-RED/);
+        await expect(dot).toHaveAttribute('title', /unattended critical/);
     });
 
     test('cluster CTA opens a two-option chooser; "View ungrouped reports" investigates WITHOUT creating an operation', async ({ page }) => {
@@ -200,7 +196,7 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         await page.goto('index.html');
         await page.waitForTimeout(400);
         await page.evaluate(() => { location.hash = '#/operations'; });
-        const cta = page.locator('#cco-list [data-cluster]');
+        const cta = page.locator('#report-feed-list [data-cluster]');
         await expect(cta).toBeVisible({ timeout: 6000 });
         await cta.click();
         // A deliberate chooser appears with BOTH options - creation is not forced.
@@ -220,7 +216,7 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         await page.goto('index.html');
         await page.waitForTimeout(400);
         await page.evaluate(() => { location.hash = '#/operations'; });
-        const cta = page.locator('#cco-list [data-cluster]');
+        const cta = page.locator('#report-feed-list [data-cluster]');
         await expect(cta).toBeVisible({ timeout: 6000 });
         await cta.click();
         await page.locator('#cluster-chooser #ccx-create').click();
@@ -328,10 +324,12 @@ test.describe('Dashboard — operation incident click → Incident Feed (v63)', 
 });
 
 test.describe('Dashboard — auto-scroll to the selected incident in a long/grouped feed (v64)', () => {
-    // A large op-scoped fixture: 60 PENDING (NEEDS HELP) so progressive disclosure
-    // (>50) hides the tail, plus one RESPONDING (HELP SENT) + one RESOLVED (CLOSED),
-    // both of which start COLLAPSED by default. The deep-linked incident must end up
-    // visible + highlighted regardless of which bucket it lands in.
+    // A large op-scoped fixture: 60 PENDING (the default tab) so progressive
+    // disclosure (>50) hides the tail, plus one RESPONDING + one RESOLVED, which
+    // live in the OTHER lifecycle tabs (Responding / Resolved) and so are filtered
+    // out of the default view. The deep-linked incident must end up visible +
+    // highlighted regardless of which bucket/tab it lands in (selectReport switches
+    // to its tab so the card renders, then CrispNav scrolls to it).
     const NOW2 = new Date().toISOString();
     function manyReports() {
         const arr = [];
@@ -388,15 +386,16 @@ test.describe('Dashboard — auto-scroll to the selected incident in a long/grou
         await expectRevealed(page, 'p-target');
     });
 
-    test('@smoke an incident in a default-COLLAPSED section (HELP SENT) auto-expands, scrolls + highlights', async ({ page }) => {
+    test('@smoke a RESPONDING incident (other tab) auto-switches tab, scrolls + highlights', async ({ page }) => {
         await bootMany(page);
         await page.goto('index.html#/incidents;op=op-a?incident=dispatched-1');
         await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 8000 });
-        // Its HELP SENT section is collapsed by default; the reveal must open it.
+        // It lives in the Responding tab (filtered out of the default Pending view);
+        // the reveal must switch to that tab so the card renders + scrolls into view.
         await expectRevealed(page, 'dispatched-1');
     });
 
-    test('@smoke a CLOSED-section incident is also revealed + scrolled to', async ({ page }) => {
+    test('@smoke a RESOLVED incident (other tab) is also revealed + scrolled to', async ({ page }) => {
         await bootMany(page);
         await page.goto('index.html#/incidents;op=op-a?incident=closed-1');
         await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 8000 });

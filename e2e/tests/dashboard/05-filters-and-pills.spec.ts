@@ -114,19 +114,21 @@ test.describe('Dashboard stat-pill + time filter', () => {
         await waitForReport(page, crit);
         await waitForReport(page, mod);
 
-        // The clickable status pills present (relocated into the feed panel;
-        // Closed + Avg-Wait were dropped as low-signal in the v55 redesign).
-        for (const id of ['stat-critical', 'stat-pending', 'stat-responding', 'stat-total']) {
-            await expect(page.locator(`#${id}`)).toBeVisible();
+        // v111: status is the 3-tab axis (Pending/Responding/Resolved); Critical is a
+        // cross-cutting quick-filter chip; Total moved to the breadcrumb.
+        await expect(page.locator('#stat-critical')).toBeVisible();
+        for (const tab of ['pending', 'responding', 'resolved']) {
+            await expect(page.locator(`.feed-tab[data-tab="${tab}"]`)).toBeVisible();
         }
 
-        // Critical + total counts must be AT LEAST 1 and 2 respectively
-        // (we can't use `toBe` because the test DB can already have
-        // other test-seeded rows from earlier specs that survived cleanup).
+        // Critical ≥ 1; the total (sum of the tab counts) ≥ 2 (we can't use `toBe`
+        // because the test DB can carry rows from earlier specs that survived cleanup).
         const crit_count = parseInt(await page.locator('#count-critical').innerText(), 10);
-        const total_count = parseInt(await page.locator('#count-total').innerText(), 10);
+        const pend = parseInt(await page.locator('#count-pending').innerText(), 10) || 0;
+        const resp = parseInt(await page.locator('#count-responding').innerText(), 10) || 0;
+        const res = parseInt(await page.locator('#count-resolved').innerText(), 10) || 0;
         expect(crit_count).toBeGreaterThanOrEqual(1);
-        expect(total_count).toBeGreaterThanOrEqual(2);
+        expect(pend + resp + res).toBeGreaterThanOrEqual(2);
     });
 
     test('click critical pill → _activePillFilter="critical" + pill-active class', async ({ page, request }) => {
@@ -151,13 +153,9 @@ test.describe('Dashboard stat-pill + time filter', () => {
             { timeout: 5_000 },
         ).toBe('critical');
 
-        // Visual highlight class — this is what users actually see. If
-        // this class rename breaks, the filter still technically works
-        // but users don't know which pill is active. Worth pinning.
-        // Phase F.1.b (May 2026) — `.pill-active` on `.clickable-pill`
-        // became plain `.active` on `.cmd-status-seg-item`. See the
-        // canonical comment block at app.js:2082.
-        await expect(page.locator('#stat-critical')).toHaveClass(/active/);
+        // Visual highlight — what users actually see. v111: the Critical control
+        // is a quick-filter chip whose active state is the `.on` class.
+        await expect(page.locator('#stat-critical')).toHaveClass(/\bon\b/);
     });
 
     test('click critical pill twice → toggle clears filter + removes class', async ({ page, request }) => {
@@ -182,9 +180,8 @@ test.describe('Dashboard stat-pill + time filter', () => {
             { timeout: 5_000 },
         ).toBeFalsy();
 
-        // No pill should carry the active class now.
-        // Phase F.1.b (May 2026) — see app.js:2082 comment.
-        await expect(page.locator('.cmd-status-seg-item.active')).toHaveCount(0);
+        // The Critical chip no longer carries the active (.on) class.
+        await expect(page.locator('#stat-critical.on')).toHaveCount(0);
     });
 
     test('time filter 1h button sets timeFilterHours=1 + active class', async ({ page }) => {

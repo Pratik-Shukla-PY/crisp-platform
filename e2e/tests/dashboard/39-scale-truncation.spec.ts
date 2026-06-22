@@ -119,9 +119,9 @@ test.describe('Incidents page — scale truncation honesty (Phase-0 C1)', () => 
         // Critical comes from the server summary (95), NOT the 3 loaded rows.
         await expect.poll(async () => (await page.locator('#count-critical').textContent())?.trim(),
             { timeout: 6000 }).toBe('95');
-        await expect(page.locator('#count-total')).toHaveText('4200');
-        // The always-on context banner names the true scope size.
-        await expect(page.locator('#queue-banner')).toContainText('4200');
+        // The scope total now lives in the header next to the scope crumb (.qb-total);
+        // moved out of the status-tab row (#count-dual) in the Jun 2026 header-total change.
+        await expect(page.locator('#feed-scope-bar .qb-total')).toContainText('4200');
     });
 
     test('C1-c: main map plots the full lean /reports/markers set', async ({ page, request }) => {

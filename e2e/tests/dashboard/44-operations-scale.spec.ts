@@ -51,25 +51,24 @@ async function boot(page: Page) {
 
 
 test.describe('Active Operations rail — triage shortlist at 50 ops', () => {
-    test('rail shows a portfolio summary + a worst-first TOP-N, not 50 cards', async ({ page }) => {
+    test('rail shows a portfolio summary + a recent shortlist, not 50 cards', async ({ page }) => {
         await boot(page);
         await page.goto('index.html');
         await page.waitForTimeout(500);
         await page.evaluate(() => (window as any).openControlCenter && (window as any).openControlCenter());
 
-        // Portfolio summary bar (the "do I need to act?" line).
-        const sum = page.locator('#cc-ops-rail .cc-ops-sum');
+        // Portfolio summary bar (the "do I need to act?" line) — the Jun 2026 home
+        // redesign moved it into the ops side panel (#cc-ops-summary), beside the
+        // recent-ops shortlist.
+        const sum = page.locator('#cc-ops-summary .cc-ops-sum');
         await expect(sum).toBeVisible({ timeout: 6000 });
         await expect(sum).toContainText('50 live');
         await expect(sum).toContainText('critical state');   // RED chip
 
-        // Only the TOP-N compact rows render (NOT all 50) — and they carry no SVG.
-        const rows = page.locator('#cc-ops-rail-list .opc-c[data-op]');
-        await expect(rows).toHaveCount(6);
-        await expect(page.locator('#cc-ops-rail-list svg')).toHaveCount(0);
-
-        // Worst-first: op-0 (30 critical) is the first row.
-        await expect(rows.first()).toHaveAttribute('data-op', 'op-0');
+        // Only a short RECENT shortlist renders (NOT all 50). The long tail routes
+        // to the registry via "View all 50".
+        const rows = page.locator('#cc-ops-rail-list .opc[data-op]');
+        await expect(rows).toHaveCount(5);
 
         // The long tail routes to the registry, and the orphan-critical CTA is a
         // slim one-line alert (not a full card).
@@ -82,13 +81,13 @@ test.describe('Active Operations rail — triage shortlist at 50 ops', () => {
         await page.goto('index.html');
         await page.waitForTimeout(500);
         await page.evaluate(() => (window as any).openControlCenter && (window as any).openControlCenter());
-        await expect(page.locator('#cc-ops-rail .cc-ops-sum')).toBeVisible({ timeout: 6000 });
+        await expect(page.locator('#cc-ops-summary .cc-ops-sum')).toBeVisible({ timeout: 6000 });
 
         await page.locator('.cc-ops-chip.red').click();   // "critical state" → RED filter
         await expect(page).toHaveURL(/#\/operations\b/);
         // The RED health chip is pre-applied → only the 4 RED ops show.
-        await expect(page.locator('#cco-list .opc[data-op]')).toHaveCount(4, { timeout: 6000 });
-        await expect(page.locator('.cco-fchip.red.active')).toBeVisible();
+        await expect(page.locator('#report-feed-list .opg-op[data-op]')).toHaveCount(4, { timeout: 6000 });
+        await expect(page.locator('.opg-reg-fchip[data-health="RED"].on')).toBeVisible();
     });
 });
 
@@ -99,45 +98,45 @@ test.describe('Operations registry — search · filter · sort · density · wi
         await page.goto('index.html');
         await page.waitForTimeout(300);
         await page.evaluate(() => { location.hash = '#/operations'; });
-        await expect(page.locator('#cc-ops-overlay .cco-controls')).toBeVisible({ timeout: 6000 });
+        await expect(page.locator('#report-feed-list .opg-reg-toolbar')).toBeVisible({ timeout: 6000 });
     }
 
     test('windowing: shows the first 30 + a Load-more, not all 50', async ({ page }) => {
         await openRegistry(page);
-        await expect(page.locator('#cco-list .opc[data-op]')).toHaveCount(30);
-        await expect(page.locator('#cco-more')).toContainText('Load more (20)');
-        await page.locator('#cco-more').click();
-        await expect(page.locator('#cco-list .opc[data-op]')).toHaveCount(50);
+        await expect(page.locator('#report-feed-list .opg-op[data-op]')).toHaveCount(30);
+        await expect(page.locator('.opg-reg-more')).toContainText('Load more (20)');
+        await page.locator('.opg-reg-more').click();
+        await expect(page.locator('#report-feed-list .opg-op[data-op]')).toHaveCount(50);
     });
 
     test('search narrows by name', async ({ page }) => {
         await openRegistry(page);
-        await page.locator('#cco-search').fill('Operation 49');
-        await expect(page.locator('#cco-list .opc[data-op]')).toHaveCount(1);
-        await expect(page.locator('#cco-list')).toContainText('Operation 49');
+        await page.locator('.opg-reg-search').fill('Operation 49');
+        await expect(page.locator('#report-feed-list .opg-op[data-op]')).toHaveCount(1);
+        await expect(page.locator('#report-feed-list')).toContainText('Operation 49');
     });
 
     test('health filter chip narrows to that band', async ({ page }) => {
         await openRegistry(page);
-        await page.locator('.cco-fchip.red').click();
-        await expect(page.locator('#cco-list .opc[data-op]')).toHaveCount(4);   // 4 RED ops
-        await page.locator('.cco-fchip.red').click();                          // toggle off
-        await expect(page.locator('#cco-list .opc[data-op]')).toHaveCount(30);  // back to windowed all
+        await page.locator('.opg-reg-fchip[data-health="RED"]').click();
+        await expect(page.locator('#report-feed-list .opg-op[data-op]')).toHaveCount(4);   // 4 RED ops
+        await page.locator('.opg-reg-fchip[data-health="RED"]').click();                          // toggle off
+        await expect(page.locator('#report-feed-list .opg-op[data-op]')).toHaveCount(30);  // back to windowed all
     });
 
-    test('density toggle switches to compact rows with no SVG', async ({ page }) => {
+    test('registry tree rows are uniformly compact (no per-op SVG mini-maps)', async ({ page }) => {
         await openRegistry(page);
-        await expect(page.locator('#cco-list .opc-mm').first()).toHaveCount(1);  // comfortable = SVG map present
-        await page.locator('#cco-density').click();
-        await expect(page.locator('#cco-list .opc-c[data-op]').first()).toBeVisible();
-        await expect(page.locator('#cco-list svg')).toHaveCount(0);             // compact = zero SVG
+        // The tree replaces the old comfortable/compact op CARDS (which carried an SVG
+        // mini-map) with uniformly compact op NODES — there is no per-op SVG to toggle.
+        await expect(page.locator('#report-feed-list .opg-op[data-op]').first()).toBeVisible();
+        await expect(page.locator('#report-feed-list svg.opc-mm')).toHaveCount(0);
     });
 
     test('sort by name reorders (overrides worst-first)', async ({ page }) => {
         await openRegistry(page);
-        await page.locator('#cco-sort').selectOption('name');
+        await page.locator('.opg-reg-sort').selectOption('name');
         // Only real ops (exclude the pinned orphan-critical CTA, which has no data-op).
-        const names = await page.locator('#cco-list [data-op] .opc-name').allTextContents();
+        const names = await page.locator('#report-feed-list .opg-op[data-op] .opg-reg-opname').allTextContents();
         const sorted = [...names].sort((a, b) => a.localeCompare(b));
         expect(names).toEqual(sorted);
     });

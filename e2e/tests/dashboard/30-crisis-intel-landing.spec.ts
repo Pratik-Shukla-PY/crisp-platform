@@ -18,6 +18,9 @@ const SUMMARY = {
     counts: {
         active: 42, critical: 7, pending_verification: 18, awaiting_triage: 23,
         open_dispatch: 9, resolved_in_window: 31, active_ops: 5, escalating: 4, stale: 6, sla_at_risk: 3,
+        // Home-restructure aggregates (Phase 2): Command Centre tiles + Executive summary.
+        reports: 137, incidents: 119, resolved: 31, rejected: 6, needs_review: 23,
+        affected_buildings: 28, total_buildings: 44, duplicate_reports: 12, buildings_critical_risk: 3,
     },
     distributions: {
         by_severity: { CRITICAL: 7, SEVERE: 12, MODERATE: 20, MINOR: 8 },
@@ -51,6 +54,21 @@ const OPERATIONS = [
     },
     { id: null, name: 'Unassigned critical reports', is_cluster: true, critical: 3, total: 3 },
 ];
+// AI Situational Awareness re-skins this cached /analytics/assess payload. This
+// stub mirrors the REAL backend contract (scope_assessment.get_payload): the
+// payload carries NO top_operations, and escalation_likelihood is the OBJECT
+// {level, rationale} (NOT a string). The "Where" facet therefore derives from the
+// live operations the rail already loaded, and the escalation meta must render the
+// level — never the literal "[object Object]" (both were pre-deploy review bugs).
+const ASSESS = {
+    assessed: true, score: 62, band: 'MIXED',
+    situation_summary: 'Flooding across Bihar is escalating with hospital access at risk.',
+    key_risks: ['Hospital access cut in Patna', 'Rising water near shelters'],
+    escalation_likelihood: { level: 'HIGH', rationale: 'Rising water levels near shelters' },
+    recommended_actions: [
+        { label: 'Dispatch teams to critical buildings', action: 'dispatch', scope: { scope_type: 'global' }, filters: { queue: 'critical' } },
+    ],
+};
 
 test('Crisis Intelligence landing renders from the real summary contract, no runtime errors', async ({ page }) => {
     const errors: string[] = [];
@@ -66,6 +84,7 @@ test('Crisis Intelligence landing renders from the real summary contract, no run
     await page.route('**/api/v1/**', async (route) => {
         const u = route.request().url();
         if (u.includes('/analytics/summary')) return route.fulfill({ json: SUMMARY });
+        if (u.includes('/analytics/assess')) return route.fulfill({ json: ASSESS });
         if (u.includes('/analytics/damage-rate-24h')) {
             return route.fulfill({ json: {
                 bucket_size_minutes: 60, total_reports: 14,
@@ -93,27 +112,36 @@ test('Crisis Intelligence landing renders from the real summary contract, no run
     errors.length = 0;                      // isolate: only capture LANDING-induced errors
     await page.evaluate(() => (window as any).openControlCenter && (window as any).openControlCenter());
 
-    // §1 TWO-ZONE Command Center: ZONE A "Active Operations" = the operations rail
-    // (renders from /operations incl. the un-operationalised critical cluster CTA);
-    // ZONE B "Global Monitoring" = global map + attention + analytics. The old
-    // map-header badge (which echoed the rail's active-ops count — the triple-count)
-    // and the 8-tile Executive KPI strip are both gone.
-    await expect(page.locator('.cc-zone-response')).toContainText('Active Operations');
-    await expect(page.locator('.cc-zone-monitor')).toContainText('Global Monitoring');
+    // §1 Section 1 · Global Overview (Jun 2026 home restructure): a 3-column row —
+    // global map | Command Centre metric tiles | AI Assessment & Actions. Then
+    // Situational Awareness, then Section 2 Active Operations, Building Intelligence,
+    // and Section 3 Global Summary. The old map-header badge + the 8-tile Executive
+    // KPI strip are both gone.
+    await expect(page.locator('#cc-home-overlay')).toContainText('Global Overview');
+    await expect(page.locator('#cc-home-overlay')).toContainText('Active Operations');
     await expect(page.locator('#cc-ops-rail')).toContainText('Bihar Floods', { timeout: 6000 });
-    // Cluster CTA is now a slim one-line alert (was a full card) that opens the
-    // chooser (offers a choice, never forces creation).
-    await expect(page.locator('#cc-ops-rail')).toContainText('not yet in an operation');
+    // The ops rail leads with a "+ New Operation" card (startNew), then recent ops.
+    await expect(page.locator('#cc-ops-rail .opc-newop')).toBeVisible();
+    // Cluster CTA is a slim one-line alert (was a full card) that opens the
+    // chooser (offers a choice, never forces creation). It now lives in the
+    // operations summary column (right of the recent-ops cards).
+    await expect(page.locator('#cc-ops-summary')).toContainText('not yet in an operation');
     await expect(page.locator('#cc-map-badge')).toHaveCount(0);   // de-duped: no map badge echoing the rail
     await expect(page.locator('#cc-kpis')).toHaveCount(0);
-    // §3 attention queue (the "Global Attention" block). The terminal pipeline
-    // stage is now "In response" (a REPORT count), NOT "Active operations" (which
-    // is a CrisisEvent count and lives solely on the rail above — kills the conflation).
-    await expect(page.locator('#cc-att')).toContainText('Critical incidents');
-    await expect(page.locator('#cc-att')).toContainText('Needs review');
-    await expect(page.locator('#cc-att')).toContainText('Escalating');
-    await expect(page.locator('#cc-att')).toContainText('In response');
-    await expect(page.locator('#cc-att')).not.toContainText('Active operations');
+    // §3 Command Centre metric tiles (#cc-att) — portfolio counts that deep-link
+    // into the incident feed. Colour discipline: Critical = red, Resolved = green.
+    await expect(page.locator('#cc-att')).toContainText('Total reports');
+    await expect(page.locator('#cc-att')).toContainText('Critical');
+    await expect(page.locator('#cc-att')).toContainText('Resolved');
+    await expect(page.locator('#cc-att')).toContainText('Rejected');
+    await expect(page.locator('#cc-att')).toContainText('Review pending');
+    await expect(page.locator('#cc-att')).toContainText('Affected buildings');
+    // Units are coherent: the headline (Total reports) is the superset, never
+    // smaller than the verdict/status buckets.
+    await expect(page.locator('#cc-att .cc-tile[data-tile="total"] .cc-tile-n')).not.toHaveText('0');
+    // The critical tile carries its count and deep-links to the critical queue.
+    await expect(page.locator('#cc-att .cc-tile[data-tile="critical"] .cc-tile-n')).toHaveText('7');
+    await expect(page.locator('#cc-att .cc-tile[data-tile="resolved"] .cc-tile-n')).toHaveText('31');
     // §2 Phase-2 client-side countries-impacted caption (Turf over world.json).
     await expect(page.locator('#cc-map-geo')).toContainText(/countries impacted/i, { timeout: 8000 });
     // The global map actually PLOTS markers from the lean /reports/markers feed
@@ -140,8 +168,21 @@ test('Crisis Intelligence landing renders from the real summary contract, no run
     // §5 impact + the honest no-fabrication placard (the guardrail, in the UI).
     await expect(page.locator('#cc-impact')).toContainText('Critical infrastructure');
     await expect(page.locator('#cc-impact')).toContainText('data integration');
-    // §6 rule-based briefing sourced from real endpoints.
-    await expect(page.locator('#cc-brief')).toContainText('source:');
+    // §5b Executive summary (Section 3, right) — portfolio totals from the aggregates.
+    await expect(page.locator('#cc-exec')).toContainText('Total buildings');
+    await expect(page.locator('#cc-exec')).toContainText('Duplicate reports');
+    // §6 AI Situational Awareness re-skins the cached /analytics/assess payload.
+    await expect(page.locator('#cc-sitaware')).toContainText("What's happening", { timeout: 8000 });
+    await expect(page.locator('#cc-sitaware')).toContainText('Flooding across Bihar');
+    await expect(page.locator('#cc-sitaware')).toContainText('Recommended actions');
+    // escalation_likelihood is the {level,rationale} OBJECT — the meta line must show
+    // the level, never the literal "[object Object]" (pre-deploy review fix).
+    await expect(page.locator('#cc-sitaware')).toContainText('escalation HIGH');
+    await expect(page.locator('#cc-sitaware')).not.toContainText('[object Object]');
+    // "Where" facet derives from the live ops the rail loaded (payload has no
+    // top_operations) — it must name the operation carrying the critical load.
+    await expect(page.locator('#cc-sitaware')).toContainText('Where');
+    await expect(page.locator('#cc-sitaware')).toContainText('Bihar Floods', { timeout: 8000 });
     // §7 activity table.
     await expect(page.locator('#cc-activity')).toContainText('Patna');
 
@@ -168,6 +209,7 @@ async function openLanding(page, role = 'ADMIN') {
     await page.route('**/api/v1/**', async (route) => {
         const u = route.request().url();
         if (u.includes('/analytics/summary')) return route.fulfill({ json: SUMMARY });
+        if (u.includes('/analytics/assess')) return route.fulfill({ json: ASSESS });
         if (u.includes('/reports/nearby')) return route.fulfill({ json: { groups: [] } });
         if (u.includes('/operations')) return route.fulfill({ json: OPERATIONS });
         if (u.includes('/reports/')) return route.fulfill({ status: 200, headers: { 'X-Total-Count': '1' }, json: REPORTS });

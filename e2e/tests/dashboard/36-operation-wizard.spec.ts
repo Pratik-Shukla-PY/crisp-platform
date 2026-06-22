@@ -66,7 +66,7 @@ test.describe('Operations redesign v2 — listing + wizard', () => {
         await boot(page);
         await page.goto('index.html#/operations');
         await page.waitForTimeout(800);
-        const list = page.locator('#cco-list');
+        const list = page.locator('#report-feed-list');
         // Start-New moved off a list card into the controls bar (scalable registry).
         await expect(page.locator('#cco-newop')).toBeVisible();
         await expect(page.locator('#cco-newop')).toContainText('New operation');
@@ -75,7 +75,7 @@ test.describe('Operations redesign v2 — listing + wizard', () => {
         await expect(list).toContainText('Bihar Floods');
         await expect(list).not.toContainText('Old Cyclone Op');
         // Switching the status segment to Ended surfaces the ended op.
-        await page.locator('.cco-seg[data-status="ended"]').click();
+        await page.locator('.opg-reg-segbtn[data-status="ended"]').click();
         await expect(list).toContainText('Old Cyclone Op');
         await expect(list).not.toContainText('Bihar Floods');
     });

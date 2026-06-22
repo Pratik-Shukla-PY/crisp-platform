@@ -90,6 +90,50 @@ test.describe('Actions section', () => {
     await request.delete(`${B}/api/v1/reports/${id}?reason=cleanup`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
   });
 
+  test('rejected report → Rejected banner + Revert only (no Reject/Delete); revert restores open actions', async ({ page, request }) => {
+    const id = await seed(request, token);
+    await openDetail(page, id);
+    await page.locator('.dp-act-reject').click();
+    await page.locator('#crisp-reject-reason').fill('Duplicate of an existing incident');
+    await page.locator('.crisp-action-confirm').click();
+    await expect(page.locator('.crisp-action-overlay')).toHaveCount(0, { timeout: 8000 });
+    await page.evaluate((rid) => (window as any).selectReport(rid, true), id);   // re-render the detail
+    // Settled state: banner + Revert; the fresh-decision buttons are gone.
+    await expect(page.locator('.dp-act-banner-rejected')).toBeVisible({ timeout: 6000 });
+    await expect(page.locator('.dp-act-revert')).toBeVisible();
+    await expect(page.locator('.dp-act-reject')).toHaveCount(0);
+    await expect(page.locator('.dp-act-delete')).toHaveCount(0);
+    await expect(page.locator('.dp-act-respond')).toHaveCount(0);
+    // Revert → back to the open action set.
+    await page.locator('.dp-act-revert').click();
+    await expect.poll(() => page.evaluate((rid) => (window as any).allReports.find((r: any) => r.id === rid)?.reviewer_verdict, id),
+      { timeout: 8000 }).toBe('NOT_REVIEWED');
+    await expect(page.locator('.dp-act-respond')).toBeVisible({ timeout: 6000 });
+    await expect(page.locator('.dp-act-reject')).toBeVisible();
+    await request.delete(`${B}/api/v1/reports/${id}?reason=cleanup`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+  });
+
+  test('notified report → "Response team notified" banner + Resolve/False Alarm/Revert (no Reject/Delete)', async ({ page, request }) => {
+    const id = await seed(request, token);
+    await openDetail(page, id);
+    await page.locator('.dp-act-respond').click();
+    await expect.poll(() => page.evaluate((rid) => (window as any).allReports.find((r: any) => r.id === rid)?.status, id),
+      { timeout: 8000 }).toBe('RESPONDING');
+    await page.evaluate((rid) => (window as any).selectReport(rid, true), id);
+    await expect(page.locator('.dp-act-banner-responding')).toBeVisible({ timeout: 6000 });
+    await expect(page.locator('.dp-act-resolve')).toBeVisible();
+    await expect(page.locator('.dp-act-false')).toBeVisible();
+    await expect(page.locator('.dp-act-revert')).toBeVisible();
+    await expect(page.locator('.dp-act-reject')).toHaveCount(0);
+    await expect(page.locator('.dp-act-delete')).toHaveCount(0);
+    // Revert (reopen) → back to PENDING + the open actions.
+    await page.locator('.dp-act-revert').click();
+    await expect.poll(() => page.evaluate((rid) => (window as any).allReports.find((r: any) => r.id === rid)?.status, id),
+      { timeout: 8000 }).toBe('PENDING');
+    await expect(page.locator('.dp-act-respond')).toBeVisible({ timeout: 6000 });
+    await request.delete(`${B}/api/v1/reports/${id}?reason=cleanup`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+  });
+
   test('Delete button is a high-severity confirm that requires a reason', async ({ page, request }) => {
     const id = await seed(request, token);
     await openDetail(page, id);

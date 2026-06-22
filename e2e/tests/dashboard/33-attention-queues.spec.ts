@@ -1,13 +1,12 @@
 /**
- * Attention-panel operational queues (Jun 2026 routing audit).
+ * Command Centre metric tiles → deep-linked queues (Jun 2026 home restructure).
  *
- * Each "Immediate Attention Required" row must deep-link into its OWN
- * filtered queue at '#/incidents;queue=<key>' — previously all 7 rows
- * routed flat to '/incidents' with no filter. The queue predicates in
- * app.js (QUEUES) mirror the backend count definitions in
- * analytics.py::operational_summary, so this spec seeds a report set with
- * a KNOWN distinct membership per queue and asserts the clicked queue
- * shows exactly that population (verification requirement: counts match).
+ * Section 1's Command Centre tiles (#cc-att .cc-tile) deep-link into the incident
+ * feed at the right scope/filter. The two tiles that carry a bookmarkable queue
+ * segment ('#/incidents;queue=<key>') are Critical and Rejected; the queue
+ * predicates in app.js (QUEUES) mirror the backend count definitions, so this spec
+ * seeds a report set with a KNOWN distinct membership per queue and asserts the
+ * clicked tile shows exactly that population (verification requirement: counts match).
  *
  * Fully stubbed (no backend) like 30-crisis-intel-landing.
  */
@@ -17,13 +16,9 @@ const now = Date.now();
 const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
 const H = 3600e3;
 
-// Crafted membership (5-card action model — the three work queues are
-// MUTUALLY EXCLUSIVE; critical/escalating are situational overlays):
-//   critical:       r_crit (CRITICAL)                                  → 1
-//   needs-review:   r_crit + r_stale (unreviewed, not dispatched/responding) → 2
-//   escalating:     r_esc (building b1, risk 80)                       → 1
-//   needs-response: r_sla + r_esc (ACCEPTED, not dispatched/responding)→ 2
-//   active-ops:     r_disp (RESPONDING / dispatched)                   → 1
+// Crafted membership for the two queue-deep-linking Command Centre tiles:
+//   critical:  r_crit (CRITICAL, open)        → 1
+//   rejected:  r_rej  (reviewer_verdict=REJECTED) → 1
 const REPORTS = [
     { id: 'r_crit', severity: 'CRITICAL', status: 'PENDING', reviewer_verdict: 'NOT_REVIEWED',
       crisis_type: 'EARTHQUAKE', infrastructure_type: 'HOSPITAL', description: 'QCRIT collapsed ward',
@@ -42,6 +37,9 @@ const REPORTS = [
       crisis_type: 'EARTHQUAKE', infrastructure_type: 'COMMERCIAL', description: 'QESC hot building',
       building_id: 'b1',
       server_created_at: iso(1 * H), location: { latitude: 12.94, longitude: 77.54 } },
+    { id: 'r_rej', severity: 'MINOR', status: 'PENDING', reviewer_verdict: 'REJECTED',
+      crisis_type: 'FLOOD', infrastructure_type: 'OTHER', description: 'QREJ rejected as spam',
+      server_created_at: iso(4 * H), location: { latitude: 12.95, longitude: 77.55 } },
 ];
 const SUMMARY = {
     generated_at: new Date(now).toISOString(), window_hours: 24, stale_hours: 24, total_reports: 5,
@@ -56,10 +54,7 @@ const SUMMARY = {
 
 const EXPECTED: Record<string, { count: number, member: string }> = {
     'critical': { count: 1, member: 'r_crit' },
-    'needs-review': { count: 2, member: 'r_crit' },
-    'escalating': { count: 1, member: 'r_esc' },
-    'needs-response': { count: 2, member: 'r_sla' },
-    'active-ops': { count: 1, member: 'r_disp' },
+    'rejected': { count: 1, member: 'r_rej' },
 };
 
 async function boot(page: Page) {
@@ -88,22 +83,22 @@ async function boot(page: Page) {
         const r = (window as any).__crispRouter;
         if (r) r.navigate('/');
     });
-    await expect(page.locator('#cc-att .cc-att-row').first()).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('#cc-att .cc-tile').first()).toBeVisible({ timeout: 8000 });
 }
 
-test.describe('Attention rows → dedicated operational queues', () => {
+test.describe('Command Centre tiles → dedicated operational queues', () => {
     for (const [key, exp] of Object.entries(EXPECTED)) {
-        test(`row "${key}" deep-links to its filtered queue (count + membership match)`, async ({ page }) => {
+        test(`tile "${key}" deep-links to its filtered queue (count + membership match)`, async ({ page }) => {
             await boot(page);
-            await page.locator(`#cc-att .cc-att-row[data-queue="${key}"]`).click();
+            await page.locator(`#cc-att .cc-tile[data-tile="${key}"]`).click();
             // Deep link in the URL (bookmarkable / sharable).
             await expect(page).toHaveURL(new RegExp(`#/incidents;queue=${key}`));
             // Queue banner with the live filtered count — matches the crafted
             // membership (same predicate the badge count definition uses).
-            await expect(page.locator('#queue-banner')).toBeVisible({ timeout: 6000 });
-            // v55: the unified context banner shows the count in .qb-sub (e.g.
-            // "Immediate response required · 44 incidents").
-            await expect(page.locator('#queue-banner .qb-sub'))
+            await expect(page.locator('#feed-scope-bar')).toBeVisible({ timeout: 6000 });
+            // The total incidents for the active scope now sit in the header next to
+            // the scope crumb (.qb-total), e.g. "Critical incidents · 1 incident".
+            await expect(page.locator('#feed-scope-bar .qb-total'))
                 .toContainText(new RegExp(`${exp.count} incident`), { timeout: 6000 });
             // A known member of this queue is on screen, with no manual
             // filtering — and the visible card count is EXACTLY the queue
@@ -116,30 +111,33 @@ test.describe('Attention rows → dedicated operational queues', () => {
 
     test('clear-queue button exits the queue and cleans the URL segment', async ({ page }) => {
         await boot(page);
-        await page.locator('#cc-att .cc-att-row[data-queue="critical"]').click();
-        await expect(page.locator('#queue-banner')).toContainText('CRITICAL INCIDENTS', { timeout: 6000 });
-        await page.locator('#queue-banner .qb-clear').click();
-        // v55: the banner is ALWAYS visible - clearing a queue falls back to the
-        // GLOBAL state (not hidden) and the URL drops the queue segment.
-        await expect(page.locator('#queue-banner')).toContainText('GLOBAL INCIDENTS', { timeout: 6000 });
-        await expect(page).toHaveURL(/#\/incidents(?!;queue=)/);
+        await page.locator('#cc-att .cc-tile[data-tile="critical"]').click();
+        await expect(page.locator('#feed-scope-bar')).toContainText('CRITICAL INCIDENTS', { timeout: 10000 });
+        // The active category is a clearable chip beside the Switch button. It clears
+        // the queue and synchronously re-renders the banner (removing itself), so
+        // dispatchEvent fires the handler directly without racing the self-detach.
+        await page.locator('#feed-scope-bar .ctx-qchip').dispatchEvent('click');
+        // Durable signal: the URL drops the queue segment + the banner falls back to
+        // the GLOBAL breadcrumb (always visible, never hidden).
+        await expect.poll(() => page.evaluate(() => location.hash), { timeout: 8000 }).not.toContain('queue=');
+        await expect(page.locator('#feed-scope-bar .qb-crumbs')).toContainText('Global', { timeout: 6000 });
     });
 
     test('browser refresh preserves queue state (deep link is the state)', async ({ page }) => {
         await boot(page);
-        await page.locator('#cc-att .cc-att-row[data-queue="needs-review"]').click();
-        await expect(page.locator('#queue-banner')).toBeVisible({ timeout: 6000 });
+        await page.locator('#cc-att .cc-tile[data-tile="rejected"]').click();
+        await expect(page.locator('#feed-scope-bar')).toBeVisible({ timeout: 6000 });
         await page.reload();
         await page.waitForTimeout(800);
-        await expect(page).toHaveURL(/#\/incidents;queue=needs-review/);
-        await expect(page.locator('#queue-banner')).toBeVisible({ timeout: 8000 });
-        await expect(page.locator('#queue-banner')).toContainText('NEEDS REVIEW');
+        await expect(page).toHaveURL(/#\/incidents;queue=rejected/);
+        await expect(page.locator('#feed-scope-bar')).toBeVisible({ timeout: 8000 });
+        await expect(page.locator('#feed-scope-bar')).toContainText('REJECTED');
     });
 
     test('browser back returns to the landing; navigating home drops the queue segment', async ({ page }) => {
         await boot(page);
-        await page.locator('#cc-att .cc-att-row[data-queue="needs-review"]').click();
-        await expect(page.locator('#queue-banner')).toBeVisible({ timeout: 6000 });
+        await page.locator('#cc-att .cc-tile[data-tile="critical"]').click();
+        await expect(page.locator('#feed-scope-bar')).toBeVisible({ timeout: 6000 });
         // Back → landing restored.
         await page.goBack();
         await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible({ timeout: 6000 });
@@ -147,7 +145,7 @@ test.describe('Attention rows → dedicated operational queues', () => {
         // bar: the router must DROP the queue segment (clean URL, no stale
         // queue re-applying later).
         await page.goForward();
-        await expect(page.locator('#queue-banner')).toBeVisible({ timeout: 6000 });
+        await expect(page.locator('#feed-scope-bar')).toBeVisible({ timeout: 6000 });
         await page.evaluate(() => (window as any).__crispRouter.navigate('/'));
         await expect(page).toHaveURL(/#\/$/);
         await expect(page.locator('#cc-home-overlay.cc-home-open')).toBeVisible();

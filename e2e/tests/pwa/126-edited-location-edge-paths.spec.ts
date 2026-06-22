@@ -82,24 +82,29 @@ async function landOnCaptureInZoneA(page: Page) {
 
 test.describe('PWA — edited-location edge paths (real DOM)', () => {
 
-    test('@smoke free-text edit (no suggestion tapped) still resolves coords + re-homes the pack', async ({ page }) => {
+    test('@smoke edit requires a PICKED suggestion: Save disabled until one is tapped, then re-homes the pack', async ({ page }) => {
+        // STRICT edit (v355): a free-typed name that matches no tapped suggestion is
+        // never accepted (it would mis-route the report). Save stays disabled until
+        // a suggestion is picked; picking one re-homes the pack to the new coords.
         const { pageErrors } = await boot(page);
         await landOnCaptureInZoneA(page);
 
         await page.locator('#btn-v4-loc-edit').click();
         await expect(page.locator('#v4-meta-loc-edit')).toBeVisible();
-        // Zone-B place is searchable, but the user will NOT tap the suggestion.
         await page.evaluate(([name, lat, lng]) => {
             (window as any).placeSearch.cacheResult(name as string, [{ name, region: 'Goa', country: 'India', lat, lng }]);
         }, ['Panaji', B_LAT, B_LNG] as any);
         await page.locator('#v4-meta-loc-input').fill('Panaji');
         await page.locator('#v4-meta-loc-input').dispatchEvent('input');
         await expect(page.locator('#v4-meta-loc-suggest .v4-meta-loc-suggest-item').first()).toBeVisible({ timeout: 3000 });
-        // Save WITHOUT tapping the suggestion (_locSelected stays null).
+        // Save is DISABLED while no suggestion is picked.
+        await expect(page.locator('#btn-v4-loc-save')).toBeDisabled();
+        // Pick the suggestion → Save enabled → saves + re-homes the pack.
+        await page.locator('#v4-meta-loc-suggest .v4-meta-loc-suggest-item').first().click();
+        await expect(page.locator('#btn-v4-loc-save')).toBeEnabled();
         await page.locator('#btn-v4-loc-save').click();
 
         expect(pageErrors).toEqual([]);
-        // Coordinates were resolved from the rendered suggestion → pack re-homed.
         await page.waitForFunction(
             () => (window as any).state.crisisPack && (window as any).state.crisisPack.pack_id === 'pk-B-flood',
             null, { timeout: 5000 });
@@ -109,26 +114,27 @@ test.describe('PWA — edited-location edge paths (real DOM)', () => {
         await expect(page.locator('#toast-notification')).toContainText('refreshed', { timeout: 2000 });
     });
 
-    test('@smoke unresolvable free-text → name saved, coords stay on device, hint toast', async ({ page }) => {
+    test('@smoke unresolvable free-text is REJECTED: Save disabled, pick-a-suggestion hint, nothing saved', async ({ page }) => {
         await boot(page);
         await landOnCaptureInZoneA(page);
         const before = await page.evaluate(() => (window as any).state.location);
 
-        // Force offline so no remote resolve fires; type a place that matches
-        // nothing local.
+        // Offline + a place that matches nothing → no suggestions resolve.
         await page.evaluate(() => { try { Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false }); } catch (_) {} });
         await page.locator('#btn-v4-loc-edit').click();
         await expect(page.locator('#v4-meta-loc-edit')).toBeVisible();
         await page.locator('#v4-meta-loc-input').fill('Zzxqunknownplace');
         await page.locator('#v4-meta-loc-input').dispatchEvent('input');
-        await page.locator('#btn-v4-loc-save').click();
-
-        // The hint toast appears; coords are UNCHANGED (no {0,0}); name is saved.
-        await expect(page.locator('#toast-notification')).toContainText('Saved the name only', { timeout: 3000 });
+        // No suggestion → Save stays disabled (free-text can't be accepted).
+        await expect(page.locator('#btn-v4-loc-save')).toBeDisabled();
+        // A forced save attempt (Enter) shows the hint + saves NOTHING; editor open.
+        await page.locator('#v4-meta-loc-input').press('Enter');
+        await expect(page.locator('#toast-notification')).toContainText('pick a location', { timeout: 3000 });
+        await expect(page.locator('#v4-meta-loc-edit')).toBeVisible();   // editor stays open
         const after = await page.evaluate(() => ({ loc: (window as any).state.location, name: (window as any).state.userLocationName, pack: (window as any).state.crisisPack?.pack_id }));
-        expect(after.loc.lat).toBeCloseTo(before.lat, 4);   // device coords kept
+        expect(after.loc.lat).toBeCloseTo(before.lat, 4);   // device coords unchanged
         expect(after.loc.lng).toBeCloseTo(before.lng, 4);
-        expect(after.name).toBe('Zzxqunknownplace');
+        expect(after.name).not.toBe('Zzxqunknownplace');    // NOT saved as the location
         expect(after.pack).toBe('pk-A-wildfire');           // device pack unchanged
     });
 
@@ -150,5 +156,52 @@ test.describe('PWA — edited-location edge paths (real DOM)', () => {
         expect(s.answers).toEqual({});                       // previous zone's answers cleared
         expect(s.loc.lat).toBeCloseTo(B_LAT, 3);
         await expect(page.locator('#toast-notification')).toContainText('refreshed', { timeout: 2000 });
+    });
+
+    test('@smoke refresh reverts a manual edit to the DEVICE snapshot even when the fresh GPS poll FAILS', async ({ page }) => {
+        // Reported bug: after editing the location, tapping refresh did NOT revert to
+        // the device location when the fresh GPS poll was slow/denied. The fix snapshots
+        // the device fix and restores it INSTANTLY, independent of a live poll.
+        const { pageErrors } = await boot(page);
+        await landOnCaptureInZoneA(page);
+        // a device snapshot (zone A) is now captured.
+
+        // Manually re-home the report to zone B (a picked suggestion).
+        await page.locator('#btn-v4-loc-edit').click();
+        await page.evaluate(([name, lat, lng]) => {
+            (window as any).placeSearch.cacheResult(name as string, [{ name, region: 'Goa', country: 'India', lat, lng }]);
+        }, ['Panaji', B_LAT, B_LNG] as any);
+        await page.locator('#v4-meta-loc-input').fill('Panaji');
+        await page.locator('#v4-meta-loc-input').dispatchEvent('input');
+        await page.locator('#v4-meta-loc-suggest .v4-meta-loc-suggest-item').first().click();
+        await page.locator('#btn-v4-loc-save').click();
+        await page.waitForFunction(() => (window as any).state.location.is_user_corrected === true, null, { timeout: 5000 });
+
+        // Now make the GPS poll FAIL (denied) and tap refresh.
+        await page.evaluate(() => {
+            const geo = { getCurrentPosition: (_ok: any, err: any) => { if (err) err({ code: 1, message: 'denied' }); },
+                          watchPosition: () => 0, clearWatch: () => {} };
+            Object.defineProperty(navigator, 'geolocation', { configurable: true, get: () => geo });
+        });
+        await page.locator('#btn-v4-retry-gps').click();
+
+        // Despite the failed poll, the location reverts to the DEVICE snapshot (zone A).
+        await page.waitForFunction(([aLat]) => Math.abs((window as any).state.location.lat - (aLat as number)) < 0.01,
+            [A_LAT] as any, { timeout: 5000 });
+        const after = await page.evaluate(() => ({
+            loc: (window as any).state.location, name: (window as any).state.userLocationName }));
+        expect(after.loc.lat).toBeCloseTo(A_LAT, 2);
+        expect(after.loc.lng).toBeCloseTo(A_LNG, 2);
+        expect(after.loc.is_user_corrected).toBe(false);   // reverted to device
+        expect(after.name).toBe('');                        // user-typed name cleared
+        expect(pageErrors).toEqual([]);
+    });
+
+    test('@smoke the location card shows the precise lat/long alongside the name', async ({ page }) => {
+        await boot(page);
+        await landOnCaptureInZoneA(page);
+        // Operator request: lat/long visible in the meta card's coords sub-line.
+        await expect(page.locator('#v4-meta-loc-coords')).toContainText(A_LAT.toFixed(4), { timeout: 4000 });
+        await expect(page.locator('#v4-meta-loc-coords')).toContainText('±');   // accuracy still shown
     });
 });
