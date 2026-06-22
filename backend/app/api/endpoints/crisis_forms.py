@@ -223,7 +223,8 @@ def list_operations(
             # the dashboard you land on. (total stays all-status = lifetime report count.)
             sa_func.coalesce(sa_func.sum(case((and_(
                 Report.severity == SeverityEnum.CRITICAL,
-                Report.status.notin_(_OPEN_REPORT_STATUSES_EXCLUDED)), 1), else_=0)), 0).label("critical"),
+                Report.status.notin_(_OPEN_REPORT_STATUSES_EXCLUDED),
+                Report.reviewer_verdict != ReviewerVerdictEnum.REJECTED.value), 1), else_=0)), 0).label("critical"),
             # verified = reviewer accepted (mirrors analytics counts.verified).
             sa_func.coalesce(sa_func.sum(
                 case((Report.reviewer_verdict == ReviewerVerdictEnum.ACCEPTED.value, 1), else_=0)), 0).label("verified"),
@@ -237,22 +238,35 @@ def list_operations(
             sa_func.coalesce(sa_func.sum(case((and_(
                 Report.severity == SeverityEnum.CRITICAL,
                 Report.status.notin_(_OPEN_REPORT_STATUSES_EXCLUDED),
+                Report.reviewer_verdict != ReviewerVerdictEnum.REJECTED.value,
                 Report.help_dispatched_at.is_(None)), 1), else_=0)), 0).label("unattended_critical"),
             # SLA breaches - mirrors analytics sla_at_risk (per-severity thresholds).
             sa_func.coalesce(sa_func.sum(case((and_(
                 Report.status == ReportStatusEnum.PENDING,
                 or_(*[and_(Report.severity == sev, Report.server_created_at < now - timedelta(hours=h))
                       for sev, h in _SLA_THRESHOLD_HOURS.items()])), 1), else_=0)), 0).label("sla_breaches"),
-            # review backlog. M10+M8 (Phase-1): identical definition to the global
-            # summary's needs_review - OPEN (pre-fix counted closed reports → drove
-            # AMBER op health off already-resolved reports) AND not-yet-ACCEPTED
-            # (verdict != ACCEPTED, so an open-but-REJECTED report still counts as
-            # needing a closure decision rather than leaking out of every bucket).
+            # review backlog. Identical definition to the global summary's needs_review:
+            # OPEN, not-yet-ACCEPTED, AND not REJECTED (a rejected report is set aside in
+            # the Rejected count, not the review backlog) — so the op card agrees with the
+            # op-scoped feed + the global summary (the Jun 2026 consistency contract).
             sa_func.coalesce(sa_func.sum(case((and_(
                 Report.status.notin_(_OPEN_REPORT_STATUSES_EXCLUDED),
                 Report.reviewer_verdict != ReviewerVerdictEnum.ACCEPTED.value,
+                Report.reviewer_verdict != ReviewerVerdictEnum.REJECTED.value,
                 Report.help_dispatched_at.is_(None),
                 Report.status != ReportStatusEnum.RESPONDING), 1), else_=0)), 0).label("needs_review"),
+            # Home restructure (Jun 2026): per-op resolved / rejected / affected-buildings
+            # for the Active-Operations cards. Same grouped query (no N+1, #12).
+            # "Resolved" mirrors global counts.resolved EXACTLY (consistency contract):
+            # the CLOSED/handled bucket = RESOLVED or FALSE_ALARM, and NOT rejected (a
+            # rejected report is set aside in the Rejected count). Matches the op-scoped
+            # incident feed's Resolved tab so the op card == the feed.
+            sa_func.coalesce(sa_func.sum(case((and_(
+                Report.status.in_([ReportStatusEnum.RESOLVED, ReportStatusEnum.FALSE_ALARM]),
+                Report.reviewer_verdict != ReviewerVerdictEnum.REJECTED.value), 1), else_=0)), 0).label("resolved"),
+            sa_func.coalesce(sa_func.sum(
+                case((Report.reviewer_verdict == ReviewerVerdictEnum.REJECTED.value, 1), else_=0)), 0).label("rejected"),
+            sa_func.count(sa_func.distinct(Report.building_id)).label("affected_buildings"),
         )
         .outerjoin(Report, and_(
             Report.crisis_event_id == CrisisEvent.id,
@@ -297,6 +311,20 @@ def list_operations(
                     BuildingResponder.crisis_event_id.isnot(None))
             .group_by(BuildingResponder.crisis_event_id).all())
     }
+    # Merged-away (confirmed-duplicate) reports per op → interim incident_count =
+    # total - merged (visible reports after collapse). Building-centric redesign;
+    # one grouped query, no N+1. Joins the duplicate decision's RELATED report to
+    # its operation. (Import kept local to avoid widening the module's import head.)
+    from app.models.report import ReportDuplicateDecision as _RDD
+    merged_by_op = {
+        row[0]: int(row[1] or 0)
+        for row in (db.query(Report.crisis_event_id, sa_func.count(_RDD.id))
+            .join(Report, Report.id == _RDD.related_report_id)
+            .filter(_RDD.decision == "CONFIRMED_DUP", _RDD.undone_at.is_(None),
+                    Report.crisis_event_id.isnot(None),
+                    Report.deletion_requested_at.is_(None))
+            .group_by(Report.crisis_event_id).all())
+    }
     ops = []
     for r in rows:
         _unatt = int(r.unattended_critical or 0)
@@ -318,6 +346,10 @@ def list_operations(
             health=health, health_reason=reason,
             responders_active=resp_by_op.get(r.id, 0),
             unattended_critical=_unatt, sla_breaches=_sla,
+            incident_count=max(0, int(r.total or 0) - merged_by_op.get(r.id, 0)),
+            unreviewed_count=_nr,
+            resolved=int(r.resolved or 0), rejected=int(r.rejected or 0),
+            affected_buildings=int(r.affected_buildings or 0),
         ))
     # Un-operationalised critical clusters: open-critical reports tied to NO
     # operation - surfaced as a single CTA row ("Launch operation here").
@@ -362,6 +394,34 @@ async def operation_weather(event_id: str, db: Session = Depends(get_db),
     ctx = await fetch_operation_context(ev.center_lat, ev.center_lng, ev.radius_km or 30.0)
     cache_put(event_id, ctx)
     return ctx
+
+
+# ── Operator: multi-section Operation Summary PDF ───────────────────────────
+@operations_router.get("/{event_id}/report.pdf",
+                       summary="Multi-section Operation Summary PDF")
+def export_operation_report_pdf(event_id: str, request: Request,
+                                db: Session = Depends(get_db),
+                                user=Depends(require_viewer)):
+    """One downloadable multi-section operation summary: metadata + health, report
+    roll-up, severity/status distribution, top buildings, top incidents, satellite
+    verification summary, the active form configuration, and recent activity.
+    Mirrors the building dossier so the Global / Operation / Building / Incident
+    report stack is consistent. Aggregates are scale-safe (must-have #12)."""
+    import io as _io
+    from fastapi.responses import StreamingResponse
+    from app.services.operation_report import build_operation_report_pdf
+    ev = db.query(CrisisEvent).filter(CrisisEvent.id == event_id).first()
+    if not ev:
+        raise HTTPException(status_code=404, detail="Operation not found")
+    pdf = build_operation_report_pdf(db, ev)
+    try:
+        from app.api.endpoints.exports import _audit_export
+        _audit_export(db, user, request, "operation_pdf", {"operation_id": event_id}, len(pdf))
+    except Exception:
+        pass
+    fname = f"operation-{ev.id[:8]}-report-{datetime.now(timezone.utc).date()}.pdf"
+    return StreamingResponse(_io.BytesIO(pdf), media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={fname}"})
 
 
 # ── Operator: operation-level responders (Phase 3, Option B) ────────────────
@@ -649,6 +709,61 @@ def unclaim_operation(event_id: str, db: Session = Depends(get_db),
     return OperationLaunchResponse(
         operation_id=event_id, operation_name=(ev.name if ev else ""),
         unclaimed_count=int(unclaimed or 0))
+
+
+@operations_router.post("/{event_id}/cascade/{action}",
+                        summary="Cascade an action across a whole operation (set-based)")
+def cascade_operation(event_id: str, action: str, body: Optional[dict] = None,
+                      dry_run: bool = Query(False),
+                      db: Session = Depends(get_db), user=Depends(require_analyst)):
+    """Command Center action layer: apply an operational action to the WHOLE
+    operation — every building, incident and report in scope — in ONE set-based,
+    audited, reversible transaction (the percolating cascade). Scales to a 500k-report
+    crisis (a few UPDATE…WHERE statements, never a per-row loop). `dry_run=true`
+    returns the blast-radius counts without mutating; `body.filters` narrows the slice
+    (e.g. {"queue":"unattended_critical"})."""
+    from app.services.cascade import run_cascade, CascadeError
+    ev = db.query(CrisisEvent).filter(CrisisEvent.id == event_id).first()
+    if not ev:
+        raise HTTPException(status_code=404, detail="Operation not found")
+    b = body or {}
+    try:
+        return run_cascade(db, user, scope_type="operation", scope_id=event_id,
+                           action=action, filters=(b.get("filters") or None),
+                           reason=b.get("reason"), dry_run=bool(dry_run or b.get("dry_run")))
+    except CascadeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@operations_router.post("/{event_id}/assess", summary="AI Analyze an operation (synthesis)")
+async def assess_operation(event_id: str, db: Session = Depends(get_db),
+                           user=Depends(require_analyst)):
+    """Command Center 'Analyze Operation': aggregate the operation's child confidence
+    scores + ONE Claude synthesis call → situation summary, key risks, escalation
+    likelihood, EXECUTABLE recommended actions, priority score, resource needs."""
+    ev = db.query(CrisisEvent).filter(CrisisEvent.id == event_id).first()
+    if not ev:
+        raise HTTPException(status_code=404, detail="Operation not found")
+    from app.services.scope_assessment import generate_scope_assessment, persist
+    from app.services.building_ai_summary import SummaryUnavailable
+    try:
+        payload = await generate_scope_assessment(db, "operation", event_id)
+    except SummaryUnavailable as e:
+        raise HTTPException(status_code=503, detail=f"AI assessment unavailable: {e}")
+    persist(db, user, payload)
+    payload["assessed"] = True
+    return payload
+
+
+@operations_router.get("/{event_id}/assess", summary="Latest cached operation assessment")
+def get_operation_assessment(event_id: str, db: Session = Depends(get_db),
+                             user=Depends(require_viewer)):
+    """Cached card: fresh roll-up metrics + the last Claude narrative (no Claude call)."""
+    ev = db.query(CrisisEvent).filter(CrisisEvent.id == event_id).first()
+    if not ev:
+        raise HTTPException(status_code=404, detail="Operation not found")
+    from app.services.scope_assessment import get_payload
+    return get_payload(db, "operation", event_id)
 
 
 # ── Admin: Crisis Events CRUD ───────────────────────────────────────────────

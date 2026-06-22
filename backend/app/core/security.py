@@ -158,18 +158,24 @@ def create_refresh_token(user_id: str) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
-def create_step_up_token(user_id: str, ttl_minutes: int = 10) -> str:
+def create_step_up_token(user_id: str, ttl_minutes: int = 10,
+                         method: Optional[str] = None) -> str:
     """Short-lived JWT proving a FRESH re-auth (TOTP code or password) for an
     irreversible destructive action (the hard-purge). Stateless + time-boxed
     ("sudo mode"): the exp claim enforces the ~10-min window server-side, so a
     forgotten open session can't keep purging. `type='step_up'` (NOT 'access')
     so get_current_user rejects it as a session token - it ONLY authorizes the
-    step-up-gated endpoints. Replaces the shared static CRISP_ADMIN_KEY."""
+    step-up-gated endpoints. Replaces the shared static CRISP_ADMIN_KEY.
+
+    `method` records HOW the operator re-authenticated ('totp' / 'password' /
+    'mock') so a gated endpoint can require a true time-based factor in
+    production (e.g. the purge requires method=='totp')."""
     now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
         "type": "step_up",
         "scope": "step_up",
+        "method": method or "totp",
         "exp": now + timedelta(minutes=ttl_minutes),
         "iat": now,
     }

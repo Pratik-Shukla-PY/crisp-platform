@@ -1,9 +1,10 @@
 from fastapi import APIRouter
-from app.api.endpoints import reports, exports, auth, predictions, integrations, analytics, modules, push, share, config, observability, appeals, devices, hot_regions, buildings, crisis_forms
+from app.api.endpoints import reports, exports, auth, predictions, integrations, analytics, modules, push, share, config, observability, appeals, devices, hot_regions, buildings, crisis_forms, incidents
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(reports.router, prefix="/reports", tags=["reports"])
+api_router.include_router(incidents.router, prefix="/incidents", tags=["incidents"])
 api_router.include_router(exports.router, prefix="/exports", tags=["exports"])
 api_router.include_router(predictions.router, prefix="/predictions", tags=["predictions"])
 # UI v2.1 (W7) - UNDP RAPIDA integration stub. Server-to-server

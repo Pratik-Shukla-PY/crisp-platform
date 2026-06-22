@@ -266,6 +266,22 @@ class BuildingIdSourceEnum(str, enum.Enum):
     MANUAL    = "MANUAL"      # Operator-created via dashboard
 
 
+# Building-centric Incident-Feed redesign Phase 2 - Incident operational
+# lifecycle. An Incident is a first-class real-world EVENT (the operational
+# object analysts respond to); duplicate detection only ASSISTS its assembly.
+# Stored as String(20) on the Incident row (NOT a Postgres enum) so adding new
+# states later never needs an ALTER TYPE migration - mirrors BuildingStateEnum.
+#   OPEN        → needs triage / response (default at intake)
+#   RESPONDING  → responders dispatched
+#   RESOLVED    → handled
+#   FALSE_ALARM → not a real event
+class IncidentStatusEnum(str, enum.Enum):
+    OPEN        = "OPEN"
+    RESPONDING  = "RESPONDING"
+    RESOLVED    = "RESOLVED"
+    FALSE_ALARM = "FALSE_ALARM"
+
+
 class Device(Base):
     __tablename__ = "devices"
     id = Column(String(36), primary_key=True, default=gen_uuid)
@@ -417,6 +433,27 @@ class Report(Base):
     # the design plan F.5.c.
     building_version_ordinal = Column(Integer, nullable=True)
     building_is_latest = Column(Boolean, default=False, nullable=False, server_default="false")
+    # Building-centric Incident-Feed redesign Phase 2 - the report's parent
+    # INCIDENT (the first-class operational event it is evidence for). Nullable:
+    # set server-side at intake (right after building assignment) by
+    # _assign_incident, by the analyst merge/move/split ops, OR backfilled for
+    # legacy rows by migration 0059. FK to incidents.id with ON DELETE SET NULL
+    # so deleting an incident never destroys its evidence reports - they fall
+    # back to unassigned and re-cluster on the next intake/backfill.
+    incident_id = Column(String(36), ForeignKey("incidents.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    @property
+    def display_building_name(self):
+        """Canonical BUILDING name for any human/AI-facing surface: the reporter-tagged
+        name ONLY when it is an OSM footprint pick (building_id set + from_osm not False),
+        so a free-text "what was hit" descriptor never masquerades as the building name.
+        Mirrors the dashboard `_taggedBuildingName` gate so EVERY surface (feed, console,
+        exports, PDF, AI) shows ONE consistent name. Returns None for free-text/unmapped."""
+        name = (self.infrastructure_name or "").strip()
+        if name and self.building_id and self.infrastructure_name_from_osm is not False:
+            return name
+        return None
+
     # Progressive-upload placeholder. Compact blurhash
     # of the main photo - decoded on the dashboard to render a fuzzy colour
     # impression the instant the meta POST lands, BEFORE any media chunk
@@ -464,6 +501,11 @@ class Report(Base):
     media       = relationship("Media",       back_populates="report", cascade="all, delete-orphan")
     ai_analysis = relationship("AIAnalysis",  back_populates="report", uselist=False, cascade="all, delete-orphan")
     verification = relationship("SatelliteVerification", back_populates="report", uselist=False, cascade="all, delete-orphan")
+    # Building-centric Incident-Feed redesign Phase 2 - the parent incident.
+    # foreign_keys pinned to incident_id (the only FK between reports+incidents;
+    # lead_report_id on Incident is intentionally non-FK) so the relationship is
+    # unambiguous. No cascade: an incident delete SET NULLs the report (above).
+    incident    = relationship("Incident", back_populates="reports", foreign_keys=[incident_id])
 
     # UI v2.1 - performance indexes for 500k-scale crisis queries.
     # Mirror migration 0008. Names match exactly so `alembic upgrade` from
@@ -1197,6 +1239,18 @@ class Building(Base):
     ai_summary = Column(JSON, nullable=True)
     ai_summary_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Building Assessment cache (denormalised latest, for the hot list/detail read
+    # path). The full per-run history lives in `building_assessments`. Set by
+    # POST /buildings/{id}/assess.
+    building_confidence_score = Column(Float, nullable=True)
+    building_assessment_at = Column(DateTime(timezone=True), nullable=True)
+    # ONE consolidated Building RISK score (Jun 2026): the primary act-first metric
+    # shown on the console (fuses severity + aggregated incident credibility +
+    # corroboration/evidence/recency). High = urgent. Denormalised from the latest
+    # BuildingAssessment for the hot read path.
+    building_risk_score = Column(Integer, nullable=True)
+    building_risk_band = Column(String(20), nullable=True)
+
     # Soft archive (set when all constituent reports are deleted in grace)
     archived_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -1545,6 +1599,10 @@ event.listen(Report, "after_update", _apply_building_link)
 #   AI_SUMMARY_GENERATED
 #   SATELLITE_VERIFIED  payload: {mean_score, verdict, count}
 #   ESCALATED / DE_ESCALATED / FALSE_ALARM_DECLARED / ARCHIVED
+#   ASSESSMENT_RUN      payload: {assessed, skipped, queued, score, band, forced}
+#   ASSESSMENT_REPORT_EXPORTED  payload: {format, size_bytes}
+#   CASCADE_RESOLVE / CASCADE_FALSE_ALARM / CASCADE_NOTIFY / CASCADE_REJECT /
+#   CASCADE_REOPEN      payload: {incident_ids, reports_changed, skipped, reason?, to_state}
 class BuildingEvent(Base):
     """Append-only audit log of building lifecycle events.
 
@@ -1580,6 +1638,46 @@ class BuildingEvent(Base):
         server_default=func.now(),
         nullable=False,
         index=True,
+    )
+
+
+class BuildingAssessment(Base):
+    """Append-only history of building-level AI assessments. A run assesses each
+    non-duplicate incident's representative report and consolidates them into a
+    building confidence roll-up. The latest run is denormalised onto Building
+    (building_confidence_score / building_assessment_at) for the hot read path;
+    this table keeps the full provenance (who assessed, when, what came out)."""
+    __tablename__ = "building_assessments"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    building_id = Column(
+        String(64), ForeignKey("buildings.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    building_confidence_score = Column(Float, nullable=True)
+    building_confidence_band = Column(String(20), nullable=True)
+    # Jun 2026 - the consolidated Building RISK score + its transparent factor breakdown
+    # ([{key,label,max,ran,awarded,reason}] from services/building_risk.py).
+    building_risk_score = Column(Integer, nullable=True)
+    building_risk_band = Column(String(20), nullable=True)
+    risk_factors = Column(JSON, nullable=True)
+    incident_count = Column(Integer, nullable=False, default=0)
+    assessed_count = Column(Integer, nullable=False, default=0)
+    skipped_count = Column(Integer, nullable=False, default=0)
+    queued_count = Column(Integer, nullable=False, default=0)
+    recommendation = Column(String(40), nullable=True)
+    # [{incident_id, title, severity, score, band, summary, lead_report_id, cached}]
+    per_incident = Column(JSON, nullable=True)
+    distribution = Column(JSON, nullable=True)   # {VERIFIED, LIKELY, MIXED, WEAK, UNVERIFIED}
+    actor_user_id = Column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True,
+    )
+
+    __table_args__ = (
+        Index("ix_building_assessments_building_created", "building_id", "created_at"),
     )
 
 
@@ -1681,6 +1779,128 @@ class OperationClaimLog(Base):
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
     )
     happened_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+# Command Center (Jun 2026) - reversible audit trail for a SET-BASED scoped cascade
+# action. ONE row per cascade (not per report): the operator acts at Global /
+# Operation / Building and it percolates to every incident + report in the slice in
+# a single transaction. report_ids snapshots the rows actually changed so an Undo is
+# precise. Mirrors OperationClaimLog's reversibility model.
+class CascadeActionLog(Base):
+    """One audited, reversible record of a set-based scoped cascade action."""
+    __tablename__ = "cascade_action_log"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    scope_type = Column(String(16), nullable=False)        # building | operation | global
+    scope_id = Column(String(36), nullable=True, index=True)  # building/operation id; NULL=global
+    action = Column(String(20), nullable=False)            # dispatch|resolve|false_alarm|reject|reopen
+    filters = Column(JSON, nullable=True)                  # the slice predicate (queue/severity/status/...)
+    reason = Column(Text, nullable=True)
+    reports_changed = Column(Integer, nullable=False, default=0, server_default="0")
+    incidents_changed = Column(Integer, nullable=False, default=0, server_default="0")
+    buildings_changed = Column(Integer, nullable=False, default=0, server_default="0")
+    responders_notified = Column(Integer, nullable=False, default=0, server_default="0")
+    report_ids = Column(JSON, nullable=True)               # bounded snapshot for a precise Undo
+    reverted_at = Column(DateTime(timezone=True), nullable=True)
+    actor_user_id = Column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    happened_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("ix_cascade_action_log_scope", "scope_type", "scope_id", "happened_at"),
+    )
+
+
+# Command Center (Jun 2026) - AI Analyze at OPERATION + GLOBAL scope. Aggregates the
+# already-computed child confidence scores (incident -> building -> operation ->
+# global) into a score/band/distribution, then ONE Claude synthesis call writes the
+# narrative. Append-only history; the latest row is the cached card. Building keeps
+# its own building_assessments table - this covers the wider scopes only.
+class ScopeAssessment(Base):
+    """A persisted operation- or global-scope AI situation assessment."""
+    __tablename__ = "scope_assessment"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    scope_type = Column(String(16), nullable=False)        # operation | global
+    scope_id = Column(String(36), nullable=True, index=True)  # operation id; NULL=global
+    score = Column(Float, nullable=True)
+    band = Column(String(20), nullable=True)
+    distribution = Column(JSON, nullable=True)             # {RED:n, AMBER:n, GREEN:n} or band tally
+    coverage = Column(JSON, nullable=True)                 # {assessed, total, cached}
+    situation_summary = Column(Text, nullable=True)
+    key_risks = Column(JSON, nullable=True)                # [str]
+    escalation_likelihood = Column(JSON, nullable=True)    # {level, rationale}
+    recommended_actions = Column(JSON, nullable=True)      # [{label, action, scope, filters}]
+    priority_score = Column(Integer, nullable=True)
+    resource_recommendations = Column(JSON, nullable=True) # [str]
+    model = Column(String(60), nullable=True)
+    actor_user_id = Column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("ix_scope_assessment_scope", "scope_type", "scope_id", "created_at"),
+    )
+
+
+# Building-centric Incident-Feed redesign Phase 2 - the first-class INCIDENT.
+# An Incident is a real-world operational EVENT (what analysts respond to),
+# sitting between Building (context) and Report (evidence) in the hierarchy
+#   Global → Operation → Building → Incident → Report.
+# Reports link via Report.incident_id. Duplicate detection
+# (report_duplicate_decisions, below) only ASSISTS incident assembly at intake
+# (HIGH ≥88 auto-join) - it never DEFINES incident identity (Floor 1/7/10 in one
+# building score MEDIUM and stay 3 distinct incidents). severity/incident_type
+# are derived from member reports (analyst-overridable via severity_overridden);
+# report_count is a cache rebuilt from member reports. building_id is advisory
+# String(36) (NOT an FK), mirroring Report.building_id - an incident must never
+# fail to persist because its building row isn't mirrored yet (must-have #1).
+class Incident(Base):
+    """A first-class real-world operational event; reports are its evidence."""
+    __tablename__ = "incidents"
+
+    id              = Column(String(36), primary_key=True, default=gen_uuid)
+    building_id     = Column(String(36), nullable=True, index=True)
+    crisis_event_id = Column(String(36), ForeignKey("crisis_events.id", ondelete="SET NULL"), nullable=True, index=True)
+    incident_type   = Column(String(30), nullable=True)   # crisis_type vocabulary (CrisisTypeEnum)
+    # Derived = max severity across member reports; an analyst override pins it
+    # (severity_overridden=True stops re-derivation from clobbering the override).
+    severity            = Column(String(20), nullable=False, default=SeverityEnum.UNKNOWN.value, server_default=SeverityEnum.UNKNOWN.value)
+    severity_overridden = Column(Boolean, nullable=False, default=False, server_default="false")
+    status          = Column(String(20), nullable=False, default=IncidentStatusEnum.OPEN.value, server_default=IncidentStatusEnum.OPEN.value)
+    title           = Column(String(200), nullable=True)
+    # The lead/primary report (earliest, richest on tie). Plain String(36), NOT
+    # an FK - keeps a single FK path (Report.incident_id) between the two tables
+    # so the relationship stays unambiguous, and the lead can be reassigned
+    # (merge/split) without FK churn.
+    lead_report_id  = Column(String(36), nullable=True)
+    report_count    = Column(Integer, nullable=False, default=0, server_default="0")  # cached roll-up
+    # NULL created_by = system-created at intake; set to the operator id when an
+    # analyst creates/splits an incident.
+    created_by      = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at      = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # passive_deletes=True → rely on the DB FK (ON DELETE SET NULL) instead of
+    # SQLAlchemy loading + NULL-ing children in Python when an incident is
+    # deleted. The merge/move ops reassign member reports to another incident
+    # BEFORE deleting the emptied one; without passive_deletes the stale
+    # in-session collection would fight that reassignment (StaleDataError).
+    reports = relationship(
+        "Report", back_populates="incident",
+        foreign_keys="Report.incident_id", passive_deletes=True,
+    )
+
+    __table_args__ = (
+        # Intake "open incidents in this building" candidate lookup + the
+        # operation worklist's per-status incident counts. The single-column
+        # building_id / crisis_event_id indexes come from the column index=True
+        # flags above (ix_incidents_building_id / ix_incidents_crisis_event_id).
+        Index("ix_incidents_building_status",     "building_id",     "status"),
+        Index("ix_incidents_crisis_event_status", "crisis_event_id", "status"),
+    )
 
 
 # Incident Intelligence P3 - reversible analyst duplicate decisions within an

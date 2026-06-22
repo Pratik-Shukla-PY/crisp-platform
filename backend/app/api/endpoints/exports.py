@@ -49,7 +49,9 @@ def _query_reports(db: Session, status: Optional[str], crisis_type: Optional[str
                    since: Optional[str], until: Optional[str],
                    severity: Optional[str] = None, bbox: Optional[str] = None,
                    crisis_event_id: Optional[str] = None,
-                   report_id: Optional[str] = None):
+                   report_id: Optional[str] = None,
+                   reviewer_verdict: Optional[str] = None,
+                   building_id: Optional[str] = None):
     """Shared query builder for all export endpoints. Returns the QUERY so
     callers can count() or iterate. Eager-loads the per-report relations
     every format consumes (location, verification, media) - the old lazy
@@ -63,6 +65,21 @@ def _query_reports(db: Session, status: Optional[str], crisis_type: Optional[str
         )
         .filter(Report.deletion_requested_at.is_(None))
     )
+    # Analyst-rejected reports are hidden from the live feed (verdict-based, status
+    # stays PENDING) and MUST stay out of shared GIS exports too (data-integrity +
+    # must-have #11). Default: exclude REJECTED. An explicit reviewer_verdict param
+    # overrides (e.g. the admin "rejected reports" audit view passes verdict=REJECTED).
+    # Exception: an explicit single-report export (report_id) is a deliberate by-id
+    # pull of the one report the operator is viewing - the REJECTED exclusion is for
+    # unscoped/bulk datasets, so it must not silently yield an empty file there.
+    if reviewer_verdict:
+        q = q.filter(Report.reviewer_verdict == reviewer_verdict)
+    elif not report_id:
+        q = q.filter(Report.reviewer_verdict != "REJECTED")
+    if building_id:
+        # Building-scoped export (the Building dossier / Assessment report). building_id
+        # is the advisory OSM/proximity link on Report; equality filter, indexed.
+        q = q.filter(Report.building_id == building_id)
     if status:
         # Comma-separated list supported so the dashboard's composite
         # "Active" view (PENDING+VERIFIED) exports exactly what it shows.
@@ -126,16 +143,20 @@ def _build_tier_map(db: Session, reports) -> dict:
 
 def _fetch_export_rows(db: Session, status, crisis_type, since, until,
                        severity=None, bbox=None, limit: Optional[int] = None,
-                       crisis_event_id=None, report_id: Optional[str] = None):
+                       crisis_event_id=None, report_id: Optional[str] = None,
+                       reviewer_verdict: Optional[str] = None,
+                       building_id: Optional[str] = None):
     """Run the export query and flatten to plain row dicts (no ORM refs held).
     Returns (rows, total) where total is the pre-limit match count so
     truncation is never silent."""
     q = _query_reports(db, status, crisis_type, since, until, severity, bbox,
-                       crisis_event_id=crisis_event_id, report_id=report_id)
+                       crisis_event_id=crisis_event_id, report_id=report_id,
+                       reviewer_verdict=reviewer_verdict, building_id=building_id)
     reports = q.limit(limit).all() if limit else q.all()
     total = q.order_by(None).count() if limit else len(reports)
     tier_map = _build_tier_map(db, reports)
-    rows = [_report_to_row(r, tier_map) for r in reports]
+    pack_labels = _build_pack_label_map(db, reports)
+    rows = [_report_to_row(r, tier_map, pack_labels) for r in reports]
     return rows, total, reports
 
 
@@ -159,7 +180,71 @@ def _audit_export(db: Session, user, request: Optional[Request], fmt: str,
         logger.exception("export audit log failed (format=%s)", fmt)
 
 
-def _report_to_row(r, tier_map: Optional[dict] = None):
+def _build_pack_label_map(db: Session, reports) -> dict:
+    """Map (form_pack_id, form_pack_version) -> {field_key: {"label": question,
+    "options": {value: option_label}}} so exports render verbatim crisis-pack
+    answer labels (e.g. UNDP Appendix-1 wording) instead of raw value codes. One
+    set-based query over the referenced pack versions (no N+1)."""
+    from app.models.report import CrisisFormPackVersion
+    pairs = {(r.form_pack_id, r.form_pack_version) for r in reports
+             if getattr(r, "form_pack_id", None) and getattr(r, "form_pack_version", None)}
+    if not pairs:
+        return {}
+    pack_ids = {p for (p, _v) in pairs}
+    vers = (db.query(CrisisFormPackVersion)
+            .filter(CrisisFormPackVersion.pack_id.in_(pack_ids)).all())
+    schema_by_pv = {(v.pack_id, v.version): v.schema_json for v in vers}
+
+    def _en(d, fb):
+        return (d.get("en") if isinstance(d, dict) else None) or fb
+
+    out: dict = {}
+    for (pid, ver) in pairs:
+        schema = schema_by_pv.get((pid, ver))
+        if not isinstance(schema, dict):
+            continue
+        fmap: dict = {}
+        for sec in (schema.get("sections") or []):
+            for f in (sec.get("fields") or []):
+                if not isinstance(f, dict) or not f.get("key"):
+                    continue
+                opts = {}
+                for o in (f.get("options") or []):
+                    if isinstance(o, dict) and "value" in o:
+                        opts[o["value"]] = _en(o.get("label_i18n"), o.get("label") or o["value"])
+                fmap[f["key"]] = {
+                    "label": _en(f.get("label_i18n"), f.get("label") or f["key"]),
+                    "options": opts,
+                }
+        out[(pid, ver)] = fmap
+    return out
+
+
+def _resolve_form_data_export(fd, fmap) -> str:
+    """Render Report.form_data as a JSON object keyed by the question label with
+    option labels resolved (falls back to the raw code / key). Empty -> ''. One
+    stable, parseable column across every export format."""
+    if not isinstance(fd, dict) or not fd:
+        return ""
+    fmap = fmap or {}
+    out: dict = {}
+    for k, val in fd.items():
+        field = fmap.get(k) or {}
+        label = field.get("label") or k
+        opts = field.get("options") or {}
+        if isinstance(val, list):
+            out[label] = [opts.get(x, x) for x in val]
+        elif isinstance(val, bool):
+            out[label] = "Yes" if val else "No"
+        else:
+            out[label] = opts.get(val, val)
+    try:
+        return json.dumps(out, ensure_ascii=False)
+    except Exception:
+        return ""
+
+
+def _report_to_row(r, tier_map: Optional[dict] = None, pack_labels: Optional[dict] = None):
     """Extract flat dict from a Report for export.
 
     UNDP-aligned values:
@@ -247,6 +332,11 @@ def _report_to_row(r, tier_map: Optional[dict] = None):
         "infrastructure_type": r.infrastructure_type.value if r.infrastructure_type else "",
         "infrastructure_sub_type": getattr(r, "infrastructure_sub_type", "") or "",
         "infrastructure_name": r.infrastructure_name or "",
+        # Canonical building name (gated): the OSM-tagged name only, so a free-text
+        # "what was hit" answer is never emitted AS the building name. The raw
+        # infrastructure_name + infra_name_from_osm columns still carry the reporter's
+        # verbatim answer + its provenance for manual mapping.
+        "building_name": r.display_building_name or "",
         "damage_classification": damage,
         "crisis_type": r.crisis_type or "",
         "crisis_category": crisis_cat,
@@ -265,6 +355,13 @@ def _report_to_row(r, tier_map: Optional[dict] = None):
         "health_status":      health_status,
         "pressing_needs":     pressing_needs_csv,
         "reporter_tier":      reporter_tier,
+        # Dynamic crisis-pack answers (UNDP Appendix-1 + any pack questions) as a
+        # JSON object keyed by question label with option labels resolved. Empty
+        # for default (no-pack) reports - column shape stays stable.
+        "form_data": _resolve_form_data_export(
+            getattr(r, "form_data", None),
+            (pack_labels or {}).get(
+                (getattr(r, "form_pack_id", None), getattr(r, "form_pack_version", None)))),
         "building_id": r.building_id or "",
         "latitude": str(loc.latitude) if loc else "",
         "longitude": str(loc.longitude) if loc else "",
@@ -288,6 +385,11 @@ def _report_to_row(r, tier_map: Optional[dict] = None):
         # the pin.
         "accuracy_m": (str(loc.accuracy_meters) if loc and loc.accuracy_meters is not None else ""),
         "location_source": location_source,
+        # Device-original GPS (preserved when the reporter corrected the pin) so GIS
+        # analysts can see the device-vs-submitted mismatch directly. Empty when the
+        # submitted location IS the device GPS.
+        "device_latitude": (str(loc.device_latitude) if loc and getattr(loc, "device_latitude", None) is not None else ""),
+        "device_longitude": (str(loc.device_longitude) if loc and getattr(loc, "device_longitude", None) is not None else ""),
         "infra_name_from_osm": (
             str(r.infrastructure_name_from_osm)
             if getattr(r, "infrastructure_name_from_osm", None) is not None else ""
@@ -299,6 +401,7 @@ def _report_to_row(r, tier_map: Optional[dict] = None):
         "help_arrived_at": _iso(getattr(r, "help_arrived_at", None)),
         # Crisis-event linkage + comms planning.
         "crisis_event_id": getattr(r, "crisis_event_id", "") or "",
+        "incident_id": getattr(r, "incident_id", "") or "",
         "detected_language": getattr(r, "detected_language", "") or "",
         # Media presence (no bytes - stable thumb URL for the first photo).
         "media_count": str(media_count),
@@ -318,6 +421,8 @@ EXPORT_HEADERS = [
     # Phase 2.1 (May 2026) - UNDP analyst-friendly flat V4 columns.
     "electricity_status", "water_status", "health_status",
     "pressing_needs", "reporter_tier",
+    # Dynamic crisis-pack answers (UNDP Appendix-1 + any pack questions), JSON.
+    "form_data",
     "building_id", "latitude", "longitude", "location_name",
     "lives_impacted", "timestamp",
     # Satellite verification columns (UNDP must-have #11).
@@ -326,9 +431,14 @@ EXPORT_HEADERS = [
     "satellite_cloud_cover_pct", "satellite_source",
     # Jun 2026 appended metadata (export audit).
     "client_created_at", "accuracy_m", "location_source",
+    "device_latitude", "device_longitude",
     "infra_name_from_osm", "reviewer_verdict", "reviewed_at",
     "help_dispatched_at", "help_arrived_at", "crisis_event_id",
     "detected_language", "media_count", "first_photo_url",
+    # Building-centric Incident-Feed redesign Phase 2F - the report's incident.
+    "incident_id",
+    # Canonical (gated) building name — OSM-tagged only; blank for free-text/unmapped.
+    "building_name",
 ]
 
 # HXL hashtag row (https://hxlstandard.org) - the HDX convention puts the
@@ -339,6 +449,7 @@ HXL_TAGS = {
     "id": "#meta+id", "source": "#meta+channel", "status": "#status",
     "severity": "#severity", "infrastructure_type": "#infrastructure+type",
     "infrastructure_name": "#infrastructure+name",
+    "building_name": "#infrastructure+building+name",
     "damage_classification": "#impact+type", "crisis_type": "#event+type",
     "crisis_category": "#event+category", "description": "#description",
     "building_id": "#infrastructure+building+id",
@@ -346,6 +457,7 @@ HXL_TAGS = {
     "location_name": "#loc+name", "lives_impacted": "#affected",
     "timestamp": "#date+reported", "client_created_at": "#date+occurred",
     "detected_language": "#meta+lang", "crisis_event_id": "#event+id",
+    "incident_id": "#event+incident+id",
 }
 
 _NUMERIC_RE = re.compile(r"-?\d+(\.\d+)?")
@@ -369,6 +481,8 @@ def export_csv(
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
     crisis_event_id: Optional[str] = Query(None, description="Scope to one operation (CrisisEvent id)"),
+    building_id: Optional[str] = Query(None, description="Scope to one building (advisory building_id)"),
+    reviewer_verdict: Optional[str] = Query(None, description="Exact reviewer_verdict filter; omitted = exclude REJECTED (audit-safe default)"),
     report_id: Optional[str] = Query(None, description="Scope the export to a single report"),
     since: Optional[str] = Query(None),
     until: Optional[str] = Query(None),
@@ -380,7 +494,7 @@ def export_csv(
     the old hand-rolled f'\"{v}\"' writer corrupted any field containing a
     double quote), with an HXL hashtag row for HDX interoperability and a
     formula-injection guard."""
-    rows, total, _ = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox, crisis_event_id=crisis_event_id, report_id=report_id)
+    rows, total, _ = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox, crisis_event_id=crisis_event_id, report_id=report_id, reviewer_verdict=reviewer_verdict, building_id=building_id)
     _audit_export(db, user, request, "csv",
                   {"status": status, "crisis_type": crisis_type, "since": since,
                    "until": until, "severity": severity, "bbox": bbox},
@@ -416,6 +530,8 @@ def export_geojson(
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
     crisis_event_id: Optional[str] = Query(None, description="Scope to one operation (CrisisEvent id)"),
+    building_id: Optional[str] = Query(None, description="Scope to one building (advisory building_id)"),
+    reviewer_verdict: Optional[str] = Query(None, description="Exact reviewer_verdict filter; omitted = exclude REJECTED (audit-safe default)"),
     report_id: Optional[str] = Query(None, description="Scope the export to a single report"),
     since: Optional[str] = Query(None),
     until: Optional[str] = Query(None),
@@ -425,7 +541,7 @@ def export_geojson(
     """Export reports as a GeoJSON FeatureCollection. Reports without a
     Location row can't be point features - they are counted in the foreign
     `metadata` member instead of silently vanishing."""
-    rows, total, reports = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox, crisis_event_id=crisis_event_id, report_id=report_id)
+    rows, total, reports = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox, crisis_event_id=crisis_event_id, report_id=report_id, reviewer_verdict=reviewer_verdict, building_id=building_id)
     features = []
     dropped_no_location = 0
     for r, row in zip(reports, rows):
@@ -477,6 +593,8 @@ def export_shapefile(
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
     crisis_event_id: Optional[str] = Query(None, description="Scope to one operation (CrisisEvent id)"),
+    building_id: Optional[str] = Query(None, description="Scope to one building (advisory building_id)"),
+    reviewer_verdict: Optional[str] = Query(None, description="Exact reviewer_verdict filter; omitted = exclude REJECTED (audit-safe default)"),
     since: Optional[str] = Query(None),
     until: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
@@ -485,7 +603,7 @@ def export_shapefile(
     """Export all reports as Shapefile (.shp/.shx/.dbf/.prj) in a ZIP."""
     import shapefile
 
-    rows_all, total, reports = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox, crisis_event_id=crisis_event_id)
+    rows_all, total, reports = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox, crisis_event_id=crisis_event_id, reviewer_verdict=reviewer_verdict, building_id=building_id)
     row_by_id = {row["id"]: row for row in rows_all}
 
     shp_buf = io.BytesIO()
@@ -527,6 +645,10 @@ def export_shapefile(
     w.field("SAT_GAP", "C", 10)
     w.field("SAT_CLOUD", "C", 10)
     w.field("SAT_SRC", "C", 40)
+    # Dynamic crisis-pack answers (DBF text caps at 254 - long packs truncate).
+    w.field("FORM_DATA", "C", 254)
+    # Phase 2F - the report's incident.
+    w.field("INCIDENT", "C", 40)
 
     for r in reports:
         loc = r.location
@@ -549,6 +671,8 @@ def export_shapefile(
             row["satellite_verdict"][:30], row["satellite_total_score"][:10],
             row["satellite_acquisition_date"][:30], row["satellite_days_gap"][:10],
             row["satellite_cloud_cover_pct"][:10], row["satellite_source"][:40],
+            row["form_data"][:254],
+            row["incident_id"][:40],
         )
 
     w.close()
@@ -592,6 +716,8 @@ def export_pdf(
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
     crisis_event_id: Optional[str] = Query(None, description="Scope to one operation (CrisisEvent id)"),
+    building_id: Optional[str] = Query(None, description="Scope to one building (advisory building_id)"),
+    reviewer_verdict: Optional[str] = Query(None, description="Exact reviewer_verdict filter; omitted = exclude REJECTED (audit-safe default)"),
     since: Optional[str] = Query(None),
     until: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
@@ -613,7 +739,7 @@ def export_pdf(
 
     rows_all, total, reports = _fetch_export_rows(
         db, status, crisis_type, since, until, severity, bbox, limit=limit,
-        crisis_event_id=crisis_event_id)
+        crisis_event_id=crisis_event_id, reviewer_verdict=reviewer_verdict, building_id=building_id)
     row_by_id = {row["id"]: row for row in rows_all}
     truncated = total > len(reports)
     if truncated:
@@ -726,7 +852,13 @@ def export_pdf(
             ["Crisis Category (UNDP)", row["crisis_category"]],
             ["Infrastructure (UNDP)",  row["infrastructure_type"]],
             ["Sub-type",               row.get("infrastructure_sub_type", "")],
-            ["Building / Structure",   row["infrastructure_name"]],
+            # Gated: show the verified OSM building name; a free-text "what was hit"
+            # answer is shown but clearly flagged unverified, never as the building name.
+            ["Building / Structure",   (
+                row.get("building_name")
+                or (f'{row["infrastructure_name"]} (reporter-described, unverified)'
+                    if row["infrastructure_name"] else "Unmapped")
+            )],
         ]
         if building_version_row:
             data.append(building_version_row)
@@ -753,6 +885,21 @@ def export_pdf(
             ["Help Dispatched at",     row.get("help_dispatched_at", "")],
             ["Help Arrived at",        row.get("help_arrived_at", "")],
         ])
+
+        # Crisis-pack answers (dynamic UNDP Appendix-1 questions) - rendered as
+        # readable "Question: answer" lines from the resolved-label form_data JSON.
+        # Empty for default (no-pack) reports → row omitted to keep the table tight.
+        _fd_raw = row.get("form_data", "")
+        if _fd_raw:
+            try:
+                _fd = json.loads(_fd_raw)
+                _fd_text = "; ".join(
+                    f"{k}: {', '.join(str(x) for x in v) if isinstance(v, list) else v}"
+                    for k, v in _fd.items())
+            except Exception:
+                _fd_text = _fd_raw
+            data.append([Paragraph("Crisis-Pack Answers", label),
+                         Paragraph(_fd_text, small)])
 
         # May 2026 audit Item 3 - append satellite verification rows
         # (UNDP must-have #11). Pre-fix the PDF only contained 20
@@ -903,6 +1050,8 @@ def export_kml(
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
     crisis_event_id: Optional[str] = Query(None, description="Scope to one operation (CrisisEvent id)"),
+    building_id: Optional[str] = Query(None, description="Scope to one building (advisory building_id)"),
+    reviewer_verdict: Optional[str] = Query(None, description="Exact reviewer_verdict filter; omitted = exclude REJECTED (audit-safe default)"),
     report_id: Optional[str] = Query(None, description="Scope the export to a single report"),
     since: Optional[str] = Query(None),
     until: Optional[str] = Query(None),
@@ -912,7 +1061,7 @@ def export_kml(
     """Export all reports as KML for Google Earth."""
     import simplekml
 
-    rows_all, total, reports = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox, crisis_event_id=crisis_event_id, report_id=report_id)
+    rows_all, total, reports = _fetch_export_rows(db, status, crisis_type, since, until, severity, bbox, crisis_event_id=crisis_event_id, report_id=report_id, reviewer_verdict=reviewer_verdict, building_id=building_id)
     row_by_id = {row["id"]: row for row in rows_all}
     _audit_export(db, user, request, "kml",
                   {"status": status, "crisis_type": crisis_type, "since": since,
@@ -971,6 +1120,10 @@ def export_kml(
             "satellite_verdict", "satellite_total_score",
             "satellite_acquisition_date", "satellite_days_gap",
             "satellite_cloud_cover_pct", "satellite_source",
+            # Phase 2F - incident linkage.
+            "incident_id",
+            # Dynamic crisis-pack answers (UNDP Appendix-1 + any pack questions).
+            "form_data",
         ):
             try:
                 pnt.extendeddata.newdata(name=k, value=row.get(k, "") or "")
@@ -996,6 +1149,8 @@ def export_count(
     status: Optional[str] = Query(None),
     crisis_type: Optional[str] = Query(None),
     crisis_event_id: Optional[str] = Query(None, description="Scope to one operation (CrisisEvent id)"),
+    building_id: Optional[str] = Query(None, description="Scope to one building (advisory building_id)"),
+    reviewer_verdict: Optional[str] = Query(None, description="Exact reviewer_verdict filter; omitted = exclude REJECTED (audit-safe default)"),
     report_id: Optional[str] = Query(None, description="Scope the export to a single report"),
     since: Optional[str] = Query(None),
     until: Optional[str] = Query(None),
@@ -1005,7 +1160,7 @@ def export_count(
     """Row count for a prospective export - lets the Export Center show
     'N reports match this scope' BEFORE the user downloads anything."""
     q = _query_reports(db, status, crisis_type, since, until, severity, bbox,
-                       crisis_event_id=crisis_event_id, report_id=report_id)
+                       crisis_event_id=crisis_event_id, report_id=report_id, reviewer_verdict=reviewer_verdict, building_id=building_id)
     return {
         "count": q.order_by(None).count(),
         "filters": {k: v for k, v in {
@@ -1053,7 +1208,8 @@ _COLUMN_DESCRIPTIONS = {
     "severity": "Operator severity (CRITICAL / SEVERE / MODERATE / MINOR)",
     "infrastructure_type": "UNDP infrastructure super-type (+ OTHER)",
     "infrastructure_sub_type": "Granular sub-type where the reporter chose one",
-    "infrastructure_name": "Building / structure name (reporter-supplied or OSM)",
+    "infrastructure_name": "Raw reporter-supplied 'what was hit' answer (OSM name or free text)",
+    "building_name": "Canonical building name — OSM-tagged only (gated); blank for free-text/unmapped",
     "damage_classification": "UNDP 3-tier: MINIMAL / PARTIAL / COMPLETE",
     "crisis_type": "UNDP crisis taxonomy value",
     "crisis_category": "Natural / technological / human-made (derived)",
@@ -1065,6 +1221,7 @@ _COLUMN_DESCRIPTIONS = {
     "health_status": "V4 flat: health-service status at the site",
     "pressing_needs": "V4 flat: semicolon-joined needs list",
     "reporter_tier": "Reporter credibility tier (gamification)",
+    "form_data": "Dynamic crisis-pack answers (UNDP Appendix-1 + any pack questions) as JSON, keyed by question label with option labels resolved",
     "building_id": "Stable building identifier (OSM-derived where available)",
     "latitude": "WGS84 decimal degrees",
     "longitude": "WGS84 decimal degrees",
@@ -1080,12 +1237,15 @@ _COLUMN_DESCRIPTIONS = {
     "client_created_at": "Device capture time, ISO-8601 (offline chronology)",
     "accuracy_m": "GPS horizontal accuracy in meters",
     "location_source": "device_gps or user_corrected pin",
+    "device_latitude": "Device-original GPS latitude (WGS84) when the reporter corrected the pin; blank otherwise",
+    "device_longitude": "Device-original GPS longitude (WGS84) when the reporter corrected the pin; blank otherwise",
     "infra_name_from_osm": "True when the name came from an OSM footprint",
     "reviewer_verdict": "Human review verdict (NOT_REVIEWED / ACCEPTED / REJECTED)",
     "reviewed_at": "Human review time, ISO-8601",
     "help_dispatched_at": "Response dispatch time, ISO-8601",
     "help_arrived_at": "Response arrival time, ISO-8601",
     "crisis_event_id": "Linked crisis activation id (if any)",
+    "incident_id": "Operational incident id this report is evidence for",
     "detected_language": "Reporter language (ISO code)",
     "media_count": "Number of media items attached",
     "first_photo_url": "Stable thumbnail URL of the first completed photo",

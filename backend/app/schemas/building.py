@@ -77,6 +77,11 @@ class BuildingSummary(BaseModel):
     critical_report_count: int = 0
     responder_count: int = 0
     duplicate_group_count: int = 0
+    # Building-centric redesign: interim "incident count" = visible reports after
+    # confirmed-duplicate collapse (report_count - merged-away). Phase 2 replaces
+    # this with the real Incident entity count; for now it powers the card's
+    # "N incidents - M reports" without baking in incident = duplicate-group.
+    collapsed_count: int = 0
 
     # Aggregated taxonomy.
     severity_max: Optional[str] = None
@@ -153,6 +158,11 @@ class BuildingDetail(BuildingSummary):
     # active + soft-deleted (the latter render as tombstones). Capped
     # at 50 entries in the endpoint to keep the detail payload bounded.
     notes: List["NoteResponse"] = Field(default_factory=list)
+
+    # Building Assessment: the latest consolidated AI-assessment snapshot (building
+    # confidence roll-up + per-incident breakdown) so the console's assessment card
+    # self-heals from server state on open. None = never assessed.
+    assessment: Optional[dict] = None
 
 
 class SatelliteRollup(BaseModel):

@@ -92,6 +92,17 @@ class OperationSummaryResponse(BaseModel):
     responders_active: int = 0                  # live responders attached to this op
     unattended_critical: int = 0
     sla_breaches: int = 0
+    # Building-centric redesign roll-ups (so an operation manager need not open each
+    # building): incident_count = visible reports after confirmed-duplicate collapse
+    # (interim; Phase 2 = real Incident count); unreviewed_count = open + not-yet-
+    # accepted reports. Duplicate-review count is fetched on demand via
+    # /reports/duplicate-summary?crisis_event_id= when the operation workspace opens.
+    incident_count: int = 0
+    unreviewed_count: int = 0
+    # Home restructure (Jun 2026): per-operation Active-Operations card metrics.
+    resolved: int = 0            # RESOLVED reports in this op
+    rejected: int = 0            # reviewer_verdict=REJECTED reports in this op
+    affected_buildings: int = 0  # distinct buildings with a live report in this op
 
 
 # ── Auto-claim write-path (Phase 3) ────────────────────────────────────────

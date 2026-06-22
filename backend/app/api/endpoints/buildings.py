@@ -16,6 +16,7 @@ is read-only except for the footprint cache.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -29,13 +30,16 @@ from app.db.session import get_db
 from app.models.auth import User
 from app.models.report import (
     Building,
+    BuildingAssessment,
     BuildingEvent,
     BuildingMonitor,
     BuildingNote,
     BuildingResponder,
+    Incident,
     Report,
     ReportDuplicateDecision,
     SatelliteVerification,
+    _SEVERITY_RANK,
     is_valid_building_state_transition,
 )
 from app.schemas.building import (
@@ -57,6 +61,7 @@ from app.schemas.building import (
 )
 from app.schemas.report import ReportResponse
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -223,6 +228,7 @@ def list_buildings(
     crit_map: dict = {}
     resp_map: dict = {}
     dup_map: dict = {}
+    merged_map: dict = {}
     if page_ids:
         for bid, n in (db.query(Report.building_id, func.count(Report.id))
                        .filter(Report.building_id.in_(page_ids),
@@ -243,6 +249,17 @@ def list_buildings(
                                Report.building_id.in_(page_ids))
                        .group_by(Report.building_id).all()):
             dup_map[bid] = int(n or 0)
+        # Merged-away (hidden) reports per building = active CONFIRMED_DUP rows whose
+        # RELATED report sits in this building. Interim "incident count" =
+        # report_count - merged_away (visible reports after collapse). Building-
+        # centric redesign; Phase 2 replaces with the real Incident entity count.
+        for bid, n in (db.query(Report.building_id, func.count(ReportDuplicateDecision.id))
+                       .join(Report, Report.id == ReportDuplicateDecision.related_report_id)
+                       .filter(ReportDuplicateDecision.decision == "CONFIRMED_DUP",
+                               ReportDuplicateDecision.undone_at.is_(None),
+                               Report.building_id.in_(page_ids))
+                       .group_by(Report.building_id).all()):
+            merged_map[bid] = int(n or 0)
 
     # Build the response items.
     items: List[BuildingSummary] = []
@@ -251,6 +268,7 @@ def list_buildings(
         s.critical_report_count = crit_map.get(b.id, 0)
         s.responder_count = resp_map.get(b.id, 0)
         s.duplicate_group_count = dup_map.get(b.id, 0)
+        s.collapsed_count = max(0, (s.report_count or 0) - merged_map.get(b.id, 0))
         items.append(s)
 
     next_cursor = None
@@ -356,6 +374,40 @@ def get_building(
     # Phase H.4 - notes (newest-first, pinned first, capped at 50).
     note_payloads = _load_notes_for_building(db, building_id, viewer=_user, limit=50)
 
+    # Latest Building Assessment snapshot (so the console card self-heals on open).
+    latest_assess = (
+        db.query(BuildingAssessment)
+        .filter(BuildingAssessment.building_id == building_id)
+        .order_by(desc(BuildingAssessment.created_at))
+        .first()
+    )
+    assessment_payload = None
+    if latest_assess:
+        assessment_payload = {
+            # ONE consolidated Building RISK score (the primary metric the console shows).
+            "risk": {
+                "score": latest_assess.building_risk_score,
+                "band": latest_assess.building_risk_band,
+                "assessed": (latest_assess.assessed_count or 0) > 0
+                            or (latest_assess.skipped_count or 0) > 0,
+                "factors": latest_assess.risk_factors or [],
+                "coverage": {"assessed": latest_assess.incident_count
+                             and (latest_assess.assessed_count or 0) + (latest_assess.skipped_count or 0),
+                             "total": latest_assess.incident_count},
+            },
+            # Legacy confidence roll-up retained for older readers / the distribution chips.
+            "score": latest_assess.building_confidence_score,
+            "band": latest_assess.building_confidence_band,
+            "distribution": latest_assess.distribution or {},
+            "incidents": latest_assess.per_incident or [],
+            "counts": {"incident_count": latest_assess.incident_count,
+                       "assessed": latest_assess.assessed_count,
+                       "cached": latest_assess.skipped_count,
+                       "queued": latest_assess.queued_count},
+            "recommendation": latest_assess.recommendation,
+            "assessed_at": latest_assess.created_at.isoformat() if latest_assess.created_at else None,
+        }
+
     return BuildingDetail(
         **summary.model_dump(),
         reports=report_responses,
@@ -365,6 +417,7 @@ def get_building(
         responders=[ResponderResponse.model_validate(r) for r in responders],
         monitors=[MonitorResponse.model_validate(m) for m in monitors],
         notes=note_payloads,
+        assessment=assessment_payload,
     )
 
 
@@ -967,6 +1020,50 @@ def export_dossier_pdf(
     )
 
 
+@router.get("/{building_id}/assessment.pdf")
+def export_assessment_pdf(
+    building_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Standalone Building Assessment Report (PDF) - the consolidated AI assessment
+    (building confidence roll-up + per-incident breakdown + recommendation +
+    satellite verification columns, must-have #11). Distinct from dossier.pdf.
+    404 until an assessment has been run (POST /assess)."""
+    b = db.query(Building).filter(Building.id == building_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Building not found")
+    a = (
+        db.query(BuildingAssessment)
+        .filter(BuildingAssessment.building_id == building_id)
+        .order_by(desc(BuildingAssessment.created_at))
+        .first()
+    )
+    if not a:
+        raise HTTPException(status_code=404,
+                            detail="No assessment yet - run a Building Assessment first")
+
+    from app.services.building_assessment_pdf import build_assessment_pdf
+    pdf_bytes = build_assessment_pdf(db, b, a)
+
+    db.add(BuildingEvent(
+        building_id=building_id, event_kind="ASSESSMENT_REPORT_EXPORTED",
+        actor_user_id=getattr(user, "id", None), actor_kind="OPERATOR",
+        payload={"format": "PDF", "size_bytes": len(pdf_bytes)},
+    ))
+    db.commit()
+
+    fname = f"building-{_short_building_id(b.id)}-assessment-{datetime.now(timezone.utc).date()}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{fname}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @router.get("/{building_id}/dossier.geojson")
 def export_dossier_geojson(
     building_id: str,
@@ -1310,6 +1407,424 @@ def false_alarm(
         event_kind="FALSE_ALARM_DECLARED",
         reason=(body.reason if body else None),
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Building as a first-class operational entity: Assessment + cascade Actions.
+# ─────────────────────────────────────────────────────────────────────────────
+_BLDG_ASSESS_CAP = 20   # max representative reports billed per run; overflow deferred
+
+
+def _audit_building_action(db: Session, user, action: str, building_id: str,
+                           details: Optional[dict] = None) -> None:
+    """AuthAuditLog row for a building-level operator action (mirrors
+    _audit_report_action). Caller commits."""
+    from app.models.auth import AuthAuditLog
+    db.add(AuthAuditLog(
+        user_id=getattr(user, "id", None),
+        user_email=getattr(user, "email", None),
+        action=action,
+        resource_type="building",
+        resource_id=building_id,
+        details=details,
+    ))
+
+
+def _sev_name(obj) -> str:
+    s = getattr(obj, "severity", None)
+    return str(getattr(s, "value", s) or "").upper()
+
+
+def _rep_title(rep: Report) -> str:
+    # Per feedback_no_redundant_parent_context: in the building workspace the building
+    # name is redundant, so a building-tagged report leads with WHAT WAS HIT (infra
+    # sub-type / type), never the building name. Untagged free-text names are kept.
+    sub = getattr(rep, "infrastructure_sub_type", None)
+    sub = getattr(sub, "value", sub)
+    it = getattr(rep, "infrastructure_type", None)
+    it = getattr(it, "value", it)
+    if sub:
+        return str(sub).replace("_", " ").title()
+    if it and str(it) != "OTHER":
+        return str(it).replace("_", " ").title()
+    if not rep.building_id and rep.infrastructure_name:
+        return rep.infrastructure_name
+    ct = getattr(rep, "crisis_type", None)
+    ct = getattr(ct, "value", ct)
+    return str(ct or "Incident").replace("_", " ").title()
+
+
+def _rep_report_for_incident(db: Session, inc) -> Optional[Report]:
+    """Representative report for an incident: its lead if live, else the richest
+    non-rejected, non-deleted member (most media, then newest)."""
+    members = (
+        db.query(Report)
+        .filter(
+            Report.incident_id == inc.id,
+            Report.deletion_requested_at.is_(None),
+            Report.reviewer_verdict != "REJECTED",
+        )
+        .all()
+    )
+    if not members:
+        return None
+    if inc.lead_report_id:
+        for m in members:
+            if m.id == inc.lead_report_id:
+                return m
+    return max(members, key=lambda r: (len(r.media or []), r.server_created_at or datetime.min))
+
+
+def _building_assessment_units(db: Session, building_id: str):
+    """(incident, representative-report) units to assess. Primary: non-duplicate
+    incidents (status OPEN/RESPONDING). Legacy fallback for buildings with reports
+    but no Incident rows: each live, non-confirmed-duplicate report is its own unit.
+    Returns (units, legacy_fallback_used)."""
+    incidents = (
+        db.query(Incident)
+        .filter(Incident.building_id == building_id,
+                Incident.status.in_(["OPEN", "RESPONDING"]))
+        .all()
+    )
+    units = []
+    for inc in incidents:
+        rep = _rep_report_for_incident(db, inc)
+        if rep is not None:
+            units.append((inc, rep))
+    if units:
+        return units, False
+    # Legacy fallback.
+    dup_ids = {
+        rid for (rid,) in db.query(ReportDuplicateDecision.related_report_id)
+        .filter(
+            ReportDuplicateDecision.cluster_key == building_id,
+            ReportDuplicateDecision.decision == "CONFIRMED_DUP",
+            ReportDuplicateDecision.undone_at.is_(None),
+        ).all() if rid
+    }
+    reps = (
+        db.query(Report)
+        .filter(
+            Report.building_id == building_id,
+            Report.deletion_requested_at.is_(None),
+            Report.reviewer_verdict != "REJECTED",
+        )
+        .order_by(desc(Report.server_created_at))
+        .all()
+    )
+    return [(None, r) for r in reps if r.id not in dup_ids], True
+
+
+def _rep_credibility(rep: Report) -> dict:
+    """Composite Confidence Score for a representative report - reuses the EXACT
+    read-time scorer via the ReportResponse validator (AI + satellite + location +
+    corroboration + reporter)."""
+    try:
+        ic = getattr(ReportResponse.model_validate(rep), "incident_credibility", None)
+        if isinstance(ic, dict):
+            return ic
+        if ic is not None:
+            return ic.model_dump() if hasattr(ic, "model_dump") else dict(ic)
+    except Exception:
+        logger.exception("[building assess] credibility compute failed for %s", rep.id)
+    return {"score": None, "band": "UNVERIFIED", "assessed": False}
+
+
+def _building_recommendation(band: str, per_incident: list) -> str:
+    """Plain-rules recommendation (no extra Claude call). <=40 chars."""
+    has_critical = any((p.get("severity") in ("CRITICAL", "SEVERE")) for p in per_incident)
+    if band in ("VERIFIED", "LIKELY") and has_critical:
+        return "Dispatch responders"
+    if band in ("VERIFIED", "LIKELY"):
+        return "Coordinate response"
+    if band in ("WEAK", "UNVERIFIED"):
+        return "Verify before acting"
+    return "Monitor"
+
+
+@router.post("/{building_id}/assess")
+async def assess_building(
+    building_id: str,
+    force: bool = Query(False, description="Re-assess incidents even if already assessed (re-bills Claude)"),
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Run the AI assessment across the building's non-duplicate incidents and
+    consolidate them into a building-level confidence roll-up + per-incident
+    breakdown. One representative report per incident; cached assessments are reused
+    unless force=true; the billable batch is capped worst-first (overflow deferred to
+    a follow-up run, since buildings rarely exceed the cap). Persists a
+    BuildingAssessment history row + denormalised Building cache + audit/event."""
+    import os
+    from app.services.credibility import _band_for
+    if not os.getenv("ANTHROPIC_API_KEY", ""):
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY not configured")
+    b = db.query(Building).filter(Building.id == building_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Building not found")
+
+    units, legacy = _building_assessment_units(db, building_id)
+    incident_count = len(units)
+
+    def _is_assessed(rep):
+        return isinstance(rep.ai_assessment, dict) and bool(rep.ai_assessment)
+
+    to_assess = [(inc, rep) for (inc, rep) in units if force or not _is_assessed(rep)]
+    cached = [(inc, rep) for (inc, rep) in units if not (force or not _is_assessed(rep))]
+    to_assess.sort(
+        key=lambda u: (_SEVERITY_RANK.get(_sev_name(u[1]), 0), u[1].server_created_at or datetime.min),
+        reverse=True,
+    )
+    batch = to_assess[:_BLDG_ASSESS_CAP]
+    overflow = to_assess[_BLDG_ASSESS_CAP:]
+
+    # Reuse the EXACT per-incident assessment implementation (no drift). Sequential
+    # under the single sync Session (correctness > parallelism; the Claude HTTP call
+    # is the latency). Cached reps cost $0; cap bounds the billable count.
+    from app.api.endpoints.reports import ai_assess_report
+    assessed = 0
+    for inc, rep in batch:
+        try:
+            await ai_assess_report(report_id=rep.id, payload={}, user=user, db=db, force=force)
+            assessed += 1
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception("[building assess] representative report %s failed", rep.id)
+
+    now = datetime.now(timezone.utc)
+    per_incident = []
+    risk_inputs = []   # per-incident signals for the consolidated Building Risk Score
+    dist = {"VERIFIED": 0, "LIKELY": 0, "MIXED": 0, "WEAK": 0, "UNVERIFIED": 0}
+    scores = []   # (score, severity-weight) — legacy building_confidence_score
+    billed_ids = {rep.id for _, rep in batch}
+    for inc, rep in (cached + batch):
+        try:
+            db.refresh(rep)
+        except Exception:
+            pass
+        ic = _rep_credibility(rep)
+        score = ic.get("score")
+        band = ic.get("band") or "UNVERIFIED"
+        sev = _sev_name(rep)
+        dist[band if band in dist else "UNVERIFIED"] += 1
+        if score is not None:
+            scores.append((score, max(1, _SEVERITY_RANK.get(sev, 1))))
+        reasons = ic.get("reasons")
+        per_incident.append({
+            "incident_id": inc.id if inc else None,
+            "report_id": rep.id,
+            "title": _rep_title(rep),   # what-was-hit, never the (redundant) building name
+            "severity": sev,
+            "score": score,
+            "band": band,
+            "summary": (reasons[0] if isinstance(reasons, list) and reasons else None),
+            "cached": rep.id not in billed_ids,
+        })
+        _sat = getattr(getattr(rep, "verification", None), "total_score", None)
+        _age_h = ((now - rep.server_created_at).total_seconds() / 3600.0
+                  if rep.server_created_at else None)
+        risk_inputs.append({
+            "severity": sev, "score": score, "satellite_score": _sat,
+            "media_count": len(rep.media or []), "age_hours": _age_h,
+        })
+
+    # Legacy confidence roll-up (kept for back-compat / sorting; no longer shown).
+    bscore = None
+    bband = "UNVERIFIED"
+    if scores:
+        wtot = sum(w for _, w in scores)
+        if wtot:
+            bscore = round(sum(s * w for s, w in scores) / wtot)
+            bband = _band_for(bscore)
+
+    # ── ONE consolidated Building Risk Score (the primary metric, factor-based) ──
+    from app.services.building_risk import compute_building_risk
+    _reps = [r for _, r in (cached + batch)]
+    _src_count = len({r.source for r in _reps if getattr(r, "source", None)})
+    _reports_24h = sum(1 for r in _reps if r.server_created_at
+                       and (now - r.server_created_at).total_seconds() < 86400)
+    risk = compute_building_risk(
+        incidents=risk_inputs, report_count=(b.report_count or 0),
+        damage_class_max=getattr(b, "damage_class_max", None),
+        source_count=_src_count, reports_24h=_reports_24h, now=now)
+
+    recommendation = risk.get("recommendation") or _building_recommendation(bband, per_incident)
+    db.add(BuildingAssessment(
+        building_id=building_id,
+        building_confidence_score=bscore, building_confidence_band=bband,
+        building_risk_score=risk["score"], building_risk_band=risk["band"],
+        risk_factors=risk["factors"],
+        incident_count=incident_count, assessed_count=assessed,
+        skipped_count=len(cached), queued_count=len(overflow),
+        recommendation=recommendation, per_incident=per_incident, distribution=dist,
+        actor_user_id=getattr(user, "id", None),
+    ))
+    b.building_confidence_score = bscore
+    b.building_risk_score = risk["score"]
+    b.building_risk_band = risk["band"]
+    b.building_assessment_at = now
+    db.add(BuildingEvent(
+        building_id=building_id, event_kind="ASSESSMENT_RUN",
+        actor_user_id=getattr(user, "id", None), actor_kind="OPERATOR",
+        payload={"assessed": assessed, "skipped": len(cached), "queued": len(overflow),
+                 "risk_score": risk["score"], "risk_band": risk["band"], "forced": force},
+    ))
+    _audit_building_action(db, user, "BUILDING_ASSESS", building_id,
+                           {"risk_score": risk["score"], "risk_band": risk["band"],
+                            "incident_count": incident_count})
+    db.commit()
+
+    return {
+        "building_id": building_id,
+        "risk": {"score": risk["score"], "band": risk["band"], "assessed": risk["assessed"],
+                 "factors": risk["factors"], "coverage": risk["coverage"],
+                 "reasons": risk["reasons"]},
+        # legacy block retained for any older reader; the console reads `risk`.
+        "building_confidence": {"score": bscore, "band": bband, "distribution": dist},
+        "incidents": per_incident,
+        "counts": {"incident_count": incident_count, "assessed": assessed,
+                   "cached": len(cached), "queued": len(overflow)},
+        "recommendation": recommendation,
+        "legacy_fallback": legacy,
+        "assessed_at": now.isoformat(),
+    }
+
+
+# Cascade spec: per-action report fn + which report/incident statuses it acts on +
+# the building state it sets. reject is verdict-based (status untouched).
+_CASCADE_SPEC = {
+    "resolve":     {"fn": "resolve",    "report_from": ("PENDING", "VERIFIED", "RESPONDING"),
+                    "incident_from": ("OPEN", "RESPONDING"), "incident_to": "RESOLVED",
+                    "bld_to": "RESOLVED", "needs_reason": False, "event": "CASCADE_RESOLVE"},
+    "false-alarm": {"fn": "false_alarm", "report_from": ("PENDING", "VERIFIED", "RESPONDING"),
+                    "incident_from": ("OPEN", "RESPONDING"), "incident_to": "FALSE_ALARM",
+                    "bld_to": "FALSE_ALARM", "needs_reason": True, "event": "CASCADE_FALSE_ALARM"},
+    "notify":      {"fn": "dispatch",   "report_from": ("PENDING", "VERIFIED"),
+                    "incident_from": ("OPEN",), "incident_to": "RESPONDING",
+                    "bld_to": "RESPONDING", "needs_reason": False, "event": "CASCADE_NOTIFY"},
+    "reject":      {"fn": "reject",     "report_from": None,   # all non-rejected
+                    "incident_from": (), "incident_to": None,
+                    "bld_to": None, "needs_reason": True, "event": "CASCADE_REJECT"},
+    "reopen":      {"fn": "reopen",     "report_from": ("RESPONDING", "RESOLVED", "FALSE_ALARM"),
+                    "incident_from": ("RESOLVED", "FALSE_ALARM", "RESPONDING"), "incident_to": "OPEN",
+                    "bld_to": "ACTIVE", "force_state": True, "needs_reason": False, "event": "CASCADE_REOPEN"},
+}
+
+
+@router.post("/{building_id}/cascade/{action}")
+def cascade_building(
+    building_id: str,
+    action: str,
+    body: Optional[dict] = None,
+    db: Session = Depends(get_db),
+    user=Depends(require_analyst),
+):
+    """Apply an operational action to the WHOLE building: its incidents + their
+    reports + the building state, in one audited, reversible batch. Reuses the EXACT
+    per-report endpoint logic (guards/push/audit) so behaviour matches the incident
+    path; illegal per-report transitions are skipped (counted), never fatal. Reopen
+    reverses resolve/false-alarm/notify; reject cascades verdict=REJECTED (the
+    building's reports stay hidden from the feed + exports)."""
+    spec = _CASCADE_SPEC.get(action)
+    if not spec:
+        raise HTTPException(status_code=400,
+                            detail=f"Unknown cascade action '{action}'. Allowed: {sorted(_CASCADE_SPEC)}")
+    b = db.query(Building).filter(Building.id == building_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Building not found")
+
+    reason = (body or {}).get("reason") if isinstance(body, dict) else None
+    if spec["needs_reason"] and not (reason and str(reason).strip()):
+        raise HTTPException(status_code=400, detail=f"reason is required for the '{action}' action")
+    reason = str(reason).strip()[:500] if reason else None
+
+    from app.api.endpoints.reports import (
+        resolve_report, mark_false_alarm, dispatch_team, reopen_report, set_review_verdict,
+    )
+
+    q = db.query(Report).filter(
+        Report.building_id == building_id,
+        Report.deletion_requested_at.is_(None),
+    )
+    if action == "reject":
+        q = q.filter(Report.reviewer_verdict != "REJECTED")
+    else:
+        q = q.filter(Report.status.in_(list(spec["report_from"])))
+    target_ids = [r.id for r in q.all()]
+
+    changed = 0
+    skipped = 0
+    for rid in target_ids:
+        try:
+            if spec["fn"] == "resolve":
+                resolve_report(report_id=rid, user=user, db=db)
+            elif spec["fn"] == "false_alarm":
+                mark_false_alarm(report_id=rid, user=user, db=db)
+            elif spec["fn"] == "dispatch":
+                dispatch_team(report_id=rid, user=user, db=db)
+            elif spec["fn"] == "reopen":
+                reopen_report(report_id=rid, user=user, db=db)
+            elif spec["fn"] == "reject":
+                set_review_verdict(report_id=rid, user=user, db=db,
+                                   payload={"verdict": "REJECTED",
+                                            "action_taken": reason or "Building-level rejection"})
+            changed += 1
+        except HTTPException as e:
+            if e.status_code == 409:
+                skipped += 1   # illegal transition for this report's current state
+            else:
+                raise
+
+    # Cascade incident status (advisory layer above reports).
+    incident_ids = []
+    if spec["incident_to"] and spec["incident_from"]:
+        incs = (
+            db.query(Incident)
+            .filter(Incident.building_id == building_id,
+                    Incident.status.in_(list(spec["incident_from"])))
+            .all()
+        )
+        for inc in incs:
+            inc.status = spec["incident_to"]
+            incident_ids.append(inc.id)
+
+    # Cascade building state. Reopen is a deliberate revert (force_state) so it
+    # always lands the building back in ACTIVE - mirroring the per-report reopen,
+    # which bypasses the building state machine - otherwise RESPONDING->ACTIVE is
+    # an illegal transition and a notified building would stay stuck in RESPONDING
+    # while its reports/incidents revert. Forward actions stay guarded.
+    bld_to = None
+    if spec["bld_to"] and b.state != spec["bld_to"] and (
+        spec.get("force_state") or is_valid_building_state_transition(b.state, spec["bld_to"])
+    ):
+        now = datetime.now(timezone.utc)
+        b.state = spec["bld_to"]
+        b.state_changed_at = now
+        b.state_changed_by_user_id = getattr(user, "id", None)
+        if spec["bld_to"] == "ARCHIVED":
+            b.archived_at = now
+        elif b.state != "ARCHIVED":
+            b.archived_at = None
+        bld_to = spec["bld_to"]
+
+    db.add(BuildingEvent(
+        building_id=building_id, event_kind=spec["event"],
+        actor_user_id=getattr(user, "id", None), actor_kind="OPERATOR",
+        payload={"incident_ids": incident_ids, "reports_changed": changed,
+                 "skipped": skipped, "reason": reason, "to_state": bld_to},
+    ))
+    _audit_building_action(db, user, f"BUILDING_{spec['event']}", building_id,
+                           {"reports_changed": changed, "skipped": skipped, "reason": reason})
+    db.commit()
+    db.refresh(b)
+    return {
+        "action": action,
+        "building_state": b.state,
+        "counts": {"reports_changed": changed, "skipped": skipped,
+                   "incidents_changed": len(incident_ids)},
+        "reason": reason,
+    }
 
 
 @router.get("/{building_id}/timeline", response_model=List[BuildingEventResponse])

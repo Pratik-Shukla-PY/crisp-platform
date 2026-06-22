@@ -19,6 +19,7 @@ from app.db.session import get_db
 from app.models.report import (
     Device, Report, Location, Media, MediaChunk, AIAnalysis,
     SatelliteVerification, DeletionAuditLog, ReportDuplicateDecision,
+    Incident, IncidentStatusEnum,
     MediaTypeEnum, ResolutionEnum, ReportStatusEnum, SyncStatusEnum,
     SeverityEnum, InfraTypeEnum,
 )
@@ -1590,10 +1591,15 @@ def _audit_report_action(
 # `reviewer_verdict` is orthogonal and intentionally NOT guarded here. Idempotent
 # self-transitions (re-applying the same status) are always allowed.
 _REPORT_STATUS_TRANSITIONS = {
+    # PENDING → act. The reverse edges back to PENDING (Jun 2026) power the
+    # operator's "undo notify" / "reopen" actions on the incident detail: a
+    # decision is reversible (RESPONDING/RESOLVED/FALSE_ALARM → PENDING) via the
+    # /reopen endpoint. Rejection is verdict-based (reviewer_verdict) + reverted
+    # via /review {NOT_REVIEWED}, so REJECTED status stays terminal here.
     ReportStatusEnum.PENDING:     {ReportStatusEnum.RESPONDING, ReportStatusEnum.RESOLVED, ReportStatusEnum.FALSE_ALARM},
-    ReportStatusEnum.RESPONDING:  {ReportStatusEnum.RESOLVED, ReportStatusEnum.FALSE_ALARM},
-    ReportStatusEnum.RESOLVED:    set(),   # terminal
-    ReportStatusEnum.FALSE_ALARM: set(),   # terminal
+    ReportStatusEnum.RESPONDING:  {ReportStatusEnum.RESOLVED, ReportStatusEnum.FALSE_ALARM, ReportStatusEnum.PENDING},
+    ReportStatusEnum.RESOLVED:    {ReportStatusEnum.PENDING},   # reopen
+    ReportStatusEnum.FALSE_ALARM: {ReportStatusEnum.PENDING},   # reopen
     # Deprecated/inert statuses (never written; see ReportStatusEnum docstring) -
     # treat a legacy VERIFIED row like PENDING, REJECTED as terminal.
     ReportStatusEnum.VERIFIED:    {ReportStatusEnum.RESPONDING, ReportStatusEnum.RESOLVED, ReportStatusEnum.FALSE_ALARM},
@@ -1691,6 +1697,53 @@ def resolve_report(report_id: str, user=Depends(require_analyst), db: Session = 
     db.refresh(report)
     _push_status_change_safely(report)
     return report
+
+
+@router.patch("/{report_id}/reopen", response_model=ReportResponse)
+def reopen_report(report_id: str, user=Depends(require_analyst), db: Session = Depends(get_db)):
+    """Revert a RESPONDING / RESOLVED / FALSE_ALARM report back to PENDING (open) -
+    the operator's "undo notify" / "reopen" action on the incident detail. Clears
+    the dispatch/arrival timestamps so the queue predicates treat it as open again.
+    (Reverting a REJECTION is verdict-based: PATCH /review {verdict: NOT_REVIEWED}.)"""
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    _guard_status_transition(report, ReportStatusEnum.PENDING)
+    report.status = ReportStatusEnum.PENDING
+    report.help_dispatched_at = None
+    report.help_arrived_at = None
+    _audit_report_action(db, user, "REPORT_REOPEN", report_id)
+    db.commit()
+    db.refresh(report)
+    _push_status_change_safely(report)
+    return report
+
+
+# ── Command Center: global FILTERED-slice cascade (set-based) ───────────────────
+# The realistic 10k-incident response: an admin acts on a SLICE (critical /
+# unattended / needs-response / by-operation), not row-by-row. One set-based
+# transaction percolates to every incident + report in the slice — audited +
+# reversible. Admin-gated because a global blast radius can be very large; a
+# meaningful filter is required (no blind whole-DB mutation). dry_run first shows
+# the blast radius.
+@router.post("/cascade", summary="Cascade an action across a global filtered slice (set-based, admin)")
+def cascade_global(body: dict, db: Session = Depends(get_db), user=Depends(require_admin)):
+    from app.services.cascade import run_cascade, CascadeError
+    try:
+        return run_cascade(db, user, scope_type="global", scope_id=None,
+                           action=body.get("action"), filters=(body.get("filters") or {}),
+                           reason=body.get("reason"), dry_run=bool(body.get("dry_run")))
+    except CascadeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/cascade-revert", summary="Undo a prior cascade precisely (set-based)")
+def cascade_revert(body: dict, db: Session = Depends(get_db), user=Depends(require_analyst)):
+    from app.services.cascade import revert_cascade, CascadeError
+    try:
+        return revert_cascade(db, user, body.get("log_id"))
+    except CascadeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # ── Notify Response Team (Actions section) ──────────────────────
@@ -2599,6 +2652,14 @@ def _require_purge_auth(request: Request, user=Depends(require_super_admin)):
             detail="Step-up confirmation expired or invalid - please re-confirm.")
     if payload.get("type") != "step_up" or payload.get("sub") != user.id:
         raise HTTPException(status_code=401, detail="Step-up token does not authorize this action.")
+    # PRODUCTION: require a TIME-BASED authenticator (TOTP) re-auth - a reused
+    # password is weaker than a 30-second time-based factor for an irreversible
+    # purge. Dev/CI may use the mock/password methods. (Defense-in-depth: the
+    # step-up endpoint already rejects password in prod.)
+    import os
+    if os.getenv("APP_ENV", "production").lower() == "production" and payload.get("method") != "totp":
+        raise HTTPException(status_code=403,
+            detail="Purge requires confirmation with your time-based authenticator (TOTP).")
     return user
 
 
@@ -2778,10 +2839,14 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
     # PWA-supplied OSM footprint so the FK on the subsequent report INSERT
     # is satisfied. Without this, a fresh DB (or any client that taps a
     # building not yet mirrored into `buildings`) trips
-    # `fk_reports_building_id` and 500s the entire submission. On upsert
-    # failure, fall through to NULL + infrastructure_name_from_osm=False
-    # so the dashboard surfaces the report under "needs mapping" rather
-    # than dropping it on the floor.
+    # `fk_reports_building_id` and 500s the entire submission. The FK forces us
+    # to drop the building_id on upsert failure (we can't reference a row that
+    # doesn't exist) — but we KEEP infrastructure_name_from_osm=true: the reporter
+    # DID tap a real OSM footprint, so once _auto_assign_building_id (below) links
+    # this report to a proximity building the dashboard can still show its real
+    # name. (Previously we also reset from_osm=False here, which permanently
+    # demoted an explicit "University" tag to "Unnamed Building" on a transient
+    # buildings-row upsert hiccup.)
     if report_dict.get("building_id"):
         resolved_bid = _ensure_building_for_pwa_pick(
             db,
@@ -2793,8 +2858,7 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
             ),
         )
         if resolved_bid is None:
-            report_dict["building_id"] = None
-            report_dict["infrastructure_name_from_osm"] = False
+            report_dict["building_id"] = None   # FK-forced; keep the from_osm provenance
     # Phase 1: attach user_id if the
     # client presented a valid Bearer token. Anonymous path leaves it NULL.
     extra_cols = {}
@@ -2929,6 +2993,11 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
 
     # Auto-assign building_id for deduplication/versioning
     _auto_assign_building_id(db_report, db)
+    # Building-centric Incident-Feed redesign Phase 2B - assign the report to its
+    # operational incident (JOIN on HIGH confidence, else SEED a new one). Runs
+    # here, in the shared meta path, so EVERY channel's report gets an incident
+    # (must-have #1). Best-effort (savepoint-isolated): never blocks the write.
+    _assign_incident(db_report, db)
     # Update reporter gamification profile
     _update_reporter_profile(meta_in.device_hash, db)
 
@@ -3417,6 +3486,24 @@ async def ai_assess_report(
     lat = loc.latitude if loc else 0
     lng = loc.longitude if loc else 0
     acc = loc.accuracy_meters if loc else 0
+    # Device-vs-submitted location mismatch → CONTEXT for the AI (analyst signal),
+    # never a hard penalty: a corrected pin can be a legitimate edit (reporting
+    # about damage elsewhere) OR a spoof. Significant = >1 km from the device GPS.
+    loc_mismatch_note = ""
+    if (loc and getattr(loc, "is_user_corrected", False)
+            and getattr(loc, "device_latitude", None) is not None
+            and getattr(loc, "device_longitude", None) is not None):
+        from math import radians, sin, cos, asin, sqrt
+        _a = (sin(radians((lat or 0) - loc.device_latitude) / 2) ** 2
+              + cos(radians(loc.device_latitude)) * cos(radians(lat or 0))
+              * sin(radians((lng or 0) - loc.device_longitude) / 2) ** 2)
+        _dist_km = 2 * 6371.0 * asin(min(1.0, sqrt(_a)))
+        if _dist_km > 1.0:
+            loc_mismatch_note = (
+                f"\n⚠ LOCATION ADJUSTED: the reporter moved the pin {int(round(_dist_km))} km from "
+                f"the device GPS ({loc.device_latitude:.4f}, {loc.device_longitude:.4f}). This may be a "
+                "legitimate correction or a spoof - weigh it and consider a satellite cross-check. "
+                "Do NOT auto-penalise a corrected location.")
     v = report.verification
     caller = report.caller_info or payload.get("caller_info", {}) or {}
     source = report.source.value if report.source else "APP"
@@ -3529,12 +3616,12 @@ Report ID: {report_id[:8]} | Source: {source} {"(NO photo capability)" if is_voi
 
 ── SECTION 1: REPORT DATA ──
 Infrastructure: {infra} (Criticality: {criticality})
-Name: {report.infrastructure_name or 'Not specified'}
+Name: {report.display_building_name or (report.infrastructure_name + ' (reporter-described, unverified — not an OSM-tagged building)' if report.infrastructure_name else 'Not specified')}
 Severity: {report.severity.value if report.severity else 'UNKNOWN'}
 Crisis Type: {report.crisis_type or 'Not specified'}
 Damage: {report.damage_classification or 'Not specified'}
 Debris Clearing: {'Needed' if report.debris_clearing_needed else 'Not specified'}
-Location: {loc_name} ({lat}, {lng}) ±{acc}m
+Location: {loc_name} ({lat}, {lng}) ±{acc}m{loc_mismatch_note}
 
 ── SECTION 2: EVIDENCE ──
 Photo: {'Yes ('+str(len(img_media))+')' if has_photo else 'No'} | Audio: {'Yes' if has_audio else 'No'} | Text: {'Yes ('+str(len(desc))+' chars)' if desc else 'No'}
@@ -5098,6 +5185,12 @@ def mark_media_deferred(
     valid_tiers = {"SMALL", "MEDIUM", "ORIGINAL"}
     valid_reasons = {
         "bandwidth_tier_deferred", "encode_failed", "orphan_no_source",
+        # R6 (Jun 2026): the client EVICTED this non-SMALL tier's bytes under
+        # device storage pressure AFTER its SMALL preview had already delivered,
+        # so the analyst keeps a usable preview while the full-resolution upload
+        # is deferred (not silently lost). Distinct from bandwidth_tier_deferred
+        # so the dashboard can render "deferred - storage" vs "couldn't deliver".
+        "storage_evicted",
     }
     if reason not in valid_reasons:
         raise HTTPException(
@@ -5368,9 +5461,10 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
     # PWA-supplied OSM footprint so the FK on the subsequent report INSERT
     # is satisfied. Same rationale as in /reports/meta: without this, a
     # tap on an OSM footprint not yet mirrored into `buildings` trips
-    # `fk_reports_building_id` and 500s the submission. On upsert failure
-    # we fall through to NULL + infrastructure_name_from_osm=False so the
-    # dashboard surfaces the report under "needs mapping".
+    # `fk_reports_building_id` and 500s the submission. The FK forces dropping
+    # building_id on upsert failure, but we KEEP infrastructure_name_from_osm=true
+    # (the reporter tapped a real OSM footprint) so the name still surfaces once a
+    # proximity building is linked — same rationale as /reports/meta above.
     if report_dict.get("building_id"):
         resolved_bid = _ensure_building_for_pwa_pick(
             db,
@@ -5382,8 +5476,7 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
             ),
         )
         if resolved_bid is None:
-            report_dict["building_id"] = None
-            report_dict["infrastructure_name_from_osm"] = False
+            report_dict["building_id"] = None   # FK-forced; keep the from_osm provenance
     db_report = Report(**report_dict, device_id=device.id)
     db.add(db_report)
     db.commit()
@@ -5482,6 +5575,14 @@ def create_report(report_in: ReportCreate, request: Request, db: Session = Depen
                 and db_report.received_media >= db_report.expected_media):
             db_report.sync_status = SyncStatusEnum.SYNCED
 
+    db.commit()
+
+    # Building-centric Incident-Feed redesign Phase 2B - the legacy one-shot path
+    # also gets building + incident assignment (parity with create_report_meta).
+    # It carries media at create time, so the incident scorer has full signal
+    # (pHash + description) and a true duplicate can auto-join here. Best-effort.
+    _auto_assign_building_id(db_report, db)
+    _assign_incident(db_report, db)
     db.commit()
 
     # 5. Pipeline Trigger: Local AI NLP processing
@@ -5618,6 +5719,43 @@ def duplicate_summary(crisis_event_id: Optional[str] = Query(None, description="
         else:
             low += 1
     return {"high": high, "medium": med, "low": low, "total": high + med + low}
+
+
+@router.get("/buildings-needing-review")
+def buildings_needing_review(crisis_event_id: Optional[str] = Query(None, description="scope to one operation"),
+                             db: Session = Depends(get_db), user=Depends(require_viewer)):
+    """Building-centric redesign — AWARENESS feed. Lists the buildings that have
+    UNSETTLED duplicate-candidate pairs an analyst should review, so the global
+    'Potential Duplicates' merge panel can be removed WITHOUT losing cross-building
+    visibility (merge itself happens only inside a building/operation workspace).
+    Reuses `_rdd_candidate_pairs` (building-scoped dedup) so this agrees with the
+    per-building 'Potential Duplicates' counts. Returns worst-first. Same cost class
+    as /duplicate-summary; the dashboard caches it."""
+    agg: dict = {}
+    for a, b, level in _rdd_candidate_pairs(db, crisis_event_id=crisis_event_id):
+        bid = a.building_id  # pairs only form within a building (cluster), so this is set
+        if not bid:
+            continue
+        e = agg.setdefault(bid, {"pairs": 0, "report_ids": set(), "high": 0, "medium": 0, "low": 0})
+        e["pairs"] += 1
+        e["report_ids"].add(a.id)
+        e["report_ids"].add(b.id)
+        e[level.lower()] += 1
+    name_map: dict = {}
+    if agg:
+        from app.models.report import Building
+        for bid, osm_name in db.query(Building.id, Building.osm_name).filter(Building.id.in_(list(agg.keys()))).all():
+            name_map[bid] = osm_name
+    out = [{
+        "building_id": bid,
+        "building_name": name_map.get(bid) or "Building",
+        "candidate_pairs": v["pairs"],
+        "report_count": len(v["report_ids"]),
+        "high": v["high"], "medium": v["medium"], "low": v["low"],
+    } for bid, v in agg.items()]
+    out.sort(key=lambda x: (-x["high"], -x["candidate_pairs"]))
+    return {"buildings": out, "total_buildings": len(out),
+            "total_pairs": sum(x["candidate_pairs"] for x in out)}
 
 
 class DuplicateMergeRequest(_ReclaimBaseModel):
@@ -8353,6 +8491,134 @@ def _auto_assign_building_id(report: Report, db: Session):
                 report.building_id = bid
                 n.building_id = bid
                 return
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Building-centric Incident-Feed redesign Phase 2B - intake incident assignment
+# ══════════════════════════════════════════════════════════════════════
+# An Incident is the first-class operational EVENT (Building → Incident → Report).
+# This runs in the SHARED create path (create_report_meta, right after building
+# assignment; also the legacy one-shot POST /), so every report - from ALL six
+# channels - lands on an incident (must-have #1 parity). A report JOINS the best
+# same-building incident ONLY on HIGH duplicate confidence (>=88, reusing the
+# documented _rdd_score_pair against that incident's member reports); otherwise it
+# SEEDS its own incident. Conservative BY DESIGN: MEDIUM/LOW matches are never
+# auto-joined (so distinct same-building events - Floor 1/7/10 - stay separate
+# incidents); they surface as analyst "possible same incident?" suggestions via
+# the existing duplicate engine + the merge ops. Defensive: wrapped in a SAVEPOINT
+# so a failure can NEVER corrupt or block the report write (must-have #1/#3).
+_INCIDENT_HIGH = 88            # mirrors _rdd_score_pair's HIGH threshold
+_INCIDENT_MAX_CANDIDATES = 80  # bound the intake scoring scan at 500k scale (#12)
+_SEVERITY_RANK = {"UNKNOWN": 0, "MINOR": 1, "MODERATE": 2, "SEVERE": 3, "CRITICAL": 4}
+
+
+def _severity_rank(sev) -> int:
+    return _SEVERITY_RANK.get((sev or "UNKNOWN"), 0)
+
+
+def _incident_title(report: "Report") -> str:
+    """Human label for a freshly-seeded incident: crisis type + place/building."""
+    ct = (report.crisis_type or "Incident").replace("_", " ").title()
+    place = None
+    loc = getattr(report, "location", None)
+    if loc:
+        place = getattr(loc, "user_location_name", None) or getattr(loc, "device_location_name", None)
+    tail = getattr(report, "infrastructure_name", None) or place
+    return (f"{ct} - {tail}" if tail else ct)[:200]
+
+
+def _new_incident_from_report(report: "Report", db: Session, actor_user_id: Optional[str] = None) -> "Incident":
+    """Seed + flush a fresh single-member incident from `report` (the lead).
+    Shared by intake (_assign_incident) and the analyst split op."""
+    inc = Incident(
+        building_id=report.building_id,
+        crisis_event_id=report.crisis_event_id,
+        incident_type=report.crisis_type,
+        severity=(report.severity or SeverityEnum.UNKNOWN.value),
+        status=IncidentStatusEnum.OPEN.value,
+        title=_incident_title(report),
+        lead_report_id=report.id,
+        report_count=1,
+        created_by=actor_user_id,
+    )
+    db.add(inc)
+    db.flush()
+    return inc
+
+
+def _recompute_incident_rollup(incident: "Incident", db: Session) -> None:
+    """Rebuild an incident's cached roll-ups from its live member reports.
+    severity = max member severity UNLESS analyst-overridden; lead = earliest
+    (richest on tie via _rdd_info_score); report_count = live member count;
+    incident_type backfilled from the first typed member if still blank."""
+    members = db.query(Report).filter(
+        Report.incident_id == incident.id,
+        Report.deletion_requested_at.is_(None),
+    ).all()
+    incident.report_count = len(members)
+    if not members:
+        return
+    if not incident.severity_overridden:
+        incident.severity = max((m.severity or "UNKNOWN" for m in members), key=_severity_rank)
+    lead = min(members, key=lambda m: (m.server_created_at, -_rdd_info_score(m)))
+    incident.lead_report_id = lead.id
+    if not incident.incident_type:
+        incident.incident_type = next((m.crisis_type for m in members if m.crisis_type), None)
+
+
+def _assign_incident(report: "Report", db: Session, actor_user_id: Optional[str] = None) -> None:
+    """Assign `report` to an incident at intake: JOIN the best same-building
+    incident on HIGH confidence (>=88), else SEED a new incident. Idempotent
+    (no-op if already assigned). Never raises into the caller's transaction."""
+    if getattr(report, "incident_id", None):
+        return
+    try:
+        with db.begin_nested():   # SAVEPOINT - isolates any failure from the report write
+            bid = report.building_id
+            best_inc_id, best_score = None, 0
+            if bid:
+                members = (
+                    db.query(Report)
+                    .options(joinedload(Report.media))
+                    .filter(
+                        Report.building_id == bid,
+                        Report.incident_id.isnot(None),
+                        Report.id != report.id,
+                        Report.deletion_requested_at.is_(None),
+                    )
+                    .order_by(Report.server_created_at.desc())
+                    .limit(_INCIDENT_MAX_CANDIDATES)
+                    .all()
+                )
+                groups: dict = {}
+                for m in members:
+                    groups.setdefault(m.incident_id, []).append(m)
+                for inc_id, group in groups.items():
+                    s = max(_rdd_score_pair(report, m)[0] for m in group)
+                    if s > best_score:
+                        best_score, best_inc_id = s, inc_id
+
+            if best_inc_id and best_score >= _INCIDENT_HIGH:
+                report.incident_id = best_inc_id
+                # Flush the new membership so the roll-up COUNT sees it even when
+                # the session runs autoflush=False (e.g. the test session).
+                db.flush()
+                inc = db.get(Incident, best_inc_id)
+                if inc is not None:
+                    _recompute_incident_rollup(inc, db)
+            else:
+                inc = _new_incident_from_report(report, db, actor_user_id)
+                report.incident_id = inc.id
+    except Exception:
+        # Best-effort: leave the report unassigned (backfill/re-eval can fix it
+        # later) rather than fail a legitimate submission. Reset the in-memory
+        # link in case it was set before the savepoint rolled back, so the outer
+        # commit can't write an FK to a now-nonexistent incident.
+        logger.exception("incident assignment failed for report %s (non-fatal)", getattr(report, "id", "?"))
+        try:
+            report.incident_id = None
+        except Exception:
+            pass
 
 
 # ══════════════════════════════════════════════════════════════════════

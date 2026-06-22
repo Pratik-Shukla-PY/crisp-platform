@@ -90,6 +90,7 @@ def compute_incident_credibility(
     reporter_tier: Optional[str] = None,
     duplicate_count: int = 0,
     location: Optional[dict] = None,
+    location_mismatch: Optional[dict] = None,
 ) -> dict:
     """Sum the independent automated checks into one system-only Confidence Score.
 
@@ -167,6 +168,14 @@ def compute_incident_credibility(
         elif isinstance(gconf, (int, float)):
             loc_pts = _MAX_LOC * max(0.3, min(1.0, gconf))
             loc_reason = f"Location geocoded from text (confidence {int(gconf * 100)}%)."
+    # A significant device-vs-submitted location mismatch is an ANALYST SIGNAL ONLY:
+    # it appends a "verify on the map" note to the reason TEXT and NEVER changes
+    # loc_pts. A reporter who corrects the pin (e.g. reporting from base camp about
+    # damage elsewhere) must not be penalised - the analyst + the AI weigh it.
+    if location_mismatch and location_mismatch.get("distance_km"):
+        _d = location_mismatch["distance_km"]
+        loc_reason = (loc_reason + f" [NOTE: reporter adjusted the pin {_d} km from "
+                      "the device GPS - verify the location on the map.]")
     factors.append(_factor("location", "Location & metadata", _MAX_LOC, loc is not None, loc_pts, loc_reason))
 
     # 4. Corroboration & duplicate detection — 15

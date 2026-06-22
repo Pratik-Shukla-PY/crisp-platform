@@ -623,6 +623,12 @@ class ReportResponse(BaseModel):
     # listing by reports._attach_operation_name so the new-report notification can
     # name its operation. Not a captured column - derived at read time.
     crisis_event_name: Optional[str] = None
+    # Building-centric Incident-Feed redesign Phase 2 - the first-class INCIDENT
+    # (operational event) this report is evidence for. A real FK column on Report
+    # (incidents.id), set server-side at intake for every channel + backfilled for
+    # legacy rows; NULL only transiently if intake assignment was skipped. Distinct
+    # from building_id (physical structure) + crisis_event_id (operation).
+    incident_id: Optional[str] = None
     # Duplicate collapse: how many OTHER reports an analyst has confirmed as
     # duplicates of THIS one (i.e. this report is the primary/incident, and N
     # corroborating reports are merged beneath it). Derived at read time by
@@ -694,6 +700,7 @@ class ReportResponse(BaseModel):
             from app.services.credibility import compute_incident_credibility
             v = self.verification
             loc = None
+            location_mismatch = None
             if self.location is not None:
                 loc = {
                     "latitude": getattr(self.location, "latitude", None),
@@ -701,6 +708,24 @@ class ReportResponse(BaseModel):
                     "accuracy_meters": getattr(self.location, "accuracy_meters", None),
                     "geocoding_confidence": getattr(self.location, "geocoding_confidence", None),
                 }
+                # Significant device-vs-submitted mismatch (>1 km, beyond GPS jitter)
+                # is surfaced to the analyst + AI as a SIGNAL - it never changes the
+                # numeric Confidence Score (a corrected pin is not penalised).
+                _dlat = getattr(self.location, "device_latitude", None)
+                _dlng = getattr(self.location, "device_longitude", None)
+                if (getattr(self.location, "is_user_corrected", False)
+                        and _dlat is not None and _dlng is not None
+                        and loc["latitude"] is not None and loc["longitude"] is not None):
+                    from math import radians, sin, cos, asin, sqrt
+                    _a = (sin(radians(loc["latitude"] - _dlat) / 2) ** 2
+                          + cos(radians(_dlat)) * cos(radians(loc["latitude"]))
+                          * sin(radians(loc["longitude"] - _dlng) / 2) ** 2)
+                    _dist = 2 * 6371.0 * asin(min(1.0, sqrt(_a)))
+                    if _dist > 1.0:
+                        location_mismatch = {
+                            "distance_km": int(round(_dist)),
+                            "device_latitude": _dlat, "device_longitude": _dlng,
+                        }
             self.incident_credibility = compute_incident_credibility(
                 ai_assessment=self.ai_assessment if isinstance(self.ai_assessment, dict) else None,
                 satellite_score=getattr(v, "total_score", None) if v else None,
@@ -710,6 +735,7 @@ class ReportResponse(BaseModel):
                 reporter_tier=self.reporter_tier,
                 duplicate_count=self.duplicate_count or 0,
                 location=loc,
+                location_mismatch=location_mismatch,
             )
         except Exception:
             self.incident_credibility = None

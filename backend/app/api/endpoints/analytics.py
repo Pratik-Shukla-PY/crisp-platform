@@ -35,15 +35,15 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, or_, and_
 from sqlalchemy.orm import Session
 
-from app.core.deps import require_viewer
+from app.core.deps import require_viewer, require_analyst
 from app.db.session import get_db
 from app.models.report import (
-    Report, Location, Building, BuildingResponder,
+    Report, Location, Building, BuildingResponder, Incident,
     ReportStatusEnum, SeverityEnum, InfraTypeEnum, ReviewerVerdictEnum,
 )
 
@@ -393,6 +393,17 @@ class SummaryCounts(BaseModel):
     # under their primary). Both ADDITIVE; existing counts unchanged.
     reports: int = 0
     incidents: int = 0
+    # Home restructure (Jun 2026) - command-centre + executive-summary aggregates.
+    # All ADDITIVE; existing counts unchanged. rejected/affected_buildings/resolved/
+    # duplicate_reports honour the operation scope; total_buildings/buildings_critical_risk
+    # are platform totals (the exec summary is global).
+    rejected: int = 0                  # analyst-rejected (reviewer_verdict=REJECTED)
+    pending: int = 0                   # status PENDING and NOT rejected (the "Pending" bucket)
+    affected_buildings: int = 0        # distinct buildings with a live report in scope
+    resolved: int = 0                  # all-time RESOLVED (vs window-scoped resolved_in_window)
+    duplicate_reports: int = 0         # reports confirmed as duplicates (collapsed under a primary)
+    total_buildings: int = 0           # all tracked Building rows
+    buildings_critical_risk: int = 0   # Building.building_risk_score > 90
 
 
 class SummaryDistributions(BaseModel):
@@ -474,11 +485,34 @@ def operational_summary(
     # that bypass _count. Global view → empty list → no constraint.
     _scope = [Report.crisis_event_id == crisis_event_id] if crisis_event_id else []
     not_deleted = Report.deletion_requested_at.is_(None)
-    active = [not_deleted, Report.status.notin_(_CLOSED_STATUSES)]
     NOT_REVIEWED = ReviewerVerdictEnum.NOT_REVIEWED.value
+    _REJECTED = ReviewerVerdictEnum.REJECTED.value
+    # CONSISTENCY CONTRACT (Jun 2026): a REJECTED report is operationally SET ASIDE.
+    # It lives ONLY in the Rejected count/tab and is excluded from every open/active/
+    # critical count — EXACTLY as the incident feed excludes it (_applyQueueFilter in
+    # app.js drops verdict==REJECTED from the default view + every queue). Folding the
+    # exclusion into `active` makes the home Command Centre, the incidents-page tabs,
+    # the deep-linked queues and the rendered feed all report the SAME number for the
+    # same concept — fixes "critical says 2 but the queue is empty" (a rejected report
+    # was being counted as an open critical).
+    active = [not_deleted, Report.status.notin_(_CLOSED_STATUSES),
+              Report.reviewer_verdict != _REJECTED]
+    # DEDUP CONTRACT (Jun 2026): the incident feed COLLAPSES confirmed-duplicate reports
+    # under their primary (only the primary is visible / counted). The summary counts MUST
+    # exclude the same hidden duplicates, or the home Command Centre over-counts vs the
+    # feed — e.g. "Critical 1" where that 1 critical is a collapsed duplicate the feed
+    # shows as 0, and "71 reports" vs the feed's de-duplicated "52". Computed once here,
+    # after the cache check, so cached responses pay nothing.
+    try:
+        from app.api.endpoints.reports import _resolve_duplicate_groups
+        _dup_hidden, _ = _resolve_duplicate_groups(db)
+        _dup_hidden = list(_dup_hidden or [])
+    except Exception:
+        _dup_hidden = []
+    _dedup = [Report.id.notin_(_dup_hidden)] if _dup_hidden else []
 
     def _count(*filters) -> int:
-        return int(db.query(func.count(Report.id)).filter(*_scope, *filters).scalar() or 0)
+        return int(db.query(func.count(Report.id)).filter(*_scope, *_dedup, *filters).scalar() or 0)
 
     window_cut = now - timedelta(hours=window_hours)
     stale_cut = now - timedelta(hours=stale_hours)
@@ -530,7 +564,7 @@ def operational_summary(
     _crit = [*active, Report.severity == SeverityEnum.CRITICAL]
     counts.critical_incidents = (
         int(db.query(func.count(func.distinct(Report.building_id)))
-            .filter(*_scope, *_crit, Report.building_id.isnot(None)).scalar() or 0)
+            .filter(*_scope, *_dedup, *_crit, Report.building_id.isnot(None)).scalar() or 0)
         + _count(*_crit, Report.building_id.is_(None))
     )
     # P4: cluster_count = distinct ACTIVE buildings + each building-less active
@@ -538,24 +572,69 @@ def operational_summary(
     # dedup; additive for the "N clusters · M reports" dual count.
     counts.cluster_count = (
         int(db.query(func.count(func.distinct(Report.building_id)))
-            .filter(*_scope, *active, Report.building_id.isnot(None)).scalar() or 0)
+            .filter(*_scope, *_dedup, *active, Report.building_id.isnot(None)).scalar() or 0)
         + _count(*active, Report.building_id.is_(None))
     )
-    # Duplicate collapse: dual "Incidents / Reports" picture. `reports` = total
-    # non-deleted volume; `incidents` = that minus the duplicates merged under a
-    # primary. Uses the SAME resolver as the feed/markers so the numbers agree
-    # (local import avoids an endpoint-module import cycle). dup_hidden is small.
-    from app.api.endpoints.reports import _resolve_duplicate_groups
-    dup_hidden, _dup_primary_count = _resolve_duplicate_groups(db)
+    # "Incidents / Reports" picture, now sourced from the REAL incidents entity
+    # (Global→Operation→Building→Incident→Report). `reports` = total non-deleted
+    # report volume; `incidents` = distinct first-class Incident rows that have a
+    # live report in scope + each incident-less report (incident_id NULL, the
+    # best-effort-assign fallback) as its own singleton — matching EXACTLY what the
+    # feed renders as an incident unit (it groups loaded reports by incident_id).
+    # Mirrors the critical_incidents / cluster_count dedup pattern: one indexed
+    # COUNT(DISTINCT Report.incident_id) + the NULL singletons (Report.incident_id
+    # is indexed; no N+1). Scoped by report.crisis_event_id so it agrees with the
+    # feed's scope (not the incident row's, which can drift on re-scoping).
     counts.reports = _count(not_deleted)
-    hidden_in_scope = _count(not_deleted, Report.id.in_(dup_hidden)) if dup_hidden else 0
-    counts.incidents = max(0, counts.reports - hidden_in_scope)
+    counts.incidents = (
+        int(db.query(func.count(func.distinct(Report.incident_id)))
+            .filter(*_scope, *_dedup, not_deleted, Report.incident_id.isnot(None)).scalar() or 0)
+        + _count(not_deleted, Report.incident_id.is_(None))
+    )
+    # ── Home restructure aggregates (Jun 2026) — all indexed COUNTs, no N+1 (#12) ──
+    # Scoped (honour the operation): rejected, affected buildings, all-time resolved.
+    counts.rejected = _count(not_deleted, Report.reviewer_verdict == ReviewerVerdictEnum.REJECTED.value)
+    counts.affected_buildings = int(
+        db.query(func.count(func.distinct(Report.building_id)))
+          .filter(*_scope, *_dedup, not_deleted, Report.building_id.isnot(None)).scalar() or 0)
+    # "Resolved" = the CLOSED/handled bucket = RESOLVED or FALSE_ALARM, matching the
+    # incidents feed's Resolved tab (_statusTabFor maps both to 'resolved') so the count
+    # equals what the tab shows. (resolved_in_window above stays RESOLVED-only by design.)
+    # A REJECTED report is SET ASIDE (Rejected tab only) even if its status is RESOLVED/
+    # FALSE_ALARM — exclude it here too, or it double-counts against counts.rejected and
+    # the feed's Resolved tab (which drops verdict==REJECTED) would show fewer.
+    counts.resolved = _count(not_deleted, Report.reviewer_verdict != _REJECTED,
+        Report.status.in_([ReportStatusEnum.RESOLVED, ReportStatusEnum.FALSE_ALARM]))
+    # Canonical "Pending" bucket = status PENDING and NOT rejected. Single source of
+    # truth for BOTH the home "Review pending" tile AND the incidents-page "Pending"
+    # status tab, so they always show the same number.
+    counts.pending = _count(not_deleted, Report.status == ReportStatusEnum.PENDING,
+                            Report.reviewer_verdict != _REJECTED)
+    # Confirmed-duplicate report volume (reports merged under a primary). Counts the
+    # HIDDEN duplicates themselves, so it must NOT go through _count (which excludes
+    # them via _dedup) — a raw count over the same _dup_hidden set the feed collapses.
+    counts.duplicate_reports = int(
+        db.query(func.count(Report.id))
+          .filter(*_scope, not_deleted, Report.id.in_(_dup_hidden)).scalar() or 0) if _dup_hidden else 0
+    # Platform totals for the executive summary (global; not operation-scoped).
+    # Wrapped defensively: a building-table schema drift (e.g. a dev DB behind on
+    # the 0062 building_risk migration) must NOT 500 the whole operational summary -
+    # the exec tile degrades to 0, the rest of the home still renders.
+    try:
+        counts.total_buildings = int(db.query(func.count(Building.id)).scalar() or 0)
+    except Exception:
+        counts.total_buildings = 0
+    try:
+        counts.buildings_critical_risk = int(
+            db.query(func.count(Building.id)).filter(Building.building_risk_score > 90).scalar() or 0)
+    except Exception:
+        counts.buildings_critical_risk = 0
 
     # ── distributions ──
     def _group(col) -> dict:
         out: dict = {}
         for val, n in (db.query(col, func.count(Report.id))
-                         .filter(*_scope, *active).group_by(col).all()):
+                         .filter(*_scope, *_dedup, *active).group_by(col).all()):
             if val is not None:
                 out[_enum_name(val)] = int(n)
         return out
@@ -670,3 +749,28 @@ def operational_summary(
     )
     _summary_cache[cache_key] = (now + timedelta(seconds=_SUMMARY_TTL_SECONDS), resp)
     return resp
+
+
+# ── Command Center: GLOBAL AI Analyze ───────────────────────────────────────────
+@router.post("/assess", summary="AI Analyze the GLOBAL response (synthesis)")
+async def assess_global(db: Session = Depends(get_db), user=Depends(require_analyst)):
+    """Command Center 'Analyze Global': aggregate every operation's child confidence
+    scores + ONE Claude synthesis call → situation summary, key risks, escalation
+    likelihood, EXECUTABLE recommended actions (each a scoped cascade), priority
+    score, resource needs. Exactly one Claude call regardless of crisis size."""
+    from app.services.scope_assessment import generate_scope_assessment, persist
+    from app.services.building_ai_summary import SummaryUnavailable
+    try:
+        payload = await generate_scope_assessment(db, "global", None)
+    except SummaryUnavailable as e:
+        raise HTTPException(status_code=503, detail=f"AI assessment unavailable: {e}")
+    persist(db, user, payload)
+    payload["assessed"] = True
+    return payload
+
+
+@router.get("/assess", summary="Latest cached GLOBAL assessment")
+def get_global_assessment(db: Session = Depends(get_db), _user=Depends(require_viewer)):
+    """Cached card: fresh global roll-up metrics + the last Claude narrative."""
+    from app.services.scope_assessment import get_payload
+    return get_payload(db, "global", None)

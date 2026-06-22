@@ -670,41 +670,73 @@ def logout(request: Request, user: User = Depends(get_current_user), db: Session
 
 class StepUpRequest(BaseModel):
     code: str = Field(..., min_length=1, max_length=128,
-                      description="Authenticator (TOTP) code when MFA is enrolled, "
-                                  "otherwise the account password.")
+                      description="6-digit authenticator (TOTP) code. In production "
+                                  "the time-based authenticator is required; "
+                                  "dev/test may use the configured mock code.")
 
 
 @router.post("/step-up")
 def step_up(req: StepUpRequest, request: Request,
             user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Re-confirm the operator's identity for an IRREVERSIBLE action (hard-purge).
-    Verifies the authenticator (TOTP) code when MFA is enrolled, else the account
-    password, then issues a short-lived step-up token (~10 min) that the client
-    sends as X-Step-Up. Replaces the shared static CRISP_ADMIN_KEY + the browser
-    prompt - this is per-user (auditable) and a real second factor."""
+
+    PRODUCTION: requires the operator's time-based authenticator (TOTP) code - the
+    SAME authenticator used for dashboard-login MFA. The account password is NOT
+    accepted in prod (a reused password is weaker than a 30-second time-based
+    factor), and an operator without MFA enrolled cannot step up.
+
+    DEV / CI (APP_ENV != production + CRISP_TESTING=1): a fixed mock code
+    (CRISP_DEV_STEPUP_CODE, default '000000') is accepted so local + automated tests
+    need no real authenticator; a non-prod password fallback also remains for
+    convenience.
+
+    Issues a short-lived step-up token (~10 min, X-Step-Up) carrying the auth
+    `method` so the purge endpoint can require method=='totp' in prod."""
+    import os
     code = (req.code or "").strip()
-    method = "totp" if user.mfa_secret else "password"
+    app_env = os.getenv("APP_ENV", "production").lower()
+    is_prod = app_env == "production"
+    testing = os.getenv("CRISP_TESTING", "").lower() in ("1", "true")
+    dev_code = os.getenv("CRISP_DEV_STEPUP_CODE", "000000")
+
     ok = False
-    if user.mfa_secret:
+    method = None
+    if (not is_prod) and testing and code and code == dev_code:
+        # Dev/CI convenience: a fixed mock code so tests need no real authenticator.
+        ok, method = True, "mock"
+    elif user.mfa_secret:
+        method = "totp"
         try:
             ok = pyotp.TOTP(user.mfa_secret).verify(code, valid_window=1)
         except Exception:  # noqa: BLE001 - malformed secret/code must not 500
             ok = False
-    elif user.password_hash:
+    elif (not is_prod) and user.password_hash:
+        # Password fallback ONLY outside production (prod requires the authenticator).
+        method = "password"
         ok = verify_password(code, user.password_hash)
+    else:
+        # Prod + no MFA enrolled → cannot confirm an irreversible action.
+        method = "totp"
+
     if not ok:
         _audit(db, user.id, user.email or user.phone_number, "STEP_UP_FAILED",
-               request, details={"method": method})
+               request, details={"method": method or "none", "env": app_env})
         db.commit()
+        if is_prod and not user.mfa_secret:
+            raise HTTPException(
+                status_code=403,
+                detail="Multi-factor authentication must be enrolled to confirm this action.",
+            )
         raise HTTPException(
             status_code=401,
-            detail=("Incorrect authenticator code." if method == "totp"
-                    else "Incorrect password."),
+            detail=("Incorrect authenticator code." if method in ("totp", "mock")
+                    else "Incorrect code."),
         )
     _audit(db, user.id, user.email or user.phone_number, "STEP_UP_OK",
-           request, details={"method": method})
+           request, details={"method": method, "env": app_env})
     db.commit()
-    return {"step_up_token": create_step_up_token(user.id), "expires_in": 600}
+    return {"step_up_token": create_step_up_token(user.id, method=method),
+            "expires_in": 600}
 
 
 # ── Phase 1: device-linking ──────────────
