@@ -197,12 +197,15 @@
     /* The ops split reuses .cc-split (1.6fr 1fr) so its columns line up exactly
        with Global Monitoring above; align-items:start lets each column own its
        height (the comfortable cards can run taller than the summary + map). */
-    .cc-split-ops{align-items:start}
+    /* Match the map column's height to the left operations list (stretch both columns),
+       then let the map card fill the space below the summary chips. */
+    .cc-split-ops{align-items:stretch}
     .cc-split-opslist #cc-ops-rail{max-height:none;overflow:visible;display:flex;flex-direction:column;gap:10px}
     .cc-ops-side{display:flex;flex-direction:column;gap:10px;min-width:0}
+    .cc-ops-map-card{flex:1 1 auto;min-height:260px}
     #cc-ops-summary .cc-ops-sum{margin:0}
     #cc-ops-summary .cc-ops-alert{margin-top:8px}
-    #cc-ops-map{height:340px;border-radius:10px;overflow:hidden;background:#0d1422;isolation:isolate}
+    #cc-ops-map{height:100%;min-height:260px;border-radius:10px;overflow:hidden;background:#0d1422;isolation:isolate}
     .cc-ops-mk{background:none;border:none}
     .cc-ops-mk-dot{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;
       font-size:11px;font-weight:800;color:#0b1220;box-shadow:0 0 0 2px rgba(2,8,20,.7),0 2px 6px rgba(0,0,0,.5)}
@@ -277,6 +280,27 @@
     /* ops intel grid */
     .cc-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
     @media(max-width:980px){.cc-grid3{grid-template-columns:1fr}}
+    /* Analytics section (relocated from the header Tools): 70% analytics | 30% recent feed */
+    .cc-analytics-split{display:grid;grid-template-columns:7fr 3fr;gap:14px;align-items:start}
+    @media(max-width:980px){.cc-analytics-split{grid-template-columns:1fr}}
+    .cc-an-main{min-width:0;min-height:200px}
+    .cc-an-side{min-width:0;display:flex;flex-direction:column}
+    /* Recent incidents feed scrolls after ~20 rows (height-matched to the analytics). */
+    .cc-an-feed{max-height:640px;overflow-y:auto}
+    /* The re-parented analytics panel, rendered INLINE (not as the fixed overlay). */
+    .cc-analytics-inline{position:static !important;inset:auto !important;width:100% !important;height:auto !important;
+      display:block !important;box-shadow:none !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important;
+      border:1px solid #1d2942;border-radius:12px}
+    .cc-analytics-inline .analytics-scroll{height:auto !important;max-height:640px;overflow-y:auto;padding:14px}
+    /* Recent Incidents feed rows (compact, for the 30% column) */
+    .cc-an-row{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid #1a2436;padding:9px 6px;cursor:pointer;font:inherit;color:#cdd8ec}
+    .cc-an-row:hover{background:#16213a}
+    .cc-an-row:last-child{border-bottom:0}
+    .cc-an-dot{width:8px;height:8px;border-radius:999px;flex:none}
+    .cc-an-rbody{display:flex;flex-direction:column;min-width:0;flex:1 1 auto}
+    .cc-an-what{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .cc-an-meta{font-size:10.5px;color:#8A99B5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .cc-an-time{font-size:10.5px;color:#7d89a3;flex:none;white-space:nowrap}
     .cc-bar-row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:12px}
     .cc-bar-row .bl{width:78px;color:#aab4c5;flex:none;text-transform:capitalize;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .cc-bar-track{flex:1;height:8px;background:#1d2942;border-radius:6px;overflow:hidden}
@@ -319,27 +343,59 @@
     .cc-expand-btn:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
     @media (max-width:560px){.cc-expand-btn .cc-expand-l{display:none}.cc-expand-btn{padding:3px 7px}}
 
-    /* ── Section 1 · Global Overview: map | command-centre tiles | AI panel ── */
-    .cc-sec1{display:grid;grid-template-columns:1.5fr 1.1fr 1.15fr;gap:14px;align-items:stretch;margin-bottom:6px}
+    /* ── Global Overview: two EQUAL-HEIGHT 50/50 columns (map | command centre) ── */
+    .cc-sec1{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch;margin-bottom:14px}
     .cc-sec1-map{min-width:0;position:relative}
     .cc-cmdc{min-width:0;display:flex;flex-direction:column}
-    .cc-sec1-ai{min-width:0;display:flex;flex-direction:column}
-    @media(max-width:1180px){.cc-sec1{grid-template-columns:1fr 1fr}.cc-sec1-ai{grid-column:1 / -1}}
     @media(max-width:760px){.cc-sec1{grid-template-columns:1fr}}
+    /* AI Assessment & Actions — its own FULL-WIDTH row (replaces Situational Awareness). */
+    .cc-sec1-ai{min-width:0;display:flex;flex-direction:column}
+    .cc-ai-wide{width:100%;margin-bottom:14px}
+    /* On wide screens, lay the AI assessment across the full row: the situation
+       assessment + the recommended actions sit side by side, with the scoped action
+       bar full-width beneath — uses the horizontal space instead of a tall column. */
+    @media(min-width:900px){
+      .cc-ai-wide.cc-cmd{display:grid;grid-template-columns:1.6fr 1fr;grid-template-areas:"bc bc" "top recs" "act act";column-gap:20px;row-gap:8px;align-items:start}
+      .cc-ai-wide.cc-cmd>.cc-cmd-bc{grid-area:bc}
+      .cc-ai-wide.cc-cmd>.cc-cmd-top{grid-area:top;margin:0}
+      .cc-ai-wide.cc-cmd>.cc-cmd-recs{grid-area:recs;margin-top:0}
+      .cc-ai-wide.cc-cmd>.cc-cmd-actions{grid-area:act}
+    }
     /* Command-centre metric tiles (deep-link into the incident feed) */
-    .cc-tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1 1 auto;align-content:start}
-    .cc-tile{appearance:none;text-align:left;display:flex;flex-direction:column;gap:2px;
-      background:#0f1726;border:1px solid #1d2942;border-radius:11px;padding:11px 12px;cursor:pointer;
+    /* Fill the column height: the 3 tile rows stretch so the metric highlights expand
+       to match the map's height (the operator's "command centre" reads as one tall card). */
+    .cc-tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1 1 auto;align-content:stretch;grid-auto-rows:1fr}
+    /* Compact stat-card: icon on the LEFT, number + label + cta stacked to the
+       RIGHT. Kills the dead vertical whitespace of the old icon-over-number stack. */
+    .cc-tile{appearance:none;text-align:left;display:grid;grid-template-columns:auto 1fr;align-items:center;gap:11px;
+      background:#0f1726;border:1px solid #1d2942;border-radius:11px;padding:12px 13px;cursor:pointer;
       transition:border-color .12s,background .12s;min-width:0;font:inherit;color:inherit}
     .cc-tile:hover{border-color:#418FDE;background:#13203a}
     .cc-tile:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
     .cc-tile-info{cursor:default}.cc-tile-info:hover{border-color:#1d2942;background:#0f1726}
-    .cc-tile-ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:14px;margin-bottom:2px}
-    .cc-tile-n{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.05}
-    .cc-tile-l{font-size:12px;color:#cdd8ec;font-weight:600}
-    .cc-tile-cta{font-size:10.5px;color:#7d89a3}
+    .cc-tile-ic{width:38px;height:38px;border-radius:9px;display:grid;place-items:center;font-size:17px;flex:none}
+    .cc-tile-body{display:flex;flex-direction:column;min-width:0}
+    .cc-tile-n{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.15}
+    .cc-tile-l{font-size:12px;color:#cdd8ec;font-weight:600;line-height:1.25}
+    .cc-tile-cta{font-size:10.5px;color:#7d89a3;margin-top:1px}
     .cc-tile:hover .cc-tile-cta{color:#9fb2d4}
     @media(max-width:420px){.cc-tiles{grid-template-columns:1fr}}
+
+    /* Duplicate-checks status strip (algorithm-based pHash + proximity; global) */
+    .cc-dupcheck{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:9px 13px;
+      border:1px solid #233149;border-radius:10px;background:#0f1726;font-size:12.5px;color:#cdd8ec;flex-wrap:wrap}
+    .cc-dupcheck:empty{display:none}
+    .cc-dupcheck.clear{color:#9fb2d4}
+    .cc-dupcheck .ccd-ic{font-size:14px;flex:none}
+    .cc-dupcheck .ccd-t{min-width:0}
+    .cc-dupcheck .ccd-chips{display:inline-flex;gap:5px;flex-wrap:wrap}
+    .cc-dupcheck .ccd-chip{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;border:1px solid #2b3b56}
+    .cc-dupcheck .ccd-chip.high{color:#fca5a5;border-color:#7f1d1d;background:rgba(239,68,68,.10)}
+    .cc-dupcheck .ccd-chip.med{color:#fcd34d;border-color:#78350f;background:rgba(245,158,11,.10)}
+    .cc-dupcheck .ccd-chip.low{color:#9fb2d4}
+    .cc-dupcheck .ccd-review{margin-left:auto;appearance:none;border:1px solid #2b3b56;background:#173a6b;color:#dbe7fb;
+      font:inherit;font-size:12px;font-weight:600;padding:4px 11px;border-radius:8px;cursor:pointer}
+    .cc-dupcheck .ccd-review:hover{background:#1d4a85}
 
     /* ── Situational Awareness: four AI facets ── */
     .cc-sa-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -393,6 +449,12 @@
   function closeLanding() {
     const ov = el('cc-home-overlay');
     if (ov) ov.classList.remove('cc-home-open');
+    // Park the relocated analytics panel back in <body> (hidden) so it survives the
+    // home being closed/reopened (innerHTML is rebuilt each open).
+    try {
+      const _ap = document.getElementById('analytics-panel');
+      if (_ap) { _ap.classList.remove('cc-analytics-inline'); _ap.style.display = 'none'; document.body.appendChild(_ap); }
+    } catch (_e) {}
     if (_poll) { clearInterval(_poll); _poll = null; }
   }
   // Focus-trap: keep Tab/Shift+Tab within the open overlay (a11y, WCAG 2.4.3).
@@ -412,6 +474,10 @@
     if (!token()) return;
     ensureOverlay();
     const ov = el('cc-home-overlay');
+    // The Analytics panel was relocated off the header Tools into this home. It lives
+    // in <body> while the home is closed; move it back out BEFORE we wipe innerHTML so
+    // the rebuild doesn't destroy it (re-parented into the section again just below).
+    try { const _ap = document.getElementById('analytics-panel'); if (_ap && _ap.parentElement !== document.body) document.body.appendChild(_ap); } catch (_e) {}
     // Identity, live status, profile and the primary nav now live in the
     // global Command Center shell (crisp-shell.js / #crisp-globalnav), shown on
     // every surface. The landing keeps only its situational sub-header (org
@@ -424,11 +490,11 @@
              visually-hidden heading is the labelled region's H1 for a11y. -->
         <h1 id="cc-home-heading" class="cc-vh">Crisis Intelligence Center</h1>
 
-        <!-- ═════ SECTION 1 · GLOBAL OVERVIEW ═════
-             map (WHERE) | command-centre metric tiles (HOW MANY - each deep-links
-             into the incident feed at the right scope/filter) | AI Assessment &
-             Actions (CrispCommandPanel, auto-runs on load). One decision-first row. -->
-        <div class="cc-sec-t cc-band">🌐 Section 1 · Global Overview <span class="cc-band-sub">- map · command centre · AI assessment &amp; actions</span></div>
+        <!-- ═════ GLOBAL OVERVIEW ═════ two EQUAL-HEIGHT 50/50 columns:
+             map (WHERE) | command-centre metric tiles (HOW MANY - each deep-links into
+             the incident feed). The tiles stretch to fill the column height. The AI
+             Assessment + actions now own the full-width row below. -->
+        <div class="cc-sec-t cc-band">🌐 Global Overview <span class="cc-band-sub">- map · command centre</span></div>
         <div class="cc-sec1">
           <div class="cc-card cc-split-map cc-sec1-map" id="cc-map-card" style="padding:8px">
             <div id="cc-map"></div><div id="cc-map-geo" class="cc-geo"></div>
@@ -437,21 +503,24 @@
             <div class="cc-sec-t cc-att-hd" style="margin:0 0 8px">Command centre</div>
             <div id="cc-att"><div class="cc-empty">Loading…</div></div>
           </div>
-          <div class="cc-sec1-ai" id="cc-command"></div>
         </div>
 
-        <!-- ═════ SITUATIONAL AWARENESS (AI · auto-generated) ═════
-             Re-skins the SAME /analytics/assess payload into four operator facets
-             (what's happening · where · what needs attention · recommended actions).
-             Replaces the old rule-based "Situation Briefing". -->
-        <div class="cc-sec-t cc-band">📡 Situational Awareness <span class="cc-band-sub">- AI · what's happening · where · what needs attention · recommended actions</span></div>
-        <div class="cc-card" id="cc-sitaware"><div class="cc-empty">Generating situational summary…</div></div>
+        <!-- ═════ AI ASSESSMENT & ACTIONS (global) ═════ full-width row. Replaces the
+             old Situational Awareness re-skin (which duplicated this same /analytics/assess
+             payload). The shared CrispCommandPanel renders the situation confidence, key
+             risks, recommended actions + the scoped action bar across the full width. -->
+        <div class="cc-sec-t cc-band">🛰️ AI Assessment &amp; Actions <span class="cc-band-sub">- situation confidence · key risks · recommended actions</span></div>
+        <div class="cc-sec1-ai cc-ai-wide" id="cc-command"><div class="cc-empty">Click <b>Analyze Global</b> to generate the situation assessment.</div></div>
+
+        <!-- Duplicate checks (algorithm-based pHash + proximity, not AI). A slim
+             always-on status strip; reused at operation + building level. -->
+        <div class="cc-dupcheck" id="cc-dupcheck"></div>
 
         <div class="cc-zone cc-zone-monitor">
           <!-- ═════ SECTION 2 · ACTIVE OPERATIONS ═════
                recent operations (the rail leads with a "+ New Operation" card) |
                operations summary + a single all-operations hotspot map. -->
-          <div class="cc-sec-t cc-band">🎯 Section 2 · Active Operations <span class="cc-band-sub">- operations you are running</span> <span class="cc-stale" id="cc-sum-stale"></span><button type="button" id="cc-ops-expand" class="cc-expand-btn" title="Open the full operations view" aria-label="Expand to the full operations management view">⤢ <span class="cc-expand-l">View all</span></button></div>
+          <div class="cc-sec-t cc-band">🎯 Active Operations <span class="cc-band-sub">- operations you are running</span> <span class="cc-stale" id="cc-sum-stale"></span><button type="button" id="cc-ops-expand" class="cc-expand-btn" title="Open the full operations view" aria-label="Expand to the full operations management view">⤢ <span class="cc-expand-l">View all</span></button></div>
           <div class="cc-split cc-split-ops">
             <div class="cc-split-opslist">
               <div id="cc-ops-rail"><div class="cc-empty">Loading operations…</div></div>
@@ -465,29 +534,22 @@
             </div>
           </div>
 
-          <!-- Building Intelligence: buildings ranked by operational priority - the
-               real places help is sent. Same shared card used in the Operation
-               worklist (no second mental model). Report volume stays visible. -->
-          <div class="cc-sec-t cc-band">🏢 Building Intelligence <span class="cc-band-sub">- buildings ranked by priority · where to send help next</span> <button type="button" id="cc-bld-expand" class="cc-expand-btn" title="See all buildings in the incident feed">⤢ <span class="cc-expand-l">View all</span></button></div>
-          <div id="cc-buildings"><div class="cc-empty">Loading buildings…</div></div>
+          <!-- Building Intelligence was removed from the home (Jun 2026): buildings now
+               live ONLY in the incident feed (the op→building→incident tree), so there is
+               no second building surface to reconcile. -->
 
-          <!-- ═════ SECTION 3 · GLOBAL SUMMARY ═════
-               left = the existing distribution cards (kept); the grid below pairs
-               Operational Impact with the new portfolio Executive summary. -->
-          <div class="cc-sec-t cc-band">📊 Section 3 · Global Summary <span class="cc-band-sub">- distributions · executive summary</span></div>
-          <div class="cc-grid3">
-            <div class="cc-card"><div class="cc-sec-t" style="margin:0 0 8px">By severity</div><div id="cc-dist-sev"></div></div>
-            <div class="cc-card"><div class="cc-sec-t" style="margin:0 0 8px">By crisis type</div><div id="cc-dist-type"></div></div>
-            <div class="cc-card"><div class="cc-sec-t" style="margin:0 0 8px">Efficiency &amp; intake</div><div id="cc-eff"></div></div>
+          <!-- ═════ ANALYTICS ═════ relocated off the header Tools into the home as a
+               70/30 row: the analytics dashboard (the re-parented #analytics-panel, shown
+               inline) beside a scrolling Recent Incidents feed. The old Global Summary /
+               Operational Impact / Executive Summary were removed. -->
+          <div class="cc-sec-t cc-band">📈 Analytics <span class="cc-band-sub">- trends · KPIs · team performance · recent incidents</span></div>
+          <div class="cc-analytics-split">
+            <div class="cc-an-main" id="cc-analytics-mount"><div class="cc-empty">Loading analytics…</div></div>
+            <div class="cc-an-side">
+              <div class="cc-sec-t cc-att-hd" style="margin:0 0 8px">Recent incidents</div>
+              <div class="cc-card cc-an-feed" id="cc-activity" style="padding:6px 10px"><div class="cc-empty">Loading…</div></div>
+            </div>
           </div>
-
-          <div class="cc-grid2" style="margin-top:14px">
-            <div><div class="cc-sec-t">Operational Impact</div><div class="cc-card" id="cc-impact"></div></div>
-            <div><div class="cc-sec-t">Executive summary</div><div class="cc-card" id="cc-exec"><div class="cc-empty">Loading…</div></div></div>
-          </div>
-
-          <div class="cc-sec-t">Recent Operational Activity</div>
-          <div class="cc-card" id="cc-activity" style="padding:6px 10px"><div class="cc-empty">Loading…</div></div>
         </div>
       </div>`;
     ov.classList.add('cc-home-open');
@@ -497,6 +559,20 @@
     try {
       if (window.CrispCommandPanel && el('cc-command')) {
         window.CrispCommandPanel.render({ level: 'global', mountEl: el('cc-command') });
+      }
+    } catch (_e) {}
+
+    // Relocated Analytics: re-parent the (header-Tools) analytics panel into the home
+    // 70% column, render it INLINE, and draw it. 30% column = the Recent Incidents feed.
+    try {
+      const _ap = document.getElementById('analytics-panel');
+      const _mnt = el('cc-analytics-mount');
+      if (_ap && _mnt) {
+        _ap.classList.add('cc-analytics-inline');
+        _ap.style.display = 'block';
+        _mnt.innerHTML = '';
+        _mnt.appendChild(_ap);
+        if (typeof window.__renderAnalytics === 'function') window.__renderAnalytics();
       }
     } catch (_e) {}
 
@@ -513,11 +589,6 @@
       e.preventDefault(); e.stopPropagation();
       try { (window.openOperationWizard || function () { go('/operations'); })(); } catch (_e) { go('/operations'); }
     });
-    // "View all" buildings → the incident feed, where the Buildings grouping view
-    // lists every building (no separate buildings route by design).
-    const bldExp = el('cc-bld-expand');
-    if (bldExp) bldExp.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); go('/incidents'); });
-
     // Org branding + clock are rendered by the shell (crisp-shell.js) now.
     refreshAll();
     if (_poll) clearInterval(_poll);
@@ -527,10 +598,43 @@
   function refreshAll() {
     loadSummary();
     loadOperations();
-    loadBuildings();
     loadFeed();
     loadSparkline();
-    loadSitAware();   // AI Situational Awareness (replaced the rule-based Situation Briefing)
+    loadDupChecks();  // algorithm-based duplicate detection status (global)
+  }
+
+  // ── data: duplicate checks (algorithm-based, NOT AI) ──────────────────────
+  // Surfaces the global pHash + proximity duplicate detector's standing result:
+  // how many UNCONFIRMED probable-duplicate pairs await an analyst. Reuses the
+  // existing /reports/duplicate-summary (scopable; reused at op + building level).
+  async function loadDupChecks() {
+    const box = el('cc-dupcheck');
+    if (!box) return;
+    try {
+      const { body } = await jget('/reports/duplicate-summary');
+      renderDupChecks(box, body || {});
+    } catch (e) {
+      // Non-fatal: the panel just goes quiet if the detector endpoint is unavailable.
+      box.innerHTML = '';
+    }
+  }
+  function renderDupChecks(box, d) {
+    const total = Number(d.total) || 0;
+    const high = Number(d.high) || 0, med = Number(d.medium) || 0, low = Number(d.low) || 0;
+    if (total === 0) {
+      box.className = 'cc-dupcheck clear';
+      box.innerHTML = '<span class="ccd-ic">🔍</span><span class="ccd-t"><strong>Duplicate checks</strong> · all clear — no probable duplicates detected</span>';
+      return;
+    }
+    box.className = 'cc-dupcheck has-dups';
+    const chip = (n, label, cls) => n > 0 ? `<span class="ccd-chip ${cls}">${fmtNum(n)} ${label}</span>` : '';
+    box.innerHTML =
+      '<span class="ccd-ic">🔍</span>'
+      + `<span class="ccd-t"><strong>Duplicate checks</strong> · ${fmtNum(total)} probable-duplicate pair${total === 1 ? '' : 's'} to review</span>`
+      + `<span class="ccd-chips">${chip(high, 'high', 'high')}${chip(med, 'med', 'med')}${chip(low, 'low', 'low')}</span>`
+      + '<button type="button" class="ccd-review" id="cc-dupcheck-review">Review →</button>';
+    const btn = box.querySelector('#cc-dupcheck-review');
+    if (btn) btn.addEventListener('click', () => go('/incidents'));
   }
 
   // ── data: Building Intelligence (top buildings by humanitarian_priority) ──
@@ -601,9 +705,11 @@
     const tag = (t) => (t.nav ? 'button' : 'div');
     const tile = (t) => `<${tag(t)} type="button" class="cc-tile${t.nav ? '' : ' cc-tile-info'}" data-tile="${t.k}"${t.nav ? ' role="link" aria-label="' + esc(t.label) + ', open"' : ''}>
         <span class="cc-tile-ic" style="background:${t.col}22;color:${t.col}">${t.ic}</span>
-        <span class="cc-tile-n" id="cc-tile-${t.k}" style="color:${t.col}">${fmtNum(t.n)}</span>
-        <span class="cc-tile-l">${esc(t.label)}</span>
-        <span class="cc-tile-cta">${t.sub ? esc(t.sub) : (t.nav ? 'view ›' : '')}</span>
+        <span class="cc-tile-body">
+          <span class="cc-tile-n" id="cc-tile-${t.k}" style="color:${t.col}">${fmtNum(t.n)}</span>
+          <span class="cc-tile-l">${esc(t.label)}</span>
+          <span class="cc-tile-cta">${t.sub ? esc(t.sub) : (t.nav ? 'view ›' : '')}</span>
+        </span>
       </${tag(t)}>`;
     const box = el('cc-att');
     if (!box) return;
@@ -658,7 +764,12 @@
       const all = (ops || []).slice();
       const cluster = all.find((o) => o.is_cluster) || null;
       const real = all.filter((o) => !o.is_cluster);
-      const isEnded = (o) => String(o && o.status || '').toUpperCase() === 'ENDED';
+      // Live-vs-ended via the shared CrispOpCard rule (status ENDED, is_active
+      // false, OR end-window passed) so a window-closed op never leads the rail
+      // with a green LIVE badge - it drops to the "View all" overflow instead.
+      const isEnded = (o) => (window.CrispOpCard && window.CrispOpCard.isEffectivelyEnded)
+        ? window.CrispOpCard.isEffectivelyEnded(o)
+        : String(o && o.status || '').toUpperCase() === 'ENDED';
       const live = real.filter((o) => !isEnded(o));
 
       // Portfolio summary - the one-line "do I need to act?" answer at any scale,
@@ -1090,32 +1201,35 @@
     return '<span style="color:#8A99B5">unreviewed</span>';
   }
 
+  // Recent Incidents — a compact vertical FEED for the narrow (30%) column. Renders up
+  // to 20 newest, then the container (.cc-an-feed) scrolls.
   function renderActivity(reports) {
     const box = el('cc-activity');
     if (!box) return;
-    if (!reports.length) { box.innerHTML = `<div class="cc-empty">No recent activity</div>`; return; }
-    const rows = reports.slice(0, 10).map((r) => {
+    if (!reports.length) { box.innerHTML = `<div class="cc-empty">No recent incidents</div>`; return; }
+    box.innerHTML = reports.slice(0, 20).map((r) => {
       const sev = String(r.severity || 'UNKNOWN').toUpperCase();
       const col = SEV_COLOR[sev] || '#64748b';
-      const status = String(r.status || '').toUpperCase();
-      const sc = STATUS_COLOR[status] || '#6B7280';
+      // A REJECTED report (reviewer_verdict) keeps status PENDING in the DB, but it must
+      // READ as "Rejected" in the feed, not "Pending" (verdict wins over raw status).
+      const _rejected = String(r.reviewer_verdict || '').toUpperCase() === 'REJECTED';
+      const status = _rejected ? 'REJECTED' : String(r.status || '').toUpperCase();
+      const sc = _rejected ? '#f87171' : (STATUS_COLOR[status] || '#6B7280');
       const place = (r.location && (r.location.user_location_name || r.location.device_location_name)) || '-';
       const what = [r.crisis_type, r.infrastructure_type].filter(Boolean).map(titleCase).join(' · ') || 'Report';
-      return `<tr data-id="${esc(r.id || '')}">
-        <td title="${esc(what)}">${esc(what)}</td>
-        <td title="${esc(place)}">${esc(place)}</td>
-        <td><span class="cc-badge" style="background:${col}22;color:${col}">${esc(titleCase(sev))}</span></td>
-        <td>${verdictLabel(r.reviewer_verdict)}</td>
-        <td><span class="cc-badge" style="background:${sc}22;color:${sc}">${esc(titleCase(status))}</span></td>
-        <td style="color:#8A99B5">${esc(timeAgo(r.server_created_at))}</td></tr>`;
+      return `<button type="button" class="cc-an-row" data-id="${esc(r.id || '')}" title="${esc(what)} · ${esc(place)}">
+        <span class="cc-an-dot" style="background:${col}"></span>
+        <span class="cc-an-rbody">
+          <span class="cc-an-what">${esc(what)}</span>
+          <span class="cc-an-meta">${esc(place)} · <span style="color:${sc}">${esc(titleCase(status))}</span></span>
+        </span>
+        <span class="cc-an-time">${esc(timeAgo(r.server_created_at))}</span>
+      </button>`;
     }).join('');
-    box.innerHTML = `<table class="cc-tbl"><thead><tr>
-      <th>Type</th><th>Location</th><th>Severity</th><th>Verification</th><th>Status</th><th>Updated</th>
-      </tr></thead><tbody>${rows}</tbody></table>`;
-    // Deep-link the clicked report (route-aware: navigates to Operations then
-    // opens that incident's detail) - not the old generic '/incidents' feed.
-    box.querySelectorAll('tbody tr').forEach((tr) => tr.addEventListener('click', () => {
-      const id = tr.getAttribute('data-id');
+    // Deep-link the clicked report (route-aware: navigates to Operations then opens
+    // that incident's detail) - not the old generic '/incidents' feed.
+    box.querySelectorAll('.cc-an-row').forEach((row) => row.addEventListener('click', () => {
+      const id = row.getAttribute('data-id');
       if (id && typeof window.openIncident === 'function') window.openIncident(id);
       else go('/incidents');
     }));
