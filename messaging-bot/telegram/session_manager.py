@@ -204,6 +204,20 @@ class TelegramSession:
     # reset to False only if submission fails, to allow a retry.
     reviewed: bool = False
     submitted: bool = False
+    # ── Dynamic crisis-form pack (UNDP Appendix-1 questions) ──────────────────
+    # When an active pack covers the reporter's GPS location, the bot asks the
+    # pack's channel-applicable questions (the 3 UNDP multi-selects) conversation-
+    # ally and submits form_pack_id/version/form_data. All None/empty when no pack
+    # applies → the rapid-intake flow is byte-for-byte unchanged.
+    form_pack_id: Optional[str] = None
+    form_pack_version: Optional[int] = None
+    pack_schema: Optional[dict] = None              # cached schema_json for this session
+    pack_fields: list = field(default_factory=list)  # iter_askable_fields(...) result
+    pack_index: int = 0                             # which askable field we're on
+    pack_answers: dict = field(default_factory=dict)  # field key -> coerced value (== form_data)
+    pack_partial: list = field(default_factory=list)  # in-progress multi_select picks (option values)
+    pack_resolved: bool = False                     # already called /active for this session
+    pack_awaiting_other: Optional[str] = None       # field key awaiting an "Other" free-text
 
     @property
     def has_evidence(self) -> bool:
@@ -212,6 +226,20 @@ class TelegramSession:
     @property
     def has_location(self) -> bool:
         return self.latitude is not None and self.longitude is not None
+
+    @property
+    def pack_active(self) -> bool:
+        """An active crisis-form pack covers this location → the bot must ask its
+        channel-applicable questions before submitting."""
+        return bool(self.pack_fields)
+
+    @property
+    def pack_complete(self) -> bool:
+        """Every askable pack field has been answered (and no pending "Other"
+        follow-up). True when no pack applies → the rapid-intake flow is unchanged."""
+        if not self.pack_fields:
+            return True
+        return self.pack_index >= len(self.pack_fields) and not self.pack_awaiting_other
 
     @property
     def is_complete(self) -> bool:
@@ -682,12 +710,20 @@ async def create_report_early(session: TelegramSession) -> Optional[str]:
         # the active crisis zone there and echo its event id. The backend treats
         # this as a hint and re-derives authoritatively from the location, so a
         # stale lookup can't mislabel; no active zone → absent → GLOBAL report.
-        # NOTE: only crisis_event_id is sent (NOT form_pack_id) - Telegram doesn't
-        # render the dynamic Stage 2/3 pack, so attaching a pack would 422 on its
-        # unanswered required fields.
         _eid = await resolve_active_event_id(session.latitude, session.longitude)
         if _eid:
             meta["crisis_event_id"] = _eid
+        # Dynamic crisis-form pack (UNDP Appendix-1 questions). When an active pack
+        # covers this location, the bot asked its channel-applicable questions
+        # conversationally; attach the answers so the server validates + stores them
+        # (form_data). ONLY when the pack is COMPLETE - the caller defers this create
+        # until every askable field is answered (handlers._maybe_create_report), so
+        # a half-answered pack can never 422 on a required field. No pack → nothing
+        # attached and the report is filed exactly as before.
+        if session.form_pack_id and session.pack_complete and session.pack_answers:
+            meta["form_pack_id"] = session.form_pack_id
+            meta["form_pack_version"] = session.form_pack_version
+            meta["form_data"] = dict(session.pack_answers)
 
     try:
         async with httpx.AsyncClient(timeout=30) as c:

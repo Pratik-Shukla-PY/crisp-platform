@@ -18,6 +18,9 @@ API_BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 _STRINGS = {
     "en": {
+        "pack_done": "✅ Done",
+        "pack_multi_hint": "Tap all that apply, then tap Done.",
+        "pack_other_prompt": "Please describe your other pressing need.",
         "welcome_1": "🆘 *HELP! Report Damage*",
         "welcome_2": "Tell us what is broken.\nWe will send help.\n\n👇 Press the button below",
         "welcome_btn": "🚨 I NEED HELP",
@@ -179,6 +182,9 @@ _STRINGS = {
         "debris_no":   "❌ नहीं",
     },
     "es": {
+        "pack_done": "✅ Listo",
+        "pack_multi_hint": "Marque todo lo que corresponda y pulse Listo.",
+        "pack_other_prompt": "Describa su otra necesidad urgente.",
         "welcome_1": "🆘 *¡AYUDA! Reportar Daño*",
         "welcome_2": "Dinos qué se rompió.\nVamos a enviar ayuda.\n\n👇 Toca el botón abajo",
         "welcome_btn": "🚨 NECESITO AYUDA",
@@ -253,6 +259,9 @@ _STRINGS = {
         "consent_declined": "Entendido - no se recopilaron datos. Envía /start para volver a intentar.",
     },
     "fr": {
+        "pack_done": "✅ Terminé",
+        "pack_multi_hint": "Cochez tout ce qui s'applique, puis Terminé.",
+        "pack_other_prompt": "Veuillez décrire votre autre besoin urgent.",
         "welcome_1": "🆘 *AU SECOURS ! Signaler un Dégât*",
         "welcome_2": "Dites-nous ce qui est cassé.\nOn envoie de l'aide.\n\n👇 Appuyez en bas",
         "welcome_btn": "🚨 J'AI BESOIN D'AIDE",
@@ -327,6 +336,9 @@ _STRINGS = {
         "consent_declined": "Compris - aucune donnée collectée. Envoyez /start pour réessayer.",
     },
     "ar": {
+        "pack_done": "✅ تم",
+        "pack_multi_hint": "اختر كل ما ينطبق، ثم اضغط تم.",
+        "pack_other_prompt": "يُرجى وصف حاجتك الملحّة الأخرى.",
         "welcome_1": "🆘 *نجدة! بلّغ عن ضرر*",
         "welcome_2": "قولنا شو انكسر.\nرح نبعت مساعدة.\n\n👇 اضغط الزر تحت",
         "welcome_btn": "🚨 بدي مساعدة",
@@ -503,6 +515,9 @@ _STRINGS = {
         "debris_no":   "❌ Hapana",
     },
     "zh": {
+        "pack_done": "✅ 完成",
+        "pack_multi_hint": "勾选所有适用项，然后点击完成。",
+        "pack_other_prompt": "请描述您的其他迫切需求。",
         "welcome_1": "🆘 *救命！报告损坏*",
         "welcome_2": "告诉我们什么坏了。\n我们会派人来帮忙。\n\n👇 点下面的按钮",
         "welcome_btn": "🚨 我需要帮助",
@@ -577,6 +592,9 @@ _STRINGS = {
         "consent_declined": "好的 - 未收集任何数据。随时输入 /start 重试。",
     },
     "ru": {
+        "pack_done": "✅ Готово",
+        "pack_multi_hint": "Отметьте всё подходящее, затем нажмите Готово.",
+        "pack_other_prompt": "Опишите вашу другую насущную потребность.",
         "welcome_1": "🆘 *ПОМОГИТЕ! Сообщить о повреждении*",
         "welcome_2": "Скажите что сломалось.\nМы пришлем помощь.\n\n👇 Нажмите кнопку внизу",
         "welcome_btn": "🚨 МНЕ НУЖНА ПОМОЩЬ",
@@ -939,6 +957,38 @@ async def send_step_severity(chat_id: int, lang: str):
                 [{"text": "❌ Cancel & Start Over", "callback_data": "cancel_report"}],
             ],
         },
+    })
+
+
+async def send_pack_question(chat_id: int, lang: str, field: dict, field_idx: int, partial):
+    """Render a dynamic crisis-pack question (the UNDP Appendix-1 multi-selects) as a
+    Telegram inline keyboard: one toggle button per option (a check mark when
+    selected) + a Done row. callback_data uses INDICES (ps:{field_idx}:{opt_idx} /
+    ps_done:{field_idx}) to stay well under Telegram's 64-byte limit. The question +
+    option TEXT come from the pack's own label_i18n (already localized to the 6 UN
+    languages); only the chrome (Done, hint) uses the bot's _STRINGS."""
+    from messaging_bot.pack_questions import field_label, option_label
+    chosen = set(partial or [])
+    opts = field.get("options") or []
+    rows = []
+    for oi, o in enumerate(opts):
+        mark = "✅ " if o.get("value") in chosen else "▫️ "
+        rows.append([{"text": (mark + option_label(o, lang))[:60],
+                      "callback_data": f"ps:{field_idx}:{oi}"}])
+    rows.append([{"text": t(lang, "pack_done"), "callback_data": f"ps_done:{field_idx}"}])
+    body = "*" + field_label(field, lang) + "*\n" + t(lang, "pack_multi_hint")
+    return await _send("sendMessage", {
+        "chat_id": chat_id,
+        "text": body,
+        "parse_mode": "Markdown",
+        "reply_markup": {"inline_keyboard": rows},
+    })
+
+
+async def send_pack_other_prompt(chat_id: int, lang: str):
+    """Free-text follow-up after an "Other, please specify" pressing-need selection."""
+    return await _send("sendMessage", {
+        "chat_id": chat_id, "text": t(lang, "pack_other_prompt"), "parse_mode": "Markdown",
     })
 
 

@@ -75,6 +75,20 @@ class SessionBuffer:
     last_activity: float = field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
     message_ids: set = field(default_factory=set)  # deduplication
     submitted_report_id: Optional[str] = None
+    # ── Dynamic crisis-form pack (UNDP Appendix-1 questions) ──────────────────
+    # When an active pack covers the reporter's location, the bot asks the pack's
+    # channel-applicable questions (the 3 UNDP multi-selects) as numbered text and
+    # submits form_pack_id/version/form_data. All None/empty when no pack applies →
+    # the rapid-intake flow is byte-for-byte unchanged.
+    form_pack_id: Optional[str] = None
+    form_pack_version: Optional[int] = None
+    pack_schema: Optional[dict] = None
+    pack_fields: list = field(default_factory=list)
+    pack_index: int = 0
+    pack_answers: dict = field(default_factory=dict)   # field key -> coerced value (== form_data)
+    pack_partial: list = field(default_factory=list)   # in-progress multi_select picks (option values)
+    pack_resolved: bool = False
+    pack_awaiting_other: Optional[str] = None
 
     @property
     def has_evidence(self) -> bool:
@@ -86,13 +100,25 @@ class SessionBuffer:
         return self.latitude is not None and self.longitude is not None
 
     @property
+    def pack_active(self) -> bool:
+        return bool(self.pack_fields)
+
+    @property
+    def pack_complete(self) -> bool:
+        if not self.pack_fields:
+            return True
+        return self.pack_index >= len(self.pack_fields) and not self.pack_awaiting_other
+
+    @property
     def is_complete(self) -> bool:
-        """All required fields gathered - ready to submit."""
+        """All required fields gathered - ready to submit. In a pack region the
+        UNDP questions must also be answered before the auto-submit fires."""
         return (
             self.has_evidence
             and self.severity != "UNKNOWN"
             and self.infra_type != "OTHER"  # Must explicitly choose
             and self.has_location
+            and self.pack_complete
         )
 
     @property
@@ -190,12 +216,19 @@ async def submit_report(session: SessionBuffer) -> Optional[str]:
         # Operation linkage - WhatsApp shares a precise GPS location, so resolve
         # the active crisis zone there and echo its event id. The backend treats
         # it as a hint and re-derives authoritatively from the location; no active
-        # zone → absent → GLOBAL report. Only crisis_event_id is sent (NOT
-        # form_pack_id) - WhatsApp doesn't render the dynamic pack, so attaching
-        # one would 422 on its unanswered required fields.
+        # zone → absent → GLOBAL report.
         _eid = await resolve_active_event_id(session.latitude, session.longitude)
         if _eid:
             meta["crisis_event_id"] = _eid
+        # Dynamic crisis-form pack (UNDP Appendix-1 questions). When an active pack
+        # covers this location the bot asked its channel-applicable questions; attach
+        # the answers so the server validates + stores them (form_data). The submit
+        # gate (is_complete → pack_complete) guarantees the pack is fully answered
+        # before this fires, so a required field can never 422. No pack → unchanged.
+        if session.form_pack_id and session.pack_complete and session.pack_answers:
+            meta["form_pack_id"] = session.form_pack_id
+            meta["form_pack_version"] = session.form_pack_version
+            meta["form_data"] = dict(session.pack_answers)
 
     try:
         from messaging_bot.chunked_uploader import upload_media_chunked, extract_b64_from_data_url

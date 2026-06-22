@@ -42,6 +42,12 @@ from .bot_replies import (
     send_review_card, send_review_fix_menu,
     send_text, answer_callback, edit_reply_markup_clear,
     detect_lang, t,
+    send_pack_question, send_pack_other_prompt,
+)
+from messaging_bot.crisis_forms_client import resolve_active_pack
+from messaging_bot.pack_questions import (
+    iter_askable_fields, conditional_child, coerce_answer,
+    selection_has_other, is_other_option, field_label, option_label, max_count,
 )
 
 logger = logging.getLogger(__name__)
@@ -83,6 +89,68 @@ def _fire_upload(session, coro):
     """Fire-and-forget an upload coroutine. Tracks task for safety-net await at submit."""
     task = asyncio.create_task(coro)
     session.pending_uploads.append(task)
+
+
+async def _resolve_pack(session):
+    """Resolve the active crisis-form pack at the reporter's GPS location and prepare
+    the channel-applicable questions (the 3 UNDP multi-selects). No pack →
+    `pack_fields` stays empty and the rapid-intake flow is byte-for-byte unchanged.
+    Safe to call again on a corrected pin: a pack change resets pack progress."""
+    try:
+        pack = await resolve_active_pack(session.latitude, session.longitude)
+    except Exception as e:
+        logger.warning("[TG] pack resolve failed: %s", e)
+        pack = None
+    session.pack_resolved = True
+    if pack and pack.get("schema_json"):
+        if pack.get("pack_id") != session.form_pack_id:
+            # new/changed pack → start its questions fresh
+            session.pack_index = 0
+            session.pack_answers = {}
+            session.pack_partial = []
+            session.pack_awaiting_other = None
+        session.form_pack_id = pack.get("pack_id")
+        session.form_pack_version = pack.get("pack_version")
+        session.pack_schema = pack.get("schema_json")
+        session.pack_fields = iter_askable_fields(pack["schema_json"], "TELEGRAM")
+    else:
+        # No active pack here → drop any prior pack state (e.g. a corrected pin that
+        # left the zone), so nothing is asked or attached.
+        session.form_pack_id = None
+        session.form_pack_version = None
+        session.pack_schema = None
+        session.pack_fields = []
+        session.pack_index = 0
+        session.pack_answers = {}
+        session.pack_partial = []
+        session.pack_awaiting_other = None
+
+
+async def _maybe_create_report(session):
+    """Create the server report once there is a minimal viable set AND (when a pack
+    is active) the pack is complete - so the single /reports/meta POST carries
+    form_pack_id/form_data. Fires the deferred media uploads after creation. No-op
+    if already created or not yet viable. Idempotent."""
+    if session.report_id:
+        return
+    has_media_or_text = bool(session.image_data_url or session.audio_data_url or session.text)
+    if not (has_media_or_text and session.has_location):
+        return
+    if session.pack_active and not session.pack_complete:
+        return   # defer until the UNDP pack questions are answered
+    await create_report_early(session)
+    if session.report_id:
+        # Flush the classify fields captured BEFORE creation (crisis_type, damage,
+        # ...). The per-chip /classify PATCHes no-op'd while report_id was None
+        # (deferred for the pack), and create_report_early's meta omits crisis_type /
+        # damage_classification - so push them now so nothing is lost.
+        await update_report_metadata(session)
+        if session.image_data_url:
+            _fire_upload(session, upload_image(session))
+        if session.extra_images:
+            _fire_upload(session, upload_extra_images(session))
+        if session.audio_data_url:
+            _fire_upload(session, upload_audio(session))
 
 
 _TAP_ONLY_STEPS = {"STEP_DAMAGE_CLASS", "STEP_TYPE", "STEP_CRISIS_TYPE", "STEP_DEBRIS"}
@@ -207,7 +275,16 @@ async def _capture_any_media(session, message: dict):
 
     # Text - always accumulate (never reject text from a person in crisis)
     text = message.get("text", "").strip()
-    if text and not text.startswith("/"):
+    if text and not text.startswith("/") and session.pack_awaiting_other:
+        # UNDP "Other, please specify" follow-up → the conditional pack field
+        # (pressing_needs_other), NOT the description. Intercepted FIRST so a
+        # free-text need is never mis-captured as severity/type or appended to text.
+        # The parent question (with its Other detail) is now fully answered → advance.
+        session.pack_answers[session.pack_awaiting_other] = text[:200].strip()
+        session.pack_awaiting_other = None
+        session.pack_index += 1
+        captured = True
+    elif text and not text.startswith("/"):
         sev = SEVERITY_MAP.get(text.lower()) or SEVERITY_MAP.get(text)
         itype = TYPE_MAP.get(text.lower()) or TYPE_MAP.get(text)
         if sev and session.severity == "UNKNOWN":
@@ -293,6 +370,11 @@ def _next_missing_step(session) -> str:
         return "STEP_BUILDING_NAME"
     if not session.debris_answered:
         return "STEP_DEBRIS"
+    # Dynamic crisis-form pack (UNDP Appendix-1 questions) - asked just before
+    # review when an active pack covers the reporter's location. pack_fields is
+    # empty when no pack applies → skipped entirely (rapid-intake unchanged).
+    if session.pack_active and not session.pack_complete:
+        return "STEP_PACK"
     # Phase 0: removed the dead STEP_SEVERITY step. Severity is AUTO-DERIVED
     # from the damage chip in the dmg_ callback (MINIMAL→MINOR / PARTIAL→
     # MODERATE / COMPLETE→SEVERE), so severity_answered is already True by the
@@ -353,6 +435,15 @@ async def _prompt_for_step(session, chat_id: int, step: str):
         result = await send_step_debris(chat_id, lang)
     elif step == "STEP_LOCATION":
         result = await send_step_location(chat_id, lang)
+    elif step == "STEP_PACK":
+        # If we're waiting on an "Other, please specify" free-text, prompt that;
+        # otherwise render the current multi-select question's inline keyboard.
+        if session.pack_awaiting_other:
+            result = await send_pack_other_prompt(chat_id, lang)
+        elif session.pack_index < len(session.pack_fields):
+            result = await send_pack_question(
+                chat_id, lang, session.pack_fields[session.pack_index],
+                session.pack_index, session.pack_partial)
     if result is not None:
         track_prompt_msg(session, result)
 
@@ -507,6 +598,11 @@ async def handle_update(update: dict):
                    and (session.latitude != prev_lat or session.longitude != prev_lng))
     if loc_is_new or loc_changed:
         await resolve_location_name(session)
+        # Resolve the active crisis-form pack at this location so the bot can ask the
+        # UNDP questions (the 3 multi-selects) before submitting. No active pack →
+        # pack_fields stays empty and nothing changes. Re-resolve on a corrected pin.
+        if not session.pack_resolved or loc_changed:
+            await _resolve_pack(session)
         if session.report_id:
             await update_report_location(session)
             if loc_changed:
@@ -529,28 +625,12 @@ async def handle_update(update: dict):
                 await update_report_location(session)
 
     # P2.8 - Defer server-side report creation until the session has a minimal
-    # viable set of fields (photo OR audio, plus location or explicit text).
-    # The previous "aggressive early submit on any data" created partial rows
-    # that stranded in the DB with severity='UNKNOWN' when users dropped off
-    # mid-conversation. Keep the session in local memory until we're sure.
-    # Once created, media upload is fire-and-forget as before.
-    if not session.report_id:
-        has_media_or_text = bool(session.image_data_url or session.audio_data_url or session.text)
-        has_location = session.has_location
-        if has_media_or_text and has_location:
-            await create_report_early(session)
-            logger.info(
-                f"[TG] Report created once ready: loc={has_location} "
-                f"text={bool(session.text)} img={bool(session.image_data_url)} "
-                f"aud={bool(session.audio_data_url)}"
-            )
-            if session.report_id:
-                if session.image_data_url:
-                    _fire_upload(session, upload_image(session))
-                if session.extra_images:
-                    _fire_upload(session, upload_extra_images(session))
-                if session.audio_data_url:
-                    _fire_upload(session, upload_audio(session))
+    # viable set of fields (photo OR audio, plus location or explicit text), AND -
+    # when an active crisis pack covers the location - until the UNDP pack questions
+    # are answered, so the single /reports/meta POST carries form_pack_id/form_data.
+    # The previous "aggressive early submit on any data" created partial rows that
+    # stranded in the DB. Media upload stays fire-and-forget after creation.
+    await _maybe_create_report(session)
 
     # ── Instant acknowledgment if new evidence just captured ──
     if not had_evidence_before and session.has_evidence:
@@ -707,17 +787,11 @@ async def _handle_callback(callback_query: dict):
             await _capture_any_media(session, pending)
             if session.has_location and not had_loc:
                 await resolve_location_name(session)
-            if (not session.report_id
-                    and (session.image_data_url or session.audio_data_url or session.text)
-                    and session.has_location):
-                await create_report_early(session)
-                if session.report_id:
-                    if session.image_data_url:
-                        _fire_upload(session, upload_image(session))
-                    if session.extra_images:
-                        _fire_upload(session, upload_extra_images(session))
-                    if session.audio_data_url:
-                        _fire_upload(session, upload_audio(session))
+                # Resolve the active pack here too so a pre-consent location still
+                # gets the UNDP questions; _maybe_create_report then defers the
+                # create until they're answered (pack-region) or creates now (no pack).
+                await _resolve_pack(session)
+            await _maybe_create_report(session)
             if session.has_evidence:
                 await send_text(
                     chat_id,
@@ -1006,6 +1080,67 @@ async def _handle_callback(callback_query: dict):
                 await _prompt_for_step(session, chat_id, next_step)
         return
 
+    # ── Crisis-form pack: multi-select toggle (UNDP questions) ──
+    # ps:{field_idx}:{opt_idx} → toggle the option in the running selection and
+    # re-render the SAME question keyboard (✓ marks). Does NOT advance the flow.
+    if data.startswith("ps:"):
+        parts = data.split(":")
+        try:
+            fi, oi = int(parts[1]), int(parts[2])
+        except (IndexError, ValueError):
+            await answer_callback(cq_id)
+            return
+        if 0 <= fi < len(session.pack_fields) and fi == session.pack_index and not session.pack_awaiting_other:
+            field = session.pack_fields[fi]
+            opts = field.get("options") or []
+            if 0 <= oi < len(opts):
+                val = opts[oi].get("value")
+                if val in session.pack_partial:
+                    session.pack_partial.remove(val)
+                else:
+                    mc = max_count(field)
+                    if mc and len(session.pack_partial) >= mc:
+                        await answer_callback(cq_id, t(lang, "pack_done"))   # at cap → finish
+                        return
+                    session.pack_partial.append(val)
+                result = await send_pack_question(chat_id, lang, field, fi, session.pack_partial)
+                if result is not None:
+                    track_prompt_msg(session, result)
+        await answer_callback(cq_id)
+        return
+
+    # ── Crisis-form pack: finish a multi-select question ──
+    # ps_done:{field_idx} → commit the selection, run the "Other" follow-up if
+    # picked, else advance; when the pack completes, create the (deferred) report
+    # so the meta POST carries form_pack_id/form_data, then go to review.
+    if data.startswith("ps_done:"):
+        await answer_callback(cq_id)
+        try:
+            fi = int(data.split(":", 1)[1])
+        except (IndexError, ValueError):
+            return
+        if not (0 <= fi < len(session.pack_fields) and fi == session.pack_index):
+            return
+        field = session.pack_fields[fi]
+        session.pack_answers[field["key"]] = coerce_answer(field, list(session.pack_partial))
+        child = conditional_child(session.pack_schema, field["key"], "TELEGRAM")
+        ask_other = child is not None and selection_has_other(field, session.pack_partial)
+        session.pack_partial = []
+        if ask_other:
+            session.pack_awaiting_other = child["key"]
+            session.state = "STEP_PACK"
+            await _prompt_for_step(session, chat_id, "STEP_PACK")
+            return
+        session.pack_index += 1
+        await _maybe_create_report(session)
+        next_step = _next_missing_step(session)
+        session.state = next_step
+        if next_step == "READY":
+            await _finalize(session)
+        else:
+            await _prompt_for_step(session, chat_id, next_step)
+        return
+
     await answer_callback(cq_id)
 
 
@@ -1037,6 +1172,22 @@ def _review_summary(session) -> str:
         else:
             dtxt = t(lang, "debris_na")
         lines.append(f"🚜 *{t(lang, 'review_debris')}:* {dtxt}")
+    # Crisis-pack answers (UNDP Appendix-1) - question label + selected option
+    # labels, localized via the pack's own label_i18n.
+    for f in (session.pack_fields or []):
+        key = f.get("key")
+        val = session.pack_answers.get(key)
+        if val in (None, "", []):
+            continue
+        if isinstance(val, list):
+            opt_by_val = {o.get("value"): o for o in (f.get("options") or [])}
+            vtxt = ", ".join(option_label(opt_by_val[v], lang) if v in opt_by_val else str(v) for v in val)
+        else:
+            vtxt = str(val)
+        lines.append(f"📋 *{field_label(f, lang)}:* {vtxt}")
+    _other = session.pack_answers.get("pressing_needs_other")
+    if _other:
+        lines.append(f"✏️ {_other}")
     # Evidence - count photos (primary + extras) + audio + text flags.
     ev = []
     n_photos = (1 if session.image_data_url else 0) + len(session.extra_images)

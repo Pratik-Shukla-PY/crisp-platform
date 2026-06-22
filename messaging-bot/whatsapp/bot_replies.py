@@ -15,6 +15,8 @@ TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "")
 # ── Multilingual strings (6 UN + Hindi, Portuguese, Swahili) ────────────────
 _STRINGS = {
     "en": {
+        "pack_multi_hint_wa": "Reply with the numbers that apply (e.g. 1 3), then send 0 when done.",
+        "pack_other_prompt": "Please reply with your other pressing need.",
         "welcome": "🆘 *CRISP - Crisis Report Bot*\n\nReport damage in 3 steps:\n📍 Share location\n📸 Send photo\n✅ Done!\n\n💡 Or just send a photo with a caption.\n\nReply LANG to change language.\n🔒 _Faces auto-blurred for privacy_",
         "sev_prompt": "How severe is the damage?",
         "type_prompt": "What type of infrastructure is affected?",
@@ -27,6 +29,8 @@ _STRINGS = {
         "lang_menu": "🌐 Choose your language:\n\n1. English\n2. 中文\n3. Русский\n4. Espanol\n5. Francais\n6. العربية\n7. हिन्दी\n\nReply with the number.",
     },
     "zh": {
+        "pack_multi_hint_wa": "回复适用的编号（例如 1 3），完成后发送 0。",
+        "pack_other_prompt": "请回复您的其他迫切需求。",
         "welcome": "🆘 *CRISP - 危机报告*\n\n3步报告损失:\n📍 分享位置\n📸 发送照片\n✅ 完成!\n\n回复 LANG 更改语言\n🔒 _面部自动模糊_",
         "sev_prompt": "损坏严重程度?",
         "type_prompt": "哪种基础设施受损?",
@@ -39,6 +43,8 @@ _STRINGS = {
         "lang_menu": "🌐 选择语言:\n\n1. English\n2. 中文\n3. Русский\n4. Espanol\n5. Francais\n6. العربية\n7. हिन्दी\n\n回复数字。",
     },
     "ru": {
+        "pack_multi_hint_wa": "Отправьте подходящие номера (напр. 1 3), затем отправьте 0 для завершения.",
+        "pack_other_prompt": "Опишите вашу другую насущную потребность.",
         "welcome": "🆘 *CRISP - Экстренный отчет*\n\n3 шага:\n📍 Местоположение\n📸 Фото\n✅ Готово!\n\nОтветьте LANG для смены языка\n🔒 _Лица размываются автоматически_",
         "sev_prompt": "Насколько серьезно повреждение?",
         "type_prompt": "Какая инфраструктура повреждена?",
@@ -51,6 +57,8 @@ _STRINGS = {
         "lang_menu": "🌐 Выберите язык:\n\n1. English\n2. 中文\n3. Русский\n4. Espanol\n5. Francais\n6. العربية\n7. हिन्दी\n\nОтветьте цифрой.",
     },
     "es": {
+        "pack_multi_hint_wa": "Responda con los números que correspondan (p. ej. 1 3) y envíe 0 al terminar.",
+        "pack_other_prompt": "Responda con su otra necesidad urgente.",
         "welcome": "🆘 *CRISP - Reporte de Crisis*\n\n3 pasos:\n📍 Ubicacion\n📸 Foto\n✅ Listo!\n\nResponde LANG para cambiar idioma\n🔒 _Rostros se difuminan automaticamente_",
         "sev_prompt": "¿Que tan grave es el dano?",
         "type_prompt": "¿Que infraestructura esta afectada?",
@@ -63,6 +71,8 @@ _STRINGS = {
         "lang_menu": "🌐 Elige idioma:\n\n1. English\n2. 中文\n3. Русский\n4. Espanol\n5. Francais\n6. العربية\n7. हिन्दी\n\nResponde con el numero.",
     },
     "fr": {
+        "pack_multi_hint_wa": "Répondez avec les numéros qui s'appliquent (ex. 1 3), puis envoyez 0 pour terminer.",
+        "pack_other_prompt": "Veuillez indiquer votre autre besoin urgent.",
         "welcome": "🆘 *CRISP - Rapport de Crise*\n\n3 etapes:\n📍 Position\n📸 Photo\n✅ Fini!\n\nRepondez LANG pour changer de langue\n🔒 _Visages floutes automatiquement_",
         "sev_prompt": "Quelle est la gravite?",
         "type_prompt": "Quel type d'infrastructure est touche?",
@@ -75,6 +85,8 @@ _STRINGS = {
         "lang_menu": "🌐 Choisissez la langue:\n\n1. English\n2. 中文\n3. Русский\n4. Espanol\n5. Francais\n6. العربية\n7. हिन्दी\n\nRepondez avec le numero.",
     },
     "ar": {
+        "pack_multi_hint_wa": "أرسل الأرقام المناسبة (مثل 1 3)، ثم أرسل 0 عند الانتهاء.",
+        "pack_other_prompt": "يُرجى إرسال حاجتك الملحّة الأخرى.",
         "welcome": "🆘 *CRISP - تقرير الأزمات*\n\n3 خطوات:\n📍 الموقع\n📸 صورة\n✅ تم!\n\nأرسل LANG لتغيير اللغة\n🔒 _يتم تشويش الوجوه تلقائياً_",
         "sev_prompt": "ما مدى خطورة الضرر؟",
         "type_prompt": "ما نوع البنية التحتية المتضررة؟",

@@ -45,3 +45,42 @@ async def resolve_active_event_id(lat: Optional[float], lng: Optional[float]) ->
     except Exception as e:
         logger.warning("active-event lookup failed at (%s,%s): %s", lat, lng, e)
     return None
+
+
+async def resolve_active_pack(lat: Optional[float], lng: Optional[float]) -> Optional[dict]:
+    """Return the FULL active crisis-form pack at (lat, lng) as
+    ``{"event_id", "pack_id", "pack_version", "schema_json"}``, or None when there
+    is no active pack / the lookup fails.
+
+    Same single GET as :func:`resolve_active_event_id`, but returns the pack so the
+    GPS chat channels (Telegram, WhatsApp) can ASK the pack's channel-applicable
+    questions conversationally and submit ``form_pack_id``/``form_pack_version``/
+    ``form_data`` (the server re-validates per channel). The event id is included so
+    a caller needs only one network round-trip for both the operation link and the
+    questions.
+
+    Never raises - any failure returns None so the caller submits unchanged (the
+    rapid-intake flow is byte-for-byte preserved when there is no pack).
+    """
+    if lat is None or lng is None:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(
+                f"{BACKEND_URL}/api/v1/crisis-forms/active",
+                params={"lat": lat, "lng": lng},
+                headers={"Accept": "application/json"},
+            )
+        if r.status_code != 200:
+            return None
+        data = r.json() or {}
+        if data.get("active") and data.get("pack_id") and data.get("schema_json"):
+            return {
+                "event_id": data.get("event_id"),
+                "pack_id": data["pack_id"],
+                "pack_version": data.get("pack_version"),
+                "schema_json": data["schema_json"],
+            }
+    except Exception as e:
+        logger.warning("active-pack lookup failed at (%s,%s): %s", lat, lng, e)
+    return None
