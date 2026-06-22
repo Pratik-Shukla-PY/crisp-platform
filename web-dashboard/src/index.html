@@ -11,7 +11,7 @@
          empty in source; deploy pipeline patches with the real DSN
          (public-safe write-only key). -->
     <meta name="crisp-sentry-dsn" content="">
-    <meta name="crisp-release" content="crisp-dashboard@v146">
+    <meta name="crisp-release" content="crisp-dashboard@v154">
     <meta name="description" content="United Nations Crisis Response Intelligence System - hierarchical incident monitoring and strategic command center.">
     <meta name="theme-color" content="#7c3aed">
     <!-- May 2026 - favicon. SVG works in modern browsers (Chrome 80+,
@@ -205,11 +205,8 @@
                 <div class="export-menu tools-menu-body">
                     <!-- View toggles -->
                     <div class="tools-menu-section-label" data-i18n="tools_section_views">View</div>
-                    <button class="tools-menu-item" id="tools-item-analytics"
-                            onclick="toggleAnalytics();this.closest('.export-dropdown').classList.remove('open')">
-                        <i class="fa-solid fa-chart-bar"></i>
-                        <span data-i18n="btn_analytics">Analytics</span>
-                    </button>
+                    <!-- Analytics was moved OUT of Tools onto the home page (a 70/30
+                         Analytics + Recent Incidents section after Active Operations). -->
                     <button class="tools-menu-item" id="tools-item-predict"
                             onclick="togglePredictions();this.closest('.export-dropdown').classList.remove('open')">
                         <i class="fa-solid fa-bolt"></i>
