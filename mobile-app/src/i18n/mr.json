@@ -68,6 +68,10 @@
   "aria_online_status": "ऑनलाइन",
   "aria_quick_actions": "जलद क्रिया",
   "aria_read_aloud": "हे पान मोठ्याने वाचा",
+  "aria_share": "हे अ‍ॅप शेअर करा",
+  "share_link_copied": "लिंक कॉपी केली",
+  "share_text": "CRISP ने आपत्ती नुकसानीची तक्रार करा - कोणत्याही फोनवर, ऑफलाइनही चालते.",
+  "v4_pack_loading": "तुमच्या भागाचा फॉर्म लोड होत आहे…",
   "aria_retry_sync": "सिंक पुन्हा प्रयत्नासाठी टॅप",
   "aria_section_identity": "ओळख",
   "aria_section_other": "इतर चॅनेल आणि माहिती",
@@ -1073,5 +1077,11 @@
   "rd_view_photo": "View photo",
   "aria_prev_photo": "Previous photo",
   "aria_next_photo": "Next photo",
-  "home_login_optional": "Optional"
+  "home_login_optional": "Optional",
+  "storage_full_hard_limit": "⚠ Device storage is full - clear old reports from My Reports, then send again.",
+  "sync_queued_nudge": "{n} report(s) waiting to send - keep the app open until they finish.",
+  "cp_electricity_condition": "संकटानंतर तुमच्या समुदायातील वीज पायाभूत सुविधांची सध्याची स्थिती काय आहे?",
+  "cp_health_services_status": "घटनेनंतर तुमच्या समुदायातील आरोग्य सेवांच्या एकूण कार्याचे तुम्ही कसे मूल्यांकन कराल?",
+  "cp_pressing_needs": "सर्वात निकडीच्या गरजा कोणत्या आहेत?",
+  "cp_pressing_needs_other": "कृपया इतर निकडीची गरज नमूद करा"
 }

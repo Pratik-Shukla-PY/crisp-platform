@@ -68,6 +68,10 @@
   "aria_online_status": "ఆన్‌లైన్",
   "aria_quick_actions": "త్వరిత చర్యలు",
   "aria_read_aloud": "ఈ పేజీని పెద్దగా చదువు",
+  "aria_share": "ఈ యాప్‌ను షేర్ చేయండి",
+  "share_link_copied": "లింక్ కాపీ చేయబడింది",
+  "share_text": "CRISP తో విపత్తు నష్టాన్ని నివేదించండి - ఏ ఫోన్‌లోనైనా, ఆఫ్‌లైన్‌లో కూడా పనిచేస్తుంది.",
+  "v4_pack_loading": "మీ ప్రాంతానికి సంబంధించిన ఫారమ్ లోడ్ అవుతోంది…",
   "aria_retry_sync": "సింక్ మళ్ళీ ప్రయత్నించడానికి నొక్కు",
   "aria_section_identity": "గుర్తింపు",
   "aria_section_other": "ఇతర ఛానెల్‌లు మరియు సమాచారం",
@@ -1073,5 +1077,11 @@
   "rd_view_photo": "View photo",
   "aria_prev_photo": "Previous photo",
   "aria_next_photo": "Next photo",
-  "home_login_optional": "Optional"
+  "home_login_optional": "Optional",
+  "storage_full_hard_limit": "⚠ Device storage is full - clear old reports from My Reports, then send again.",
+  "sync_queued_nudge": "{n} report(s) waiting to send - keep the app open until they finish.",
+  "cp_electricity_condition": "సంక్షోభం తర్వాత మీ సమాజంలో విద్యుత్ మౌలిక సదుపాయాల ప్రస్తుత స్థితి ఏమిటి?",
+  "cp_health_services_status": "సంఘటన తర్వాత మీ సమాజంలో ఆరోగ్య సేవల మొత్తం పనితీరును మీరు ఎలా అంచనా వేస్తారు?",
+  "cp_pressing_needs": "అత్యంత అత్యవసర అవసరాలు ఏమిటి?",
+  "cp_pressing_needs_other": "దయచేసి ఇతర అత్యవసర అవసరాన్ని పేర్కొనండి"
 }

@@ -68,6 +68,10 @@
   "aria_online_status": "ઓનલાઈન",
   "aria_quick_actions": "ઝડપી ક્રિયાઓ",
   "aria_read_aloud": "આ પાનું જોરથી વાંચો",
+  "aria_share": "આ એપ શેર કરો",
+  "share_link_copied": "લિંક કૉપિ થઈ",
+  "share_text": "CRISP થી આપત્તિ નુકસાનની જાણ કરો - કોઈપણ ફોન પર, ઑફલાઇન પણ કામ કરે છે.",
+  "v4_pack_loading": "તમારા વિસ્તારનું ફોર્મ લોડ થઈ રહ્યું છે…",
   "aria_retry_sync": "સિંક ફરી પ્રયાસ માટે ટેપ",
   "aria_section_identity": "ઓળખ",
   "aria_section_other": "અન્ય ચૅનલ અને માહિતી",
@@ -1073,5 +1077,11 @@
   "rd_view_photo": "View photo",
   "aria_prev_photo": "Previous photo",
   "aria_next_photo": "Next photo",
-  "home_login_optional": "Optional"
+  "home_login_optional": "Optional",
+  "storage_full_hard_limit": "⚠ Device storage is full - clear old reports from My Reports, then send again.",
+  "sync_queued_nudge": "{n} report(s) waiting to send - keep the app open until they finish.",
+  "cp_electricity_condition": "કટોકટી પછી તમારા સમુદાયમાં વીજળીના માળખાની વર્તમાન સ્થિતિ શું છે?",
+  "cp_health_services_status": "ઘટના પછી તમારા સમુદાયમાં આરોગ્ય સેવાઓની એકંદર કામગીરીને તમે કેવી રીતે રેટ કરશો?",
+  "cp_pressing_needs": "સૌથી તાકીદની જરૂરિયાતો કઈ છે?",
+  "cp_pressing_needs_other": "કૃપા કરીને અન્ય તાકીદની જરૂરિયાત જણાવો"
 }

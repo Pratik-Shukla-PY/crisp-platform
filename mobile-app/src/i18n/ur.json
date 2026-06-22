@@ -68,6 +68,10 @@
   "aria_online_status": "آن لائن",
   "aria_quick_actions": "فوری اعمال",
   "aria_read_aloud": "اس صفحے کو بلند آواز سے پڑھیں",
+  "aria_share": "یہ ایپ شیئر کریں",
+  "share_link_copied": "لنک کاپی ہو گیا",
+  "share_text": "CRISP کے ساتھ آفت کے نقصان کی اطلاع دیں - کسی بھی فون پر، آف لائن بھی کام کرتا ہے۔",
+  "v4_pack_loading": "آپ کے علاقے کا فارم لوڈ ہو رہا ہے…",
   "aria_retry_sync": "ہم وقتی دوبارہ کوشش کے لیے ٹیپ کریں",
   "aria_section_identity": "شناخت",
   "aria_section_other": "دیگر چینلز اور معلومات",
@@ -1073,5 +1077,11 @@
   "rd_view_photo": "View photo",
   "aria_prev_photo": "Previous photo",
   "aria_next_photo": "Next photo",
-  "home_login_optional": "Optional"
+  "home_login_optional": "Optional",
+  "storage_full_hard_limit": "⚠ Device storage is full - clear old reports from My Reports, then send again.",
+  "sync_queued_nudge": "{n} report(s) waiting to send - keep the app open until they finish.",
+  "cp_electricity_condition": "بحران کے بعد آپ کی برادری میں بجلی کے بنیادی ڈھانچے کی موجودہ حالت کیا ہے؟",
+  "cp_health_services_status": "واقعے کے بعد سے آپ کی برادری میں صحت کی خدمات کی مجموعی کارکردگی کا آپ کیسے جائزہ لیں گے؟",
+  "cp_pressing_needs": "سب سے فوری ضروریات کیا ہیں؟",
+  "cp_pressing_needs_other": "براہ کرم دیگر فوری ضرورت بیان کریں"
 }

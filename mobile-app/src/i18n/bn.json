@@ -68,6 +68,10 @@
   "aria_online_status": "অনলাইন",
   "aria_quick_actions": "দ্রুত ক্রিয়া",
   "aria_read_aloud": "এই পৃষ্ঠা জোরে পড়ুন",
+  "aria_share": "অ্যাপটি শেয়ার করুন",
+  "share_link_copied": "লিঙ্ক কপি হয়েছে",
+  "share_text": "CRISP দিয়ে দুর্যোগের ক্ষতি জানান - যেকোনো ফোনে, এমনকি অফলাইনেও কাজ করে।",
+  "v4_pack_loading": "আপনার এলাকার ফর্ম লোড হচ্ছে…",
   "aria_retry_sync": "সিঙ্ক পুনরায় চেষ্টা করতে ট্যাপ",
   "aria_section_identity": "পরিচয়",
   "aria_section_other": "অন্যান্য চ্যানেল ও তথ্য",
@@ -1073,5 +1077,11 @@
   "rd_view_photo": "View photo",
   "aria_prev_photo": "Previous photo",
   "aria_next_photo": "Next photo",
-  "home_login_optional": "Optional"
+  "home_login_optional": "Optional",
+  "storage_full_hard_limit": "⚠ Device storage is full - clear old reports from My Reports, then send again.",
+  "sync_queued_nudge": "{n} report(s) waiting to send - keep the app open until they finish.",
+  "cp_electricity_condition": "সংকটের পর আপনার সম্প্রদায়ে বিদ্যুৎ অবকাঠামোর বর্তমান অবস্থা কী?",
+  "cp_health_services_status": "ঘটনার পর থেকে আপনার সম্প্রদায়ে স্বাস্থ্যসেবার সামগ্রিক কার্যকারিতা আপনি কীভাবে মূল্যায়ন করবেন?",
+  "cp_pressing_needs": "সবচেয়ে জরুরি প্রয়োজনগুলো কী?",
+  "cp_pressing_needs_other": "অনুগ্রহ করে অন্য জরুরি প্রয়োজনটি উল্লেখ করুন"
 }

@@ -65,6 +65,10 @@
   "aria_online_status": "ഓൺലൈൻ",
   "aria_quick_actions": "ദ്രുത പ്രവർത്തനങ്ങൾ",
   "aria_read_aloud": "ഈ പേജ് ഉറക്കെ വായിക്കുക",
+  "aria_share": "ഈ ആപ്പ് പങ്കിടുക",
+  "share_link_copied": "ലിങ്ക് പകർത്തി",
+  "share_text": "CRISP ഉപയോഗിച്ച് ദുരന്ത നാശനഷ്ടം റിപ്പോർട്ട് ചെയ്യുക - ഏത് ഫോണിലും, ഓഫ്‌ലൈനിലും പ്രവർത്തിക്കും.",
+  "v4_pack_loading": "നിങ്ങളുടെ പ്രദേശത്തിന്റെ ഫോം ലോഡ് ചെയ്യുന്നു…",
   "aria_retry_sync": "വീണ്ടും ശ്രമിക്കാൻ ടാപ് ചെയ്യുക",
   "aria_section_identity": "ഐഡന്റിറ്റി",
   "aria_section_other": "മറ്റ് ചാനലുകളും വിവരങ്ങളും",
@@ -1070,5 +1074,11 @@
   "rd_view_photo": "View photo",
   "aria_prev_photo": "Previous photo",
   "aria_next_photo": "Next photo",
-  "home_login_optional": "Optional"
+  "home_login_optional": "Optional",
+  "storage_full_hard_limit": "⚠ Device storage is full - clear old reports from My Reports, then send again.",
+  "sync_queued_nudge": "{n} report(s) waiting to send - keep the app open until they finish.",
+  "cp_electricity_condition": "പ്രതിസന്ധിക്ക് ശേഷം നിങ്ങളുടെ സമൂഹത്തിലെ വൈദ്യുതി അടിസ്ഥാനസൗകര്യങ്ങളുടെ നിലവിലെ അവസ്ഥ എന്താണ്?",
+  "cp_health_services_status": "സംഭവത്തിന് ശേഷം നിങ്ങളുടെ സമൂഹത്തിലെ ആരോഗ്യസേവനങ്ങളുടെ മൊത്തത്തിലുള്ള പ്രവർത്തനത്തെ നിങ്ങൾ എങ്ങനെ വിലയിരുത്തും?",
+  "cp_pressing_needs": "ഏറ്റവും അടിയന്തിര ആവശ്യങ്ങൾ എന്തൊക്കെയാണ്?",
+  "cp_pressing_needs_other": "ദയവായി മറ്റ് അടിയന്തിര ആവശ്യം വ്യക്തമാക്കുക"
 }

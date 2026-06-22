@@ -68,6 +68,10 @@
   "aria_online_status": "ಆನ್‌ಲೈನ್",
   "aria_quick_actions": "ತ್ವರಿತ ಕ್ರಮಗಳು",
   "aria_read_aloud": "ಈ ಪುಟವನ್ನು ಗಟ್ಟಿಯಾಗಿ ಓದಿ",
+  "aria_share": "ಈ ಅಪ್ ಹಂಚಿಕೊಳ್ಳಿ",
+  "share_link_copied": "ಲಿಂಕ್ ನಕಲಿಸಲಾಗಿದೆ",
+  "share_text": "CRISP ಮೂಲಕ ವಿಪತ್ತು ಹಾನಿಯನ್ನು ವರದಿ ಮಾಡಿ - ಯಾವುದೇ ಫೋನ್‌ನಲ್ಲಿ, ಆಫ್‌ಲೈನ್‌ನಲ್ಲೂ ಕೆಲಸ ಮಾಡುತ್ತದೆ.",
+  "v4_pack_loading": "ನಿಮ್ಮ ಪ್ರದೇಶದ ಫಾರ್ಮ್ ಲೋಡ್ ಆಗುತ್ತಿದೆ…",
   "aria_retry_sync": "ಸಿಂಕ್ ಮರುಪ್ರಯತ್ನಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ",
   "aria_section_identity": "ಗುರುತು",
   "aria_section_other": "ಇತರ ಚಾನೆಲ್‌ಗಳು ಮತ್ತು ಮಾಹಿತಿ",
@@ -1073,5 +1077,11 @@
   "rd_view_photo": "View photo",
   "aria_prev_photo": "Previous photo",
   "aria_next_photo": "Next photo",
-  "home_login_optional": "Optional"
+  "home_login_optional": "Optional",
+  "storage_full_hard_limit": "⚠ Device storage is full - clear old reports from My Reports, then send again.",
+  "sync_queued_nudge": "{n} report(s) waiting to send - keep the app open until they finish.",
+  "cp_electricity_condition": "ಬಿಕ್ಕಟ್ಟಿನ ನಂತರ ನಿಮ್ಮ ಸಮುದಾಯದಲ್ಲಿ ವಿದ್ಯುತ್ ಮೂಲಸೌಕರ್ಯದ ಪ್ರಸ್ತುತ ಸ್ಥಿತಿ ಏನು?",
+  "cp_health_services_status": "ಘಟನೆಯ ನಂತರ ನಿಮ್ಮ ಸಮುದಾಯದಲ್ಲಿ ಆರೋಗ್ಯ ಸೇವೆಗಳ ಒಟ್ಟಾರೆ ಕಾರ್ಯನಿರ್ವಹಣೆಯನ್ನು ನೀವು ಹೇಗೆ ಮೌಲ್ಯಮಾಪನ ಮಾಡುತ್ತೀರಿ?",
+  "cp_pressing_needs": "ಅತ್ಯಂತ ತುರ್ತು ಅಗತ್ಯಗಳು ಯಾವುವು?",
+  "cp_pressing_needs_other": "ದಯವಿಟ್ಟು ಇತರ ತುರ್ತು ಅಗತ್ಯವನ್ನು ನಮೂದಿಸಿ"
 }

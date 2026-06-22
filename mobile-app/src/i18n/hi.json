@@ -67,6 +67,10 @@
   "aria_online_status": "ऑनलाइन",
   "aria_quick_actions": "त्वरित क्रियाएँ",
   "aria_read_aloud": "यह पृष्ठ ज़ोर से पढ़ें",
+  "aria_share": "यह ऐप साझा करें",
+  "share_link_copied": "लिंक कॉपी किया गया",
+  "share_text": "CRISP से आपदा क्षति की रिपोर्ट करें - किसी भी फ़ोन पर, ऑफ़लाइन भी काम करता है।",
+  "v4_pack_loading": "आपके क्षेत्र का फ़ॉर्म लोड हो रहा है…",
   "aria_retry_sync": "सिंक पुनः प्रयास के लिए टैप करें",
   "aria_section_identity": "पहचान",
   "aria_section_other": "अन्य चैनल और जानकारी",
@@ -1072,5 +1076,11 @@
   "rd_view_photo": "View photo",
   "aria_prev_photo": "Previous photo",
   "aria_next_photo": "Next photo",
-  "home_login_optional": "Optional"
+  "home_login_optional": "Optional",
+  "storage_full_hard_limit": "⚠ Device storage is full - clear old reports from My Reports, then send again.",
+  "sync_queued_nudge": "{n} report(s) waiting to send - keep the app open until they finish.",
+  "cp_electricity_condition": "संकट के बाद आपके समुदाय में बिजली के बुनियादी ढांचे की वर्तमान स्थिति क्या है?",
+  "cp_health_services_status": "घटना के बाद से आपके समुदाय में स्वास्थ्य सेवाओं के समग्र कामकाज का आप कैसे मूल्यांकन करेंगे?",
+  "cp_pressing_needs": "सबसे जरूरी जरूरतें क्या हैं?",
+  "cp_pressing_needs_other": "कृपया अन्य जरूरी जरूरत बताएं"
 }

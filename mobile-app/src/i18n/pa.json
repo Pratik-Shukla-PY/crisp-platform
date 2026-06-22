@@ -68,6 +68,10 @@
   "aria_online_status": "ਆਨਲਾਈਨ",
   "aria_quick_actions": "ਤੁਰੰਤ ਕਾਰਵਾਈਆਂ",
   "aria_read_aloud": "ਇਹ ਪੰਨਾ ਉੱਚੀ ਪੜ੍ਹੋ",
+  "aria_share": "ਇਹ ਐਪ ਸਾਂਝੀ ਕਰੋ",
+  "share_link_copied": "ਲਿੰਕ ਕਾਪੀ ਹੋ ਗਿਆ",
+  "share_text": "CRISP ਨਾਲ ਆਫ਼ਤ ਨੁਕਸਾਨ ਦੀ ਰਿਪੋਰਟ ਕਰੋ - ਕਿਸੇ ਵੀ ਫ਼ੋਨ ਤੇ, ਆਫ਼ਲਾਈਨ ਵੀ ਕੰਮ ਕਰਦਾ ਹੈ।",
+  "v4_pack_loading": "ਤੁਹਾਡੇ ਖੇਤਰ ਦਾ ਫਾਰਮ ਲੋਡ ਹੋ ਰਿਹਾ ਹੈ…",
   "aria_retry_sync": "ਸਿੰਕ ਮੁੜ ਕੋਸ਼ਿਸ਼ ਲਈ ਟੈਪ",
   "aria_section_identity": "ਪਛਾਣ",
   "aria_section_other": "ਹੋਰ ਚੈਨਲ ਅਤੇ ਜਾਣਕਾਰੀ",
@@ -1073,5 +1077,11 @@
   "rd_view_photo": "View photo",
   "aria_prev_photo": "Previous photo",
   "aria_next_photo": "Next photo",
-  "home_login_optional": "Optional"
+  "home_login_optional": "Optional",
+  "storage_full_hard_limit": "⚠ Device storage is full - clear old reports from My Reports, then send again.",
+  "sync_queued_nudge": "{n} report(s) waiting to send - keep the app open until they finish.",
+  "cp_electricity_condition": "ਸੰਕਟ ਤੋਂ ਬਾਅਦ ਤੁਹਾਡੇ ਭਾਈਚਾਰੇ ਵਿੱਚ ਬਿਜਲੀ ਦੇ ਬੁਨਿਆਦੀ ਢਾਂਚੇ ਦੀ ਮੌਜੂਦਾ ਹਾਲਤ ਕੀ ਹੈ?",
+  "cp_health_services_status": "ਘਟਨਾ ਤੋਂ ਬਾਅਦ ਤੁਹਾਡੇ ਭਾਈਚਾਰੇ ਵਿੱਚ ਸਿਹਤ ਸੇਵਾਵਾਂ ਦੇ ਸਮੁੱਚੇ ਕੰਮਕਾਜ ਨੂੰ ਤੁਸੀਂ ਕਿਵੇਂ ਦਰਜਾ ਦਿਓਗੇ?",
+  "cp_pressing_needs": "ਸਭ ਤੋਂ ਜ਼ਰੂਰੀ ਲੋੜਾਂ ਕੀ ਹਨ?",
+  "cp_pressing_needs_other": "ਕਿਰਪਾ ਕਰਕੇ ਹੋਰ ਜ਼ਰੂਰੀ ਲੋੜ ਦੱਸੋ"
 }

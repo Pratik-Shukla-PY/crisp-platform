@@ -68,6 +68,10 @@
   "aria_online_status": "ஆன்லைன்",
   "aria_quick_actions": "விரைவு செயல்கள்",
   "aria_read_aloud": "இந்த பக்கத்தை சத்தமாக படி",
+  "aria_share": "இந்த ஆப்பைப் பகிரவும்",
+  "share_link_copied": "இணைப்பு நகலெடுக்கப்பட்டது",
+  "share_text": "CRISP மூலம் பேரிடர் சேதத்தைப் புகாரளியுங்கள் - எந்த ஃபோனிலும், ஆஃப்லைனிலும் வேலை செய்யும்.",
+  "v4_pack_loading": "உங்கள் பகுதிக்கான படிவம் ஏற்றப்படுகிறது…",
   "aria_retry_sync": "ஒத்திசையை மீண்டும் முயற்சிக்க தட்டவும்",
   "aria_section_identity": "அடையாளம்",
   "aria_section_other": "மற்ற சேனல்கள் மற்றும் தகவல்",
@@ -1073,5 +1077,11 @@
   "rd_view_photo": "View photo",
   "aria_prev_photo": "Previous photo",
   "aria_next_photo": "Next photo",
-  "home_login_optional": "Optional"
+  "home_login_optional": "Optional",
+  "storage_full_hard_limit": "⚠ Device storage is full - clear old reports from My Reports, then send again.",
+  "sync_queued_nudge": "{n} report(s) waiting to send - keep the app open until they finish.",
+  "cp_electricity_condition": "நெருக்கடிக்குப் பிறகு உங்கள் சமூகத்தில் மின்சார உள்கட்டமைப்பின் தற்போதைய நிலை என்ன?",
+  "cp_health_services_status": "நிகழ்வுக்குப் பிறகு உங்கள் சமூகத்தில் சுகாதார சேவைகளின் ஒட்டுமொத்த செயல்பாட்டை எவ்வாறு மதிப்பிடுவீர்கள்?",
+  "cp_pressing_needs": "மிகவும் அவசரமான தேவைகள் என்ன?",
+  "cp_pressing_needs_other": "மற்ற அவசரத் தேவையைக் குறிப்பிடவும்"
 }
