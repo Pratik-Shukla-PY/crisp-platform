@@ -418,6 +418,7 @@
             _locSelected = place;
             locEditInput.value = place.name;
             _hideLocSuggestions();
+            _syncLocSaveBtn();   // a valid pick enables Save
             // Keep focus so the user can keep editing if they want.
             locEditInput.focus();
         }
@@ -433,6 +434,7 @@
             locEditInput.value = s.userLocationName || s.locationName || '';
             _locSelected = null;
             _hideLocSuggestions();
+            _syncLocSaveBtn();   // Save stays disabled until a suggestion is picked
             locEditWrap.removeAttribute('hidden');
             setTimeout(() => locEditInput.focus(), 30);
         }
@@ -443,6 +445,17 @@
         // Coordinate-bearing? (and never the {0,0} null-island sentinel).
         function _hasCoords(p) {
             return p && Number.isFinite(p.lat) && Number.isFinite(p.lng) && !(p.lat === 0 && p.lng === 0);
+        }
+        // STRICT location-edit acceptance: only a location PICKED from the
+        // suggestions list (whose name still matches the input + carries real
+        // coords) may be saved. A free-typed name that matches nothing is never
+        // accepted - it would route the report to the wrong / no operation.
+        function _locPickValid() {
+            return !!(_locSelected && locEditInput
+                && _locSelected.name === locEditInput.value.trim() && _hasCoords(_locSelected));
+        }
+        function _syncLocSaveBtn() {
+            if (locEditSaveBtn) locEditSaveBtn.disabled = !_locPickValid();
         }
         // Best coordinate-bearing match for a typed place name within a result
         // list - exact name, then prefix either way, then word-prefix. Requires a
@@ -476,82 +489,50 @@
                 } catch (_) { clearTimeout(timer); finish(null); }
             });
         }
-        async function _saveLocEdit() {
+        function _saveLocEdit() {
             if (!locEditInput) return;
             const name = locEditInput.value.trim();
             if (!name) { _closeLocEdit(); return; }
-            const patch = { userLocationName: name, locationName: name };
-
-            // Resolve COORDINATES for the edited place so the edited location is
-            // authoritative for crisis-form / operation matching - not just a
-            // label. Priority: an explicit suggestion pick → the best name-match
-            // among the rendered suggestions / bundled+cached DB (instant) → an
-            // online Nominatim resolve (awaited, capped at 3s). A free-text edit
-            // that doesn't tap a suggestion now still re-homes the report.
-            let coords = null;
-            if (_locSelected && _locSelected.name === name && _hasCoords(_locSelected)) {
-                coords = _locSelected;
-            } else {
-                let local = [];
-                try {
-                    const ps = (typeof placeSearch !== 'undefined') ? placeSearch
-                             : (typeof window !== 'undefined' && window.placeSearch) || null;
-                    if (ps && typeof ps.search === 'function') local = ps.search(name) || [];
-                } catch (_) {}
-                coords = _bestSuggestionFor(name, _locSuggestions) || _bestSuggestionFor(name, local);
-                if (!coords && typeof navigator !== 'undefined' && navigator.onLine !== false) {
-                    if (locEditSaveBtn) locEditSaveBtn.disabled = true;
-                    coords = await _resolveRemoteCoords(name);
-                    if (locEditSaveBtn) locEditSaveBtn.disabled = false;
-                }
-            }
-
-            let _locationMoved = false;
-            if (_hasCoords(coords)) {
-                patch.location = {
-                    lat: coords.lat,
-                    lng: coords.lng,
-                    // Submit reads state.location.acc - write THAT key (not `accuracy`,
-                    // which nothing reads). 0 + is_user_corrected = "user-placed pin".
-                    acc: 0,
-                    source: 'user_corrected',
-                    // Edited place is AUTHORITATIVE (user-edited > GPS > device).
-                    is_user_corrected: true,
-                };
-                _locationMoved = true;
-            }
-            _setState(patch);
-            _paintV4LocationPills();
-            if (_locationMoved && patch.location) {
-                // Repaint the building overlay for the new bbox (UNDP must-have #6 -
-                // BuildingSelect listens to crisp-location-changed; ensureMap is a
-                // defence-in-depth direct call).
-                try {
-                    document.dispatchEvent(new CustomEvent('crisp-location-changed', {
-                        detail: { lat: patch.location.lat, lng: patch.location.lng, source: 'user_corrected' },
-                    }));
-                } catch (_) {}
-                try {
-                    if (window.BuildingSelect && typeof window.BuildingSelect.ensureMap === 'function') {
-                        window.BuildingSelect.ensureMap(patch.location.lat, patch.location.lng).catch(() => {});
-                    }
-                } catch (_) {}
-                // AUTHORITATIVE RE-EVAL - re-run crisis-form + operation matching for
-                // the NEW coords (overriding the jitter guard), drop the previous
-                // zone's stock answers, toast. _onLocationReeval lives in a sibling
-                // scope (_refreshGps) → call the global it exports.
-                if (typeof window.__crispV4OnLocationReeval === 'function') {
-                    window.__crispV4OnLocationReeval(patch.location.lat, patch.location.lng);
-                }
-            } else {
-                // Couldn't resolve coordinates → the map + crisis form still reflect
-                // the device GPS. Save the NAME (never {0,0}) and tell the user how to
-                // make the edited place authoritative.
-                const _K = 'v4_loc_saved_name_only';
-                const _EN = 'Saved the name only - tap a suggestion to update the map and crisis form.';
+            // STRICT acceptance: only a location PICKED from the suggestions list
+            // (whose name still matches the input + carries real coords) is saved.
+            // A free-typed name that matches no suggestion is REJECTED - accepting an
+            // unresolved / fuzzy-matched name would route the report to the wrong (or
+            // no) operation. The reporter must tap a suggestion; if they can't find
+            // their place, the GPS-refresh button restores the device location.
+            if (!_locPickValid()) {
+                const _K = 'v4_loc_pick_suggestion';
+                const _EN = 'Please pick a location from the suggestions list.';
                 let msg = _EN;
                 try { const fn = window.t; if (typeof fn === 'function') { const v = fn(_K); if (v && v !== _K) msg = v; } } catch (_) {}
-                if (typeof window.showToast === 'function') window.showToast(msg, 3500);
+                if (typeof window.showToast === 'function') window.showToast(msg, 3000);
+                locEditInput.focus();
+                return;   // keep the editor OPEN - nothing saved
+            }
+            const coords = _locSelected;
+            _setState({
+                userLocationName: name,
+                locationName: name,
+                location: {
+                    lat: coords.lat, lng: coords.lng,
+                    // Submit reads state.location.acc; 0 + is_user_corrected = "user-placed".
+                    acc: 0, source: 'user_corrected', is_user_corrected: true,
+                },
+            });
+            _paintV4LocationPills();
+            // Repaint the building overlay for the new bbox (must-have #6) + re-run
+            // crisis-form / operation matching authoritatively for the picked coords.
+            try {
+                document.dispatchEvent(new CustomEvent('crisp-location-changed', {
+                    detail: { lat: coords.lat, lng: coords.lng, source: 'user_corrected' },
+                }));
+            } catch (_) {}
+            try {
+                if (window.BuildingSelect && typeof window.BuildingSelect.ensureMap === 'function') {
+                    window.BuildingSelect.ensureMap(coords.lat, coords.lng).catch(() => {});
+                }
+            } catch (_) {}
+            if (typeof window.__crispV4OnLocationReeval === 'function') {
+                window.__crispV4OnLocationReeval(coords.lat, coords.lng);
             }
             _closeLocEdit();
         }
@@ -632,6 +613,7 @@
 
             locEditInput.addEventListener('input', () => {
                 _locSelected = null;
+                _syncLocSaveBtn();   // typing away from a pick re-disables Save
                 const q = locEditInput.value.trim();
                 // placeSearch.search() returns [] below 3 chars by design
                 // (too noisy on 1-2 char prefixes). Mirror that here.
@@ -688,10 +670,12 @@
                     _highlightLocSuggestion(_locActiveIdx);
                 } else if (e.key === 'Enter') {
                     e.preventDefault();
-                    if (hasList && _locActiveIdx >= 0) {
-                        _pickLocSuggestion(_locSuggestions[_locActiveIdx]);
+                    // Enter PICKS a suggestion (the highlighted one, else the first)
+                    // rather than accepting free-text - strict suggestion-only edit.
+                    if (hasList) {
+                        _pickLocSuggestion(_locSuggestions[_locActiveIdx >= 0 ? _locActiveIdx : 0]);
                     } else {
-                        _saveLocEdit();
+                        _saveLocEdit();   // no list → _saveLocEdit toasts unless a pick is already valid
                     }
                 } else if (e.key === 'Escape') {
                     e.preventDefault();
@@ -1279,7 +1263,39 @@
             retryGpsBtn.disabled = true;
             retryGpsBtn.setAttribute('aria-busy', 'true');
             try {
-                _refreshGps(true);   // user-initiated → a material move re-evals the crisis form
+                // If the location was MANUALLY edited, a GPS refresh reverts to the
+                // DEVICE location. Restore the snapshotted device fix (coords + name)
+                // INSTANTLY so the revert is correct even when the fresh GPS poll
+                // below is slow / denied / times out (the reported bug: previously we
+                // only cleared the typed name + flag and relied on _refreshGps, so a
+                // failed poll left the edited coords + name in place).
+                const _st = _getState();
+                const _loc = _st.location || {};
+                const _dev = _st.deviceLocation;
+                if (_st.userLocationName || _loc.is_user_corrected || _loc.source === 'user_corrected') {
+                    if (_dev && Number.isFinite(_dev.lat) && Number.isFinite(_dev.lng)) {
+                        _setState({
+                            userLocationName: '',
+                            locationName: _dev.name || '',
+                            location: { lat: _dev.lat, lng: _dev.lng, acc: _dev.acc || 0,
+                                        source: 'device_gps', is_user_corrected: false },
+                        });
+                        _paintV4LocationPills();
+                        // Re-evaluate the crisis form for the reverted device location
+                        // (works offline; the fresh poll below is a same-spot no-op).
+                        if (typeof window.__crispV4OnLocationReeval === 'function') {
+                            window.__crispV4OnLocationReeval(_dev.lat, _dev.lng);
+                        }
+                    } else {
+                        // No snapshot yet (edited before any device fix landed) - fall
+                        // back to clearing the override and letting the fresh fix land.
+                        _setState({
+                            userLocationName: '',
+                            location: Object.assign({}, _loc, { is_user_corrected: false, source: 'device_gps' }),
+                        });
+                    }
+                }
+                _refreshGps(true);   // user-initiated → fresh device fix, re-evals the crisis form
             } finally {
                 setTimeout(() => {
                     retryGpsBtn.disabled = false;
@@ -1730,6 +1746,24 @@
         const _t = (typeof window.t === 'function') ? window.t : ((k) => k);
         return _t('v4_gps_locating') || 'Locating…';
     }
+    // Snapshot the DEVICE location (coords + reverse-geocoded name) whenever a
+    // device / cached / IP fix is shown AND it isn't a manual edit. The GPS-refresh
+    // button restores THIS snapshot instantly, so the revert works even when a fresh
+    // GPS poll is slow or denied (the reported bug). The unchanged-guard makes it
+    // safe to call from the paint path without re-entrancy loops.
+    function _snapshotDeviceLoc() {
+        try {
+            const s = _getState();
+            const loc = s.location;
+            if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) return;
+            if (loc.is_user_corrected || loc.source === 'user_corrected') return;
+            const name = s.locationName || '';
+            const prev = s.deviceLocation;
+            if (prev && prev.lat === loc.lat && prev.lng === loc.lng
+                && (prev.acc || 0) === (loc.acc || 0) && (prev.name || '') === name) return;
+            _setState({ deviceLocation: { lat: loc.lat, lng: loc.lng, acc: loc.acc || 0, name } });
+        } catch (_) {}
+    }
     function _paintV4LocationPills() {
         const s = _getState();
         // prefer the user-typed name if present, then the
@@ -1761,23 +1795,21 @@
         const coordsEl = document.getElementById('v4-meta-loc-coords');
         if (coordsEl) {
             const loc = s.location;
-            const techMode = (() => {
-                try { return localStorage.getItem('crisp_tech_user') === 'on'; }
-                catch { return false; }
-            })();
+            // Operator request (Jun 2026): show the precise lat/long alongside the
+            // place name + accuracy so the device vs edited location is unambiguous
+            // (the May-2026 audit had hidden the decimals to cut victim cognitive
+            // load; the operator wants them back for forensic clarity). Order:
+            // "12.9716°, 77.5946° · ±20 m".
             if (loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lng)) {
                 const acc = Math.max(0, Math.round(loc.acc || 0));
-                if (techMode) {
-                    coordsEl.textContent =
-                        `${loc.lat.toFixed(4)}°, ${loc.lng.toFixed(4)}°` +
-                        (acc > 0 ? ` · ±${acc} m` : '');
-                } else {
-                    coordsEl.textContent = acc > 0 ? `±${acc} m` : '';
-                }
+                coordsEl.textContent =
+                    `${loc.lat.toFixed(4)}°, ${loc.lng.toFixed(4)}°` +
+                    (acc > 0 ? ` · ±${acc} m` : '');
             } else {
                 coordsEl.textContent = '';
             }
         }
+        _snapshotDeviceLoc();
     }
 
     // Live timestamp + timezone in the meta card. For crisis
@@ -2002,13 +2034,81 @@
         // flow: on {active:false}, offline, or any error we leave/clear
         // crisisPack and the existing hardcoded Stage 2/3 runs UNCHANGED
         // (fail-safe). Idempotent to ~110 m so it fires at most once per spot.
-        let _crisisPackKey = null;
+        // ── Offline-first pack cache (must-have #3) ──────────────────────────
+        // The UNDP-mandated questions are REQUIRED to submit inside an active zone,
+        // so a reporter who loaded the pack online then dropped offline must still
+        // be able to answer them. We persist the last resolved active pack with its
+        // resolution point; on an offline/errored fetch we restore it when the
+        // reporter is near that point (≈2 km) and the cache is recent (≤7 days).
+        const _PACK_CACHE_KEY = 'crisp_active_pack_v1';
+        function _approxKm(la1, lo1, la2, lo2) {
+            const dLat = (la2 - la1) * 111;
+            const dLng = (lo2 - lo1) * 111 * Math.cos((la1 + la2) / 2 * Math.PI / 180);
+            return Math.sqrt(dLat * dLat + dLng * dLng);
+        }
+        const _CANON_CRISIS_T = { EARTHQUAKE: 1, FLOOD: 1, TSUNAMI: 1, CYCLONE: 1,
+            WILDFIRE: 1, EXPLOSION: 1, CHEMICAL_INCIDENT: 1, CONFLICT: 1, CIVIL_UNREST: 1 };
+        // Apply a resolved active-pack payload (server OR cache shape: pack_id,
+        // pack_version, event_id, crisis_type, schema_json) to state.
+        function _applyActivePack(data) {
+            const patch = { crisisPack: {
+                pack_id: data.pack_id, pack_version: data.pack_version,
+                event_id: data.event_id, crisis_type: data.crisis_type,
+                schema: data.schema_json,
+            } };
+            if (data.crisis_type && _CANON_CRISIS_T[data.crisis_type]) {
+                patch.crisis_type = data.crisis_type;
+                patch._crisisTypeAuto = true;
+            } else if (_getState()._crisisTypeAuto) {
+                patch.crisis_type = null;
+                patch._crisisTypeAuto = false;
+            }
+            _setState(patch);
+        }
+        function _cacheActivePack(loc, data) {
+            try {
+                localStorage.setItem(_PACK_CACHE_KEY, JSON.stringify({
+                    lat: loc.lat, lng: loc.lng, ts: Date.now(),
+                    data: {
+                        pack_id: data.pack_id, pack_version: data.pack_version,
+                        event_id: data.event_id, crisis_type: data.crisis_type,
+                        schema_json: data.schema_json,
+                    },
+                }));
+            } catch (_) {}
+        }
+        function _readPackCache() {
+            try {
+                const c = JSON.parse(localStorage.getItem(_PACK_CACHE_KEY) || 'null');
+                return (c && c.data && c.data.schema_json) ? c : null;
+            } catch (_) { return null; }
+        }
+        function _restoreCachedPack(loc) {
+            const c = _readPackCache();
+            if (!c) return null;
+            if (Date.now() - (c.ts || 0) > 7 * 864e5) return null;        // ≤ 7 days
+            if (_approxKm(loc.lat, loc.lng, c.lat, c.lng) > 2) return null; // ≈ same spot
+            return c.data;
+        }
+        // The zone is no longer active here (server said {active:false}) - evict a
+        // stale cached pack within range so a later offline restore can't re-apply it.
+        function _evictCachedPackNear(loc) {
+            const c = _readPackCache();
+            if (c && _approxKm(loc.lat, loc.lng, c.lat, c.lng) <= 2) {
+                try { localStorage.removeItem(_PACK_CACHE_KEY); } catch (_) {}
+            }
+        }
+
+        let _crisisPackKey = null;          // location key of the in-flight / last-started fetch
         function _maybeFetchCrisisPack(loc) {
             try {
                 if (!loc || typeof loc.lat !== 'number' || typeof loc.lng !== 'number') return;
                 const key = loc.lat.toFixed(3) + ',' + loc.lng.toFixed(3);
                 if (key === _crisisPackKey) return;   // already resolved for ~here
                 _crisisPackKey = key;
+                // Mirror onto window so the IIFE-level classify renderer (a different
+                // scope) can detect a fresh in-flight zone vs an already-applied pack.
+                window.__crispV4PackKey = key;
                 const base = window.API_BASE;
                 if (!base) return;
                 const url = base + '/crisis-forms/active?lat=' + encodeURIComponent(loc.lat)
@@ -2021,29 +2121,11 @@
                     .then((r) => (r && r.ok ? r.json() : null))
                     .then((data) => {
                         if (data && data.active && data.schema_json) {
-                            const patch = { crisisPack: {
-                                pack_id: data.pack_id, pack_version: data.pack_version,
-                                event_id: data.event_id, crisis_type: data.crisis_type,
-                                schema: data.schema_json,
-                            } };
-                            // The active zone already knows the crisis type - auto-set the
-                            // canonical field so the "what caused it" sub-step is skipped.
-                            // GUARD: only when the event's type is a canonical CrisisTypeEnum
-                            // the PWA offers (must-have #5). A non-canonical, display-only event
-                            // type (e.g. 'LANDSLIDE') leaves crisis_type unset → the crisis chip
-                            // step stays so the reporter picks a valid type.
-                            const _CANON = { EARTHQUAKE: 1, FLOOD: 1, TSUNAMI: 1, CYCLONE: 1,
-                                WILDFIRE: 1, EXPLOSION: 1, CHEMICAL_INCIDENT: 1, CONFLICT: 1, CIVIL_UNREST: 1 };
-                            if (data.crisis_type && _CANON[data.crisis_type]) {
-                                patch.crisis_type = data.crisis_type;
-                                patch._crisisTypeAuto = true;   // zone-derived → clearable on a later swap
-                            } else if (_getState()._crisisTypeAuto) {
-                                // New zone has a non-canonical type → drop the stale
-                                // auto-applied type from the PREVIOUS zone (Bangalore→Chennai).
-                                patch.crisis_type = null;
-                                patch._crisisTypeAuto = false;
-                            }
-                            _setState(patch);
+                            // Auto-set crisis_type only for a canonical CrisisTypeEnum
+                            // (must-have #5); a display-only event type leaves it unset so
+                            // the reporter picks a valid one. (Logic lives in _applyActivePack.)
+                            _applyActivePack(data);
+                            _cacheActivePack(loc, data);   // offline-first: remember for this spot
                         } else {
                             // No active zone here → drop the pack AND any crisis_type we
                             // auto-applied from a previous zone, so the "what caused it"
@@ -2054,11 +2136,31 @@
                                 patch._crisisTypeAuto = false;
                             }
                             _setState(patch);
+                            _evictCachedPackNear(loc);     // zone ended here → drop stale cache
                         }
-                        document.dispatchEvent(new CustomEvent('crisis-pack-resolved'));
+                        // Remember WHICH location this pack resolved for, so the
+                        // classify flow can tell a fresh in-flight (new zone) from
+                        // an already-applied pack (stale-zone guard below).
+                        window.__crispV4PackResolvedKey = key;
                     })
-                    .catch(() => { /* offline / error → default flow (fail-safe) */ })
-                    .finally(() => { if (window.__crispV4PackInFlight === _p) window.__crispV4PackInFlight = null; });
+                    .catch(() => {
+                        // Offline / error → fail-safe. Restore a recent pack cached for
+                        // ~this spot so the mandatory questions still render offline;
+                        // otherwise the default flow runs UNCHANGED.
+                        try {
+                            const cd = _restoreCachedPack(loc);
+                            if (cd) _applyActivePack(cd);
+                        } catch (_) {}
+                        window.__crispV4PackResolvedKey = key;
+                    })
+                    .finally(() => {
+                        if (window.__crispV4PackInFlight === _p) window.__crispV4PackInFlight = null;
+                        // Fire on EVERY settle (success OR error) so the classify flow
+                        // ALWAYS repaints to the correct order once the zone resolves -
+                        // the user never has to navigate back-and-forth, and any
+                        // "loading the area form" view is cleared deterministically.
+                        document.dispatchEvent(new CustomEvent('crisis-pack-resolved'));
+                    });
                 window.__crispV4PackInFlight = _p;
             } catch (_) {}
         }
@@ -2284,9 +2386,49 @@
         (cp.schema.sections || []).forEach((sec) => (sec.fields || []).forEach((f) => {
             if (!f || !f.key || !_CP_BASE_TYPES[f.type]) return;       // skip special types
             if (f.maps_to && _CP_DEFAULT_CAPTURED[f.maps_to]) return;  // captured by chips
+            if (f.show_if) return;   // conditional field - rendered under its parent, not standalone
             out.push(f);
         }));
         return out;
+    }
+    // Conditional fields (e.g. the UNDP "Other, please specify" free-text) declare
+    // `show_if: {field, includes|equals}`; they render hidden under their controlling
+    // field and surface only when its value matches. Optional server-side, so they
+    // never affect the required-gate (_crisisPackFields excludes them).
+    function _cpConditionalChildren(parentKey) {
+        const s = window.state || {};
+        const cp = s.crisisPack;
+        if (!cp || !cp.schema) return [];
+        const out = [];
+        (cp.schema.sections || []).forEach((sec) => (sec.fields || []).forEach((f) => {
+            if (f && f.show_if && f.show_if.field === parentKey && _CP_BASE_TYPES[f.type]) out.push(f);
+        }));
+        return out;
+    }
+    function _cpShowIfMet(child) {
+        const s = window.state || {};
+        const ans = s.crisisStockAnswers || {};
+        const si = child.show_if || {};
+        const cur = ans[si.field];
+        if (si.includes != null) return Array.isArray(cur) ? cur.indexOf(si.includes) >= 0 : cur === si.includes;
+        if (si.equals != null) return cur === si.equals;
+        return true;
+    }
+    // After a parent value changes, show/hide its conditional children and CLEAR a
+    // hidden child's stored answer so a deselected "Other" never ships stale text.
+    function _cpSyncConditionals(view, parentKey) {
+        if (!view) return;
+        _cpConditionalChildren(parentKey).forEach((c) => {
+            const node = view.querySelector('.v4-cp-cond[data-key="' + c.key + '"]');
+            if (!node) return;
+            const shown = _cpShowIfMet(c);
+            node.style.display = shown ? '' : 'none';
+            if (!shown) {
+                const ans = Object.assign({}, (window.state || {}).crisisStockAnswers || {});
+                if (ans[c.key] != null && ans[c.key] !== '') { delete ans[c.key]; _setState({ crisisStockAnswers: ans }); }
+                const inp = node.querySelector('.v4-cp-input'); if (inp) inp.value = '';
+            }
+        });
     }
     // Does the active crisis-form pack already ask the debris question? A field
     // that maps_to 'debris_clearing_needed' means the DEPLOYED form collects
@@ -2402,6 +2544,18 @@
                 html += `<${tag} class="v4-cp-input"${f.type === 'short_text' ? ' type="text"' : ''}></${tag}>`;
             }
             html += '</div>';
+            // Conditional children (e.g. UNDP "Other, please specify") - hidden until
+            // their parent's value matches show_if.
+            _cpConditionalChildren(f.key).forEach((c) => {
+                const shown = _cpShowIfMet(c);
+                const tag = c.type === 'long_text' ? 'textarea' : 'input';
+                // Inline display:none (beats the .v4-cp-q stylesheet rule the bare
+                // [hidden] attribute can't override).
+                html += `<div class="v4-cp-q v4-cp-cond" data-key="${esc(c.key)}" data-type="${esc(c.type)}"${shown ? '' : ' style="display:none"'}>`;
+                html += `<div class="v4-cp-label">${esc(_cpLabel(c))}</div>`;
+                html += `<${tag} class="v4-cp-input"${c.type === 'short_text' ? ' type="text"' : ''}></${tag}>`;
+                html += '</div>';
+            });
         });
         html += '</div>';
         view.innerHTML = html;
@@ -2410,8 +2564,10 @@
             const key = q.getAttribute('data-key');
             const type = q.getAttribute('data-type');
             if (type === 'yes_no' || type === 'single_select' || type === 'multi_select') {
-                q.querySelectorAll('.v4-cp-opt').forEach((b) => b.addEventListener('click',
-                    () => _cpSetAnswer(key, type, b.getAttribute('data-val'), b, q)));
+                q.querySelectorAll('.v4-cp-opt').forEach((b) => b.addEventListener('click', () => {
+                    _cpSetAnswer(key, type, b.getAttribute('data-val'), b, q);
+                    _cpSyncConditionals(view, key);
+                }));
             } else {
                 const inp = q.querySelector('.v4-cp-input');
                 if (!inp) return;
@@ -2717,6 +2873,9 @@
         }
         return true;
     }
+    // Test hook: expose the classify-step gate so e2e can assert the required
+    // crisis-pack questions block advancement until answered. Zero production effect.
+    window.__crispV4CanAdvance = (step) => _canAdvanceFrom(step);
     // ── Auto-progress helpers - May 2026 ──────────────────────────────
     //
     // Operator: "When the user selects any tile/card option in Stage 2
@@ -2823,6 +2982,54 @@
         });
     }
 
+    // True while a region crisis-form fetch is resolving the current zone.
+    function _packPending() {
+        try { return !!window.__crispV4PackInFlight; } catch (_) { return false; }
+    }
+    // True when an OLD zone's pack is still applied while a NEWER zone is resolving
+    // (reporter moved A→B mid-report). Until the new zone settles, the divergent
+    // step shows a loading view rather than zone-A's stale questions.
+    function _isPackStaleResolving() {
+        try {
+            return !!(window.__crispV4PackInFlight && window.state && window.state.crisisPack
+                && window.__crispV4PackResolvedKey && window.__crispV4PackKey
+                && window.__crispV4PackResolvedKey !== window.__crispV4PackKey);
+        } catch (_) { return false; }
+    }
+    // Transient "loading the region form" view shown on the divergent classify step
+    // while the zone pack resolves. Carries .v4-classify-view so the next
+    // _showSubStep() (fired by 'crisis-pack-resolved' on settle) hides it. Mounted
+    // once, reused thereafter. Disables Continue while shown.
+    function _showCrisisPackLoading() {
+        const views = document.querySelectorAll('.v4-classify-view');
+        views.forEach((v) => v.setAttribute('hidden', ''));
+        let el = document.getElementById('v4-view-pack-loading');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'v4-view-pack-loading';
+            el.className = 'v4-classify-view v4-pack-loading';
+            el.setAttribute('role', 'status');
+            el.setAttribute('aria-live', 'polite');
+            el.innerHTML = '<div class="v4-pack-loading-inner">'
+                + '<span class="v4-pack-spinner" aria-hidden="true"></span>'
+                + '<p class="v4-pack-loading-text"></p></div>';
+            const anchor = views[0];
+            if (anchor && anchor.parentNode) anchor.parentNode.appendChild(el);
+            else { const st = document.getElementById('stage-v4-classify'); if (st) st.appendChild(el); }
+        }
+        const txt = el.querySelector('.v4-pack-loading-text');
+        if (txt) {
+            let m = 'Loading the form for your area…';
+            try { const fn = window.t; if (typeof fn === 'function') { const v = fn('v4_pack_loading'); if (v && v !== 'v4_pack_loading') m = v; } } catch (_) {}
+            txt.textContent = m;
+        }
+        el.removeAttribute('hidden');
+        const label = document.getElementById('v4-substep-label');
+        if (label) { label.style.display = ''; label.innerHTML = '<span></span>'; }
+        const nextBtn = document.getElementById('btn-v4-classify-next');
+        if (nextBtn) { nextBtn.disabled = true; nextBtn.classList.remove('is-ready'); }
+    }
+
     function _showSubStep(step) {
         // Re-derive the zone's canonical crisis_type before computing the order,
         // so the "what caused it" skip survives add-another (crisisPack persists,
@@ -2834,6 +3041,17 @@
         // departing step.
         _advancingFromStep = null;
         _classifyStep = step;
+        // Defer the divergent post-infra step while the region's crisis form is still
+        // resolving - either the FIRST resolution (no pack yet) or a NEWER zone
+        // replacing a stale one. Show a brief loading view instead of the wrong
+        // "what caused it?" / stale-zone questions; 'crisis-pack-resolved' (fired on
+        // EVERY settle) repaints to the correct order with no user retries. Steps 1-2
+        // (damage/infra) are always safe and never deferred.
+        if ((step === 'crisis' || step === 'crispack')
+            && ((_packPending() && !(window.state && window.state.crisisPack)) || _isPackStaleResolving())) {
+            try { _showCrisisPackLoading(); } catch (_) {}
+            return;
+        }
         // Render the dynamic crisis-pack view lazily on entry. The pack step is
         // a multi-field form, so reveal the Continue footer (the single-pick
         // sub-steps hide it + auto-advance) by tagging the stage.
@@ -3112,6 +3330,23 @@
         // Expose so app.js setLanguage() can call after i18n re-application.
         window.__crispV4RefreshUndpBadge = _refreshTriggerBadge;
 
+        // ── Hide the legacy "additional information" sheet in PACK REGIONS ──────
+        // When a crisis-form pack is deployed for the reporter's location, the pack
+        // collects the impact details (electricity / health / pressing-needs) in its
+        // own sub-step, so the standalone UNDP-details sheet on the last submit page
+        // would ask the same things twice. Operator requirement: do NOT ask for
+        // additional information on the review page when a pack is deployed - hide
+        // the trigger entirely. No active pack → unchanged (sheet still offered).
+        function _packActive() {
+            const s = _getState();
+            return !!(s && s.crisisPack && s.crisisPack.schema);
+        }
+        function _syncUndpTrigger() {
+            if (!_undpTrigger) return;
+            _undpTrigger.style.display = _packActive() ? 'none' : '';
+        }
+        window.__crispV4SyncUndpTrigger = _syncUndpTrigger;
+
         // ── REQUIRED debris card (UNDP core question, Jun 2026) ─────────
         // Moved out of the optional sheet onto the review surface
         // (#v4-debris-card). Taps write state.debris_present (explicit
@@ -3154,6 +3389,8 @@
             }
             // Keep the Send button's enabled state in lockstep with the answer.
             _updateSendBtnState();
+            // Pack regions hide the legacy "additional information" sheet trigger.
+            _syncUndpTrigger();
         }
         window.__crispV4RenderDebrisCard = _renderDebrisCard;
         (function _wireDebrisCard() {

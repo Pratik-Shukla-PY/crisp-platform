@@ -1666,7 +1666,27 @@
     function _wireHomeVoice() {
         const btn = document.getElementById('btn-home-voice');
         if (!btn) return;
+        let _safety = null;
+        const _clear = () => {
+            if (_safety) { clearTimeout(_safety); _safety = null; }
+            btn.classList.remove('is-speaking');
+        };
+        // Stop hook so navigation (Report an Incident / leaving home) can halt
+        // playback + restore the icon. Idempotent; safe to call any time.
+        window.__crispStopHomeVoice = () => {
+            try { if (window.VoiceReadout && window.VoiceReadout.stop) window.VoiceReadout.stop(); } catch (_) {}
+            _clear();
+        };
         btn.addEventListener('click', () => {
+            const VR = window.VoiceReadout;
+            if (!VR || !VR.speak) return;
+            // Toggle: a second tap WHILE speaking stops playback + restores the
+            // icon. (Only one home-audio instance is ever active - speak() cancels
+            // any prior utterance, and isSpeaking() reflects the live engine state.)
+            if (btn.classList.contains('is-speaking') || (VR.isSpeaking && VR.isSpeaking())) {
+                window.__crispStopHomeVoice();
+                return;
+            }
             const tt = (typeof window.t === 'function') ? window.t : (k, f) => f || k;
             const parts = [
                 'CRISP',
@@ -1675,18 +1695,56 @@
             ];
             const text = parts.join('. ');
             try {
-                if (window.VoiceReadout && window.VoiceReadout.speak) {
-                    btn.classList.add('is-speaking');
-                    window.VoiceReadout.speak(text);
-                    // The speak() implementation in voice-readout.js cancels
-                    // on next call; we leave the visual state on for a few
-                    // seconds then auto-clear.
-                    setTimeout(() => btn.classList.remove('is-speaking'), 6000);
-                }
+                btn.classList.add('is-speaking');   // active (orange) state - see styles.css
+                // Clear the icon the instant playback finishes/errors (onend), not on
+                // a fixed timer, so the active state always matches real playback.
+                VR.speak(text, null, _clear);
+                // Safety net for engines that never fire onend.
+                _safety = setTimeout(() => { if (!(VR.isSpeaking && VR.isSpeaking())) _clear(); }, 30000);
             } catch (e) {
                 console.warn('[home] voice readout failed:', e);
-                btn.classList.remove('is-speaking');
+                _clear();
             }
+        });
+    }
+
+    // Share the app - native Web Share where available, else copy the link.
+    // All local APIs (navigator.share / clipboard) so it works offline. The URL
+    // is the app's own landing page (install/share target), not the report.
+    function _wireHomeShare() {
+        const btn = document.getElementById('btn-home-share');
+        if (!btn) return;
+        btn.addEventListener('click', async () => {
+            const tt = (typeof window.t === 'function') ? window.t : (k, f) => f || k;
+            const url = (location.origin || '') + (location.pathname || '');
+            const title = 'CRISP';
+            const text = tt('share_text', 'Report disaster damage with CRISP - works on any phone, even offline.');
+            // 1. Native share sheet (Android Chrome, iOS Safari, some desktop).
+            //    It already offers "Copy" on every platform that supports it.
+            if (navigator.share) {
+                try {
+                    await navigator.share({ title, text, url });
+                    return;
+                } catch (e) {
+                    // A deliberate dismiss (AbortError) is NOT a failure - don't
+                    // fall back to copy in that case.
+                    if (e && e.name === 'AbortError') return;
+                    // Any other error → fall through to the copy-link fallback.
+                }
+            }
+            // 2. Fallback: copy the link + confirm via toast (offline-safe).
+            const _confirm = () => {
+                try { if (typeof window.showToast === 'function') window.showToast(tt('share_link_copied', 'Link copied')); } catch (_) {}
+            };
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(url);
+                    _confirm();
+                    return;
+                }
+            } catch (_) { /* clipboard blocked (insecure ctx / permissions) - prompt below */ }
+            // 3. Last resort: surface the URL so the user can copy manually.
+            try { window.prompt(tt('aria_share', 'Copy this link'), url); } catch (_) {}
         });
     }
 
@@ -2318,6 +2376,7 @@
         // new wirings.
         _wireInstallIcon();
         _wireHomeVoice();
+        _wireHomeShare();
         _wireLoginIcon();
         _wireUtilityFooter();
         _paintIdentityBar();

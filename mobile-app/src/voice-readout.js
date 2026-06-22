@@ -73,11 +73,14 @@
         return match || null;
     }
 
-    function speakText(text, lang) {
-        if (!_isSupported() || !text) return;
+    // Optional `onDone` callback fires once when playback finishes or errors
+    // (so callers can clear their "speaking" UI immediately rather than polling).
+    // Backward-compatible: existing speak(text) / speak(text, lang) callers ignore it.
+    function speakText(text, lang, onDone) {
+        if (!_isSupported() || !text) { if (typeof onDone === 'function') { try { onDone(); } catch (_) {} } return; }
         try {
             // Cancel any in-flight utterance so a second tap on a
-            // different question doesn't queue.
+            // different question doesn't queue. (Single active instance.)
             window.speechSynthesis.cancel();
             const u = new SpeechSynthesisUtterance(text);
             const speechCode = lang ? (SPEECH_MAP[lang] || lang) : _getActiveSpeechCode();
@@ -87,10 +90,28 @@
             u.rate = 0.95;     // a touch slower for clarity
             u.pitch = 1.0;
             u.volume = 1.0;
+            if (typeof onDone === 'function') {
+                let _fired = false;
+                const _fire = () => { if (_fired) return; _fired = true; try { onDone(); } catch (_) {} };
+                u.onend = _fire;
+                u.onerror = _fire;
+            }
             window.speechSynthesis.speak(u);
         } catch (e) {
             console.warn('[voice-readout] speak failed:', e);
+            if (typeof onDone === 'function') { try { onDone(); } catch (_) {} }
         }
+    }
+
+    // Stop any in-flight playback immediately (idempotent; safe when unsupported).
+    function stopSpeaking() {
+        if (!_isSupported()) return;
+        try { window.speechSynthesis.cancel(); } catch (_) {}
+    }
+
+    function isSpeaking() {
+        try { return !!(_isSupported() && window.speechSynthesis.speaking); }
+        catch (_) { return false; }
     }
 
     function _resolveText(el) {
@@ -179,6 +200,8 @@
     // Public surface - used by other modules + e2e tests.
     window.VoiceReadout = {
         speak: speakText,
+        stop: stopSpeaking,
+        isSpeaking: isSpeaking,
         rescan: _scanAndAttach,
         isSupported: _isSupported,
         // For tests: expose the BCP-47 mapping.

@@ -187,14 +187,23 @@
                 tags: tags,
                 name: osmName,
             };
-            // Auto-fill `infrastructure_name` with the OSM name so the
-            // dashboard renders "City Hospital" next to the indigo
-            // Building-history pill. Only overwrite if the user hasn't
-            // manually typed something - respects user intent. Tag with
-            // a flag so `_clearSelection` below only clears what WE set.
+            // An explicit OSM FOOTPRINT pick is ALWAYS the authoritative building
+            // reference (must-have #6) → flag it from-OSM unconditionally. Write BOTH
+            // the snake_case field the submit payload reads first AND the legacy
+            // camelCase fallback, so the two can never disagree again — the
+            // camelCase/snake_case desync (only the camelCase flag was set, the payload
+            // read the snake_case one via `??`) is exactly what made an explicit
+            // "University" tag render as "Unnamed Building".
+            window.state.infraNameFromOsm = true;
+            window.state.infrastructure_name_from_osm = true;
+            // Auto-fill `infrastructure_name` with the OSM name so the dashboard renders
+            // "City Hospital" next to the indigo Building-history pill. Only overwrite if
+            // the user hasn't manually typed something - respects user intent. Mark that
+            // WE auto-filled it so `_clearSelection` below only clears what WE set.
             if (osmName && !(window.state.infraName && window.state.infraName.trim())) {
                 window.state.infraName = osmName;
-                window.state.infraNameFromOsm = true;
+                window.state.infrastructure_name = osmName;
+                window.state._infraNameAutofilled = true;
                 // Mirror into the textbox if it exists on-screen so the
                 // submitter sees what auto-filled. Bare HTMLInput so no
                 // framework dance.
@@ -241,12 +250,17 @@
         if (window.state) {
             window.state.buildingId = null;
             window.state.buildingOsmElement = null;
-            // Only clear infraName if WE auto-filled it. If the user
-            // typed it manually (infraNameFromOsm is absent / false),
-            // keep their value - they might reselect a nearby building.
-            if (window.state.infraNameFromOsm) {
+            // Deselecting the footprint means it is no longer an OSM building → always
+            // reset the from-OSM flags (BOTH the snake_case authoritative one and the
+            // legacy camelCase fallback, so they can't disagree). Only clear the NAME if
+            // WE auto-filled it (the dedicated _infraNameAutofilled marker); a name the
+            // user typed themselves is preserved - they might reselect a nearby building.
+            window.state.infraNameFromOsm = false;
+            window.state.infrastructure_name_from_osm = false;
+            if (window.state._infraNameAutofilled) {
                 window.state.infraName = '';
-                window.state.infraNameFromOsm = false;
+                window.state.infrastructure_name = '';
+                window.state._infraNameAutofilled = false;
                 const inp = document.getElementById('input-infra-name');
                 if (inp) inp.value = '';
             }
@@ -332,6 +346,7 @@
         try { _overlay.clearLayers(); } catch (_) {}
         _selectedLayer = null;
         if (Array.isArray(elems)) {
+            const _allPts = [];
             elems.forEach((el) => {
                 const latlngs = _buildingLatLngs(el);
                 if (!latlngs) return;
@@ -342,11 +357,31 @@
                     fillOpacity: 0.15,
                 }).addTo(_overlay);
                 poly.on('click', () => _commitSelection(el.id, poly, el));
+                for (let i = 0; i < latlngs.length; i++) _allPts.push(latlngs[i]);
             });
             console.log(
                 `[BuildingSelect] painted ${elems.length} building(s) ` +
                 `near (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
             );
+            // Smart zoom (offline-first; uses ONLY the already-fetched/cached
+            // geometry - no extra API call): fit the viewport to the building set so
+            // AT LEAST ONE building is visible. The previous fixed zoom-18 could leave
+            // every footprint off-screen when none sit on the exact GPS centre. Capped
+            // at 18 so a single building isn't over-zoomed; runs only when we have real
+            // geometry (no buildings → keep the existing zoom-18 setView, no regression).
+            if (_allPts.length >= 3 && _map && typeof _map.fitBounds === 'function') {
+                try {
+                    const _b = L.latLngBounds(_allPts);
+                    if (_b && _b.isValid()) {
+                        requestAnimationFrame(() => {
+                            try {
+                                _map.invalidateSize({ animate: false });
+                                _map.fitBounds(_b, { padding: [24, 24], maxZoom: 18 });
+                            } catch (_) {}
+                        });
+                    }
+                } catch (_) {}
+            }
         } else {
             console.log('[BuildingSelect] no building data - map-only fallback');
         }

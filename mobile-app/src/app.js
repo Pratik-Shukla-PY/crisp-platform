@@ -397,7 +397,11 @@ async function _postSubscriptionToServer(subscription, deviceHash) {
     const headers = { 'Content-Type': 'application/json' };
     // Attach JWT if the reporter is logged in - backend will tie the row to user_id.
     try {
-        const token = localStorage.getItem('crisp_auth_token');
+        // I5 (v350, Jun 2026): read the bearer from AuthStore (in-memory /
+        // IDB-backed), NOT the deprecated plaintext localStorage 'crisp_auth_token'
+        // (removed - it was a leftover from the pre-AuthStore era + an XSS-readable
+        // credential at rest).
+        const token = (window.AuthStore && window.AuthStore.getAccessToken && window.AuthStore.getAccessToken()) || null;
         if (token) headers['Authorization'] = `Bearer ${token}`;
     } catch (_) {}
     const res = await fetch(`${API_BASE}/push/subscribe`, {
@@ -583,6 +587,106 @@ function _estimateQueueItemBytes(item) {
     }
     return Math.round(total);
 }
+
+// I2 (v350, Jun 2026) - real device-quota probe via the Storage API. The static
+// 35 MB warn threshold above is a guess; this asks the browser for the ACTUAL
+// usage + quota so the hard pre-enqueue budget (see submitReport) reflects reality
+// (iOS ~50 MB; desktop/Android often GBs). Best-effort: falls back to the iOS
+// per-origin assumption when navigator.storage.estimate is unavailable, so the
+// guard never blocks a submission just because the API is missing.
+async function getStorageQuotaInfo() {
+    const FALLBACK_QUOTA = 50 * 1024 * 1024;   // iOS WebKit per-origin cap
+    try {
+        if (navigator.storage && typeof navigator.storage.estimate === 'function') {
+            const est = await navigator.storage.estimate();
+            const quota = (typeof est.quota === 'number' && est.quota > 0) ? est.quota : FALLBACK_QUOTA;
+            const usage = (typeof est.usage === 'number' && est.usage >= 0) ? est.usage : 0;
+            return { usage, quota, available: Math.max(0, quota - usage), supported: true };
+        }
+    } catch (_) { /* fall through to the conservative fallback */ }
+    return { usage: 0, quota: FALLBACK_QUOTA, available: FALLBACK_QUOTA, supported: false };
+}
+window.__crispGetStorageQuotaInfo = getStorageQuotaInfo;   // e2e hook
+
+// R6 (Jun 2026): smart LRU eviction under storage pressure. With INDEFINITE
+// retention (the 30-day cap was removed), the outbox can accrue many reports each
+// holding a multi-MB ORIGINAL Blob. Rather than SILENTLY expiring evidence on a
+// timer (old behaviour) OR hard-blocking new submissions, we shed the OLDEST
+// originals/mediums whose SMALL preview has ALREADY delivered to the server: the
+// analyst keeps a usable preview, the full-res is given up VISIBLY (backend
+// 'storage_evicted'), and space is freed so a NEW report is never blocked while
+// stale already-previewed evidence sits undelivered. Oldest-first = freshest
+// evidence retained longest. Runs at submit time, before the hard budget block.
+async function _evictNonSmallTiersOfRow(row) {
+    let freed = 0;
+    const reportId = row.serverId || null;
+    const groups = [];
+    if (row.photoVariants) groups.push({ groupId: row.photoGroupId, v: row.photoVariants });
+    (row.extraPhotosVariants || []).forEach(ev => { if (ev) groups.push({ groupId: ev.groupId, v: ev }); });
+    for (const g of groups) {
+        for (const tier of ['medium', 'original']) {
+            const variant = g.v && g.v[tier];
+            if (!variant || variant.complete) continue;
+            if (variant.deferredReason === 'storage_evicted') continue;   // already evicted
+            const sz = variant.blob ? (variant.blob.size || 0)
+                     : (variant.dataUrl ? variant.dataUrl.length : 0);
+            if (sz <= 0) continue;   // no bytes to reclaim
+            // Shed the bytes + mark evicted (VISIBLE, never a silent drop).
+            variant.blob = null;
+            variant.dataUrl = null;
+            variant.deferred = true;
+            variant.deferredReason = 'storage_evicted';
+            variant.deferredAt = Date.now();
+            variant._deferSignalled = false;   // R6 re-transmit marker (re-sent on reconnect)
+            freed += sz;
+            if (reportId && !_isDefinitelyOffline()) {
+                try {
+                    await _signalTierDeferred(row, reportId, { tier, groupId: g.groupId, variant }, 'storage_evicted');
+                    variant._deferSignalled = true;
+                } catch (_) { /* re-transmitted later via _deferSignalled */ }
+            }
+        }
+    }
+    if (freed > 0) row._needsAttention = true;
+    return freed;
+}
+
+async function _evictOldOriginalsUnderPressure(incomingItem) {
+    let q;
+    try { q = await getStorageQuotaInfo(); } catch (_) { return 0; }
+    if (!q || !q.quota) return 0;
+    const incoming = _estimateQueueItemBytes(incomingItem) || 0;
+    if ((q.usage + incoming) <= q.quota * 0.85) return 0;   // fits under the hard budget → no eviction
+    const target = q.quota * 0.70;                           // evict down to a lower watermark for headroom
+    let projected = q.usage + incoming;
+    let rows;
+    try { rows = await getAllQueued(); } catch (_) { return 0; }
+    const incomingId = incomingItem && incomingItem.client_report_id;
+    const candidates = (rows || [])
+        .filter(r => r && r.client_report_id !== incomingId)
+        .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));   // OLDEST first
+    let evicted = 0;
+    for (const row of candidates) {
+        if (projected <= target) break;
+        // NEVER evict before the SMALL preview is safely on the server.
+        const smallDelivered = (row.stages && row.stages.photo === true)
+            || (row.photoVariants && row.photoVariants.small && row.photoVariants.small.complete);
+        if (!smallDelivered) continue;
+        const freed = await _evictNonSmallTiersOfRow(row);
+        if (freed > 0) {
+            projected -= freed; evicted += freed;
+            try { await enqueueReport(row); } catch (_) {}
+        }
+    }
+    if (evicted > 0) {
+        console.warn(
+            `[Evict] storage pressure: freed ~${Math.round(evicted / 1048576)}MB by deferring the oldest ` +
+            `already-previewed originals (target ${Math.round(target / 1048576)}MB of ${Math.round(q.quota / 1048576)}MB).`,
+        );
+    }
+    return evicted;
+}
+window.__crispEvictOldOriginalsUnderPressure = _evictOldOriginalsUnderPressure;   // e2e hook
 
 // K.4.d - version-aware enqueue. Use this from inside the retry/
 // upload pass to write progress (chunkProgress, stages, etc.) and
@@ -2752,6 +2856,10 @@ function _freshReportState() {
         // Classifiers - snake_case is authoritative (v4 writes these). null only.
         damage_classification: null, infrastructure_type: null, crisis_type: null,
         infrastructure_name: '', infrastructure_name_from_osm: false,
+        // True when building-select auto-filled infrastructure_name from an OSM
+        // footprint, so a later building change can clear OUR autofill but never a
+        // name the reporter typed. Per-report state, so it resets here.
+        _infraNameAutofilled: false,
         // Classifiers - legacy v3 camelCase fallbacks (pre-v6.7 IDB rows). null only.
         infraType: null, crisisType: null, damageClass: null, severity: null,
         infraName: '', infraNameFromOsm: false,
@@ -3654,6 +3762,10 @@ window.__crispUploadVariantTier = (item, reportId, unit) =>
     _uploadVariantTier(item, reportId, unit);
 // Mode B - let tests drive the drain-time tier regeneration in isolation.
 window.__crispRegenerateMissingVariants = (item) => _regenerateMissingVariants(item);
+// Fix A (low-bandwidth re-reduce) - let tests drive the timeout-triggered
+// frozen-chunk re-reduction in isolation (no real network needed).
+window.__crispMaybeReduceFrozenChunk = (item, reportId, unit, seq) =>
+    _maybeReduceFrozenChunk(item, reportId, unit, seq);
 // K.4.a - drain-mutex helpers exposed for the cross-tab e2e spec.
 window.__crispAcquireDrainLock = () => _acquireDrainLock();
 window.__crispReleaseDrainLock = () => _releaseDrainLock();
@@ -3696,6 +3808,12 @@ function goToStage(id) {
     // reset-on-entry guard further down can tell where the user came from.
     const _prevStageEl = document.querySelector('.stage.active');
     const _prevStageId = _prevStageEl ? _prevStageEl.id : null;
+    // Stop the home audio-guidance the moment the user leaves home (Report an
+    // Incident or any other navigation) + restore the speaker icon. Idempotent
+    // no-op when nothing is playing.
+    if (_prevStageId === 'stage-home' && id !== 'stage-home') {
+        try { if (typeof window.__crispStopHomeVoice === 'function') window.__crispStopHomeVoice(); } catch (_) {}
+    }
     // May 2026 (perf Sprint B.2) - lazy-load FontAwesome on first
     // non-home stage navigation. The home stage uses inline SVG for
     // all icons (audio glyph, channels strip, login/MyReports, trophy)
@@ -8082,8 +8200,21 @@ function detectPWANetworkTier() {
 // NavigatorConnection's tier (defaults to SLOW) is the correct
 // outcome. For everything FASTER than 2 Kbps, 64 KB is fine.
 const _PROBE_SIZE_BYTES = 65_536;      // 64 KB - clears the latency floor at typical RTTs
+// Fix C (low-bandwidth, Jun 2026): a 4 KB pre-probe completes even at ~250 B/s
+// (~16 s) so the LOW end gets a REAL measurement instead of a 45 s abort that
+// (before this fix) mis-classified a 2 kbit/s link as SLOW → 32 KB chunks →
+// every chunk timed out. Only escalate to the 64 KB probe when the pre-probe
+// cleared fast enough to prove a responsive link (otherwise the small reading
+// already tells us it is slow, and the big probe would just abort).
+const _PROBE_SIZE_SMALL = 4_096;       // 4 KB - completes within the timeout at ~2 kbit/s
+const _PROBE_ESCALATE_MS = 2_000;      // pre-probe faster than this → escalate to 64 KB for accuracy
 const _PROBE_TIMEOUT_MS = 45_000;      // abort after 45 s even on garbage links
 const _PROBE_CACHE_MS = 60_000;        // re-probe at most once per minute
+// Fix B/C: conservative bandwidth FLOOR used when the probe produced no
+// measurement, so per-chunk timeouts still scale to the bytes being sent
+// instead of a fixed tier-table wall. ~250 B/s = the 2 kbit/s disaster class.
+const _BW_FLOOR_BPS = 250;
+const _CHUNK_TIMEOUT_CEIL_MS = 120_000; // never wait > 2 min on a single chunk
 
 let _lastProbeBytesPerSec = 0;
 let _lastProbeAt = 0;
@@ -8093,8 +8224,8 @@ let _lastProbeAt = 0;
 // undersized-probe-induced low bps).
 let _lastProbeElapsedMs = 0;
 
-async function measureUploadBandwidth() {
-    const probe = new Uint8Array(_PROBE_SIZE_BYTES);
+async function measureUploadBandwidth(sizeBytes = _PROBE_SIZE_BYTES) {
+    const probe = new Uint8Array(sizeBytes);
     const fd = new FormData();
     fd.append('data', new Blob([probe], { type: 'application/octet-stream' }), 'probe.bin');
 
@@ -8121,8 +8252,8 @@ async function measureUploadBandwidth() {
         const elapsedMs = performance.now() - start;
         if (timer) clearTimeout(timer);
         // Throughput over the upload leg only. We ignore the (tiny) JSON
-        // response size - it's ~50 bytes vs the 8192-byte payload.
-        const bytesPerSec = elapsedMs > 0 ? (_PROBE_SIZE_BYTES / elapsedMs) * 1000 : 0;
+        // response size - it's ~50 bytes vs the payload.
+        const bytesPerSec = elapsedMs > 0 ? (sizeBytes / elapsedMs) * 1000 : 0;
         return { bytesPerSec, elapsedMs };
     } catch (e) {
         if (timer) clearTimeout(timer);
@@ -8179,7 +8310,16 @@ async function adaptTierViaProbe(opts = {}) {
         _pwaTier = pickTierFromBandwidth(_lastProbeBytesPerSec, _lastProbeElapsedMs);
         return _pwaTier;
     }
-    const { bytesPerSec, elapsedMs, error } = await measureUploadBandwidth();
+    // Fix C: two-stage probe. Start with a tiny 4 KB payload that completes
+    // even on a ~250 B/s (2 kbit/s) link (~16 s) so the LOW end gets a REAL
+    // measurement instead of a 45 s abort. Only escalate to the 64 KB probe
+    // when the pre-probe cleared fast enough to prove a responsive link (the
+    // 64 KB probe still amortises RTT for the latency-floor heuristic).
+    let { bytesPerSec, elapsedMs, error } = await measureUploadBandwidth(_PROBE_SIZE_SMALL);
+    if (bytesPerSec > 0 && elapsedMs > 0 && elapsedMs < _PROBE_ESCALATE_MS) {
+        const big = await measureUploadBandwidth(_PROBE_SIZE_BYTES);
+        if (big.bytesPerSec > 0) ({ bytesPerSec, elapsedMs, error } = big);
+    }
     if (bytesPerSec > 0) {
         _lastProbeBytesPerSec = bytesPerSec;
         _lastProbeAt = Date.now();
@@ -8189,10 +8329,25 @@ async function adaptTierViaProbe(opts = {}) {
             `[Probe] ${Math.round(bytesPerSec).toLocaleString()} B/s ` +
             `(${elapsedMs.toFixed(0)} ms) → tier ${_pwaTier}`
         );
-    } else {
-        // Probe failed - fall back to the browser hint (already conservative).
-        console.log(`[Probe] no measurement (${error || 'n/a'}); falling back to NavigatorConnection tier`);
+    } else if (error && /^HTTP /.test(error)) {
+        // The probe ENDPOINT responded non-2xx (e.g. 404 = client ahead of
+        // backend). That carries no link signal → defer to the browser hint.
+        console.log(`[Probe] endpoint ${error}; falling back to NavigatorConnection tier`);
         detectPWANetworkTier();
+    } else {
+        // Fix C: the probe ABORTED / network-errored — the link could not move
+        // even 4 KB inside the timeout. That is the strongest signal of an
+        // extremely slow link, so assume VERY_SLOW (1 KB chunks) instead of the
+        // OPTIMISTIC NavigatorConnection guess (which returns SLOW = 32 KB and
+        // wedged every chunk at 2 kbit/s — the user-reported HAR bug). Seed the
+        // conservative bandwidth floor so computeChunkTimeout sizes per-chunk
+        // deadlines off it too. Cached for _PROBE_CACHE_MS, then we re-probe in
+        // case the link recovered.
+        console.warn(`[Probe] aborted/failed (${error || 'n/a'}) → assuming VERY_SLOW (2 kbit/s class)`);
+        _pwaTier = 'VERY_SLOW';
+        _lastProbeBytesPerSec = _BW_FLOOR_BPS;
+        _lastProbeAt = Date.now();
+        _lastProbeElapsedMs = 0;
     }
     return _pwaTier;
 }
@@ -8205,11 +8360,17 @@ async function adaptTierViaProbe(opts = {}) {
  * is hit only for the first probe itself or when probe failed.
  */
 function computeChunkTimeout(chunkSize, measuredBytesPerSec = null) {
-    if (measuredBytesPerSec && measuredBytesPerSec > 0) {
-        const estimatedMs = (chunkSize / measuredBytesPerSec) * 1000;
-        return Math.max(10_000, Math.ceil(estimatedMs * 3 + 5_000));
-    }
-    return (getPWAAdaptiveConfig().timeout) || 30_000;
+    // Fix B: always scale the deadline to the bytes being sent. When no probe
+    // measurement exists, assume a conservative ~250 B/s FLOOR rather than the
+    // static tier-table timeout — the old fallback returned a fixed 45 s (SLOW
+    // tier) that aborted any chunk the link could have finished given more time
+    // (the 2 kbit/s wedge). Capped so a genuinely dead link still fails in
+    // bounded wall-clock and hands off to backoff + the re-reduce path.
+    const bps = (measuredBytesPerSec && measuredBytesPerSec > 0)
+        ? measuredBytesPerSec
+        : (getMeasuredBandwidth() || _BW_FLOOR_BPS);
+    const estimatedMs = (chunkSize / bps) * 1000;
+    return Math.min(_CHUNK_TIMEOUT_CEIL_MS, Math.max(10_000, Math.ceil(estimatedMs * 3 + 5_000)));
 }
 
 /** Accessor for the last measured upload bandwidth. Returns 0 until the
@@ -8412,6 +8573,8 @@ function pwaNetworkDowngrade() {
 }
 
 function pwaNetworkUpgrade() {
+    _lastUploadSuccessAt = Date.now();   // R2: success-only liveness clock (every landed chunk)
+    _consecutiveChunkFailures = 0;       // R1: a landed chunk breaks the cliff failure-streak
     _pwaSuccessStreak++;
     if (_pwaSuccessStreak >= 10) {
         const order = ['FAST', 'MEDIUM', 'SLOW', 'VERY_SLOW'];
@@ -8509,13 +8672,30 @@ function _backoffDelayMs(attempt) {
     return base + jitter;
 }
 
+// R2 (offline awareness, Jun 2026): navigator.onLine===false is authoritative
+// for "definitely offline" (it can false-POSITIVE online under a captive portal,
+// but never false-negatives a real disconnect). When definitely offline we do NOT
+// burn the per-chunk retry budget on doomed POSTs — we bubble out fast so the
+// drain loop's offline-skip owns the pause; the report stays queued and resumes on
+// the 'online' event. The thrown error is tagged `.offline` so the recovery layer
+// does NOT mistake it for a slow-link timeout (no chunk re-reduction / cliff count).
+function _isDefinitelyOffline() {
+    return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+function _offlineError() {
+    const e = new Error('offline'); e.offline = true; return e;
+}
+
 async function sendWithRetry(url, payload, retries = 7, timeoutMs = 30000) {
     for (let attempt = 1; attempt <= retries; attempt++) {
+        if (_isDefinitelyOffline()) throw _offlineError();
         try {
             return await sendJSON(url, payload, timeoutMs);
         } catch (err) {
-            console.warn(`Attempt ${attempt}/${retries} failed for ${url}: ${err.message}`);
             if (attempt === retries) throw err;
+            // Went offline mid-attempt → stop now; don't backoff-spin while offline.
+            if (_isDefinitelyOffline()) throw _offlineError();
+            console.warn(`Attempt ${attempt}/${retries} failed for ${url}: ${err.message}`);
             await new Promise(r => setTimeout(r, _backoffDelayMs(attempt)));
         }
     }
@@ -8640,6 +8820,7 @@ async function sendBinaryChunkWithRetry(reportId, params, retries = 5, timeoutMs
 
     const url = `${API_BASE}/reports/${reportId}/media/chunk-bin`;
     for (let attempt = 1; attempt <= retries; attempt++) {
+        if (_isDefinitelyOffline()) throw _offlineError();   // R2: don't burn retries offline
         try {
             const fd = new FormData();
             fd.append('media_id', mediaId);
@@ -8689,6 +8870,8 @@ async function sendBinaryChunkWithRetry(reportId, params, retries = 5, timeoutMs
             }
             console.warn(`[BinaryChunks] attempt ${attempt}/${retries} failed for seq=${seqNum}: ${err.message}`);
             if (attempt === retries) throw err;
+            // R2: went offline mid-attempt → stop; the drain loop pauses + resumes.
+            if (_isDefinitelyOffline()) throw _offlineError();
             // K.4.c - capped exponential + jitter (shared with sendWithRetry).
             await new Promise(r => setTimeout(r, _backoffDelayMs(attempt)));
         }
@@ -9022,13 +9205,14 @@ async function _submitReportInner() {
             );
         }
 
-        // capture the
-        // bearer token at enqueue time so offline replay submits under
-        // the user who captured the data, even if they log out while the
-        // queue drains. The token goes into `/reports/meta`'s auth
-        // header at replay; server silently degrades to anonymous when
-        // expired beyond offline grace - never blocks.
-        const _authToken = (window.AuthStore && window.AuthStore.getAccessToken && window.AuthStore.getAccessToken()) || null;
+        // I5 (v350, Jun 2026): the offline-grace token snapshot was REMOVED.
+        // It captured the bearer at enqueue and stored it on the queue row, but
+        // the main report-sync path (trySendQueuedReport) never attached it on
+        // replay - so logged-in offline reports already submitted ANONYMOUSLY.
+        // The snapshot was therefore dead weight AND an at-rest credential
+        // liability in the IndexedDB outbox (which now persists up to 30 days).
+        // Submission is anonymous-by-default (must-have #9); dropping it changes
+        // no observable behavior and removes the stored credential.
         // ── Dynamic Crisis Forms ── When the geo-gated pack rendered for this
         // report (reporter inside a live crisis zone), attach the pack id +
         // version + assembled answers. form_data carries the crisispack-view
@@ -9074,7 +9258,6 @@ async function _submitReportInner() {
         // Build queue item with all data
         const queueItem = {
             client_report_id: clientReportId,
-            auth_token: _authToken,     // Phase 1 - offline-grace: captured at enqueue
             meta: {
                 client_report_id: clientReportId,
                 device_hash: deviceHash,
@@ -9128,8 +9311,13 @@ async function _submitReportInner() {
                 // so an operator can resolve the free-text entry to a real OSM
                 // footprint later. Defaults to false when the field is missing
                 // (back-compat with pre-v3 clients).
-                // v6.7 - v4 snake_case first, legacy camelCase fallback.
-                infrastructure_name_from_osm: Boolean(state.infrastructure_name_from_osm ?? state.infraNameFromOsm),
+                // v6.7 - v4 snake_case first, legacy camelCase fallback. MUST be `||`
+                // not `??`: the snake_case field inits to literal `false` (not null), so
+                // `??` never fell through to the camelCase flag the OSM tap actually sets
+                // (building-select.js) - shipping from_osm=false on an explicit footprint
+                // pick, which the dashboard then rendered as "Unnamed Building". `||`
+                // takes the truthy flag from EITHER field so an OSM tag can't be lost.
+                infrastructure_name_from_osm: Boolean(state.infrastructure_name_from_osm || state.infraNameFromOsm),
                 // (UI v3 redesign Q14) - v4-flow.js writes to
                 // `debris_present` / `electricity_status` / `pressing_needs`
                 // on window.state, but the legacy v3 review form writes to
@@ -9366,6 +9554,40 @@ async function _submitReportInner() {
                 }
             }
         } catch (_) { /* size-estimate best-effort; never blocks submit */ }
+
+        // R6 (Jun 2026): BEFORE the hard block, try to make room by evicting the
+        // OLDEST already-previewed originals (indefinite retention means the outbox
+        // grows; eviction keeps new submissions from ever being blocked while stale
+        // previewed evidence sits undelivered). The hard block below is now the
+        // last resort only when eviction can't free enough.
+        try { await _evictOldOriginalsUnderPressure(queueItem); } catch (_) { /* best-effort */ }
+
+        // I2 (v350, Jun 2026) - HARD pre-enqueue budget using the REAL device
+        // quota (navigator.storage.estimate), on top of the static 35 MB warn
+        // above. The outbox can accrue many reports each carrying a multi-MB
+        // ORIGINAL Blob; on iOS (~50 MB origin cap) the next .put() would otherwise
+        // throw QuotaExceededError AFTER the user believes they submitted. Block
+        // PROACTIVELY when this report wouldn't fit under ~85% of the measured quota
+        // (only reachable when R6 eviction above could not free enough), and tell
+        // the user to clear old reports - the filled form is preserved for retry.
+        try {
+            const _q = await getStorageQuotaInfo();
+            const _wouldUse2 = _estimateQueueItemBytes(queueItem);
+            const _budget = _q.quota * 0.85;   // 15% headroom for SW caches + IDB overhead + next report
+            if ((_q.usage + _wouldUse2) > _budget) {
+                console.warn(
+                    `[I2] pre-enqueue budget block: usage=${Math.round(_q.usage / 1048576)}MB + ` +
+                    `report=${Math.round(_wouldUse2 / 1048576)}MB exceeds 85% of quota ` +
+                    `${Math.round(_q.quota / 1048576)}MB (estimate supported=${_q.supported}). Blocking submit.`,
+                );
+                hideUploadOverlay();
+                try { showToast(t('storage_full_hard_limit')); } catch (_) {
+                    showToast('Device storage is full - clear old reports from My Reports, then send again.');
+                }
+                sendBtn.disabled = false;
+                return;   // do NOT enqueue; the filled form stays so the user can retry after clearing space
+            }
+        } catch (_) { /* quota probe best-effort; fall through to enqueue + its QuotaExceededError catch */ }
 
         // ── SAVE TO QUEUE FIRST - this is the safety net ─────────────────────
         // P1.4 - Previously the enqueue error was swallowed with `catch(_){}`,
@@ -9647,6 +9869,30 @@ const CHUNK_MEDIAID_REGEN_R = 2;        // media-id regenerations before giving 
 const _CHUNK_HARD_STATUSES = new Set([400, 409, 410, 422]);
 const _chunkHardFailCounts = new Map(); // `${mediaId}:${seq}` → consecutive hard-4xx count
 
+// Fix A (low-bandwidth re-reduce, Jun 2026): a chunk frozen TOO BIG for the
+// link times out forever (status 0 → no hard 4xx → the regen path below never
+// fires; the chunk-size freeze at first attempt locks the oversized value in).
+// After K consecutive timeouts on one frozen size, halve the variant's chunk
+// size toward the VERY_SLOW floor and restart that media row from seq 0 with a
+// fresh media_id — the same chunk_count-contract discipline as the hard-4xx
+// regen. Without this an oversized tier wedged until the 30-day cap dropped it
+// (the user-reported 2 kbit/s HAR: a 21,542-byte chunk retried for 25+ min).
+const _CHUNK_TIMEOUT_REDUCE_K = 2;      // consecutive timeouts on one frozen size before re-reducing
+const _CHUNK_REDUCE_FLOOR = 1024;       // smallest chunk we shrink to (= VERY_SLOW chunkSize)
+const _CHUNK_MAX_REDUCES = 6;           // 32 KB→…→1 KB is 5 halvings; cap media-id churn
+const _chunkTimeoutCounts = new Map();  // `to:${mediaId}` → consecutive timeout/abort count
+
+// R1 (cliff-aware re-eval, Jun 2026): after N consecutive BANDWIDTH-related chunk
+// failures (timeout / network / 5xx / 429 — NOT hard-4xx, which has its own regen
+// path), force a SYNCHRONOUS re-probe so a cliff-drop (e.g. WiFi 200 kbps → cellular
+// 2 kbps mid-upload) is adopted at once instead of at the next 8-chunk
+// midUploadReprobe boundary, and the in-flight variant jumps straight to the new
+// (smaller) tier chunk size rather than halving over several timeouts (Fix A).
+const _CLIFF_FAILURE_N = 3;
+const _CLIFF_REPROBE_DEBOUNCE_MS = 8000;   // ≥ one probe round-trip; avoids double-probing with midUploadReprobe
+let _consecutiveChunkFailures = 0;
+let _lastForceReprobeAt = 0;
+
 // Extract an HTTP status from a thrown upload error. The binary path
 // (sendFormData) attaches err.status; the legacy base64 path (sendJSON)
 // only embeds it in the message ("HTTP 410"). Returns null for
@@ -9689,10 +9935,112 @@ async function _signalTierDeferred(item, reportId, unit, reason) {
 
 // Per-chunk hard-failure recovery. Called from both upload paths' catch
 // blocks BEFORE the re-throw. Mutates unit.variant (regen or give-up) on
+// R1: after N consecutive bandwidth-related failures, force a synchronous re-probe
+// and, if the link dropped to a smaller tier, jump the in-flight variant straight
+// to that tier's chunk size (fresh media_id + restart seq 0 — same chunk_count
+// discipline as the Fix-A re-reduce). Returns true if it restarted the variant
+// (so the caller skips the slower per-timeout halving for this error).
+async function _maybeCliffReprobe(item, unit) {
+    if (_consecutiveChunkFailures < _CLIFF_FAILURE_N) return false;
+    const now = Date.now();
+    if (now - _lastForceReprobeAt < _CLIFF_REPROBE_DEBOUNCE_MS) return false;   // debounce vs midUploadReprobe
+    _lastForceReprobeAt = now;
+    _consecutiveChunkFailures = 0;
+    let newTier;
+    try { newTier = await adaptTierViaProbe({ force: true }); } catch (_) { return false; }
+    const variant = unit && unit.variant;
+    if (!variant || !variant.mediaId) return false;
+    const newChunkSize = (PWA_NETWORK_TIERS[newTier] || {}).chunkSize;
+    const curEff = variant.maxChunkSize || variant.frozenChunkSize || Infinity;
+    // Only resize on a genuine cliff DOWN (new tier smaller than current), bounded
+    // by the same reduce cap so we never churn media-ids forever.
+    if (newChunkSize && newChunkSize < curEff && (variant.chunkReduces || 0) < _CHUNK_MAX_REDUCES) {
+        const oldId = variant.mediaId;
+        variant.maxChunkSize = Math.max(_CHUNK_REDUCE_FLOOR, newChunkSize);
+        variant.chunkReduces = (variant.chunkReduces || 0) + 1;
+        variant.mediaId = genUUID();
+        variant.frozenChunkSize = null;
+        variant.frozenTotalChunks = null;
+        variant.fullAssetChecksum = null;
+        variant.chunkProgress = 0;
+        for (const k of Array.from(_chunkHardFailCounts.keys())) {
+            if (k.indexOf(`${oldId}:`) === 0) _chunkHardFailCounts.delete(k);
+        }
+        _chunkTimeoutCounts.delete(`to:${oldId}`);
+        try { await enqueueReport(item); } catch (_) {}
+        console.warn(
+            `[CliffReprobe] ${_CLIFF_FAILURE_N} consecutive failures → re-probed ${newTier}; jumped ` +
+            `${unit.label} chunk ${curEff}B → ${variant.maxChunkSize}B, media_id ` +
+            `${String(oldId).slice(0, 8)}→${String(variant.mediaId).slice(0, 8)}, restart seq 0.`,
+        );
+        return true;
+    }
+    console.log(`[CliffReprobe] re-probed ${newTier} (chunk ${newChunkSize}B ≥ current ${curEff}; no in-flight resize)`);
+    return false;
+}
+
 // a hard 4xx; no-ops on transient errors so the normal backoff owns them.
+async function _maybeReduceFrozenChunk(item, reportId, unit, seq) {
+    const variant = unit.variant;
+    if (!variant || !variant.mediaId) return;
+    const curEff = variant.maxChunkSize || variant.frozenChunkSize || 0;
+    // Already at/below the floor → a 1 KB chunk still won't go; the link is
+    // genuinely dead. Let backoff + HC90 + the 30-day cap own it (re-reducing
+    // further or churning media-ids would just waste the link).
+    if (curEff && curEff <= _CHUNK_REDUCE_FLOOR) return;
+    if ((variant.chunkReduces || 0) >= _CHUNK_MAX_REDUCES) return;
+    const key = `to:${variant.mediaId}`;
+    const n = (_chunkTimeoutCounts.get(key) || 0) + 1;
+    _chunkTimeoutCounts.set(key, n);
+    if (n < _CHUNK_TIMEOUT_REDUCE_K) {
+        console.warn(`[ChunkReduce] ${unit.label} seq=${seq} timeout (${n}/${_CHUNK_TIMEOUT_REDUCE_K}) frozen=${variant.frozenChunkSize || '?'}B - retry, then re-reduce`);
+        return;
+    }
+    const base = variant.maxChunkSize || variant.frozenChunkSize || 32768;
+    const newCap = Math.max(_CHUNK_REDUCE_FLOOR, Math.floor(base / 2));
+    const oldId = variant.mediaId;
+    variant.maxChunkSize = newCap;          // honoured by the freeze block on the next attempt
+    variant.chunkReduces = (variant.chunkReduces || 0) + 1;
+    variant.mediaId = genUUID();            // fresh row so the backend chunk_count contract stays clean
+    variant.frozenChunkSize = null;         // force recompute against newCap
+    variant.frozenTotalChunks = null;
+    variant.fullAssetChecksum = null;
+    variant.chunkProgress = 0;
+    _chunkTimeoutCounts.delete(key);
+    for (const k of Array.from(_chunkHardFailCounts.keys())) {
+        if (k.indexOf(`${oldId}:`) === 0) _chunkHardFailCounts.delete(k);
+    }
+    try { await enqueueReport(item); } catch (_) {}
+    console.warn(
+        `[ChunkReduce] ${unit.label}: seq=${seq} timed out ${_CHUNK_TIMEOUT_REDUCE_K}× at ${base}B; ` +
+        `re-reduced chunk → ${newCap}B (reduce ${variant.chunkReduces}/${_CHUNK_MAX_REDUCES}), ` +
+        `media_id ${String(oldId).slice(0, 8)}→${String(variant.mediaId).slice(0, 8)}, restart seq 0.`,
+    );
+}
+
 async function _maybeRecoverStuckChunk(item, reportId, unit, seq, err) {
+    // R2: an OFFLINE abort is not a link-quality or sizing signal — it carries no
+    // HTTP status but must NOT count toward chunk re-reduction (Fix A) or the
+    // cliff failure-streak (R1). The drain loop pauses + resumes on reconnect.
+    if (err && err.offline) return;
     const status = _errHttpStatus(err);
-    if (!status || !_CHUNK_HARD_STATUSES.has(status)) return;  // transient → leave to backoff/HC90
+    // R1 (cliff-aware re-eval): count consecutive BANDWIDTH-related failures
+    // (timeout / network / 5xx / 429 — NOT hard-4xx, which has its own regen) and,
+    // at N in a row, force a synchronous re-probe + jump the in-flight variant to
+    // the dropped tier's chunk size. _cliffRestarted suppresses the slower per-
+    // timeout halving (Fix A) for THIS error so we don't double-restart the row.
+    const _bwFailure = !status || status >= 500 || status === 429;
+    let _cliffRestarted = false;
+    if (_bwFailure) {
+        _consecutiveChunkFailures++;
+        try { _cliffRestarted = await _maybeCliffReprobe(item, unit); } catch (_) {}
+    }
+    // Fix A: timeout / network abort carries NO HTTP status. A chunk frozen too
+    // big for the link aborts forever here — re-reduce the frozen chunk size so
+    // an oversized variant self-heals toward 1 KB instead of wedging until the
+    // 30-day cap. (5xx/429 with a status fall through to plain backoff below.)
+    if (!status) { if (!_cliffRestarted) await _maybeReduceFrozenChunk(item, reportId, unit, seq); return; }
+    if (!_CHUNK_HARD_STATUSES.has(status)) return;  // transient 5xx/429 → leave to backoff/HC90
     const variant = unit.variant;
     if (!variant || !variant.mediaId) return;
     const key = `${variant.mediaId}:${seq}`;
@@ -9743,6 +10091,21 @@ async function _maybeRecoverStuckChunk(item, reportId, unit, seq, err) {
 async function _uploadVariantTier(item, reportId, unit) {
     const { tier, groupId, variant, label, clientBlurApplied } = unit;
     if (variant.complete) return;
+    // R6 (Jun 2026): this tier's bytes were intentionally EVICTED under storage
+    // pressure after its SMALL preview delivered. Do NOT try to upload (no source)
+    // or re-classify it as an orphan — it is a deliberate, visible deferral. If the
+    // mark-deferred POST didn't land at eviction time (offline), RE-TRANSMIT it now
+    // so the dashboard's "deferred - storage" chip is accurate + durable.
+    if (variant.deferredReason === 'storage_evicted') {
+        if (reportId && variant._deferSignalled === false && !_isDefinitelyOffline()) {
+            try {
+                await _signalTierDeferred(item, reportId, unit, 'storage_evicted');
+                variant._deferSignalled = true;
+                await enqueueReport(item);
+            } catch (_) { /* retry next pass */ }
+        }
+        return;
+    }
     // Resilience #5 - a tier whose chunks the backend permanently rejected
     // after K hard 4xx + R media-id regens. Bytes are bad at source; never
     // re-attempt (mark-deferred already told the backend; the report
@@ -9865,45 +10228,19 @@ async function _uploadVariantTier(item, reportId, unit) {
     // self-heals stuck retry loops. v239 force-reprobe on visibility
     // resume kills the false-VERY_SLOW state from iOS-suspension-
     // killed POSTs. The only thing that bypasses all retries: a
-    // 24-hour wall-clock cap from submit (below).
+    // 30-day wall-clock cap from submit (below).
     //
-    // 24-hour cap: if a non-SMALL variant still hasn't completed 24 h
-    // after the user tapped Submit, give up on that tier and mark it
-    // `deferred` with reason `24h_timeout`. The pre-emptive-defer
-    // mark-deferred POST path (line ~9510 onwards in the parent
-    // _uploadVariants caller) picks this up on the next reconcile
-    // pass and tells the backend to abandon the row. The dashboard
-    // K.5.a chip then renders honestly: "couldn't deliver after 24 h".
-    const _ONE_DAY_MS = 24 * 60 * 60 * 1000;
-    if (tier !== 'small') {
-        const submittedAt = item.timestamp || item.client_created_at_ms || Date.now();
-        const ageMs = Date.now() - submittedAt;
-        if (ageMs > _ONE_DAY_MS) {
-            // Resilience #6 - the 24-h cap is dropping this tier. Make it
-            // VISIBLE (never a silent dequeue): signal the backend
-            // immediately so expected_media reconciles + the dashboard
-            // chip renders, and raise the calm needs-attention flag so a
-            // chronically-slow reporter's lost ORIGINAL is surfaced rather
-            // than vanishing. SMALL already gates stages.photo, so the
-            // report stays delivered + SYNCED on its landed tiers.
-            console.warn(
-                `[VariantDrop:24h] ${label}: 24h timeout (age=${Math.round(ageMs / 3600000)}h since submit) - ` +
-                `dropping this tier. complete=${variant.complete}, chunkProgress=${variant.chunkProgress || 0}.`,
-            );
-            variant.deferred = true;
-            variant.deferredReason = '24h_timeout';
-            variant.deferredAt = Date.now();
-            item._needsAttention = true;
-            try { await enqueueReport(item); } catch (_) {}
-            // Backend reason must be valid; 'bandwidth_tier_deferred' is the
-            // canonical "couldn't deliver this tier in the time window" one
-            // (same reason the existing soft-drain sends for these).
-            if (reportId) {
-                await _signalTierDeferred(item, reportId, unit, 'bandwidth_tier_deferred');
-            }
-            return;
-        }
-    }
+    // R6 (Jun 2026): INDEFINITE retention. The silent 30-day wall-clock cap (and
+    // the 24 h one before it) was REMOVED. A non-SMALL tier that hasn't delivered
+    // keeps retrying for as long as it takes — "we don't know when the internet
+    // will be back", and critical disaster evidence must never SILENTLY expire.
+    // This is not a hot spin: the HC90 send-attempt cap backs the cadence off to
+    // hourly pauses, and a genuinely-too-big chunk re-reduces toward 1 KB (Fix A).
+    // The ONLY client-side give-up is now the storage-pressure LRU eviction
+    // (_evictOldOriginalsUnderPressure, run at submit time), which sheds the
+    // OLDEST originals whose SMALL preview already delivered and reports it to the
+    // backend with the distinct, VISIBLE 'storage_evicted' reason. Explicit
+    // removal by the user/admin is the other exit. (operator-approved policy.)
     // No bandwidth-probe-based pre-emptive defer. The probe still informs
     // chunkSize + per-chunk timeout via netConfig below, but it no longer
     // gates whether we attempt the tier at all.
@@ -9920,14 +10257,13 @@ async function _uploadVariantTier(item, reportId, unit) {
     const startSeq = variant.chunkProgress || 0;
     const mediaId = variant.mediaId;
     const resolution = _TIER_MAP[tier];
-    // Dynamic timeout sized to the measured throughput. With a 2 Kbps
-    // link measured by the probe → picks VERY_SLOW (1 KB chunks) and
-    // each chunk gets ~17 s timeout (4 s expected × 3 + 5 s buffer).
-    // With a real 4G link → FAST tier (512 KB) and ~15 s timeout. Both
-    // comfortably fit a healthy upload and both surface a genuine
-    // failure within a reasonable wall-clock window.
+    // Per-chunk timeout is computed per transport path BELOW from the ACTUAL
+    // (post-freeze, possibly re-reduced) chunk size via computeChunkTimeout —
+    // see binChunkTimeout (binary) / b64ChunkTimeout (legacy base64). With a
+    // 2 kbit/s link the probe picks VERY_SLOW (1 KB) → ~17 s/chunk; a real 4G
+    // link → FAST (512 KB) → ~15 s. If a tier froze too big for the link it
+    // re-reduces toward 1 KB (Fix A) instead of wedging on the old fixed wall.
     const measuredBps = getMeasuredBandwidth();
-    const dynamicTimeout = computeChunkTimeout(netConfig.chunkSize, measuredBps || null);
 
     // UNDP §5 - binary-chunk transport. When the feature flag
     // is enabled (default), upload the variant as raw bytes via
@@ -9959,11 +10295,17 @@ async function _uploadVariantTier(item, reportId, unit) {
         // chunkSize + total, keeping chunkProgress meaningful and the
         // server's chunk_count contract intact across probe-tier shifts.
         if (!variant.frozenChunkSize) {
-            variant.frozenChunkSize = netConfig.chunkSize;
-            variant.frozenTotalChunks = Math.max(1, Math.ceil(blob.size / netConfig.chunkSize));
+            // Fix A: honour a re-reduction cap set by _maybeReduceFrozenChunk
+            // after repeated timeouts (the chunk was too big for the link).
+            const effChunkSize = Math.min(netConfig.chunkSize, variant.maxChunkSize || Infinity);
+            variant.frozenChunkSize = effChunkSize;
+            variant.frozenTotalChunks = Math.max(1, Math.ceil(blob.size / effChunkSize));
         }
         const chunkSize = variant.frozenChunkSize;
         const total = variant.frozenTotalChunks;
+        // Fix B: size the per-chunk timeout to the ACTUAL (possibly re-reduced)
+        // frozen chunk size, not the tier default computed before the freeze.
+        const binChunkTimeout = computeChunkTimeout(chunkSize, measuredBps || null);
 
         // Phase C.1 (May 2026) - whole-asset djb2 over the full bytes
         // BEFORE chunking. Shipped on chunk 0 ONLY; backend persists on
@@ -10024,7 +10366,7 @@ async function _uploadVariantTier(item, reportId, unit) {
                         // (we still send null then so the form field exists).
                         fullAssetChecksum: seq === 0 ? variant.fullAssetChecksum : null,
                     },
-                    netConfig.retries, dynamicTimeout,
+                    netConfig.retries, binChunkTimeout,
                 );
                 pwaNetworkUpgrade();
                 // Wedge-detection support: stamp progress so resume hooks can
@@ -10033,12 +10375,16 @@ async function _uploadVariantTier(item, reportId, unit) {
                 // Resilience #5 - chunk landed; clear its hard-fail counter
                 // so a later transient blip doesn't accumulate toward K.
                 _chunkHardFailCounts.delete(`${mediaId}:${seq}`);
+                // Fix A: a landed chunk resets the consecutive-timeout counter
+                // so only SUSTAINED timeouts trigger a re-reduce.
+                _chunkTimeoutCounts.delete(`to:${mediaId}`);
             } catch (err) {
                 pwaNetworkDowngrade();
                 variant.chunkProgress = seq;
                 try { await enqueueReport(item); } catch (_) {}
                 // Resilience #5 - regen the media row after K hard 4xx, give
-                // up the tier after R regens. No-op on transient errors.
+                // up the tier after R regens. Fix A - re-reduce a frozen-too-big
+                // chunk after sustained timeouts. No-op on plain transient 5xx.
                 try { await _maybeRecoverStuckChunk(item, reportId, unit, seq, err); } catch (_) {}
                 throw err;
             }
@@ -10067,10 +10413,13 @@ async function _uploadVariantTier(item, reportId, unit) {
     // v241 - same freeze logic as the bin path above. See the long comment
     // there for why this matters (silent variant-skip on probe-tier shift).
     if (!variant.frozenChunkSize) {
-        variant.frozenChunkSize = netConfig.chunkSize;
+        // Fix A: honour a re-reduction cap set by _maybeReduceFrozenChunk.
+        variant.frozenChunkSize = Math.min(netConfig.chunkSize, variant.maxChunkSize || Infinity);
     }
     const chunks = chunkBase64(b64, variant.frozenChunkSize);
     const total = chunks.length;
+    // Fix B: timeout sized to the actual (possibly re-reduced) chunk size.
+    const b64ChunkTimeout = computeChunkTimeout(variant.frozenChunkSize, measuredBps || null);
 
     // Phase C.1 - same whole-asset checksum for the legacy base64 transport.
     // We hash the base64 STRING here (not raw bytes) so it matches what the
@@ -10105,7 +10454,7 @@ async function _uploadVariantTier(item, reportId, unit) {
                     // pass on assembly.
                     client_blur_applied: Boolean(clientBlurApplied),
                 },
-                netConfig.retries, dynamicTimeout
+                netConfig.retries, b64ChunkTimeout
             );
             pwaNetworkUpgrade();
             // Wedge-detection support: stamp progress so resume hooks can
@@ -10113,6 +10462,8 @@ async function _uploadVariantTier(item, reportId, unit) {
             _lastDrainTickAt = Date.now();
             // Resilience #5 - chunk landed; clear its hard-fail counter.
             _chunkHardFailCounts.delete(`${mediaId}:${seq}`);
+            // Fix A: landed chunk resets the consecutive-timeout counter.
+            _chunkTimeoutCounts.delete(`to:${mediaId}`);
         } catch (err) {
             pwaNetworkDowngrade();
             // Persist the partial progress before bubbling out so a future
@@ -10921,64 +11272,42 @@ async function trySendQueuedReport(item) {
                 } else {
                     // HC88 (WAIT-ASSEMBLY - bounded) - SMALL is on the
                     // server. Whatever's not yet 'complete'
-                    // (smallAssembling, softAssembling) will be flipped
-                    // by the backend's async assembly worker, usually
-                    // within 1-3 s of the last chunk POST.  If it
-                    // stalls > 5 min, backend Action ① revives it
-                    // (`_run_assembly_recovery_sweep` in
-                    // backend/app/main.py).  No rollback, no re-upload,
-                    // just defer one retry-loop tick (~15 s).
+                    // (smallAssembling, softAssembling) ALREADY HAS ITS
+                    // CHUNKS ON THE SERVER (that's why we're in this WAIT
+                    // branch and not soft-drain) and will be flipped by the
+                    // backend's async assembly worker, usually within 1-3 s
+                    // of the last chunk POST.  If it stalls, backend
+                    // Action ① (`_run_assembly_recovery_sweep` in
+                    // backend/app/main.py) revives chunks-complete rows.
+                    // No rollback, no re-upload, just defer one retry-loop
+                    // tick (~15 s).
                     //
-                    // After MAX_WAIT_TICKS (= 3 min) the assembler is
-                    // likely stuck past Action ① / Action ② recovery
-                    // windows.  Promote to soft-drain: mark MEDIUM/
-                    // ORIGINAL as deferred via /media/mark-deferred and
-                    // dequeue the report.  Backend Action ④ then
-                    // promotes Report.sync_status from PARTIAL → SYNCED
-                    // on its 120 s idle-window check (default).
+                    // I4 FIX (v350, Jun 2026): after MAX_WAIT_TICKS we HAND
+                    // OFF to the backend by dequeuing WITHOUT calling
+                    // /media/mark-deferred. Pre-fix this stamped the tiers
+                    // `bandwidth_tier_deferred` (→ abandoned_at set), which
+                    // DISABLED the very sweep that would finish them
+                    // (Action ① skips `abandoned_at IS NOT NULL`) - a
+                    // confirmed data-loss path: a fully-uploaded ORIGINAL
+                    // was lost whenever assembly stalled past the cap. Since
+                    // every chunk is already on the server, the client has
+                    // done its job; leaving abandoned_at NULL lets the
+                    // sweep assemble it, and Action ④ promotes
+                    // PARTIAL → SYNCED. Wait window widened 3 → 10 min so a
+                    // momentarily-backlogged assembler isn't handed off early.
                     item.reconcileWaitTicks = (item.reconcileWaitTicks || 0) + 1;
-                    const MAX_WAIT_TICKS = 12;          // × 15 s = 180 s = 3 min
+                    const MAX_WAIT_TICKS = 40;          // × 15 s = 600 s = 10 min (was 12/3min)
                     if (item.reconcileWaitTicks > MAX_WAIT_TICKS) {
+                        const _missing = reconciled.missing || [];
+                        const _labels = _missing.map(m => m.label).join(', ');
                         console.warn(
                             `[Upload:verify WAIT-EXHAUSTED] report ${reportId} - ` +
-                            `${item.reconcileWaitTicks} tick(s) waiting on server-side ` +
-                            `assembly. Promoting to soft-drain (mark-deferred + dequeue).`,
+                            `${item.reconcileWaitTicks} tick(s); ${_missing.length} tier(s) ` +
+                            `(${_labels}) have all chunks on the server but are still ` +
+                            `assembling. Handing off to backend assembly - dequeuing ` +
+                            `WITHOUT mark-deferred so abandoned_at stays NULL and the ` +
+                            `recovery sweep (Action ①) can finish them.`,
                         );
-                        const _now = Date.now();
-                        const _missing = reconciled.missing || [];
-                        for (const m of _missing) {
-                            if (m && m.variant) {
-                                m.variant.deferred = true;
-                                m.variant.deferredAt = m.variant.deferredAt || _now;
-                                m.variant.deferredReason = 'reconcile-wait-exhausted';
-                                m.variant.complete = false;
-                                m.variant.chunkProgress = 0;
-                            }
-                        }
-                        // Tell the backend explicitly which tiers we gave
-                        // up on so Report.expected_media reflects reality.
-                        // Same call shape as the soft-drain branch above.
-                        try {
-                            const tiersByGroup = _enumerateDeferredByGroup(item, _missing);
-                            if (Object.keys(tiersByGroup).length > 0) {
-                                await fetch(
-                                    `${API_BASE}/reports/${reportId}/media/mark-deferred`,
-                                    {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            tiers_by_group: tiersByGroup,
-                                            reason: 'bandwidth_tier_deferred',
-                                        }),
-                                    },
-                                );
-                            }
-                        } catch (_e) {
-                            console.warn(
-                                `[Upload:verify] mark-deferred call failed (post-wait):`,
-                                _e?.message || _e,
-                            );
-                        }
                         try { await dequeueReport(item.client_report_id); } catch (_) {}
                         try { updateSyncBadge(); } catch (_) {}
                     } else {
@@ -11114,6 +11443,13 @@ function _releaseDrainLock() {
 // only a genuinely frozen loop trips the wedge.
 let _lastDrainTickAt = 0;
 const _RETRY_LOOP_WEDGE_THRESHOLD_MS = 60_000;
+// R2 (Jun 2026): success-ONLY liveness. _lastDrainTickAt is stamped every loop
+// tick (so it stays fresh even while every upload fails); this is stamped ONLY
+// when a chunk actually LANDS (in pwaNetworkUpgrade). It lets the wedge detector
+// distinguish a real "online + ticking but nothing delivering" stall from a
+// healthy slow trickle (which keeps landing chunks → keeps this fresh).
+let _lastUploadSuccessAt = 0;
+const _UPLOAD_SUCCESS_STALL_MS = 5 * 60 * 1000;   // 5 min of zero landed chunks while online+pending = stalled
 
 // Pure wedge-recovery decision (extracted + exported for regression tests).
 // A claimed-running loop is "wedged" (frozen on a dead awaited fetch) ONLY when:
@@ -11165,14 +11501,22 @@ async function startRetryLoop(force) {
             try { return (await getAllQueued()).length > 0; }
             catch (_) { return false; }
         })();
-        if (_isLoopWedged({ running: true, lastTickAt: _lastDrainTickAt, now: Date.now(),
+        // R2: success-stall wedge. The loop is ticking (so _isLoopWedged is false)
+        // but ZERO chunks have landed in _UPLOAD_SUCCESS_STALL_MS while online with
+        // pending work — a real "spinning but delivering nothing" stall the tick-
+        // clock misses. Guarded on _lastUploadSuccessAt>0 so a brand-new first
+        // upload still mid-flight is never falsely reset. Force-reset re-arms the
+        // drain so the next pass re-attempts + (Phase 2) force-reprobes the link.
+        const _successStalled = _online && hasPendingWork && _lastUploadSuccessAt > 0
+            && (Date.now() - _lastUploadSuccessAt) > _UPLOAD_SUCCESS_STALL_MS;
+        if (_successStalled || _isLoopWedged({ running: true, lastTickAt: _lastDrainTickAt, now: Date.now(),
                             online: _online, hasPending: hasPendingWork,
                             thresholdMs: _RETRY_LOOP_WEDGE_THRESHOLD_MS })) {
             console.warn(
-                `[Retry] wedge detected - _retryLoopRunning=true but loop has not ticked in ` +
-                `${Math.round(silentMs/1000)}s with queue non-empty + online; ` +
-                `force-resetting + re-arming. ` +
-                `Most likely iOS Safari killed an awaited TCP connection during suspension.`
+                `[Retry] ${_successStalled ? 'success-stall' : 'wedge'} detected - _retryLoopRunning=true but ` +
+                `${_successStalled ? `no chunk landed in ${Math.round((Date.now() - _lastUploadSuccessAt)/1000)}s` : `loop has not ticked in ${Math.round(silentMs/1000)}s`} ` +
+                `with queue non-empty + online; force-resetting + re-arming. ` +
+                `(wedge: likely iOS Safari killed an awaited TCP connection during suspension.)`
             );
             _retryLoopRunning = false;
             try { _releaseDrainLock(); } catch (_) {}
@@ -11269,6 +11613,24 @@ function triggerBackgroundSync() {
             reg.sync.register('sync-reports').catch(() => {});
         });
     }
+    // I1-light (v350, Jun 2026) - Periodic Background Sync where supported
+    // (Chrome/Android): lets the OS periodically wake the SW to drain the
+    // queue even if the reporter never reopens the app. The SW's
+    // `periodicsync` handler reuses syncAllReports (legacy upload + page
+    // wake). iOS Safari + Firefox lack PeriodicSyncManager → the guard +
+    // catch make this a clean no-op there (reopen-nudge + manual sync
+    // remain the drain path; true iOS background upload is impossible).
+    if ('serviceWorker' in navigator && 'PeriodicSyncManager' in window) {
+        navigator.serviceWorker.ready.then(async (reg) => {
+            try {
+                if (reg.periodicSync && typeof reg.periodicSync.register === 'function') {
+                    await reg.periodicSync.register('sync-reports-periodic', {
+                        minInterval: 6 * 60 * 60 * 1000,   // 6 h floor; OS may throttle further
+                    });
+                }
+            } catch (_) { /* unsupported / permission not granted - no-op */ }
+        }).catch(() => {});
+    }
 }
 
 // Legacy syncQueue replaced by IndexedDB-based syncQueueManual (defined above)
@@ -11345,21 +11707,29 @@ function setupBuildingFreeText() {
     const input = document.getElementById('input-infra-name-v3');
     const wrap = document.getElementById('building-free-text-block');
     if (!input) return;
-    // Seed from state on every stage-entered so an offline-queued draft
-    // shows its building name when re-opened.
-    document.addEventListener('stage-entered', (ev) => {
-        if (ev && ev.detail === 'stage-review') {
-            input.value = state.infraName || '';
-            if (wrap) wrap.classList.toggle('has-value', !!input.value.trim());
-        }
+    // Re-seed the input from state on EVERY stage entry so it always mirrors
+    // state.infraName. This fixes the report-another bug where the previous
+    // report's typed building name lingered in the box: _freshReportState() clears
+    // state.infraName, but the DOM input value is not reset by a state assign - so
+    // without re-seeding the stale text stayed visible until the field was touched.
+    // (Also still shows an offline-queued draft's building name when re-opened.)
+    document.addEventListener('stage-entered', () => {
+        input.value = state.infraName || '';
+        if (wrap) wrap.classList.toggle('has-value', !!input.value.trim());
     });
     input.addEventListener('input', () => {
         const v = input.value;
         state.infraName = v;
-        // Flip the OSM-source flag - user typed over whatever building-select
-        // auto-filled. The dashboard uses this to distinguish "verified OSM
-        // pick the user kept" from "user-typed free-text that needs mapping".
-        state.infraNameFromOsm = false;
+        state.infrastructure_name = v;   // keep snake_case (authoritative) in sync
+        // Editing the name does NOT demote an explicit OSM FOOTPRINT pick: if a real
+        // OSM building is selected (state.buildingId === 'osm:...') the report stays a
+        // verified building, so from_osm stays true even after the analyst refines the
+        // label. Only genuine free-text (no footprint) is flagged needs-mapping. Mirror
+        // BOTH the snake_case (payload-authoritative) and legacy camelCase flags so they
+        // can never disagree (the camelCase/snake_case desync caused "Unnamed Building").
+        const _osmPicked = typeof state.buildingId === 'string' && state.buildingId.indexOf('osm:') === 0;
+        state.infraNameFromOsm = _osmPicked;
+        state.infrastructure_name_from_osm = _osmPicked;
         if (wrap) wrap.classList.toggle('has-value', !!v.trim());
     });
     // Keep the v3 input in sync if the legacy #input-infra-name is touched
@@ -12761,7 +13131,21 @@ function _mapReportStatus(r) {
     if (verdict === 'REJECTED' || status === 'FALSE_ALARM') {
         return { state: 'REJECTED', color: '#ef4444', icon: '🔴', label: t('rd_status_rejected') };
     }
+    // RESOLVED is a real terminal status the dashboard "Resolve" action sets
+    // (previously it fell through to SUBMITTED - the reporter saw "Submitted" for a
+    // handled report). Green terminal, parity with the dashboard.
+    if (status === 'RESOLVED') {
+        return { state: 'RESOLVED', color: '#80EE98', icon: '✅', label: t('rd_status_resolved') };
+    }
+    // RESPONDING is set by the dashboard's primary "Notify Response Team" action
+    // (status only - no verdict/timestamps). It means the report was acted on and
+    // help is being arranged, so show the positive accepted state (the next-step
+    // line adds "Help is on the way"), NOT the neutral "under review".
     if (status === 'RESPONDING') {
+        return { state: 'ACCEPTED', color: '#80EE98', icon: '🟢', label: t('rd_status_accepted') };
+    }
+    // Genuinely mid-review (a reviewer touched it but reached no verdict yet).
+    if (r.reviewed_at) {
         return { state: 'UNDER_REVIEW', color: '#eab308', icon: '🟡', label: t('rd_status_under_review') };
     }
     return { state: 'SUBMITTED', color: '#9ca3af', icon: '⚪', label: t('rd_status_submitted') };
@@ -12788,15 +13172,20 @@ function _renderRdEta(r) {
         badge.style.display = 'none';
         return;
     }
-    if (r.help_dispatched_at) {
+    if (status === 'RESOLVED') {
+        key = 'rd_eta_resolved';                 // "Your report has been resolved."
+    } else if (r.help_dispatched_at) {
         key = 'rd_eta_help_otw';                 // "Help is on the way."
+    } else if (status === 'RESPONDING') {
+        // "Notify Response Team" was clicked - help is being arranged (status-only).
+        key = 'rd_eta_accepted';                 // "Accepted - help is being arranged."
     } else if (verdict === 'ACCEPTED') {
         key = 'rd_eta_accepted';                 // "Accepted - help is being arranged."
     } else if (verdict === 'REJECTED' || status === 'FALSE_ALARM') {
         // Terminal - the rejection block explains the outcome.
         badge.style.display = 'none';
         return;
-    } else if (status === 'RESPONDING' || r.reviewed_at) {
+    } else if (r.reviewed_at) {
         key = 'rd_eta_under_review';             // "A reviewer is assessing your report."
     } else {
         key = 'rd_eta_initial';                  // "A reviewer will assess your report shortly."
@@ -14026,15 +14415,23 @@ function renderReportDetail(r) {
     // matches the canonical backend state.
     const tl = document.getElementById('rd-timeline');
     if (tl) {
+        // Derive every stop from the canonical status + verdict + timestamps so the
+        // stepper matches the dashboard workflow. The dashboard's primary action
+        // "Notify Response Team" sets status=RESPONDING ONLY (no verdict/timestamps);
+        // "Resolve" sets status=RESOLVED. Without this, RESPONDING left the stepper
+        // stuck at Submitted and RESOLVED had no terminal (parity gap).
+        const status = (r.status || 'PENDING').toUpperCase();
         const submitted = !!r.server_created_at;
-        const reviewed = !!r.reviewed_at;
-        const accepted = (r.reviewer_verdict || '') === 'ACCEPTED';
-        const rejected = (r.reviewer_verdict || '') === 'REJECTED' ||
-            (r.status || '').toUpperCase() === 'FALSE_ALARM';
-        const dispatched = !!r.help_dispatched_at;
+        const responding = status === 'RESPONDING';
+        const resolved = status === 'RESOLVED';
+        const rejected = (r.reviewer_verdict || '') === 'REJECTED' || status === 'FALSE_ALARM';
+        // RESPONDING / RESOLVED imply the report was validated + acted on.
+        const accepted = (r.reviewer_verdict || '') === 'ACCEPTED' || responding || resolved;
+        const dispatched = !!r.help_dispatched_at || responding || resolved;
+        const reviewed = !!r.reviewed_at || accepted || rejected || dispatched;
         const steps = [
             { key: 'submitted', label: t('rd_tl_submitted'), done: submitted },
-            { key: 'review', label: t('rd_tl_review'), done: reviewed || dispatched || accepted || rejected },
+            { key: 'review', label: t('rd_tl_review'), done: reviewed },
             {
                 key: 'verdict',
                 label: rejected ? t('rd_tl_rejected') : t('rd_tl_accepted'),
@@ -14042,6 +14439,7 @@ function renderReportDetail(r) {
                 rejected,
             },
             { key: 'help', label: t('rd_tl_help_sent'), done: dispatched || !!r.help_arrived_at, hidden: rejected },
+            { key: 'resolved', label: t('rd_tl_resolved'), done: resolved, hidden: rejected },
         ];
         const visibleSteps = steps.filter(s => !s.hidden);
         // M5: identify the most recently completed step (the "current"
@@ -14409,10 +14807,18 @@ function setupBuildingFullscreenPicker() {
     // open (so already-selected buildings carry forward) + on every
     // selected/cleared event while open.
     function _refreshSheetFromState() {
-        const sel = (window.state && window.state.buildingOsmElement) || null;
+        const st = window.state || {};
+        const sel = st.buildingOsmElement || null;
+        const manualName = String(st.infraName || '').trim();
         if (sel) {
             const name = sel.name || (sel.id ? `#${sel.id}` : '-');
             _setSheetSelected(name);
+        } else if (manualName) {
+            // A manually-typed building name is a VALID selection - OSM may have no
+            // nearby footprint (must-have #6 free-text fallback). Enable Continue so
+            // the reporter is never stuck. (infrastructure_name_from_osm is already
+            // set false by the free-text input handler.)
+            _setSheetSelected(manualName);
         } else {
             _setSheetIdle();
         }
@@ -14564,6 +14970,25 @@ function setupBuildingFullscreenPicker() {
         if (!_isOpen) return;
         _setSheetIdle();
     });
+
+    // Manual building-name entry ALSO enables Continue (OSM may have no nearby
+    // footprint). Re-gate live as the reporter types in the free-text field (which
+    // is reparented into this sheet on open). Read the live input value so we never
+    // depend on the order of the other 'input' listener that writes state.infraName.
+    const _manualNameInput = document.getElementById('input-infra-name-v3');
+    if (_manualNameInput) {
+        _manualNameInput.addEventListener('input', () => {
+            if (!_isOpen) return;
+            // Order-independent: read the live input value + the OSM selection directly
+            // (never state.infraName, which another 'input' listener may not have
+            // written yet this tick).
+            const v = String(_manualNameInput.value || '').trim();
+            if (v) { _setSheetSelected(v); return; }
+            const sel = (window.state && window.state.buildingOsmElement) || null;
+            if (sel) _setSheetSelected(sel.name || (sel.id ? `#${sel.id}` : '-'));
+            else _setSheetIdle();   // empty + no OSM pick → disable Continue
+        });
+    }
 }
 
 // ── UNDP Step 4 - post-submission details ────
@@ -15738,6 +16163,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.AuthStore.init().catch((e) => console.warn('[auth] init:', e));
     }
 
+    // I3 (v350, Jun 2026) - request PERSISTENT storage so the offline outbox
+    // (queued reports + their retained ORIGINAL Blobs, retryable for up to 30
+    // days - see _MAX_VARIANT_AGE_MS) is not silently EVICTED by the browser
+    // under storage pressure during a long outage. One-time, best-effort,
+    // guarded. Without this, "best-effort" IndexedDB can be cleared at any
+    // time, defeating the 30-day retention window the operator chose.
+    try {
+        if (navigator.storage && typeof navigator.storage.persist === 'function') {
+            navigator.storage.persisted().then((already) => {
+                if (already) { console.log('[storage] persistent storage already granted'); return; }
+                navigator.storage.persist().then((granted) => {
+                    console.log(`[storage] persist() requested → granted=${granted}`);
+                }).catch(() => {});
+            }).catch(() => {});
+        }
+    } catch (_) { /* storage API unavailable - non-fatal */ }
+
     // 2. Start language detection (it will call applyI18n when ready or fallback)
     detectAndSetupLanguage();
 
@@ -15796,6 +16238,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 5. Update sync badge
     updateSyncBadge();
+
+    // I1-light (v350, Jun 2026) - reopen nudge. Modern (image-tier) reports
+    // only upload while a page is OPEN (the SW wakes the page; it does not
+    // upload them itself, and iOS has no Background Sync at all). So if the
+    // outbox still has queued reports on launch, tell the reporter to keep
+    // the app open until they drain - otherwise a report can sit for days
+    // unsent without the user realizing. Best-effort, once per boot.
+    try {
+        const _queuedAtBoot = await getAllQueued();
+        const _qn = (_queuedAtBoot || []).length;
+        if (_qn > 0) {
+            const _msg = (t('sync_queued_nudge') || '{n} report(s) waiting to send - keep the app open until they finish.')
+                .replace('{n}', String(_qn));
+            try { showToast(_msg); } catch (_) {}
+        }
+    } catch (_) { /* non-fatal */ }
 
     // Seed the 🟢/🔴 connectivity dot from the browser hint. The happy
     // path (navigator.onLine === true) requires NO active probing -
@@ -15890,6 +16348,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    // I1-light (v350, Jun 2026) - register Background Sync + Periodic Sync at
+    // BOOT. The previous registration site (triggerBackgroundSync) was never
+    // called, so neither tag was ever registered and the SW `sync` event never
+    // fired. Registering here (idempotent) lets the OS wake the SW to drain the
+    // outbox (Chrome/Android). iOS Safari + Firefox lack both APIs → guarded
+    // no-op (reopen-nudge + manual sync remain; true iOS background upload is
+    // impossible by platform design).
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(async (reg) => {
+            try { if ('SyncManager' in window && reg.sync) await reg.sync.register('sync-reports'); } catch (_) {}
+            try {
+                if ('PeriodicSyncManager' in window && reg.periodicSync) {
+                    await reg.periodicSync.register('sync-reports-periodic', { minInterval: 6 * 60 * 60 * 1000 });
+                }
+            } catch (_) { /* unsupported / permission not granted - no-op */ }
+        }).catch(() => {});
+    }
+
     // Periodic sweep of the pending-reports queue. Catches deferred-tier
     // variants that may have been waiting hours/days for bandwidth, plus
     // any orphans the connectivity event listeners missed. Runs every
@@ -15954,7 +16430,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (document.visibilityState !== 'visible') return;
             if (!navigator.onLine) return;
             const silentMs = Date.now() - (_lastDrainTickAt || 0);
-            if (silentMs < _HEARTBEAT_SILENCE_THRESHOLD_MS) return;
+            // R2: also wake on a SUCCESS-stall (loop ticking but no chunk landed in
+            // _UPLOAD_SUCCESS_STALL_MS) so startRetryLoop re-enters + its wedge block
+            // can force-reset a spinning-but-delivering-nothing loop.
+            const successStalledMs = _lastUploadSuccessAt > 0 ? (Date.now() - _lastUploadSuccessAt) : 0;
+            if (silentMs < _HEARTBEAT_SILENCE_THRESHOLD_MS && successStalledMs < _UPLOAD_SUCCESS_STALL_MS) return;
             // Only kick if there's actually pending work - otherwise
             // healthy quiet-queue would burn IDB reads forever.
             let hasPending = false;
