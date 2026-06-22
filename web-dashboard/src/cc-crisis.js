@@ -919,7 +919,20 @@
         await api('PATCH', `/packs/${id}`, { is_archived: !p.is_archived });
         toast(p.is_archived ? 'Pack unarchived.' : 'Pack archived (no longer matched).', 'ok');
         refreshAll();
-      } catch (err) { toast('Update failed: ' + err.message, 'err'); }
+      } catch (err) {
+        // Guardrail: a pack in use by a live operation can't be archived. Name the
+        // blocking operations so the operator knows exactly what to end/reassign.
+        const det = err && err.data && err.data.detail;
+        if (err && err.status === 409 && det && det.error === 'pack_in_use') {
+          const ops = (det.operations || []).map((o) => o && o.name).filter(Boolean);
+          const names = ops.length
+            ? ops.slice(0, 3).join(', ') + (ops.length > 3 ? ` +${ops.length - 3} more` : '')
+            : 'a live operation';
+          toast(`Can't archive — in use by ${names}. End or reassign first.`, 'err');
+        } else {
+          toast('Update failed: ' + err.message, 'err');
+        }
+      }
     }
   }
 
