@@ -26,9 +26,10 @@
   var BAND_COLOR = { VERIFIED: '#34D399', LIKELY: '#7db8ef', MIXED: '#fbbf24', WEAK: '#f87171', UNVERIFIED: '#8aa0bf' };
 
   // assess + cascade endpoints per scope level
-  function assessUrl(scope) {
-    return scope.level === 'global' ? api('/analytics/assess')
+  function assessUrl(scope, force) {
+    var base = scope.level === 'global' ? api('/analytics/assess')
          : api('/operations/' + encodeURIComponent(scope.id) + '/assess');
+    return force ? base + '?force=true' : base;   // force = bypass the unchanged-inputs cache (#7)
   }
   function cascadeUrl(scope, action) {
     return scope.level === 'global' ? api('/reports/cascade')
@@ -57,8 +58,13 @@
       '.cc-cmd-az-title{font-size:12px;font-weight:800;color:#e6edf7;display:flex;align-items:center;gap:8px}',
       '.cc-cmd-band{font-size:9.5px;font-weight:800;padding:2px 7px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em}',
       '.cc-cmd-az-sum{font-size:12px;color:#b7c6e0;margin-top:6px;line-height:1.5}',
+      '.cc-cmd-az-sub{font-size:10.5px;font-weight:700;color:#9fb2d4;text-transform:uppercase;letter-spacing:.04em;margin:12px 0 4px}',
+      '.cc-cmd-az-list{margin:0;padding-left:17px;font-size:12px;color:#b7c6e0;line-height:1.55}',
+      '.cc-cmd-az-list li{margin-bottom:2px}',
+      '.cc-cmd-escal{font-size:10px;font-weight:700;color:#fca5a5;background:rgba(239,68,68,.12);border:1px solid #7f1d1d;padding:1px 7px;border-radius:999px;margin-left:6px;white-space:nowrap}',
       '.cc-cmd-az-cta{cursor:pointer;border-radius:8px;font-weight:700;font-size:12px;margin-top:8px;background:linear-gradient(90deg,#6d5bd0,#4f7fe0);color:#fff;border:none;padding:8px 12px;display:inline-flex;align-items:center;gap:8px}',
       '.cc-cmd-az-cta:hover{filter:brightness(1.08)}',
+      '.cc-cmd-stale{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#fde68a;background:rgba(180,83,9,.16);border:1px solid #b45309;border-radius:8px;padding:6px 10px;margin-bottom:9px;line-height:1.4}',
       '.cc-cmd-az-link{margin-top:7px;font-size:11px;color:#7db8ef;cursor:pointer;display:inline-block}',
       '.cc-cmd-az-link:hover{text-decoration:underline}',
       '.cc-cmd-metrics{flex:1 1 200px;display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start}',
@@ -150,20 +156,64 @@
     } else {
       var band = a.band || 'UNVERIFIED', col = BAND_COLOR[band] || '#8aa0bf';
       var cov = a.coverage || {};
+      // #6: when PENDING reports have arrived since this assessment, flag it stale and
+      // make Re-run the primary action (re-run only assesses pending — never re-bills
+      // for unchanged inputs unless forced here).
+      var nNew = Number(a.new_reports_since_assessment) || 0;
+      var stale = !!a.assessed_stale && nNew > 0;
+      var ago = (a.assessed_minutes_ago != null)
+        ? ' · assessed ' + (a.assessed_minutes_ago < 1 ? 'just now' : a.assessed_minutes_ago + ' min ago') : '';
+      var staleBanner = stale
+        ? '<div class="cc-cmd-stale"><i class="fa-solid fa-triangle-exclamation"></i> <b>' + nfmt(nNew) +
+          '</b> new report' + (nNew === 1 ? '' : 's') + ' awaiting assessment — re-run to include ' + (nNew === 1 ? 'it' : 'them') + '.</div>'
+        : '';
+      // Fill the panel: the FULL summary + key risks + resource needs + escalation,
+      // so the assessment uses the available height instead of leaving dead space.
+      var _risks = (a.key_risks || []).slice(0, 6);
+      var _res = (a.resource_recommendations || []).slice(0, 5);
+      var _el = a.escalation_likelihood || {};
+      var _escal = (_el && _el.level) ? esc(String(_el.level)) : '';
+      var _escalTitle = (_el && _el.rationale) ? esc(String(_el.rationale)) : '';
+      var _list = function (title, arr) {
+        return arr.length ? '<div class="cc-cmd-az-sub">' + title + '</div><ul class="cc-cmd-az-list">'
+          + arr.map(function (x) { return '<li>' + esc(String((x && (x.label || x.text)) || x)) + '</li>'; }).join('') + '</ul>' : '';
+      };
       az.innerHTML =
+        staleBanner +
         '<div class="cc-cmd-az-head">' +
           '<div class="cc-cmd-dial" style="color:' + col + '">' + (a.score == null ? '—' : a.score) + '<small>/100</small></div>' +
           '<div class="cc-cmd-az-meta">' +
-            '<div class="cc-cmd-az-title">Situation Confidence <span class="cc-cmd-band" style="background:' + col + '22;color:' + col + '">' + esc(band) + '</span></div>' +
-            '<div class="cc-cmd-az-sum">' + esc((a.situation_summary || '').slice(0, 220)) + '</div>' +
+            '<div class="cc-cmd-az-title">Situation Confidence <span class="cc-cmd-band" style="background:' + col + '22;color:' + col + '">' + esc(band) + '</span>' +
+              (_escal ? ' <span class="cc-cmd-escal"' + (_escalTitle ? ' title="' + _escalTitle + '"' : '') + '>↑ escalation ' + _escal + '</span>' : '') + '</div>' +
+            '<div class="cc-cmd-az-sum">' + esc(a.situation_summary || '') + '</div>' +
             '<span class="cc-cmd-az-link" data-cc-view>View full assessment →</span>' +
-            (cov.total != null ? ' <span style="font-size:10.5px;color:#7d8ba3"> · ' + (cov.assessed || 0) + '/' + cov.total + ' assessed</span>' : '') +
+            (cov.total != null ? ' <span style="font-size:10.5px;color:#7d8ba3"> · ' + (cov.assessed || 0) + '/' + cov.total + ' assessed' + ago + '</span>' : '') +
           '</div>' +
         '</div>' +
-        '<button class="cc-cmd-az-cta" data-cc-run style="margin-top:9px;background:#13203a;border:1px solid #2a3a55;color:#cfe0f5"><i class="fa-solid fa-rotate"></i> Re-analyze</button>';
+        _list('⚠ Key risks', _risks) +
+        _list('🧰 Resource needs', _res) +
+        '<button class="cc-cmd-az-cta' + (stale ? ' stale' : '') + '" data-cc-run data-cc-force="1" style="margin-top:11px;' +
+          (stale ? 'background:#78350f;border:1px solid #b45309;color:#fef3c7' : 'background:#13203a;border:1px solid #2a3a55;color:#cfe0f5') +
+          '"><i class="fa-solid fa-rotate"></i> Re-analyze' + (stale ? ' (' + nfmt(nNew) + ' new)' : '') + '</button>';
     }
-    var run = az.querySelector('[data-cc-run]'); if (run) run.onclick = function () { runAnalyze(scope, el, run); };
+    var run = az.querySelector('[data-cc-run]'); if (run) run.onclick = function () { runAnalyze(scope, el, run, run.getAttribute('data-cc-force') === '1'); };
     var view = az.querySelector('[data-cc-view]'); if (view) view.onclick = function () { showAssessmentModal(scope); };
+  }
+
+  // Clean inline degradation when the AI service is unavailable (missing API key,
+  // timeout, parse error). The MANUAL workflow is unaffected — the operator reviews
+  // and actions reports normally; this just keeps a broken/empty panel from reading
+  // like a bug, and offers a retry. (#8)
+  function renderUnavailable(scope, el, reason) {
+    var az = el.querySelector('[data-cc-analyze]'); if (!az) return;
+    var why = (reason === 'no_key')
+      ? 'The AI assessment service is not configured right now.'
+      : 'The AI assessment could not be generated right now.';
+    az.innerHTML =
+      '<div class="cc-cmd-az-title"><i class="fa-solid fa-robot" style="color:#8aa0bf"></i> AI assessment unavailable</div>' +
+      '<div class="cc-cmd-az-sum">' + why + ' You can review and action reports manually — nothing is blocked.</div>' +
+      '<button class="cc-cmd-az-cta" data-cc-run style="margin-top:9px;background:#13203a;border:1px solid #2a3a55;color:#cfe0f5"><i class="fa-solid fa-rotate"></i> Try again</button>';
+    var run = az.querySelector('[data-cc-run]'); if (run) run.onclick = function () { runAnalyze(scope, el, run); };
   }
 
   function renderMetrics(scope, el, c) {
@@ -204,12 +254,12 @@
 
   // AI assessment runs ONLY on an explicit click (operator preference: no auto-run
   // on page load/refresh). A click analyses + opens the full assessment modal.
-  function runAnalyze(scope, el, btn) {
+  function runAnalyze(scope, el, btn, force) {
     var fn = window.withBusy || function (b, f) { return f(); };
     fn(btn, function () {
-      return fetch(assessUrl(scope), { method: 'POST', headers: hdrs() }).then(function (r) {
-        if (r.status === 503) { toast('AI assessment unavailable (ANTHROPIC_API_KEY not set)', 'error'); return null; }
-        if (!r.ok) { toast('Assessment failed', 'error'); return null; }
+      return fetch(assessUrl(scope, force), { method: 'POST', headers: hdrs() }).then(function (r) {
+        if (r.status === 503) { renderUnavailable(scope, el, 'no_key'); toast('AI assessment unavailable — proceed manually', 'error'); return null; }
+        if (!r.ok) { renderUnavailable(scope, el, 'error'); toast('AI assessment failed — proceed manually', 'error'); return null; }
         return r.json();
       }).then(function (a) {
         if (!a) return;
@@ -243,13 +293,18 @@
   // ── action bar (scoped cascades + nav) ──────────────────────────────────────
   function actionBar(scope) {
     if (scope.level === 'operation') {
-      return btn('dispatch-uc', 'fa-truck-medical', 'Dispatch unattended-critical', 'primary')
-           + btn('resolve-all', 'fa-circle-check', 'Resolve all', 'go')
+      return btn('dispatch-uc', 'fa-truck-medical', 'Notify response team', 'primary')
            + btn('reject-noise', 'fa-ban', 'Reject noise', 'danger')
+           + btn('false-alarm', 'fa-circle-xmark', 'Flag false alarm', 'danger')
+           + btn('merge-dupes', 'fa-clone', 'Merge duplicates', '')
+           + btn('resolve-all', 'fa-circle-check', 'Resolve all', 'go')
            + btn('open-feed', 'fa-list', 'Open Incident Feed', '');
     }
     if (scope.level === 'global') {
-      return btn('dispatch-uc', 'fa-truck-medical', 'Dispatch all unattended-critical', 'primary')
+      return btn('dispatch-uc', 'fa-truck-medical', 'Notify response team', 'primary')
+           + btn('reject-noise', 'fa-ban', 'Reject noise', 'danger')
+           + btn('false-alarm', 'fa-circle-xmark', 'Flag false alarm', 'danger')
+           + btn('merge-dupes', 'fa-clone', 'Merge duplicates', '')
            + btn('resolve-needs', 'fa-circle-check', 'Resolve a slice…', 'go')
            + btn('sitrep', 'fa-file-pdf', 'Export SITREP', '')
            + btn('worst-op', 'fa-bullseye', 'Open worst operation', '');
@@ -273,10 +328,49 @@
       try { window.__crispExportCtx = {}; } catch (_) {}
       window.location.hash = '#/exports'; toast('Open the SITREP export in the Export Center', 'info'); return;
     }
-    if (act === 'dispatch-uc') return cascade(scope, 'dispatch', { queue: 'unattended_critical' }, 'Dispatch responders to all unattended-critical');
+    if (act === 'dispatch-uc') return cascade(scope, 'dispatch', { queue: 'unattended_critical' }, 'Notify the response team for all unattended-critical');
     if (act === 'resolve-all') return cascade(scope, 'resolve', {}, 'Resolve every open incident in this operation');
     if (act === 'resolve-needs') return cascade(scope, 'resolve', { queue: 'needs_response' }, 'Resolve the needs-response slice');
     if (act === 'reject-noise') return cascade(scope, 'reject', { queue: 'needs_review' }, 'Reject the needs-review slice as noise');
+    if (act === 'false-alarm') return cascade(scope, 'false_alarm', { queue: 'needs_review' }, 'Flag the needs-review slice as a false alarm');
+    if (act === 'merge-dupes') return mergeDuplicates(scope);
+  }
+
+  // Algorithm-confirmed duplicate merge (group-aware, reversible). Surfaces the count
+  // first, confirms, then collapses the pairs under their primary via /duplicate-merge.
+  function mergeDuplicates(scope) {
+    var q = scope.level === 'operation' ? ('?crisis_event_id=' + encodeURIComponent(scope.id)) : '';
+    fetch(api('/reports/duplicate-summary' + q), { headers: hdrs() })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (s) {
+        var high = (s && Number(s.high)) || 0;
+        var total = (s && Number(s.total)) || 0;
+        if (total === 0) { toast('No probable duplicates to merge.', 'info'); return; }
+        var n = high || total;
+        var band = high ? 'high-confidence' : 'probable';
+        modal({
+          title: '<i class="fa-solid fa-clone" style="color:#8aa0bf"></i> Merge duplicates',
+          html: '<div class="cc-ov-blast">' + bchip(n, 'pairs') + '</div>' +
+                '<div class="cc-ov-msg">Collapse ' + nfmt(n) + ' ' + band + ' duplicate pair' + (n === 1 ? '' : 's') +
+                ' under their primary report. Group-aware (whole clusters merge at once) and fully reversible — nothing is deleted.</div>',
+          confirmLabel: 'Merge ' + nfmt(n) + ' pair' + (n === 1 ? '' : 's'),
+          onConfirm: function (reason, close, setBusy) {
+            setBusy(true);
+            var body = { confidence: high ? 'HIGH' : 'ALL' };
+            if (scope.level === 'operation') body.crisis_event_id = scope.id;
+            fetch(api('/reports/duplicate-merge'), { method: 'POST', headers: hdrs(), body: JSON.stringify(body) })
+              .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+              .then(function (out) {
+                setBusy(false); close();
+                if (!out.ok) { toast((out.j && out.j.detail) || 'Merge failed', 'error'); return; }
+                toast('Merged ' + nfmt((out.j && out.j.merged) || 0) + ' duplicate report(s).', 'ok');
+                try { if (typeof window.refreshAll === 'function') window.refreshAll(); } catch (_) {}
+              })
+              .catch(function () { setBusy(false); toast('Merge failed', 'error'); });
+          },
+        });
+      })
+      .catch(function () { toast('Could not load duplicate summary', 'error'); });
   }
 
   function openWorstOp() {
