@@ -44,8 +44,8 @@ test.describe('Dashboard — operation opens in the console right-panel', () => 
   // The operation renders in the right detail panel.
   const panel = page.locator('#detail-panel.detail-panel--operation');
   await expect(panel).toBeVisible({ timeout: 8000 });
-  await expect(panel.locator('.cco-banner')).toContainText('Aleppo Quake');
-  await expect(panel.locator('.cco-vitals')).toBeVisible();
+  await expect(panel.locator('#cco-command')).toContainText('Aleppo Quake', { timeout: 8000 });
+  await expect(panel.locator('#cco-weather')).toBeVisible();
   // The feed (left) is the incidents view (scoped), NOT the operations full-page overlay.
   await expect(page.locator('#view-incidents')).toBeVisible();
   // Canonical URL became #/incidents;op=op-a (replaceState).

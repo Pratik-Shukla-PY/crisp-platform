@@ -118,13 +118,31 @@ test.describe('Dashboard — unified notification shell', () => {
     await expect(page.locator('#crisp-globalnav #notif-count')).toHaveText('1', { timeout: 12000 });
     // Home "new incidents" alert appears and flags the critical arrival.
     await expect(page.locator('#cgn-home-alert.show')).toBeVisible();
-    await expect(page.locator('#cgn-home-alert')).toContainText(/critical incident received/i);
+    await expect(page.locator('#cgn-home-alert')).toContainText(/1 critical/i);
     // Clicking the notification deep-links to Operations and reveals the feed.
     await page.locator('#crisp-globalnav #notif-bell').click();
     await expect(page.locator('#notif-panel .notif-card')).toHaveCount(1);
     await page.locator('#notif-panel .notif-card').first().click();
     await expect(page).toHaveURL(/#\/incidents/);
     await expect(page.locator('#view-incidents')).toBeVisible();
+  });
+
+  test('@smoke Home alert is anchored to the last-visit watermark: acknowledging clears it', async ({ page }) => {
+    // Stream B: the Home alert counts only UNREAD arrivals since the operator was last
+    // here. A fresh arrival lights it; acknowledging (what the Review button calls,
+    // __crispMarkNotifsSeen) advances the away-anchor so that same arrival — now BEFORE
+    // the anchor — stops counting. This proves the since-baseline filter (the old bug
+    // counted the entire unread bell forever).
+    await boot(page);
+    reportsBody = JSON.stringify([reportRow('fresh-1', 'CRITICAL')]);
+    total = '1';
+    await expect(page.locator('#cgn-home-alert.show')).toBeVisible({ timeout: 12000 });
+    await expect(page.locator('#cgn-home-alert')).toContainText(/1 critical/i);
+    expect(await page.evaluate(() => (window as any).__crispNotifSummary().count)).toBeGreaterThanOrEqual(1);
+    // Acknowledge → anchor advances past the arrival → summary count drops to 0, alert hides.
+    await page.evaluate(() => (window as any).__crispMarkNotifsSeen());
+    await expect.poll(() => page.evaluate(() => (window as any).__crispNotifSummary().count)).toBe(0);
+    await expect(page.locator('#cgn-home-alert.show')).toHaveCount(0);
   });
 
   test('@smoke panel queue shortcut deep-links into the verification queue', async ({ page }) => {

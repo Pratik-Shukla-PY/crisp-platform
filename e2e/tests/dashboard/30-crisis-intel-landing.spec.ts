@@ -50,7 +50,7 @@ const OPERATIONS = [
     {
         id: 'op-flood-1', name: 'Bihar Floods', crisis_type: 'FLOOD', status: 'LIVE',
         is_active: true, center_lat: 25.6, center_lng: 85.1,
-        critical: 5, new_24h: 9, total: 42, last_activity: NOW, is_cluster: false,
+        critical: 5, new_24h: 9, total: 42, radius_km: 30, last_activity: NOW, is_cluster: false,
     },
     { id: null, name: 'Unassigned critical reports', is_cluster: true, critical: 3, total: 3 },
 ];
@@ -153,37 +153,26 @@ test('Crisis Intelligence landing renders from the real summary contract, no run
         { timeout: 8000 },
     ).toBeGreaterThan(0);
     await expect(page.locator('#cc-map .cc-map-fallback')).toHaveCount(0);
-    // §4 distributions rendered — and the bar FILLS actually paint (Jun 2026
-    // regression: .cc-bar-fill was an inline <span>, so width/height were
-    // ignored and every bar rendered as an empty track with no color).
-    await expect(page.locator('#cc-dist-sev')).toContainText('Critical');
-    const fillBox = await page.locator('#cc-dist-sev .cc-bar-fill').first().boundingBox();
-    expect(fillBox, 'bar fill must have a box').toBeTruthy();
-    expect(fillBox!.width, 'bar fill must have non-zero painted width').toBeGreaterThan(4);
-    expect(fillBox!.height, 'bar fill must have non-zero painted height').toBeGreaterThan(2);
-    // §4b intake sparkline renders bars regardless of fetch-completion order
-    // (Jun 2026 race: #cc-spark is created by the summary renderer AFTER the
-    // sparkline fetch usually resolves — cached-bucket repaint fixes it).
-    await expect(page.locator('#cc-spark i').first()).toBeVisible({ timeout: 6000 });
-    // §5 impact + the honest no-fabrication placard (the guardrail, in the UI).
-    await expect(page.locator('#cc-impact')).toContainText('Critical infrastructure');
-    await expect(page.locator('#cc-impact')).toContainText('data integration');
-    // §5b Executive summary (Section 3, right) — portfolio totals from the aggregates.
-    await expect(page.locator('#cc-exec')).toContainText('Total buildings');
-    await expect(page.locator('#cc-exec')).toContainText('Duplicate reports');
-    // §6 AI Situational Awareness re-skins the cached /analytics/assess payload.
-    await expect(page.locator('#cc-sitaware')).toContainText("What's happening", { timeout: 8000 });
-    await expect(page.locator('#cc-sitaware')).toContainText('Flooding across Bihar');
-    await expect(page.locator('#cc-sitaware')).toContainText('Recommended actions');
-    // escalation_likelihood is the {level,rationale} OBJECT — the meta line must show
-    // the level, never the literal "[object Object]" (pre-deploy review fix).
-    await expect(page.locator('#cc-sitaware')).toContainText('escalation HIGH');
-    await expect(page.locator('#cc-sitaware')).not.toContainText('[object Object]');
-    // "Where" facet derives from the live ops the rail loaded (payload has no
-    // top_operations) — it must name the operation carrying the critical load.
-    await expect(page.locator('#cc-sitaware')).toContainText('Where');
-    await expect(page.locator('#cc-sitaware')).toContainText('Bihar Floods', { timeout: 8000 });
-    // §7 activity table.
+    // §4 Analytics (relocated OFF the header Tools onto the home): the analytics
+    // dashboard panel is re-parented INLINE into the 70% column of the Analytics section.
+    await expect(page.locator('#cc-analytics-mount #analytics-panel')).toHaveCount(1);
+    await expect(page.locator('#cc-analytics-mount #analytics-panel')).toBeVisible();
+    // The old Global Summary distributions / Operational Impact / Executive Summary are gone.
+    await expect(page.locator('#cc-dist-sev')).toHaveCount(0);
+    await expect(page.locator('#cc-impact')).toHaveCount(0);
+    await expect(page.locator('#cc-exec')).toHaveCount(0);
+    // §6 AI Assessment & Actions (global) — the full-width row that REPLACED the old
+    // Situational Awareness panel. The cached /analytics/assess renders in the shared
+    // command panel (situation confidence + summary), with the scoped action bar.
+    await expect(page.locator('#cc-command')).toContainText('Flooding across Bihar', { timeout: 8000 });
+    await expect(page.locator('#cc-command')).toContainText('Situation Confidence');
+    await expect(page.locator('#cc-command')).toContainText('Notify response team');
+    await expect(page.locator('#cc-command')).toContainText('Merge duplicates');
+    await expect(page.locator('#cc-command')).not.toContainText('[object Object]');
+    // The old Situational Awareness panel is gone.
+    await expect(page.locator('#cc-sitaware')).toHaveCount(0);
+    // §7 Recent Incidents feed (the 30% column) — compact rows, scrolls after 20.
+    await expect(page.locator('#cc-activity .cc-an-row').first()).toBeVisible({ timeout: 6000 });
     await expect(page.locator('#cc-activity')).toContainText('Patna');
 
     await page.waitForTimeout(400);
@@ -361,4 +350,67 @@ test('admin-gated nav items render disabled with the admin chip for viewers', as
     // config items stay hidden for a viewer.
     await expect(page.locator('#btn-account-settings')).toHaveCount(1);
     await expect.poll(() => page.evaluate(() => document.getElementById('btn-org-settings')?.style.display)).toBe('none');
+});
+
+// v154: an operation that is LIVE in the DB but whose end-window (ended_at) has
+// passed is matcher-inactive (the backend form-pack matcher skips ended_at<now),
+// so it must NOT lead the Active Operations rail with a green LIVE badge. It reads
+// ENDED and drops to the "View all" overflow. The idle-but-open op stays LIVE.
+test('Active Operations: a LIVE op past its end-window reads ENDED, not a leading green LIVE card', async ({ page }) => {
+    const PAST = new Date(Date.now() - 3600e3).toISOString();
+    const NOWISO = new Date().toISOString();
+    const OPS = [
+        // genuinely live + recently active → leads the rail
+        { id: 'op-live', name: 'Patna Floods', crisis_type: 'FLOOD', status: 'LIVE', is_active: true,
+          center_lat: 25.6, center_lng: 85.1, critical: 4, total: 20, radius_km: 30, last_activity: NOWISO, is_cluster: false },
+        // LIVE in the DB but its end-window has passed → effectively ended
+        { id: 'op-window', name: 'Bangalore Slides', crisis_type: 'EARTHQUAKE', status: 'LIVE', is_active: true,
+          center_lat: 12.9, center_lng: 77.6, critical: 0, total: 6, radius_km: 10,
+          started_at: PAST, ended_at: PAST, last_activity: PAST, is_cluster: false },
+    ];
+    await page.addInitScript(() => {
+        localStorage.setItem('crisp_token', 'e2e-fake-token');
+        localStorage.setItem('crisp_user', JSON.stringify({ role: 'ADMIN', email: 'ops@undp.org', full_name: 'Ops' }));
+    });
+    await page.route('**/api/v1/**', async (route) => {
+        const u = route.request().url();
+        if (u.includes('/analytics/assess')) return route.fulfill({ json: { assessed: false } });
+        if (u.includes('/analytics/summary')) return route.fulfill({ json: SUMMARY });
+        if (u.includes('/operations')) return route.fulfill({ json: OPS });
+        if (u.includes('/reports/markers')) return route.fulfill({ status: 200, json: [] });
+        if (u.includes('/reports/')) return route.fulfill({ status: 200, headers: { 'X-Total-Count': '0' }, json: [] });
+        return route.fulfill({ status: 200, json: {} });
+    });
+    await page.goto('index.html');
+    await page.waitForTimeout(600);
+    await page.evaluate(() => {
+        const r = (window as any).__crispRouter;
+        if (r) r.navigate('/'); else (window as any).openControlCenter && (window as any).openControlCenter();
+    });
+
+    // The genuinely-live op leads the rail; the window-closed op is NOT a rendered
+    // card there — it drops to the "View all" overflow.
+    const railList = page.locator('#cc-ops-rail-list');
+    await expect(railList).toContainText('Patna Floods', { timeout: 6000 });
+    await expect(railList).not.toContainText('Bangalore Slides');
+    // The portfolio summary counts only the genuinely-live op as "live".
+    await expect(page.locator('#cc-ops-summary')).toContainText('1 live');
+    // The overflow surfaces the excluded op.
+    await expect(page.locator('#cc-ops-more')).toContainText('1 more operation');
+
+    // The shared badge rule (CrispOpCard.isEffectivelyEnded): a window-closed op
+    // renders the grey ENDED badge; a plain LIVE op renders the green LIVE badge.
+    const badge = await page.evaluate(() => {
+        const C = (window as any).CrispOpCard;
+        const host = document.createElement('div'); document.body.appendChild(host);
+        const read = (op: any) => { host.innerHTML = C.card(op); const b = host.querySelector('.opc-badge') as HTMLElement; return { text: b.textContent, color: b.style.color }; };
+        const w = read({ id: 'x', name: 'BC', status: 'LIVE', is_active: true, ended_at: new Date(Date.now() - 3600e3).toISOString() });
+        const l = read({ id: 'y', name: 'L', status: 'LIVE', is_active: true });
+        host.remove();
+        return { w, l };
+    });
+    expect(badge.w.text).toBe('ENDED');
+    expect(badge.l.text).toBe('LIVE');
+    expect(badge.w.color).not.toBe(badge.l.color);   // grey vs green — never the same pill
+    await page.locator('.cc-split-ops').screenshot({ path: 'test-results/ops-rail-window-closed.png' }).catch(() => {});
 });

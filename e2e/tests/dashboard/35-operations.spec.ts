@@ -152,17 +152,19 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
         const panel = page.locator('#detail-panel.detail-panel--operation');
         await expect(panel).toBeVisible({ timeout: 8000 });
         await expect(page.locator('#view-incidents')).toBeVisible();
-        // Context: the panel breadcrumb names the operation (always know which op).
-        await expect(panel.locator('.cco-banner')).toContainText('Bihar Floods');
-        // 4 vitals from the scoped summary (Critical = 5).
-        await expect(panel.locator('.cco-vital.crit')).toContainText('5');
-        await expect(panel.locator('#cco-vitals')).toContainText('Needs review');
-        await expect(panel.locator('#cco-wl')).toContainText(/Flood/i);
-        await expect(panel.locator('#cco-act-feed')).toBeVisible();
-        // "Exit to global" closes the panel + drops the op scope (back to global feed).
-        await panel.locator('#cco-exit').click();
-        await expect(panel).toBeHidden({ timeout: 4000 });
-        await expect.poll(() => page.evaluate(() => location.hash)).not.toContain('op=op-a');
+        // Context: the command-panel breadcrumb names the operation (always know which op).
+        await expect(panel.locator('#cco-command')).toContainText('Bihar Floods', { timeout: 8000 });
+        // Redesigned console (Jun 2026): AI command panel + op-scoped duplicate review +
+        // local conditions + export action. The vitals / operation map / buildings-reports
+        // worklist / Open-Incident-Feed / Exit-to-global row are all REMOVED.
+        await expect(panel.locator('#cco-command')).toBeVisible();
+        await expect(panel.locator('#cco-dupcheck')).toBeVisible();
+        await expect(panel.locator('#cco-weather')).toBeVisible();
+        await expect(panel.locator('#cco-act-export')).toBeVisible();
+        await expect(panel.locator('.cco-vital')).toHaveCount(0);
+        await expect(panel.locator('#cco-map')).toHaveCount(0);
+        await expect(panel.locator('#cco-act-feed')).toHaveCount(0);
+        await expect(panel.locator('#cco-exit')).toHaveCount(0);
     });
 
     test('operation context is ABSENT on global routes', async ({ page }) => {
@@ -270,58 +272,11 @@ test.describe('Dashboard — Operations workspace (Phase 2)', () => {
     });
 });
 
-test.describe('Dashboard — operation incident click → Incident Feed (v63)', () => {
-    test('@smoke the action button is renamed "Open Incident Feed"', async ({ page }) => {
-        await boot(page);
-        await page.goto('index.html#/operations/op-a');
-        const btn = page.locator('#cco-act-feed');
-        await expect(btn).toBeVisible();
-        await expect(btn).toHaveText('Open Incident Feed');     // was "Open full incident feed"
-        await expect(btn).not.toHaveText(/full/i);
-    });
-
-    test('@smoke clicking an operation incident opens the op-scoped Incident Feed with that report selected (list left + detail right)', async ({ page }) => {
-        await boot(page);
-        await page.goto('index.html#/operations/op-a');
-
-        // Buildings is the default operational worklist now; switch to the Reports tab
-        // to click an individual incident.
-        await page.locator('.cco-tab[data-wl="reports"]').click();
-        const row = page.locator('#cco-wl .cco-wl-row[data-id="r1"]');
-        await expect(row).toBeVisible();
-        await row.click();
-
-        // 1) Redirected OFF the operation dashboard to the Incident Feed page,
-        //    scoped to the operation, with the incident deep-linked.
-        await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/incidents;op=op-a?incident=r1');
-        await expect(page.locator('#view-incidents')).toBeVisible();
-
-        // 2) The detailed incident report opens on the RIGHT.
-        await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 8000 });
-
-        // 3) The feed LIST on the left shows the operation's incidents with the
-        //    selected one highlighted (CrispNav.markSelected → .is-selected /
-        //    renderFeed → .selected). It stays a LIST (r2 is still shown), not
-        //    filtered down to a single incident.
-        const card = page.locator('.tree-incident[data-id="r1"], .qrt-card[data-id="r1"]').first();
-        await expect(card).toBeVisible({ timeout: 8000 });
-        await expect(card).toHaveClass(/is-selected|selected/);
-        await expect(page.locator('.tree-incident[data-id="r2"], .qrt-card[data-id="r2"]').first()).toBeVisible();
-    });
-
-    test('@smoke keyboard (Enter) on an incident row also opens it in the Incident Feed', async ({ page }) => {
-        await boot(page);
-        await page.goto('index.html#/operations/op-a');
-        // Buildings is the default operational worklist now; switch to the Reports tab.
-        await page.locator('.cco-tab[data-wl="reports"]').click();
-        const row = page.locator('#cco-wl .cco-wl-row[data-id="r2"]');
-        await expect(row).toBeVisible();
-        await row.focus();
-        await row.press('Enter');
-        await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/incidents;op=op-a?incident=r2');
-        await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 8000 });
-    });
-});
+// The op-console "Open Incident Feed" button + the Buildings/Reports worklist were
+// REMOVED in the Jun 2026 console redesign: the scoped feed is already the left pane,
+// so incidents are clicked there directly (no second worklist). The incident-click →
+// op-scoped-feed + list-left/detail-right behaviour is covered by the feed's own specs;
+// the auto-scroll case below still exercises the deep-link path on the feed.
 
 test.describe('Dashboard — auto-scroll to the selected incident in a long/grouped feed (v64)', () => {
     // A large op-scoped fixture: 60 PENDING (the default tab) so progressive

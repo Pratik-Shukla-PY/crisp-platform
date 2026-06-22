@@ -64,12 +64,12 @@ test.describe.configure({ mode: 'serial' });
 
 test('op dashboard: clicking a building card opens a VISIBLE console (D1)', async ({ page }) => {
     await boot(page);
-    await page.goto('index.html#/operations/op-a');
-    // Buildings worklist is the default tab.
-    const card = page.locator('#cco-bld .bic[data-building-id]').first();
-    await expect(card).toBeVisible({ timeout: 8000 });
-
-    await card.click();
+    // Building Intelligence was removed from BOTH the home and the op console (Jun 2026);
+    // the building console is now opened from the incident feed / detail links. Invoke it
+    // directly — the D1 regression under test is the console-open behaviour (reparent to
+    // <body>, on-screen, z-index above the overlay), independent of the trigger surface.
+    await page.goto('index.html#/incidents');
+    await page.evaluate(async () => { await (window as any).openBuildingConsole('b1'); });
 
     // The building console (#detail-panel.detail-panel--building) must become a
     // VISIBLE, on-screen global overlay - not hidden behind the operations overlay.
@@ -89,22 +89,20 @@ test('op dashboard: clicking a building card opens a VISIBLE console (D1)', asyn
     expect(geo.reparentedToBody, 'detail-panel must be reparented to <body>').toBe(true);
     expect(geo.onScreen, 'console must be on-screen, not off-screen/0-size').toBe(true);
     expect(geo.z, 'console z-index must clear the operations overlay (99990)').toBeGreaterThan(99990);
-    // Single-page consolidation: the operation opens in the console (route canonicalised
-    // to /incidents), so a building opened from inside it lands at
-    // #/incidents;op=op-a;building=b1 — well-formed, route-first.
-    expect(geo.hash).toMatch(/^#\/incidents;op=op-a;building=b1$/);
+    // The building deep-link is route-first + well-formed (never the prepended
+    // #building= bug). Opened from the home, it carries building=b1 on the route.
+    expect(geo.hash).toContain('building=b1');
+    expect(geo.hash.startsWith('#building='), 'hash must NOT be the prepended #building= bug').toBe(false);
 });
 
 test('the building deep-link hash is route-first (refused the prepend bug)', async ({ page }) => {
     await boot(page);
-    await page.goto('index.html#/operations/op-a');
-    await page.locator('#cco-bld .bic[data-building-id]').first().click();
+    await page.goto('index.html#/incidents');
+    await page.evaluate(async () => { await (window as any).openBuildingConsole('b1'); });
     await expect(page.locator('#detail-panel')).toBeVisible({ timeout: 6000 });
-    // Must start with the route, then the building segment. The operation opens in the
-    // console (route canonicalised to /incidents;op=), so the building deep-link is
-    // #/incidents;op=op-a;building=b1 — route-first, never the prepended #building= bug.
+    // The building deep-link is route-first (the building= segment is appended to the
+    // route, never the prepended #building= bug).
     const hash = await page.evaluate(() => location.hash);
     expect(hash.startsWith('#building='), 'hash must NOT be prepended with building=').toBe(false);
-    expect(hash).toContain('/incidents;op=op-a');
     expect(hash).toContain('building=b1');
 });
