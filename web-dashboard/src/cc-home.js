@@ -81,6 +81,13 @@
 
   // Module-level handles (single landing instance).
   let _map = null, _cluster = null, _poll = null, _mapRO = null;
+  // Active-Operations hotspot map (Jun 2026 home redesign) - one marker per
+  // operation (number tag = critical count), beside the recent-ops cards.
+  let _opsMap = null, _opsMapRO = null, _opsLayer = null;
+  // Live operations from the last /operations load - reused by the Situational
+  // Awareness "Where" facet (the assess payload carries no top_operations, so we
+  // derive the geographic concentration from the same ops the rail already has).
+  let _lastOps = [];
 
   // ── styles ───────────────────────────────────────────────────────────────
   function injectStyles() {
@@ -185,6 +192,20 @@
        sticky nav while scrolling. */
     #cc-map{height:430px;border-radius:10px;overflow:hidden;background:#0d1422;isolation:isolate}
     .cc-map-fallback{height:430px;display:grid;place-items:center;color:#8A99B5;font-size:13px}
+    /* ── Home redesign (Jun 2026): Active Operations split + ops hotspot map ── */
+    .cc-zone-top{margin-top:2px}
+    /* The ops split reuses .cc-split (1.6fr 1fr) so its columns line up exactly
+       with Global Monitoring above; align-items:start lets each column own its
+       height (the comfortable cards can run taller than the summary + map). */
+    .cc-split-ops{align-items:start}
+    .cc-split-opslist #cc-ops-rail{max-height:none;overflow:visible;display:flex;flex-direction:column;gap:10px}
+    .cc-ops-side{display:flex;flex-direction:column;gap:10px;min-width:0}
+    #cc-ops-summary .cc-ops-sum{margin:0}
+    #cc-ops-summary .cc-ops-alert{margin-top:8px}
+    #cc-ops-map{height:340px;border-radius:10px;overflow:hidden;background:#0d1422;isolation:isolate}
+    .cc-ops-mk{background:none;border:none}
+    .cc-ops-mk-dot{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;
+      font-size:11px;font-weight:800;color:#0b1220;box-shadow:0 0 0 2px rgba(2,8,20,.7),0 2px 6px rgba(0,0,0,.5)}
     .cc-geo{font-size:11.5px;color:#8A99B5;padding:8px 6px 2px}
     .cc-geo strong{color:#cdd8ec;font-variant-numeric:tabular-nums}
     /* Geo caption OVERLAYS the map's bottom instead of adding column height -
@@ -297,6 +318,49 @@
     .cc-expand-btn:hover{border-color:#418FDE;background:rgba(65,143,222,.16);color:#E6EDF7}
     .cc-expand-btn:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
     @media (max-width:560px){.cc-expand-btn .cc-expand-l{display:none}.cc-expand-btn{padding:3px 7px}}
+
+    /* ── Section 1 · Global Overview: map | command-centre tiles | AI panel ── */
+    .cc-sec1{display:grid;grid-template-columns:1.5fr 1.1fr 1.15fr;gap:14px;align-items:stretch;margin-bottom:6px}
+    .cc-sec1-map{min-width:0;position:relative}
+    .cc-cmdc{min-width:0;display:flex;flex-direction:column}
+    .cc-sec1-ai{min-width:0;display:flex;flex-direction:column}
+    @media(max-width:1180px){.cc-sec1{grid-template-columns:1fr 1fr}.cc-sec1-ai{grid-column:1 / -1}}
+    @media(max-width:760px){.cc-sec1{grid-template-columns:1fr}}
+    /* Command-centre metric tiles (deep-link into the incident feed) */
+    .cc-tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1 1 auto;align-content:start}
+    .cc-tile{appearance:none;text-align:left;display:flex;flex-direction:column;gap:2px;
+      background:#0f1726;border:1px solid #1d2942;border-radius:11px;padding:11px 12px;cursor:pointer;
+      transition:border-color .12s,background .12s;min-width:0;font:inherit;color:inherit}
+    .cc-tile:hover{border-color:#418FDE;background:#13203a}
+    .cc-tile:focus-visible{outline:2px solid #418FDE;outline-offset:2px}
+    .cc-tile-info{cursor:default}.cc-tile-info:hover{border-color:#1d2942;background:#0f1726}
+    .cc-tile-ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:14px;margin-bottom:2px}
+    .cc-tile-n{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.05}
+    .cc-tile-l{font-size:12px;color:#cdd8ec;font-weight:600}
+    .cc-tile-cta{font-size:10.5px;color:#7d89a3}
+    .cc-tile:hover .cc-tile-cta{color:#9fb2d4}
+    @media(max-width:420px){.cc-tiles{grid-template-columns:1fr}}
+
+    /* ── Situational Awareness: four AI facets ── */
+    .cc-sa-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media(max-width:860px){.cc-sa-grid{grid-template-columns:1fr}}
+    .cc-sa-facet{background:#0f1726;border:1px solid #1d2942;border-radius:11px;padding:12px 14px;min-width:0}
+    .cc-sa-wide{grid-column:1 / -1}
+    .cc-sa-h{font-size:12px;font-weight:700;color:#E6EDF7;margin-bottom:7px;letter-spacing:.01em}
+    .cc-sa-sum{font-size:13px;color:#cdd8ec;line-height:1.5}
+    .cc-sa-meta{font-size:11px;color:#8A99B5;margin-top:7px}
+    .cc-sa-list{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
+    .cc-sa-list li{font-size:12.5px;color:#cdd8ec;line-height:1.4}
+    .cc-sa-where{font-size:13px;color:#cdd8ec}
+    .cc-sa-empty{font-size:12px;color:#7d89a3}
+    .cc-sa-foot{font-size:10.5px;color:#7d89a3;margin-top:8px;border-top:1px solid #1a2436;padding-top:7px}
+
+    /* ── Executive summary (Section 3, right) ── */
+    .cc-exec-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .cc-exec-stat{background:#0f1726;border:1px solid #1d2942;border-radius:11px;padding:13px 14px}
+    .cc-exec-n{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.05;color:#E6EDF7}
+    .cc-exec-l{font-size:12.5px;color:#cdd8ec;font-weight:600;margin-top:3px}
+    .cc-exec-s{font-size:10.5px;color:#7d89a3;margin-top:2px}
     `;
     const tag = document.createElement('style');
     tag.id = 'cc-home-styles';
@@ -360,31 +424,44 @@
              visually-hidden heading is the labelled region's H1 for a11y. -->
         <h1 id="cc-home-heading" class="cc-vh">Crisis Intelligence Center</h1>
 
-        <!-- TWO-ZONE Global Command Center (ICS COP vs IAP):
-             ZONE A - ACTIVE OPERATIONS: the operations you are RUNNING (the single
-               authoritative active-operations surface; no longer a count echoed
-               on the map badge + the attention row).
-             ZONE B - GLOBAL MONITORING: everything happening worldwide.
-             The old side-by-side ops|map row (which conflated the two) is split:
-             the rail is full-width in Zone A, the map drops full-width into Zone B. -->
-        <div class="cc-zone cc-zone-response">
-          <div class="cc-sec-t cc-band">⚡ Active Operations <span class="cc-band-sub">- operations you are running</span> <span class="cc-stale" id="cc-sum-stale"></span><button type="button" id="cc-ops-new" class="cc-expand-btn" title="Start a new operation" aria-label="Start a new operation">+ <span class="cc-expand-l">New</span></button><button type="button" id="cc-ops-expand" class="cc-expand-btn" title="Open the full operations view" aria-label="Expand to the full operations management view">⤢ <span class="cc-expand-l">View all</span></button></div>
-          <div id="cc-ops-rail"><div class="cc-empty">Loading operations…</div></div>
+        <!-- ═════ SECTION 1 · GLOBAL OVERVIEW ═════
+             map (WHERE) | command-centre metric tiles (HOW MANY - each deep-links
+             into the incident feed at the right scope/filter) | AI Assessment &
+             Actions (CrispCommandPanel, auto-runs on load). One decision-first row. -->
+        <div class="cc-sec-t cc-band">🌐 Section 1 · Global Overview <span class="cc-band-sub">- map · command centre · AI assessment &amp; actions</span></div>
+        <div class="cc-sec1">
+          <div class="cc-card cc-split-map cc-sec1-map" id="cc-map-card" style="padding:8px">
+            <div id="cc-map"></div><div id="cc-map-geo" class="cc-geo"></div>
+          </div>
+          <div class="cc-card cc-cmdc">
+            <div class="cc-sec-t cc-att-hd" style="margin:0 0 8px">Command centre</div>
+            <div id="cc-att"><div class="cc-empty">Loading…</div></div>
+          </div>
+          <div class="cc-sec1-ai" id="cc-command"></div>
         </div>
 
+        <!-- ═════ SITUATIONAL AWARENESS (AI · auto-generated) ═════
+             Re-skins the SAME /analytics/assess payload into four operator facets
+             (what's happening · where · what needs attention · recommended actions).
+             Replaces the old rule-based "Situation Briefing". -->
+        <div class="cc-sec-t cc-band">📡 Situational Awareness <span class="cc-band-sub">- AI · what's happening · where · what needs attention · recommended actions</span></div>
+        <div class="cc-card" id="cc-sitaware"><div class="cc-empty">Generating situational summary…</div></div>
+
         <div class="cc-zone cc-zone-monitor">
-          <div class="cc-sec-t cc-band">🌐 Global Monitoring <span class="cc-band-sub">- where it's happening · what needs you</span></div>
-          <!-- SPLIT DECISION SURFACE: map (left) + Global-Attention panel (right).
-               Equal-height: the map's fixed 430px child sets the row height; the
-               panel stretches to it (grid align-items:stretch) and its 5 cards
-               flex:1 1 0 divide that height into equal slices - no blank tail. -->
-          <div class="cc-split">
-            <div class="cc-card cc-split-map" id="cc-map-card" style="padding:8px">
-              <div id="cc-map"></div><div id="cc-map-geo" class="cc-geo"></div>
+          <!-- ═════ SECTION 2 · ACTIVE OPERATIONS ═════
+               recent operations (the rail leads with a "+ New Operation" card) |
+               operations summary + a single all-operations hotspot map. -->
+          <div class="cc-sec-t cc-band">🎯 Section 2 · Active Operations <span class="cc-band-sub">- operations you are running</span> <span class="cc-stale" id="cc-sum-stale"></span><button type="button" id="cc-ops-expand" class="cc-expand-btn" title="Open the full operations view" aria-label="Expand to the full operations management view">⤢ <span class="cc-expand-l">View all</span></button></div>
+          <div class="cc-split cc-split-ops">
+            <div class="cc-split-opslist">
+              <div id="cc-ops-rail"><div class="cc-empty">Loading operations…</div></div>
             </div>
-            <div class="cc-split-att">
-              <div class="cc-sec-t cc-att-hd">Global Attention</div>
-              <div id="cc-att" class="cc-att-col"><div class="cc-empty">Loading…</div></div>
+            <div class="cc-split-att cc-ops-side">
+              <div class="cc-sec-t cc-att-hd">Operations Summary</div>
+              <div id="cc-ops-summary"><div class="cc-empty">Loading…</div></div>
+              <div class="cc-card cc-ops-map-card" id="cc-ops-map-card" style="padding:8px">
+                <div id="cc-ops-map"></div>
+              </div>
             </div>
           </div>
 
@@ -394,7 +471,10 @@
           <div class="cc-sec-t cc-band">🏢 Building Intelligence <span class="cc-band-sub">- buildings ranked by priority · where to send help next</span> <button type="button" id="cc-bld-expand" class="cc-expand-btn" title="See all buildings in the incident feed">⤢ <span class="cc-expand-l">View all</span></button></div>
           <div id="cc-buildings"><div class="cc-empty">Loading buildings…</div></div>
 
-          <div class="cc-sec-t">Operational Intelligence</div>
+          <!-- ═════ SECTION 3 · GLOBAL SUMMARY ═════
+               left = the existing distribution cards (kept); the grid below pairs
+               Operational Impact with the new portfolio Executive summary. -->
+          <div class="cc-sec-t cc-band">📊 Section 3 · Global Summary <span class="cc-band-sub">- distributions · executive summary</span></div>
           <div class="cc-grid3">
             <div class="cc-card"><div class="cc-sec-t" style="margin:0 0 8px">By severity</div><div id="cc-dist-sev"></div></div>
             <div class="cc-card"><div class="cc-sec-t" style="margin:0 0 8px">By crisis type</div><div id="cc-dist-type"></div></div>
@@ -403,7 +483,7 @@
 
           <div class="cc-grid2" style="margin-top:14px">
             <div><div class="cc-sec-t">Operational Impact</div><div class="cc-card" id="cc-impact"></div></div>
-            <div><div class="cc-sec-t">Situation Briefing</div><div class="cc-card" id="cc-brief"><div class="cc-empty">Analyzing…</div></div></div>
+            <div><div class="cc-sec-t">Executive summary</div><div class="cc-card" id="cc-exec"><div class="cc-empty">Loading…</div></div></div>
           </div>
 
           <div class="cc-sec-t">Recent Operational Activity</div>
@@ -411,6 +491,14 @@
         </div>
       </div>`;
     ov.classList.add('cc-home-open');
+
+    // Command Center: the shared GLOBAL Analyze + scoped cascade-action panel at the
+    // top (loads its own /analytics/assess; acts on filtered global slices).
+    try {
+      if (window.CrispCommandPanel && el('cc-command')) {
+        window.CrispCommandPanel.render({ level: 'global', mountEl: el('cc-command') });
+      }
+    } catch (_e) {}
 
     // Expand → the full operations management view (#/operations). The home rail
     // is the concise summary; /operations is the detailed list. Route + deep-
@@ -442,7 +530,7 @@
     loadBuildings();
     loadFeed();
     loadSparkline();
-    loadBriefing();
+    loadSitAware();   // AI Situational Awareness (replaced the rule-based Situation Briefing)
   }
 
   // ── data: Building Intelligence (top buildings by humanitarian_priority) ──
@@ -472,6 +560,7 @@
       renderDistributions(body);
       renderEfficiency(body);
       renderImpact(body);
+      renderExec(body);
       const st = el('cc-sum-stale');
       if (st) st.textContent = 'updated ' + timeAgo(body.generated_at);
     } catch (e) {
@@ -481,81 +570,58 @@
     }
   }
 
-  // Jun 2026 - action-based Command Center model. FIVE cards, not seven:
-  //   • two SITUATIONAL alarms that count their real entity (critical
-  //     incidents, escalating hotspots) with the underlying report tally as a
-  //     secondary, and
-  //   • a three-stage MUTUALLY-EXCLUSIVE pipeline (Needs review → Needs
-  //     response → Active operations) where every open report sits in exactly
-  //     one stage.
-  // Each row still deep-links to its own filtered queue ('#/incidents;queue=…'
-  // - see QUEUES in app.js). Counts fall back to legacy fields so the cards
-  // still render if a stale backend hasn't shipped the new ones yet.
+  // Command Centre (Section 1) - six portfolio metric tiles. Each tile is a
+  // deep-link into the incident feed at the right scope/filter (the CTA helpers
+  // the audit located). Colour discipline: Critical = red, Resolved = green,
+  // everything else a single neutral. Counts come from /analytics/summary
+  // (Phase-2 added counts.rejected + counts.affected_buildings); "affected
+  // countries" is the honest "current view" Turf estimate, filled in by
+  // renderGeoCaption once the map markers load.
+  function goStatus(tab) {
+    go('/incidents');
+    try { setTimeout(() => { if (window.setStatusTab) window.setStatusTab(tab); }, 350); } catch (_e) {}
+  }
   function renderAttention(b) {
     const c = b.counts || {};
     const num = (v) => (v == null ? 0 : Number(v));
-    // (glyph, color, label, sublabel, primaryCount, secondaryHTML, queueKey)
-    // (glyph, color, label, sublabel, primaryCount, secondaryHTML, queueKey, isCrit)
-    // Keeps the .cc-att-row class (the binder below targets it) + adds .cc-att-card
-    // for the .opc look + a .cc-att-main wrapper so the Critical strip (absolute,
-    // adds no stacked height) shares the flex-distributed card.
-    const row = (glyph, color, label, sub, n, secondary, queue, isCrit) => {
-      const zero = !n;
-      return `<div class="cc-att-row cc-att-card${isCrit ? ' cc-att-crit' : ''}${zero ? ' zero' : ''}" data-queue="${queue}" role="link" tabindex="0"
-        aria-label="${esc(label)} - ${zero ? 'all clear' : fmtNum(n) + ', open queue'}">
-        ${isCrit && !zero ? `<div class="cc-att-strip" aria-hidden="true">Command priority</div>` : ''}
-        <div class="cc-att-main">
-          <div class="cc-att-ic" style="background:${color}22;color:${color}">${glyph}</div>
-          <div class="lab"><span class="l1">${esc(label)}</span><span class="l2">${esc(sub)}</span></div>
-          <div class="cnt-wrap">
-            ${zero
-              ? `<span class="cnt ok">✓</span><span class="cnt2" style="color:#34D399">all clear</span>`
-              : `<span class="cnt cc-num" style="color:${color}">${fmtNum(n)}</span>${secondary ? `<span class="cnt2">${secondary}</span>` : ''}`}
-          </div>
-          <div class="ar">›</div>
-        </div></div>`;
-    };
-    const overdue = num(c.sla_at_risk);
-    const rows = [
-      // M2 (Phase-1): the HEADLINE number must equal the count the card deep-links
-      // to. The 'critical' queue shows open-CRITICAL REPORTS (c.critical), so the
-      // headline is c.critical; the building-deduped "distinct sites" figure
-      // (critical_incidents) rides along as context when it differs.
-      row('🔴', SEV_COLOR.CRITICAL, 'Critical incidents', 'Command attention',
-          num(c.critical),
-          (c.critical_incidents != null && num(c.critical_incidents) !== num(c.critical))
-            ? `${fmtNum(num(c.critical_incidents))} distinct sites` : '', 'critical', true),
-      row('🔍', '#418FDE', 'Needs review', 'Triage & verdict',
-          num(c.needs_review != null ? c.needs_review : c.awaiting_triage),
-          overdue ? `<span style="color:#f87171">${fmtNum(overdue)} overdue</span>` : '', 'needs-review'),
-      row('⬆', '#fb923c', 'Escalating hotspots', 'Developing fast',
-          num(c.escalating),
-          c.escalating_reports != null ? `${fmtNum(num(c.escalating_reports))} reports` : '', 'escalating'),
-      row('🚑', '#2DD4BF', 'Needs response', 'Confirmed · dispatch',
-          num(c.needs_response), '', 'needs-response'),
-      // Terminal pipeline stage = REPORTS currently being responded to (dispatched
-      // / RESPONDING). Labeled "In response" - NOT "Active operations", which is a
-      // CrisisEvent count and lives solely on the Active Operations rail above. The
-      // old label made one number (the rail) look like a different number (this
-      // report count) and read as a contradiction.
-      row('🚁', '#a78bfa', 'In response', 'Dispatched · on-scene',
-          num(c.active_operations != null ? c.active_operations : c.active_ops), '', 'active-ops'),
+    const RED = '#f87171', GREEN = '#34D399', NEU = '#418FDE';
+    // Unit coherence (operator note: "total incidents < rejected"): the verdict/status
+    // buckets (Critical/Resolved/Rejected/Review-pending) are REPORT counts, so the
+    // headline is the report SUPERSET (counts.reports), not the deduped incident-entity
+    // count — otherwise the total reads smaller than its own parts. Affected buildings
+    // is a distinct-building count (its own unit, clearly labelled).
+    const tiles = [
+      { k: 'total',     ic: '🗂️', label: 'Total reports',      n: num(c.reports != null ? c.reports : (c.incidents != null ? c.incidents : c.total)), col: NEU, nav: () => go('/incidents') },
+      { k: 'critical',  ic: '🔴', label: 'Critical',           n: num(c.critical),          col: RED,   nav: () => { window.location.hash = '#/incidents;queue=critical'; } },
+      { k: 'resolved',  ic: '✅', label: 'Resolved',           n: num(c.resolved),          col: GREEN, nav: () => goStatus('resolved') },
+      { k: 'rejected',  ic: '🚫', label: 'Rejected',           n: num(c.rejected),          col: NEU,   nav: () => { window.location.hash = '#/incidents;queue=rejected'; } },
+      { k: 'pending',   ic: '🕓', label: 'Review pending',     n: num(c.pending != null ? c.pending : c.needs_review), col: NEU, nav: () => goStatus('pending') },
+      { k: 'buildings', ic: '🏢', label: 'Affected buildings', n: num(c.affected_buildings), col: NEU,  nav: () => go('/incidents') },
     ];
+    const tag = (t) => (t.nav ? 'button' : 'div');
+    const tile = (t) => `<${tag(t)} type="button" class="cc-tile${t.nav ? '' : ' cc-tile-info'}" data-tile="${t.k}"${t.nav ? ' role="link" aria-label="' + esc(t.label) + ', open"' : ''}>
+        <span class="cc-tile-ic" style="background:${t.col}22;color:${t.col}">${t.ic}</span>
+        <span class="cc-tile-n" id="cc-tile-${t.k}" style="color:${t.col}">${fmtNum(t.n)}</span>
+        <span class="cc-tile-l">${esc(t.label)}</span>
+        <span class="cc-tile-cta">${t.sub ? esc(t.sub) : (t.nav ? 'view ›' : '')}</span>
+      </${tag(t)}>`;
     const box = el('cc-att');
-    if (box) {
-      box.innerHTML = rows.join('');
-      const openQueue = (r) => { window.location.hash = '#/incidents;queue=' + r.getAttribute('data-queue'); };
-      box.querySelectorAll('.cc-att-row').forEach((r) => {
-        r.addEventListener('click', () => openQueue(r));
-        r.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openQueue(r); } });
-      });
-    }
+    if (!box) return;
+    box.className = 'cc-tiles';
+    box.innerHTML = tiles.map(tile).join('');
+    tiles.forEach((t) => {
+      if (!t.nav) return;
+      const node = box.querySelector(`[data-tile="${t.k}"]`);
+      if (node) node.addEventListener('click', (e) => { e.preventDefault(); t.nav(); });
+    });
   }
 
   // ── operations rail (Phase 2 - operations-first home) ──────────────────────
   async function loadOperations() {
     try {
       const { body } = await jget('/operations');
+      _lastOps = (body || []).filter((o) => o && !o.is_cluster
+        && String((o.status || '')).toUpperCase() !== 'ENDED');
       renderOpsRail(body);
     } catch (_e) {
       const box = el('cc-ops-rail');
@@ -593,7 +659,7 @@
       const cluster = all.find((o) => o.is_cluster) || null;
       const real = all.filter((o) => !o.is_cluster);
       const isEnded = (o) => String(o && o.status || '').toUpperCase() === 'ENDED';
-      const live = real.filter((o) => !isEnded(o)).sort(_opWorst);
+      const live = real.filter((o) => !isEnded(o));
 
       // Portfolio summary - the one-line "do I need to act?" answer at any scale,
       // each chip click-throughs into the filtered registry.
@@ -610,7 +676,10 @@
         + chip('amber', amber, 'rising', 'amber')
         + chip('green', green, 'stable', 'green')
         + chip('', unatt, 'unattended', 'unattended')
-        + (critTotal > 0 ? `<span class="cc-ops-chip muted"><b>${fmtNum(critTotal)}</b> critical reports</span>` : '')
+        // A4: removed the muted "N critical reports" chip - it duplicated the
+        // per-card critical counts + the red-health chip with no distinct action;
+        // the red chip filters to the critical ops and the orphan alert below
+        // surfaces the unassigned critical reports (the actionable path).
         + `</div>`;
 
       // Orphan-critical: a slim one-line alert (was a full-width card).
@@ -621,17 +690,29 @@
           + `<span class="cta">Triage →</span></div>`;
       }
 
-      const topN = live.slice(0, RAIL_TOP_N);
-      const moreN = real.length - topN.length;   // remaining live + all ended
+      // RIGHT column: portfolio summary + orphan-critical alert (#cc-ops-summary).
+      const sumBox = el('cc-ops-summary');
+      if (sumBox) sumBox.innerHTML = summary + alert;
+
+      // LEFT column: the most-recent 5 operations as COMFORTABLE cards (the same
+      // card the dedicated /operations page renders). presorted keeps our recency
+      // order; compact:false = the full card.
+      const recent = live.slice().sort((a, b) => _opRecency(b) - _opRecency(a)).slice(0, 5);
+      const moreN = real.length - recent.length;   // remaining live + all ended
       const more = moreN > 0
         ? `<div class="cc-ops-more" id="cc-ops-more" role="button" tabindex="0">+ ${fmtNum(moreN)} more operation${moreN === 1 ? '' : 's'} · <a>View all ${fmtNum(real.length)} →</a></div>`
         : '';
-
-      box.innerHTML = summary + alert + '<div id="cc-ops-rail-list"></div>' + more;
-      window.CrispOpCard.renderInto(el('cc-ops-rail-list'), topN, {
-        empty: 'No active operations. Use “+ New” to start one.',
-        grouped: false, compact: true, startNew: false,
+      box.innerHTML = '<div id="cc-ops-rail-list"></div>' + more;
+      // "+ New Operation" leads the rail as the first card (styled like an op card),
+      // then the most-recent live operations.
+      window.CrispOpCard.renderInto(el('cc-ops-rail-list'), recent, {
+        empty: 'No active operations yet.',
+        grouped: false, presorted: true, compact: false, startNew: true,
       });
+
+      // RIGHT column: a single hotspot map of ALL live operations (number tag =
+      // critical count), beside the summary.
+      try { renderOpsMap(live); } catch (_e) {}
 
       // Reflect the real op count on the band's "View all" affordance.
       try {
@@ -639,7 +720,7 @@
         if (l) l.textContent = 'View all' + (real.length ? ' ' + real.length : '');
       } catch (_e) {}
 
-      box.querySelectorAll('[data-opf]').forEach((b) => b.addEventListener('click',
+      (sumBox || box).querySelectorAll('[data-opf]').forEach((b) => b.addEventListener('click',
         () => _openOpsFiltered(b.getAttribute('data-opf') === 'all' ? null : b.getAttribute('data-opf'))));
       const al = el('cc-ops-alert');
       if (al) {
@@ -682,6 +763,75 @@
       r.addEventListener('click', choose);
       r.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(); } });
     });
+  }
+
+  // Operation recency (last activity, fallback start date) - drives the home's
+  // "most recent 5" comfortable cards.
+  function _opRecency(o) {
+    const t = o && (o.last_activity || o.started_at);
+    const ms = t ? Date.parse(t) : NaN;
+    return isFinite(ms) ? ms : 0;
+  }
+
+  // A single hotspot map of ALL live operations (right of the recent-ops cards).
+  // One number-tagged marker per operation at its centre (tag = critical count,
+  // colour = health). Mirrors renderMap's re-init/teardown discipline because
+  // openLanding rebuilds the overlay each Home visit (stale detached container).
+  function renderOpsMap(ops) {
+    const cont = el('cc-ops-map');
+    if (!cont) return;
+    if (typeof window.L === 'undefined' || !window.L.map) {
+      cont.innerHTML = '<div class="cc-map-fallback" style="height:340px">Map library not loaded</div>'; return;
+    }
+    try {
+      if (_opsMap) {
+        let liveM = false;
+        try { liveM = !!(_opsMap.getContainer && _opsMap.getContainer() === cont); } catch (_) { liveM = false; }
+        if (!liveM) {
+          try { _opsMap.remove(); } catch (_) {}
+          _opsMap = null; _opsLayer = null;
+          if (_opsMapRO) { try { _opsMapRO.disconnect(); } catch (_) {} _opsMapRO = null; }
+        }
+      }
+      if (!_opsMap) {
+        _opsMap = window.L.map('cc-ops-map', { zoomControl: true, attributionControl: false, worldCopyJump: true }).setView([15, 30], 2);
+        window.L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 18 }).addTo(_opsMap);
+        try { _opsMap.whenReady(() => { try { _opsMap.invalidateSize(); } catch (_) {} }); } catch (_) {}
+        try {
+          if (window.ResizeObserver) {
+            _opsMapRO = new ResizeObserver(() => { if (cont.clientHeight > 0) { try { _opsMap.invalidateSize(); } catch (_) {} } });
+            _opsMapRO.observe(cont);
+          }
+        } catch (_) {}
+      }
+      if (_opsLayer) { try { _opsMap.removeLayer(_opsLayer); } catch (_) {} _opsLayer = null; }
+      _opsLayer = window.L.layerGroup();
+      const pts = [];
+      (ops || []).forEach((o) => {
+        const lat = Number(o.center_lat), lng = Number(o.center_lng);
+        if (!isFinite(lat) || !isFinite(lng) || (lat === 0 && lng === 0)) return;
+        const ll = [lat, lng]; pts.push(ll);
+        const crit = Number(o.critical) || 0;
+        const health = String(o.health || '').toUpperCase();
+        const col = health === 'RED' ? '#f87171' : health === 'AMBER' ? '#fbbf24' : '#34D399';
+        const icon = window.L.divIcon({
+          className: 'cc-ops-mk',
+          html: `<span class="cc-ops-mk-dot" style="background:${col}">${crit > 0 ? crit : ''}</span>`,
+          iconSize: [26, 26], iconAnchor: [13, 13],
+        });
+        const mk = window.L.marker(ll, { icon });
+        const place = o.place_name ? esc(o.place_name) : '';
+        mk.bindPopup(`<b>${esc(o.name || 'Operation')}</b>${place ? '<br>' + place : ''}<br><small>${crit} critical · ${fmtNum(o.total || 0)} reports</small>`);
+        mk.on('mouseover', () => { try { mk.openPopup(); } catch (_e) {} });
+        mk.on('mouseout', () => { try { mk.closePopup(); } catch (_e) {} });
+        mk.on('click', () => { try { window.__crispRouter && window.__crispRouter.navigate('/operations/' + encodeURIComponent(o.id)); } catch (_e) {} });
+        _opsLayer.addLayer(mk);
+      });
+      _opsMap.addLayer(_opsLayer);
+      const _fit = () => { try { _opsMap.invalidateSize(); if (pts.length) _opsMap.fitBounds(pts, { padding: [40, 40], maxZoom: 6 }); } catch (_) {} };
+      _fit();
+      requestAnimationFrame(() => requestAnimationFrame(_fit));
+    } catch (e) { cont.innerHTML = '<div class="cc-map-fallback" style="height:340px">Map unavailable</div>'; }
   }
 
   function barRows(obj, colorFn, max) {
@@ -814,6 +964,7 @@
   // country breakdown needs a Location.country column + backfill (spec §4-A);
   // until then this honestly labels itself "current view".
   let _world = null, _worldPromise = null;
+  let _countryCount = 0;   // "current view" affected-countries estimate (Command Centre tile)
   const _countryCache = {};
   function loadWorldGeo() {
     if (_world) return Promise.resolve(_world);
@@ -849,6 +1000,9 @@
       if (c) tally[c] = (tally[c] || 0) + 1;
     });
     const entries = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+    // Feed the derived count into the Command Centre "Affected countries" tile.
+    _countryCount = entries.length;
+    const tv = el('cc-tile-countries'); if (tv) tv.textContent = fmtNum(entries.length);
     if (!entries.length) { box.textContent = ''; return; }
     const top = entries.slice(0, 4).map(([c, n]) => `${esc(c)} (${n})`).join(' · ');
     box.innerHTML = `🌍 <strong>${entries.length}</strong> countries impacted (current view) · ${top}`;
@@ -968,44 +1122,93 @@
   }
 
   // ── data: rule-based situation briefing (real aggregates, no LLM) ──
-  async function loadBriefing() {
-    const box = el('cc-brief');
+  // ── AI Situational Awareness — re-skins the SAME /analytics/assess payload ──
+  // The Command Centre AI panel (cc-command.js) auto-runs the assessment on load
+  // (one POST); this GET reads the cached result and presents the four operator
+  // facets. While the synthesis is still running we show a calm placeholder and
+  // retry a few times (the result is cached server-side once ready) — no second
+  // Claude call from here.
+  async function loadSitAware() {
+    const box = el('cc-sitaware');
     if (!box) return;
-    const cards = [];
-    const s = _lastSummary;
-    // Emerging hotspot - from the live nearby aggregator (burst/acute tiers).
-    try {
-      const { body } = await jget('/reports/nearby');
-      const groups = (body && (body.groups || body.items)) || (Array.isArray(body) ? body : []);
-      const acute = groups.filter((g) => g.is_acute || g.is_burst)
-        .sort((a, b) => (b.report_count || 0) - (a.report_count || 0));
-      if (acute.length) {
-        const g = acute[0];
-        cards.push({ cls: 'crit', h: 'Emerging hotspot',
-          d: `${fmtNum(g.report_count)} reports clustering${g.label ? ' near ' + esc(g.label) : ''}${g.is_acute ? ' (acute)' : ' (burst)'}. ${acute.length} active cluster${acute.length > 1 ? 's' : ''}.`,
-          s: 'source: /reports/nearby' });
-      }
-    } catch (_) { /* nearby optional */ }
-    if (s && s.counts) {
-      const c = s.counts, t = s.timings || {};
-      if (c.pending_verification > 0) cards.push({ cls: 'warn', h: 'Verification backlog',
-        d: `${fmtNum(c.pending_verification)} report(s) awaiting human review; ${fmtNum(c.awaiting_triage)} still in triage.`,
-        s: 'source: /analytics/summary' });
-      if (c.escalating > 0) cards.push({ cls: 'crit', h: 'Escalating incidents',
-        d: `${fmtNum(c.escalating)} incident(s) at high escalation risk (score ≥ 70). Prioritize review.`,
-        s: 'source: building escalation_risk' });
-      if (t.avg_response_seconds != null) cards.push({ cls: '', h: 'Response performance',
-        d: `Average response time is ${fmtDur(t.avg_response_seconds)} (dispatch→arrival from reviewed reports).`,
-        s: 'source: /analytics/summary' });
-      const d = s.deltas || {};
-      if ((d.reports_24h || 0) > (d.reports_prev_24h || 0)) cards.push({ cls: 'warn', h: 'Intake rising',
-        d: `${fmtNum(d.reports_24h)} new reports in 24h vs ${fmtNum(d.reports_prev_24h)} the prior day - incident inflow is increasing.`,
-        s: 'source: /analytics/summary deltas' });
+    let a = null;
+    try { const { body } = await jget('/analytics/assess'); a = body; } catch (_e) { /* fall through */ }
+    if (!a || !a.assessed) {
+      // The AI assessment runs ONLY on an explicit click (no auto-run on load).
+      // Until the operator runs it from the Command Centre panel, show a call-to-
+      // action, not a spinner. refreshAll re-checks every 30s, so this fills in
+      // automatically once the assessment has been run + cached.
+      box.innerHTML = `<div class="cc-empty">🛰️ Click <b>Analyze Global</b> in the AI Assessment panel above to generate the situational summary, key risks and recommended actions.</div>`;
+      return;
     }
-    if (!cards.length) { box.innerHTML = `<div class="cc-empty">No notable operational patterns in the current window.</div>`; return; }
-    const stamp = s && s.generated_at ? ' · ' + timeAgo(s.generated_at) : '';
-    box.innerHTML = cards.slice(0, 5).map((c) => `<div class="cc-brief ${c.cls}">
-      <div class="h">${c.h}</div><div class="d">${c.d}</div><div class="s">${c.s}${stamp}</div></div>`).join('');
+    renderSitAware(box, a);
+  }
+  function renderSitAware(box, a) {
+    const band = a.band || 'UNVERIFIED';
+    const score = (a.score == null ? '—' : a.score);
+    const risks = (a.key_risks || []).slice(0, 5);
+    const actions = (a.recommended_actions || []).slice(0, 5).map((x) =>
+      (x && typeof x === 'object') ? (x.label || x.action || '') : x).filter(Boolean);
+    // "Where" = the operations carrying the load. The /analytics/assess payload
+    // carries NO top_operations, so derive it from the live ops the rail already
+    // loaded (worst-first). a.top_operations is still honoured if a future backend
+    // ever adds it, so this stays forward-compatible.
+    const ops = (a.top_operations && a.top_operations.length
+      ? a.top_operations
+      : _lastOps.slice().sort((x, y) => (Number(y.critical) || 0) - (Number(x.critical) || 0))
+    ).slice(0, 5);
+    const li = (arr, empty) => arr.length
+      ? `<ul class="cc-sa-list">${arr.map((x) => `<li>${esc(String(x))}</li>`).join('')}</ul>`
+      : `<div class="cc-sa-empty">${esc(empty)}</div>`;
+    const where = ops.length
+      ? `<ul class="cc-sa-list">${ops.map((o) => { const pl = o.place || o.place_name; return `<li><b>${esc(o.name || 'Operation')}</b>${pl ? ' · ' + esc(pl) : ''}${o.critical ? ` · <span style="color:#f87171">${fmtNum(o.critical)} critical</span>` : ''}</li>`; }).join('')}</ul>`
+      : (_countryCount ? `<div class="cc-sa-where">${fmtNum(_countryCount)} countries in the current view</div>`
+                       : `<div class="cc-sa-empty">No geographic concentration yet.</div>`);
+    // escalation_likelihood is {level, rationale} (or a legacy plain string) — never
+    // stringify the object directly, which renders the literal "[object Object]".
+    const _el = a.escalation_likelihood;
+    const escalTxt = !_el ? '' : (typeof _el === 'object' ? (_el.level || _el.likelihood || '') : String(_el));
+    const escalTitle = (_el && typeof _el === 'object' && _el.rationale) ? _el.rationale : '';
+    box.className = 'cc-card';
+    box.innerHTML =
+      `<div class="cc-sa-grid">
+         <div class="cc-sa-facet cc-sa-wide">
+           <div class="cc-sa-h">🛰️ What's happening</div>
+           <div class="cc-sa-sum">${esc(a.situation_summary || 'No summary available.')}</div>
+           <div class="cc-sa-meta">Situation confidence <b>${score}</b>/100 · ${esc(band)}${escalTxt ? ` · <span${escalTitle ? ` title="${esc(escalTitle)}"` : ''}>escalation ${esc(escalTxt)}</span>` : ''}</div>
+         </div>
+         <div class="cc-sa-facet">
+           <div class="cc-sa-h">📍 Where</div>${where}
+         </div>
+         <div class="cc-sa-facet">
+           <div class="cc-sa-h">⚠️ Needs attention</div>${li(risks, 'No elevated risks flagged.')}
+         </div>
+         <div class="cc-sa-facet cc-sa-wide">
+           <div class="cc-sa-h">✅ Recommended actions</div>${li(actions, 'No actions recommended right now.')}
+           <div class="cc-sa-foot">Run these from the AI Assessment &amp; Actions panel above.</div>
+         </div>
+       </div>`;
+  }
+
+  // ── Executive summary (Section 3, right) — portfolio totals from /analytics/summary.
+  function renderExec(b) {
+    const box = el('cc-exec');
+    if (!box) return;
+    const c = (b && b.counts) || {};
+    const num = (v) => (v == null ? 0 : Number(v));
+    const stat = (label, n, sub, col) =>
+      `<div class="cc-exec-stat">
+         <div class="cc-exec-n" style="${col ? 'color:' + col : ''}">${fmtNum(num(n))}</div>
+         <div class="cc-exec-l">${esc(label)}</div>${sub ? `<div class="cc-exec-s">${esc(sub)}</div>` : ''}
+       </div>`;
+    box.className = 'cc-card';
+    box.innerHTML =
+      `<div class="cc-exec-grid">
+         ${stat('Total buildings', c.total_buildings, 'mapped across all operations')}
+         ${stat('Duplicate reports', c.duplicate_reports, 'merged into incidents')}
+         ${stat('Total resolved', c.resolved, 'incidents closed', '#34D399')}
+         ${stat('Buildings at risk', c.buildings_critical_risk, 'risk score > 90', '#f87171')}
+       </div>`;
   }
 
   // ── launcher (user-menu item) + boot ──

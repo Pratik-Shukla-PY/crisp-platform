@@ -172,15 +172,56 @@
       `.cco-wl-row[data-id="${e}"],.tree-incident[data-id="${e}"],.qrt-card[data-id="${e}"]`);
   }
   function _feedHost() { return document.getElementById('report-feed-list'); }
-  // Is the row already comfortably inside its scroll viewport?
-  function _rowInView(row) {
+  // What fraction of the row sits inside the BROWSER VIEWPORT (not just the
+  // scroll host). The host can extend past the fold, so a card pinned to the
+  // host's bottom edge passes a host-relative test yet rests half off-screen
+  // (the ~0.475 flake). Measuring against the viewport is what the assertion
+  // the operator/test ultimately cares about uses.
+  function _rowViewportRatio(row) {
+    try {
+      const rr = row.getBoundingClientRect();
+      if (rr.height <= 0) return 0;
+      const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      const visible = Math.max(0, Math.min(rr.bottom, vh) - Math.max(rr.top, 0));
+      return visible / rr.height;
+    } catch (_e) { return 0; }
+  }
+  // Comfortably inside the viewport — kept WELL above the 0.5 reveal threshold so
+  // a re-render / progressive-reveal expansion that nudges the card can't drop it
+  // under the line before the settling window closes.
+  function _rowInView(row) { return _rowViewportRatio(row) >= 0.85; }
+  // Scroll the feed host so the row sits at the centre of the on-screen VIEWPORT.
+  // We deliberately drive host.scrollTop ourselves instead of
+  // scrollIntoView({block:'center'}): scrollIntoView centres the row in the host's
+  // SCROLLPORT, but in some nav-cascade layouts the host extends below the fold, so
+  // "centred in the host" rests the row ~half off the real screen — and because
+  // that is a fixed point, the re-assert keeps re-producing the same stable
+  // ratio-0.475 flake. Targeting the VIEWPORT centre (clamped to the host's scroll
+  // range) converges instead: for a last/edge card the clamp scrolls to max, which
+  // still brings it fully on-screen.
+  function _scrollRowToCenter(row) {
     try {
       const host = _feedHost();
       const rr = row.getBoundingClientRect();
-      if (rr.height <= 0) return false;
-      const hr = host ? host.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
-      return rr.top >= hr.top && rr.bottom <= hr.bottom;
-    } catch (_e) { return false; }
+      const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      if (host && host.scrollHeight > host.clientHeight + 1) {
+        const hr = host.getBoundingClientRect();
+        // The host's VISIBLE band = its box clamped to the viewport. Centre the row
+        // within that band, not within a centre hidden past the fold.
+        const bandTop = Math.max(hr.top, 0);
+        const bandBottom = Math.min(hr.bottom, vh);
+        const targetCenter = (bandTop + bandBottom) / 2;
+        const rowCenter = rr.top + rr.height / 2;
+        const max = host.scrollHeight - host.clientHeight;
+        let next = host.scrollTop + (rowCenter - targetCenter);
+        next = Math.max(0, Math.min(max, next));
+        host.scrollTop = next;
+      } else {
+        row.scrollIntoView({ block: 'center', behavior: 'auto' });
+      }
+    } catch (_e) {
+      try { row.scrollIntoView({ block: 'center', behavior: 'auto' }); } catch (_e2) {}
+    }
   }
   // Make the selected row VISIBLE + scrolled-to. Returns true once it is laid out
   // (so the retry loop can stop). `reassert` = called from the re-render observer.
@@ -193,14 +234,16 @@
     try { const sec = row.closest('.qrt-section.collapsed'); if (sec) sec.classList.remove('collapsed'); } catch (_e) {}
     if (row.offsetParent === null) return false;          // still display:none → retry next frame
     if (!_rowInView(row)) {
-      // A re-render rebuilds #report-feed-list and resets scrollTop to 0; re-assert
-      // the scroll then. But never yank the operator back if THEY scrolled away
-      // (scrollTop well past 0 ⇒ a deliberate scroll, not a render reset).
-      const host = _feedHost();
-      if (reassert && host && host.scrollTop > 8) return true;
-      // Initial reveal animates (smooth); re-asserts after a re-render snap
-      // instantly so a repeated render can't leave the scroll mid-animation.
-      try { row.scrollIntoView({ block: 'center', behavior: reassert ? 'auto' : 'smooth' }); } catch (_e) {}
+      // The card lands off-centre during the nav cascade because a re-render
+      // rebuilds #report-feed-list (resetting scrollTop) and/or the
+      // progressive-reveal IO (rootMargin:400px) expands the next page right after
+      // we scroll, shifting the card's offset. The steady-state feed poll
+      // (POLL_INTERVAL = 4s) is the worst offender: it rebuilds #report-feed-list
+      // and resets scrollTop, dropping a far-down card fully off-screen — so the
+      // settle window MUST outlast one poll. Re-centre in every case while the
+      // window is open; it closes after _revealStop so we never permanently fight
+      // the operator's own scrolling.
+      _scrollRowToCenter(row);
     }
     return true;
   }
@@ -224,9 +267,19 @@
     if (!id) return;
     _revealId = id;
     const t0 = performance.now();
+    // Per-frame loop: keep (a) retrying while the row is still display:none /
+    // collapsed for a tick, then (b) re-centring every frame until it is
+    // COMFORTABLY in view. The progressive-reveal IO + detail-panel layout settle
+    // a frame or two AFTER the first scroll, so a one-shot scroll under-shoots and
+    // the card rests half off the fold. We loop (cheap) until it's centred, then
+    // hand off to the MutationObserver for later re-renders. Stops on the settle
+    // timeout so we never fight the operator's own scrolling or the steady poll.
     const poll = () => {
       if (_revealId !== id) return;
-      if (_doReveal(id, false)) return;                   // laid out → observer takes over
+      const laidOut = _doReveal(id, false);
+      const row = laidOut && _findRow(id);
+      const settled = row && _rowInView(row);            // centred → observer takes over
+      if (settled) return;
       if (performance.now() - t0 < 2000) _revealRAF = requestAnimationFrame(poll);
     };
     _revealRAF = requestAnimationFrame(poll);
@@ -235,7 +288,11 @@
       _revealObs = new MutationObserver(() => { if (_revealId === id) _doReveal(id, true); });
       try { _revealObs.observe(host, { childList: true, subtree: true }); } catch (_e) {}
     }
-    _revealStop = setTimeout(() => { if (_revealId === id) _stopReveal(); }, 2500);
+    // Keep the observer alive past one steady-state poll (POLL_INTERVAL = 4s) so a
+    // poll-driven list rebuild within the reveal window gets re-centred rather than
+    // leaving a far-down card stranded off-screen. Then stop, so the operator's own
+    // scrolling and the steady poll are never fought thereafter.
+    _revealStop = setTimeout(() => { if (_revealId === id) _stopReveal(); }, 6500);
   }
 
   // Highlight + scroll the selected incident's row, across EVERY list renderer

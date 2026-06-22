@@ -10,6 +10,13 @@ function escapeHtml(str) {
     d.textContent = String(str);
     return d.innerHTML;
 }
+// escapeHtml() serializes via textContent, which escapes & < > but NOT the
+// double-quote - safe in TEXT position, unsafe inside a "double-quoted" HTML
+// attribute (a value like `x" onmouseover="...` breaks out). Use this for any
+// attribute interpolation (title=, alt=, etc.) carrying reporter-controlled text.
+function escapeAttr(str) {
+    return escapeHtml(str).replace(/"/g, '&quot;');
+}
 
 // ── Auth Gate ────────────────────────────────────────────────────────────────
 const _crispToken = localStorage.getItem('crisp_token');
@@ -508,14 +515,71 @@ function _formatFormValue(v) {
     if (typeof v === 'object') { try { return escapeHtml(JSON.stringify(v)); } catch (_e) { return '-'; } }
     return escapeHtml(String(v));
 }
+// Resolve a form_data key/value against the pack schema map (built by
+// ensurePackSchema) so the dashboard shows the VERBATIM question + option labels
+// (e.g. UNDP Appendix-1 wording) rather than raw codes. fmap may be null on first
+// paint (humanized fallback) and is filled async once the pack schema loads.
+function _fdKeyLabel(k, fmap) {
+    const f = fmap && fmap[k];
+    return (f && f.label) ? f.label : _humanizeFormKey(k);
+}
+function _fdValLabeled(v, k, fmap) {
+    const opts = (fmap && fmap[k] && fmap[k].options) || null;
+    const lab = (x) => (opts && opts[x] != null) ? opts[x] : _humanizeFormKey(String(x));
+    if (v === true) return 'Yes';
+    if (v === false) return 'No';
+    if (v == null || v === '') return '-';
+    if (Array.isArray(v)) return v.length ? v.map((x) => escapeHtml(lab(x))).join(', ') : '-';
+    if (typeof v === 'object') { try { return escapeHtml(JSON.stringify(v)); } catch (_e) { return '-'; } }
+    return escapeHtml(opts && opts[v] != null ? opts[v] : String(v));
+}
+function _fdRowsHtml(fd, fmap) {
+    return Object.keys(fd).map((k) =>
+        `<div class="dp-cf-row"><span class="dp-cf-key">${escapeHtml(_fdKeyLabel(k, fmap))}</span><span class="dp-cf-val">${_fdValLabeled(fd[k], k, fmap)}</span></div>`).join('');
+}
+// Fetch + cache a pack version's value→label maps so form_data answers render
+// with verbatim labels. Cached by packId:version; failures degrade to codes.
+const _packSchemaCache = {};
+async function ensurePackSchema(packId, version) {
+    if (!packId) return null;
+    const ck = packId + ':' + (version || '');
+    if (Object.prototype.hasOwnProperty.call(_packSchemaCache, ck)) return _packSchemaCache[ck];
+    let fmap = null;
+    try {
+        const base = `${BACKEND_HOST}/api/v1/admin/crisis-forms`;
+        const res = await fetch(`${base}/packs/${encodeURIComponent(packId)}/versions`, { headers: _authHeaders() });
+        if (res.ok) {
+            const vers = await res.json();
+            const list = Array.isArray(vers) ? vers : [];
+            const v = list.find((x) => !version || x.version === version) || list[0];
+            const schema = v && v.schema_json;
+            if (schema && Array.isArray(schema.sections)) {
+                fmap = {};
+                schema.sections.forEach((sec) => (sec.fields || []).forEach((f) => {
+                    if (!f || !f.key) return;
+                    const options = {};
+                    (f.options || []).forEach((o) => {
+                        if (o && Object.prototype.hasOwnProperty.call(o, 'value')) {
+                            options[o.value] = (o.label_i18n && o.label_i18n.en) || o.label || o.value;
+                        }
+                    });
+                    fmap[f.key] = { label: (f.label_i18n && f.label_i18n.en) || f.label || f.key, options };
+                }));
+            }
+        }
+    } catch (_e) { fmap = null; }
+    _packSchemaCache[ck] = fmap;
+    return fmap;
+}
+window.ensurePackSchema = ensurePackSchema;
 // Render Report.form_data (curated crisis-pack answers) as a collapsible section.
-// The pack/event NAME is filled asynchronously post-render (see selectReport).
+// The pack/event NAME + verbatim answer labels are filled async post-render (see
+// selectReport).
 function _renderFormDataSection(r) {
     const fd = r && r.form_data;
     if (!fd || typeof fd !== 'object' || Array.isArray(fd)) return '';
     const keys = Object.keys(fd);
     if (!keys.length) return '';
-    const rows = keys.map((k) => `<div class="dp-cf-row"><span class="dp-cf-key">${escapeHtml(_humanizeFormKey(k))}</span><span class="dp-cf-val">${_formatFormValue(fd[k])}</span></div>`).join('');
     return `
         <details class="dp-section dp-crisis-answers" open>
             <summary class="dp-section-header">
@@ -525,7 +589,7 @@ function _renderFormDataSection(r) {
                 <span id="dp-cf-formname-${r.id}" class="dp-cf-formname"></span>
                 <i class="fa-solid fa-chevron-down dp-section-caret"></i>
             </summary>
-            <div class="dp-section-body dp-cf-grid">${rows}</div>
+            <div id="dp-cf-body-${r.id}" class="dp-section-body dp-cf-grid">${_fdRowsHtml(fd, null)}</div>
         </details>`;
 }
 
@@ -565,7 +629,7 @@ const infraDisplayLabel = (infraType, subType) => {
 const SEV_COLORS = { CRITICAL: '#ef4444', SEVERE: '#f97316', MODERATE: '#eab308', MINOR: '#22c55e', UNKNOWN: '#64748b' };
 
 // ── QRT Queue State ───────────────────────────────────────────────────────────
-let viewMode = 'queue'; // 'queue' = triage cards | 'tree' = strategic hierarchy
+let viewMode = 'buildings'; // building-centric redesign: 'buildings' (default) = building-grouped feed | 'queue' = flat "All Incidents" escape hatch. Tree retired.
 let cardSortMode = 'priority'; // priority | newest | oldest | severity | type | has_media | confidence | crisis | damage | source
 
 // ── Operational queues (Jun 2026 - attention-panel routing audit) ────────────
@@ -715,6 +779,7 @@ function _scopeAggregatesActive() {
     // compute is exact, so this returns false and behavior is unchanged.
     const noNarrowing = (timeFilterHours || 0) <= 0 &&
         !_activeQueue && !treeSearchTerm &&
+        !_activeBuildingId && !_triageScope &&
         !(_activeChipFilters && _activeChipFilters.size);
     return truncated && noNarrowing;
 }
@@ -765,6 +830,162 @@ function setOperationScope(crisisEventId) {
 }
 window.setOperationScope = setOperationScope;
 window.getOperationScope = () => _activeCrisisEventId;
+
+// ── Jun 2026 navigation-clarity: Building + Triage as first-class FEED SCOPES ──
+// Same axis as Operation, but applied CLIENT-SIDE on top of the op/global set: a
+// building's reports are a subset of what's already loaded, so scoping to a
+// building (or to the "no operation" triage bucket) needs NO refetch - it's a
+// filter, like the queue/search filters. This is the spine of the
+// Global → Operation/Triage → Building → Incident drill-down.
+let _activeBuildingId = null;   // building-scoped feed (bld=<id>); null = all buildings
+let _triageScope = false;       // op=none = reports not claimed by any operation
+
+// Narrow the working set to the active building / triage scope. Called at the TOP
+// of the feed render pipelines, BEFORE the queue/time/chip filters.
+function _applyScopeFilter(reports) {
+    let out = reports || [];
+    if (_triageScope) out = out.filter((r) => !r.crisis_event_id);
+    if (_activeBuildingId) out = out.filter((r) => r.building_id === _activeBuildingId);
+    return out;
+}
+
+// ── Status TABS (Jun 2026 feed simplification) ────────────────────────────────
+// The feed's primary status axis: Pending / Responding / Resolved. The active tab
+// narrows the (always building-grouped) feed to that lifecycle bucket. The tab
+// COUNTS (badge on each tab) are computed across the whole scope by
+// updateCommandStats, so they show "how many are in each status" regardless of
+// which tab is open. Replaces the old KPI pills + the flat NEEDS ACTION/RESPONDING/
+// CLOSED sections + the Buildings/All-Incidents view toggle.
+let _activeStatusTab = 'pending';
+function _applyStatusTabFilter(reports) {
+    const t = _activeStatusTab || 'pending';
+    if (t === 'responding') return reports.filter((r) => r.status === 'RESPONDING');
+    if (t === 'resolved') return reports.filter((r) => r.status === 'RESOLVED' || r.status === 'FALSE_ALARM');
+    return reports.filter((r) => r.status === 'PENDING' || r.status === 'VERIFIED');   // 'pending' (default)
+}
+// Inverse of _applyStatusTabFilter: which lifecycle tab OWNS a given status. Kept
+// consistent with the predicates above. Used to reveal a deep-linked / newly-
+// selected incident in its bucket when it lands outside the active tab (otherwise
+// the tab filter hides its card and CrispNav.revealSelected can't scroll to it).
+function _statusTabFor(status) {
+    if (status === 'RESPONDING') return 'responding';
+    if (status === 'RESOLVED' || status === 'FALSE_ALARM') return 'resolved';
+    return 'pending';   // PENDING / VERIFIED (and any other) live in the default tab
+}
+window.setStatusTab = function (tab) {
+    if (_activeQueue) return;   // a queue owns the lifecycle population - tabs are neutralized
+    const _btn = document.querySelector(`.feed-tab[data-tab="${tab}"]`);
+    if (_btn && _btn.classList.contains('tab-empty')) return;   // B3: empty bucket → non-interactive
+    _activeStatusTab = (tab === 'responding' || tab === 'resolved' || tab === 'rejected') ? tab : 'pending';
+    _syncStatusTabsEnabled();
+    try { renderFeed(); } catch (_e) {}
+};
+window.getStatusTab = () => _activeStatusTab;
+// Paint the status tabs' active/disabled state. When a queue owns the population
+// (attention destination / rejected view) the lifecycle tabs don't apply, so we
+// neutralize them (no .on highlight, aria-disabled, non-interactive) rather than
+// claim a filter is active that isn't. Called from renderFeed + setStatusTab.
+function _syncStatusTabsEnabled() {
+    const wrap = document.querySelector('.feed-tabs');
+    if (wrap) wrap.classList.toggle('tabs-queue-disabled', !!_activeQueue);
+    document.querySelectorAll('.feed-tab').forEach((b) => {
+        if (_activeQueue) {
+            b.classList.remove('on'); b.setAttribute('aria-selected', 'false'); b.setAttribute('aria-disabled', 'true');
+        } else {
+            // B3: mute a tab whose lifecycle bucket is empty (count 0) so the
+            // operator can't switch to a blank view. The ACTIVE tab is never muted
+            // (so you can always see why the current view is empty).
+            const cntEl = document.getElementById('count-' + b.dataset.tab);
+            const cnt = Number((cntEl && cntEl.textContent) || '0');
+            const isActive = b.dataset.tab === _activeStatusTab;
+            const empty = cnt === 0 && !isActive;
+            b.classList.toggle('tab-empty', empty);
+            b.setAttribute('aria-disabled', empty ? 'true' : 'false');
+            b.classList.toggle('on', isActive); b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        }
+    });
+}
+
+// Cross-cutting pill narrows (severity / originals-pending) layered on top of the
+// scope + status-tab + queue population. The lifecycle pills are now TABS, so the
+// only interactive pill is 'critical' (+ the command-bar originals-pending chip);
+// legacy values stay honoured for old deep-links / saved views.
+function _applyPillFilter(reports) {
+    switch (_activePillFilter) {
+        case 'critical':
+            return reports.filter((r) => r.severity === 'CRITICAL');
+        case 'pending':
+            return reports.filter((r) => r.status === 'PENDING' || r.status === 'VERIFIED');
+        case 'responding':
+            return reports.filter((r) => r.status === 'RESPONDING');
+        case 'resolved':
+            return reports.filter((r) => r.status === 'RESOLVED' || r.status === 'FALSE_ALARM');
+        case 'originals_pending':
+            return reports.filter((r) => {
+                const imgs = (r.media || []).filter((m) => m.type === 'IMAGE');
+                if (!imgs.length) return false;
+                return groupPhotos(imgs).some((g) => {
+                    const hi = g.members.find((m) => m.resolution_tier === 'ORIGINAL');
+                    return !hi || hi.assembly_status !== 'complete';
+                });
+            });
+        default:
+            return reports;   // null / 'all'
+    }
+}
+
+function setBuildingScope(buildingId) {
+    const next = buildingId || null;
+    if (next === _activeBuildingId) { try { renderFeed(); } catch (_e) {} return; }
+    _activeBuildingId = next;
+    // A single building reads better as a flat list than a one-card cluster — the
+    // active-building scope already force-expands its cluster (see _forceOpen in
+    // renderClusterFeed), so no view-mode switch is needed here.
+    try { _writeScopeHash(); } catch (_e) {}
+    try { renderFeed(); } catch (_e) {}   // re-paints feed + context banner
+}
+window.setBuildingScope = setBuildingScope;
+window.getBuildingScope = () => _activeBuildingId;
+
+function setTriageScope(on) {
+    on = !!on;
+    if (on === _triageScope) { try { renderFeed(); } catch (_e) {} return; }
+    _triageScope = on;
+    if (on) {
+        // Triage = the GLOBAL set minus operation-claimed reports. Ensure the
+        // server boundary is global (setOperationScope is a no-op if already
+        // global), then filter client-side. Mutually exclusive with an operation.
+        if (_activeCrisisEventId) { try { setOperationScope(null); } catch (_e) {} }
+        _activeBuildingId = null;
+    }
+    try { _writeScopeHash(); } catch (_e) {}
+    try { renderFeed(); } catch (_e) {}
+}
+window.setTriageScope = setTriageScope;
+window.getTriageScope = () => _triageScope;
+
+// Rewrite the #/incidents hash to reflect the current scope. One key per axis:
+// op=<id> | op=none (triage); bld=<id>. Preserves other state segments (queue=,
+// chips=…). Uses replaceState (no hashchange → no router re-dispatch → no loop);
+// the breadcrumb provides up-navigation.
+function _writeScopeHash() {
+    try {
+        let segs = [];
+        if (window.__crispRouter && window.__crispRouter.parseHash) {
+            segs = (window.__crispRouter.parseHash().stateSegs || []).slice();
+        }
+        segs = segs.filter((s) => !s.startsWith('op=') && !s.startsWith('bld='));
+        if (_triageScope) segs.push('op=none');
+        else if (_activeCrisisEventId) segs.push('op=' + encodeURIComponent(_activeCrisisEventId));
+        if (_activeBuildingId) segs.push('bld=' + encodeURIComponent(_activeBuildingId));
+        const next = '#' + ['/incidents'].concat(segs).join(';');
+        if (location.hash !== next) {
+            try { history.replaceState(null, '', location.pathname + location.search + next); }
+            catch (_e) { location.hash = next; }
+        }
+    } catch (_e) {}
+}
+window._writeScopeHash = _writeScopeHash;   // so the op panel's "Exit to global" can drop ;op= from the URL
 
 // ── Routing / data-init instrumentation ──────────────────────────────────────
 // OFF by default. Enable with `localStorage.crisp_nav_trace = '1'` (or
@@ -876,7 +1097,9 @@ window.clearActiveQueue = () => setActiveQueue(null);
 function _searchMatchCount() {
     const t = (treeSearchTerm || '').trim();
     if (!t) return 0;
-    return allReports.filter((r) => {
+    // Mirror the feed population (scope + rejected-hidden) so the banner's match
+    // count agrees with what the search actually shows - not raw allReports.
+    return _applyQueueFilter(_applyScopeFilter(allReports)).filter((r) => {
         const haystack = [
             r.description, r.infrastructure_type, r.severity, r.status, r.source,
             r.location && r.location.user_location_name, r.location && r.location.device_location_name,
@@ -922,73 +1145,113 @@ function _restoreIncidentSearch() {
 // the queue-only banner. Precedence: operation scope > active queue > search >
 // global. Each state names the scope, the count, the reason, and a clear/exit.
 function _renderContextBanner() {
-    const banner = document.getElementById('queue-banner');
+    // v116: paints the feed HEADER scope bar (Global › Operation + Switch) - this
+    // replaced the old standalone #queue-banner card. The per-scope count moved out
+    // to the status-tab row (#count-dual) so the header is a single clean breadcrumb.
+    const banner = document.getElementById('feed-scope-bar');
     if (!banner) return;
     // C1-b: show the TRUE scope size (X-Total-Count), not the truncated working
     // set, for the GLOBAL/OPERATION headline. Falls back to the loaded length
     // before the first full refresh / at small scale (where they're equal).
-    const total = (_scopeTotalCount != null ? _scopeTotalCount : allReports.length);
+    // Rejected-excluded, scope-aware live count so the headline agrees with the
+    // status tabs (which exclude rejected). At truncated scale the server total wins.
+    const _liveCount = _applyScopeFilter(allReports).filter((r) => r.reviewer_verdict !== 'REJECTED').length;
+    const total = (_scopeTotalCount != null ? _scopeTotalCount : _liveCount);
     const search = (treeSearchTerm || '').trim();
-    let cls, icon, label, sub, countTxt, clearBtn = '';
+    let cls, icon, countTxt;
+    // Client-side scopes (building/triage) count the FILTERED set - _scopeTotalCount
+    // is the server total for the op/global boundary only.
+    const _scopedLen = _liveCount;
 
-    if (_activeCrisisEventId) {
-        // Operation-scoped feed (#/incidents;op={id}). Name + region resolved from
-        // the cached operations list; degrades gracefully before it loads.
-        const meta = _opMeta(_activeCrisisEventId);
-        const nm = meta && meta.name;
-        const region = meta && meta.place_name;
+    // Jun 2026 simplification: the banner is now ONE breadcrumb row. The scope name
+    // is the last crumb (no redundant big label); the Total is folded inline as the
+    // count; row 2 (the status tabs) carries the per-status numbers.
+    if (_activeBuildingId) {
+        cls = 'ctx-bldg'; icon = '🏢';
+        countTxt = _scopedLen + ' incident' + (_scopedLen === 1 ? '' : 's');
+    } else if (_triageScope) {
+        cls = 'ctx-triage'; icon = '🧭';
+        countTxt = _scopedLen + ' incident' + (_scopedLen === 1 ? '' : 's');
+    } else if (_activeCrisisEventId) {
         cls = 'ctx-op'; icon = '🎯';
-        // Tight + professional: merge the operation NAME into the bold header line
-        // (prominent, single-line, ellipsised) and keep the sub short - just the
-        // region + the dual count - so it never overflows/truncates. The 🎯 icon +
-        // purple chrome already say "operation", so drop the "only this operation"
-        // filler. Falls back to the generic label until the op name resolves.
-        label = nm ? ('OPERATION · ' + nm) : 'OPERATION INCIDENTS';
-        sub = region || '';
         countTxt = _dualCount(total);
-        clearBtn = '<button class="qb-clear" onclick="window.setIncidentOp&&window.setIncidentOp(null)" title="Return to all incidents worldwide">🌐 Global</button>';
     } else if (_activeQueue && QUEUES[_activeQueue]) {
-        const q = QUEUES[_activeQueue];
         const matched = _applyQueueFilter(allReports).length;
         const bCount = _activeQueue === 'escalating' && _escalatingBuildingIds
             ? ' · ' + _escalatingBuildingIds.size + ' building(s)' : '';
-        cls = 'ctx-queue ctx-queue-' + _activeQueue; icon = q.icon;
-        label = String(q.label || '').toUpperCase();
-        sub = q.desc;
+        cls = 'ctx-queue ctx-queue-' + _activeQueue; icon = QUEUES[_activeQueue].icon;
         countTxt = matched + ' incident' + (matched === 1 ? '' : 's') + bCount;
-        clearBtn = '<button class="qb-clear" onclick="clearActiveQueue()" title="Leave this view (show all incidents)">✕ Clear</button>';
     } else if (search) {
         const matched = _searchMatchCount();
-        cls = 'ctx-search'; icon = '🔍'; label = 'SEARCH RESULTS';
-        sub = 'Matching "' + search + '"';
+        cls = 'ctx-search'; icon = '🔍';
         countTxt = matched + ' match' + (matched === 1 ? '' : 'es');
-        clearBtn = '<button class="qb-clear" onclick="clearIncidentSearch()" title="Clear the search">✕ Clear</button>';
     } else {
-        cls = 'ctx-global'; icon = '🌐'; label = 'GLOBAL INCIDENTS';
-        sub = 'Showing all incidents worldwide';
+        cls = 'ctx-global'; icon = '🌐';
         countTxt = _dualCount(total);
     }
 
-    // Always-available operation switcher: jump to any operation's incidents (or
-    // back to global) directly from the feed - the analyst never loses context.
-    const switchBtn = '<button class="ctx-switch" onclick="window.__crispToggleOpSwitcher(event)" title="View incidents for a specific operation">' +
-        '<i class="fa-solid fa-arrow-right-arrow-left"></i> Operation</button>';
+    // ONE scope control: the operation/global switcher (its menu lists Global +
+    // every operation). Replaces the separate "Global" exit AND the standalone
+    // Rejected button (Rejected now lives in the Filters popover).
+    const switchBtn = '<button class="ctx-switch" onclick="window.__crispToggleOpSwitcher(event)" title="Switch between operations and global">' +
+        '<i class="fa-solid fa-arrow-right-arrow-left"></i> Switch</button>';
 
-    // Discoverable entry to the dedicated Rejected Reports view (rejected reports
-    // are hidden from the active feed + every other queue). Shown when there are
-    // any and we're not already viewing them.
-    const rejectedCount = (allReports || []).filter(r => r.reviewer_verdict === 'REJECTED').length;
-    const rejectedBtn = (_activeQueue !== 'rejected' && rejectedCount > 0)
-        ? '<button class="ctx-switch ctx-rejected" onclick="setActiveQueue(\'rejected\')" title="View rejected reports (kept for audit)">🚫 Rejected <b>' + rejectedCount + '</b></button>'
+    // Active attention-category shows as a clearable chip beside the switch, so the
+    // category is named even though the breadcrumb leaf stays the scope.
+    const queueChip = (_activeQueue && QUEUES[_activeQueue])
+        ? '<button class="ctx-switch ctx-qchip" onclick="clearActiveQueue()" title="Clear the category filter">' + escapeHtml(String(QUEUES[_activeQueue].label || '').toUpperCase()) + ' ✕</button>'
         : '';
 
     banner.className = 'ctx-banner ' + cls;
     banner.style.display = 'flex';
     banner.innerHTML =
         '<span class="qb-icon" aria-hidden="true">' + icon + '</span>' +
-        '<span class="qb-text"><strong class="qb-label">' + escapeHtml(label) + '</strong>' +
-        '<span class="qb-sub">' + (sub ? escapeHtml(sub) + ' · ' : '') + '<b>' + escapeHtml(countTxt) + '</b></span></span>' +
-        '<span class="qb-actions">' + switchBtn + rejectedBtn + clearBtn + '</span>';
+        '<span class="qb-text">' + _buildScopeCrumbs() +
+            '<span class="qb-total" title="Total incidents in this scope (all statuses)">' + countTxt + '</span>' +
+        '</span>' +
+        '<span class="qb-actions">' + queueChip + switchBtn + '</span>';
+    // TOTAL incidents now sits in the HEADER next to the scope crumb (operator
+    // request). The old status-tab-row count (#count-dual) is cleared so the same
+    // number isn't shown twice (and so it never contradicts the hierarchy summary,
+    // which counts only the ACTIVE status tab).
+    const dual = document.getElementById('count-dual');
+    if (dual) dual.textContent = '';
+}
+
+// The clickable scope SPINE: Global › [Operation|Triage] › [Building]. Each crumb
+// steps UP one level (the leaf below the spine names the current view + count).
+// This is the "where am I / how did I get here" surface.
+function _buildScopeCrumbs() {
+    const sep = '<span class="qb-bc-sep" aria-hidden="true">›</span>';
+    const parts = ['<a class="qb-crumb qb-crumb-global" onclick="window.setIncidentOp&&window.setIncidentOp(null)">Global</a>'];
+    if (_triageScope) {
+        parts.push('<span class="qb-crumb qb-crumb-cur">Triage</span>');
+    } else if (_activeCrisisEventId) {
+        const nm = (_opMeta(_activeCrisisEventId) || {}).name || 'Operation';
+        // When a building is also active, the operation is a clickable step-up;
+        // otherwise it's the current leaf.
+        parts.push(_activeBuildingId
+            ? '<a class="qb-crumb qb-crumb-op" onclick="window.setIncidentOp&&window.setIncidentOp(decodeURIComponent(\'' + encodeURIComponent(_activeCrisisEventId) + '\'))">' + escapeHtml(nm) + '</a>'
+            : '<span class="qb-crumb qb-crumb-cur">' + escapeHtml(nm) + '</span>');
+    }
+    if (_activeBuildingId) {
+        parts.push('<span class="qb-crumb qb-crumb-cur">' + escapeHtml(_activeBuildingName() || 'Building') + '</span>');
+    }
+    return '<nav class="qb-crumbs" aria-label="Scope">' + parts.join(sep) + '</nav>';
+}
+
+// Best-effort building display name for the breadcrumb/banner: the OSM/infra name
+// from any loaded report tagged to the active building (no fetch). Falls back to
+// "Building".
+function _activeBuildingName() {
+    if (!_activeBuildingId) return '';
+    try {
+        // OSM building name ONLY (_taggedBuildingName) - never the reporter's free-text
+        // "what was hit" (infrastructure_name_from_osm === false).
+        const r = (allReports || []).find((x) => x && x.building_id === _activeBuildingId && _taggedBuildingName(x));
+        if (r) return r.infrastructure_name;
+    } catch (_e) {}
+    return 'Building';
 }
 
 // P4: distinct incident clusters in the active scope. Prefers the server's
@@ -1004,99 +1267,86 @@ function _scopeClusterCount() {
     for (const r of allReports) keys.add(_clusterKey(r));
     return keys.size;
 }
-// "X incidents · Y reports" - the dual operational picture. `total` is the feed's
-// X-Total-Count, which already EXCLUDES merged duplicates (collapsed) = incidents.
-// `reports` is the full report volume incl. corroborating duplicates (never collapses
-// - corroboration is operational signal). Equal when nothing has been merged.
+// ONE scope metric: "N incidents" — the REAL first-class incident count
+// (analytics counts.incidents = distinct incident_id + incident-less singletons,
+// scoped server-side, #12-cheap). Falls back to the feed's X-Total-Count (primary
+// reports) only before the scope summary has loaded. `total` is that fallback.
 function _dualCount(total) {
+    // Header total = REPORTS in scope (the superset), matching the home Command Centre
+    // "Total reports" tile EXACTLY so the two surfaces never show different totals.
+    // (Previously this showed counts.incidents = deduped entities, which disagreed with
+    // the home's report total.) Falls back to the feed's X-Total-Count before the scope
+    // summary has loaded.
     let reports = total;
     try {
-        if (_scopeSummary && _scopeSummary.counts && typeof _scopeSummary.counts.reports === 'number') {
-            reports = Math.max(_scopeSummary.counts.reports, total);
-        }
+        const c = _scopeSummary && _scopeSummary.counts;
+        if (c && typeof c.reports === 'number') reports = c.reports;
     } catch (_e) {}
-    return total + ' incident' + (total === 1 ? '' : 's') + ' · ' + reports + ' report' + (reports === 1 ? '' : 's');
+    return reports + ' report' + (reports === 1 ? '' : 's');
 }
 
-// ── Potential Duplicates review panel (Incidents page entry point) ───────────
-// Surfaces the unconfirmed-duplicate backlog by confidence with one-click
-// "Merge All" actions. Analyst-controlled (HIGH/MEDIUM/LOW are operator clicks,
-// never auto). Throttled fetch (the summary scans buildings) + cache-busted on a
-// merge. Scoped to the active operation when one is open.
+// ── Buildings needing duplicate review — awareness card (global feed) ─────────
+// REPLACES the old global "Merge all" panel. Per the building-centric model, two
+// reports in different buildings can NEVER be duplicates, so review is always
+// anchored to a building - merge/decisions therefore live ONLY in the Building
+// workspace (and the operation workspace), never globally. This card is READ-ONLY
+// awareness: it surfaces WHICH buildings have unsettled duplicate candidates and
+// drills straight into each building's workspace, where the analyst decides.
+// Reuses GET /reports/buildings-needing-review (building-scoped _rdd_candidate_pairs,
+// so it agrees with /duplicate-summary). Throttled fetch; scoped to the active
+// operation when one is open. Busted by building-level merge handlers below.
 let _dupSummaryCache = { ts: 0, scope: undefined, data: null };
-async function _renderDupReviewPanel(force) {
-    const banner = document.getElementById('queue-banner');
-    if (!banner || !banner.parentNode) return;
-    let panel = document.getElementById('dup-review-panel');
-    if (!panel) {
-        panel = document.createElement('div');
-        panel.id = 'dup-review-panel';
-        panel.style.cssText = 'display:none;margin:6px 0;padding:8px 12px;background:rgba(56,189,248,.07);border:1px solid rgba(56,189,248,.25);border-radius:10px;font-size:12px;align-items:center;flex-wrap:wrap;gap:4px';
-        banner.parentNode.insertBefore(panel, banner.nextSibling);
-    }
+// Jun 2026 — the global "Buildings needing duplicate review" AWARENESS PANEL was
+// removed from the top of the feed. Duplicate review now lives where it belongs:
+// (1) a per-building DUP COUNT badge on each building row in the feed (below) that
+// opens the building console's Potential-Duplicates + merge controls, and (2) the
+// Operations summary page's "N buildings need duplicate review" chip. This keeps the
+// SAME fetch (GET /reports/buildings-needing-review, scope-aware) but ingests it into
+// a per-building map the cluster rows read, instead of painting a top banner.
+let _dupReviewMap = {};   // building_id → { pairs, high }
+async function _refreshDupReviewMap(force) {
+    // Tear down any stale top panel left by an older build.
+    const old = document.getElementById('dup-review-panel');
+    if (old) old.remove();
     const scope = _activeCrisisEventId || null;
     const now = Date.now();
     if (!force && _dupSummaryCache.data && _dupSummaryCache.scope === scope && (now - _dupSummaryCache.ts) < 30000) {
-        _paintDupPanel(panel, _dupSummaryCache.data); return;
+        _ingestDupReview(_dupSummaryCache.data); _paintDupBadges(); return;
     }
     try {
-        const url = API + '/duplicate-summary' + (scope ? '?crisis_event_id=' + encodeURIComponent(scope) : '');
+        const url = API + '/buildings-needing-review' + (scope ? '?crisis_event_id=' + encodeURIComponent(scope) : '');
         const res = await fetch(url, { headers: { Authorization: 'Bearer ' + (localStorage.getItem('crisp_token') || '') } });
-        if (!res.ok) { panel.style.display = 'none'; return; }
+        if (!res.ok) return;
         const data = await res.json();
         _dupSummaryCache = { ts: now, scope, data };
-        _paintDupPanel(panel, data);
-    } catch (_e) { panel.style.display = 'none'; }
+        _ingestDupReview(data); _paintDupBadges();
+    } catch (_e) { /* leave the prior map; badges just don't update */ }
 }
-function _paintDupPanel(panel, d) {
-    const total = (d && d.total) || 0;
-    if (!total) { panel.style.display = 'none'; return; }
-    let role = '';
-    try { role = (JSON.parse(localStorage.getItem('crisp_user') || '{}').role) || ''; } catch (_e) {}
-    // Anyone who can record a decision (analyst and up) sees the bulk actions; the
-    // backend's require_analyst is the real gate. VIEWER is read-only.
-    const canMerge = role === 'ANALYST' || role === 'ADMIN' || role === 'SUPER_ADMIN';
-    const btn = (lvl, n, label) => (n > 0 && canMerge)
-        ? `<button class="dup-rev-btn" onclick="window._dupMergeAll('${lvl}')" style="background:#1b2942;border:1px solid #2b3b56;color:#cbd9ef;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;margin-left:6px">${label} (${n})</button>`
-        : '';
-    panel.style.display = 'flex';
-    panel.innerHTML =
-        `<span style="font-weight:700;color:#7dd3fc">🔗 Potential Duplicates</span>` +
-        `<span style="color:#cbd9ef;margin-left:6px">High <b>${d.high || 0}</b> · Medium <b>${d.medium || 0}</b> · Low <b>${d.low || 0}</b> · Total <b>${total}</b></span>` +
-        `<span style="margin-left:auto;display:flex;flex-wrap:wrap;gap:2px">` +
-        // ONE-CLICK merge-all: collapses every duplicate (High+Medium+Low) under its
-        // primary in a single action (group-aware on the backend - whole clusters
-        // collapse at once). Reversible. The per-level buttons stay for granular use.
-        ((total > 0 && canMerge)
-            ? `<button class="dup-rev-btn" onclick="window._dupMergeAll('ALL')" title="Collapse every duplicate (High + Medium + Low) under its primary in one click - the primary is the earliest, most-complete report. Reversible." style="background:#1d4ed8;border:1px solid #2563eb;color:#fff;border-radius:6px;padding:3px 11px;font-size:11px;font-weight:700;cursor:pointer;margin-left:6px">Merge all (${total})</button>`
-            : '') +
-        btn('HIGH', d.high || 0, 'Merge All High') +
-        btn('MEDIUM', d.medium || 0, 'Merge All Medium') +
-        btn('LOW', d.low || 0, 'Merge All Low') +
-        `<button class="dup-rev-btn" onclick="window.setViewMode&&window.setViewMode('clusters')" title="Review duplicates one by one in the building-grouped view" style="background:#1b2942;border:1px solid #2b3b56;color:#cbd9ef;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;margin-left:6px">Review Individually</button>` +
-        `</span>`;
+function _ingestDupReview(d) {
+    const map = {};
+    for (const b of ((d && d.buildings) || [])) {
+        if (b && b.building_id) map[b.building_id] = { pairs: b.candidate_pairs || 0, high: b.high || 0 };
+    }
+    _dupReviewMap = map;
 }
-// "Merge All <level>": analyst-initiated bulk confirm of every unconfirmed pair at
-// that confidence in the active scope. Reversible; nothing deleted.
-window._dupMergeAll = async (level) => {
-    try {
-        const body = { confidence: level };
-        if (_activeCrisisEventId) body.crisis_event_id = _activeCrisisEventId;
-        const res = await fetch(API + '/duplicate-merge', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (localStorage.getItem('crisp_token') || '') },
-            body: JSON.stringify(body),
-        });
-        if (!res.ok) { showToast(res.status === 403 ? 'Not authorized (analyst required)' : 'Could not merge', 'error'); return; }
-        const out = await res.json();
-        const n = out.merged || 0;
-        showToast('Merged ' + n + ' duplicate' + (n !== 1 ? 's' : ''), 'success');
-        _dupSummaryCache = { ts: 0, scope: undefined, data: null };   // bust the cache
-        try { _lastServerTime = null; _lastReportsEtag = null; } catch (_e) {}
-        try { fetchReports(); } catch (_e) {}
-        try { _renderDupReviewPanel(true); } catch (_e) {}
-    } catch (_e) { showToast('Could not merge', 'error'); }
-};
+// Fill the per-building dup-count slots rendered on the feed's building rows. The
+// slot carries data-dup-bld=<building_id>; a building with no candidate pairs hides
+// its badge. Clicking the row (the badge bubbles up) opens the building console,
+// whose Potential-Duplicates section holds the merge controls.
+function _paintDupBadges() {
+    document.querySelectorAll('[data-dup-bld]').forEach((el) => {
+        const d = _dupReviewMap[el.getAttribute('data-dup-bld')];
+        if (d && d.pairs > 0) {
+            el.style.display = '';
+            el.innerHTML = '<i class="fa-solid fa-clone"></i> ' + d.pairs + (d.high ? ' · ' + d.high + ' high' : '');
+            el.setAttribute('title', d.pairs + ' potential duplicate pair' + (d.pairs === 1 ? '' : 's')
+                + (d.high ? ' (' + d.high + ' high-confidence)' : '') + ' — open the building to review & merge');
+        } else {
+            el.style.display = 'none';
+            el.innerHTML = '';
+        }
+    });
+}
 
 // ── Operation switcher (Jun 2026) ────────────────────────────────────────────
 // Scope the GLOBAL incidents feed to any operation (or back to global) directly
@@ -1119,7 +1369,9 @@ async function _loadOpsForSwitcher(force) {
 }
 function _closeOpSwitcher() { const m = document.getElementById('op-switcher-menu'); if (m) m.style.display = 'none'; }
 window.setIncidentOp = function (opId) {
-    const segs = _hashStateSegs().filter((s) => !s.startsWith('op=') && !s.startsWith('queue='));
+    // Switching operation drops any building filter (a building belongs to one op)
+    // + any triage state; the router re-applies scopes from the new hash.
+    const segs = _hashStateSegs().filter((s) => !s.startsWith('op=') && !s.startsWith('queue=') && !s.startsWith('bld='));
     if (opId) segs.push('op=' + encodeURIComponent(opId));
     const next = '#' + ['/incidents'].concat(segs).join(';');
     _closeOpSwitcher();
@@ -1215,61 +1467,41 @@ if (document.readyState === 'loading') {
 (function _relocateFilterRow() {
     const move = () => {
         const row = document.getElementById('cmd-filter-row');
-        const kpi = document.querySelector('.feed-panel .feed-kpi');
-        if (row && kpi && row.previousElementSibling !== kpi) kpi.insertAdjacentElement('afterend', row);
+        const tabs = document.querySelector('.feed-panel .feed-tabs');
+        if (row && tabs && row.previousElementSibling !== tabs) tabs.insertAdjacentElement('afterend', row);
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', move);
     else move();
 })();
 
-// Collapsible FILTERS row: the secondary filter chips + Saved Views take a chunk
-// of vertical space at the top of the feed panel, pushing the incident cards down
-// on shorter windows. The "Filters" label is now a toggle that hides/shows the
-// chips (default COLLAPSED so the feed gets the room); choice persists. When
-// collapsed with active filters, a count badge on the label keeps it discoverable.
-(function _setupFilterCollapse() {
-    const KEY = 'crisp_filters_collapsed';
+// FILTERS popover (Jun 2026 simplification): the secondary filter chips + Saved
+// Views + the Rejected entry now OPEN FROM the filter icon in the tabs row, instead
+// of being an always-inline strip. Hidden until the icon is clicked; closes on
+// outside-click / Escape. The active-filter count shows as a badge on the icon
+// (#cmd-filter-active-count, synced by renderFeed → _syncFilterActiveCount).
+(function _setupFilterPopover() {
     const setup = () => {
         const row = document.getElementById('cmd-filter-row');
-        const label = row && row.querySelector('.cmd-filter-label');
-        if (!row || !label) return;
-        if (!document.getElementById('cmd-filter-collapse-css')) {
-            const s = document.createElement('style');
-            s.id = 'cmd-filter-collapse-css';
-            s.textContent =
-                '#cmd-filter-toggle{cursor:pointer;user-select:none;border-radius:6px;padding:2px 4px}' +
-                '#cmd-filter-toggle:hover{background:rgba(148,163,184,.12)}' +
-                '#cmd-filter-toggle .cft-caret{transition:transform .15s;font-size:9px;opacity:.7;margin-left:4px}' +
-                '.cmd-filter-row.cmd-filters-collapsed>*:not(.cmd-filter-label){display:none !important}' +
-                '.cmd-filter-row.cmd-filters-collapsed #cmd-filter-toggle .cft-caret{transform:rotate(-90deg)}' +
-                '#cmd-filter-active-count{margin-left:6px;background:rgba(56,189,248,.22);color:#7dd3fc;border-radius:8px;padding:0 6px;font-size:10px;font-weight:700;display:none}';
-            document.head.appendChild(s);
-        }
-        if (!label.id) {
-            label.id = 'cmd-filter-toggle';
-            label.setAttribute('role', 'button');
-            label.setAttribute('tabindex', '0');
-            label.title = 'Show / hide the filter chips';
-            label.insertAdjacentHTML('beforeend', ' <i class="fa-solid fa-caret-down cft-caret"></i><span id="cmd-filter-active-count"></span>');
-            const toggle = () => {
-                const collapsed = !row.classList.contains('cmd-filters-collapsed');
-                row.classList.toggle('cmd-filters-collapsed', collapsed);
-                try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (_e) {}
-            };
-            label.addEventListener('click', toggle);
-            label.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
-            });
-        }
-        let collapsed = true;   // default collapsed - the feed cards are the priority
-        try { if (localStorage.getItem(KEY) === '0') collapsed = false; } catch (_e) {}
-        row.classList.toggle('cmd-filters-collapsed', collapsed);
+        if (!row || row.dataset.popoverReady) return;
+        row.dataset.popoverReady = '1';
+        row.classList.add('cmd-filter-pop');   // styled as an absolute popover (hidden until .open)
+        document.addEventListener('click', (e) => {
+            if (!row.classList.contains('open')) return;
+            if (e.target.closest('#cmd-filter-row, #feed-filter-btn')) return;
+            row.classList.remove('open');
+        });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') row.classList.remove('open'); });
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setup);
     else setup();
 })();
-// Keep the collapsed "Filters" label's active-count badge in sync so a hidden
-// chip row still shows how many filters are applied. Cheap; called from renderFeed.
+window.__crispToggleFilters = function (ev) {
+    if (ev) ev.stopPropagation();
+    const row = document.getElementById('cmd-filter-row');
+    if (row) row.classList.toggle('open');
+};
+// Keep the filter icon's active-count badge in sync so a closed popover still
+// shows how many filters are applied. Cheap; called from renderFeed.
 function _syncFilterActiveCount() {
     const badge = document.getElementById('cmd-filter-active-count');
     if (!badge) return;
@@ -1764,7 +1996,17 @@ function _classifyHighTier(group, reportAgeMs) {
         return reportAgeMs < _ORIG_FRESH_MS ? 'missing-fresh' : 'missing-old';
     }
     if (large.assembly_status === 'complete') return 'complete';
-    if (large.assembly_status === 'failed') return 'lost';
+    if (large.assembly_status === 'failed') {
+        // R6 (Jun 2026): a tier the CLIENT deliberately DEFERRED — slow network
+        // (bandwidth_tier_deferred) or evicted to free device storage after the
+        // SMALL preview delivered (storage_evicted) — is RETRYABLE, not lost. It
+        // auto-revives on the next successful chunk. Treat as 'delayed' so it
+        // reads as "awaiting connectivity", not a permanent failure. A genuine
+        // integrity/encode failure (no deferred reason) stays 'lost'.
+        const _r = large.abandon_reason || '';
+        if (_r === 'bandwidth_tier_deferred' || _r === 'storage_evicted') return 'delayed';
+        return 'lost';
+    }
     // pending / assembling - distinguished by freshness window.
     return reportAgeMs < _ORIG_FRESH_MS ? 'uploading' : 'delayed';
 }
@@ -2440,31 +2682,53 @@ function _cardActionEl(r) {
 }
 window._cardActionEl = _cardActionEl;
 
-// Card title in the Global > Operation > Building > Incident hierarchy: prefer the
-// BUILDING name (the operational object) when the report is building-tagged, so
-// the operator can group/triage by building from the feed; fall back to the
-// infrastructure-type label otherwise. Flags free-text (non-OSM) building names
-// as "needs mapping" (must-have #6).
-function _cardTitle(r) {
-    if (r.building_id && r.infrastructure_name) {
-        const needsMap = r.infrastructure_name_from_osm === false
-            ? ' <span class="qrt-needsmap" title="Free-text building name - not matched to an OSM footprint">needs mapping</span>'
-            : '';
-        return escapeHtml(r.infrastructure_name) + needsMap;
-    }
-    return infraDisplayLabel(r.infrastructure_type || 'OTHER', r.infrastructure_sub_type);
+// A GENUINELY tagged building: building_id + a name that came from an OSM footprint
+// (infrastructure_name_from_osm !== false). This is the ONLY case we present
+// infrastructure_name as a BUILDING name + a Building Console route. The "Other /
+// not listed" free-text (infrastructure_name_from_osm === false) is the reporter's
+// "what was hit" label - the incident TYPE, never a building - so it must not show a
+// building link or breadcrumb segment. (Explicit `false` is the discriminator;
+// `null` legacy rows are treated as taggable to avoid regressing pre-v3 data.)
+function _taggedBuildingName(r) {
+    return !!(r && r.building_id && r.infrastructure_name && r.infrastructure_name_from_osm !== false);
 }
-window._cardTitle = _cardTitle;
+window._taggedBuildingName = _taggedBuildingName;
 
-// Building Console deep-link for the card (Global > Operation > BUILDING). Only
-// rendered when the report is building-tagged.
-function _cardBuildingLink(r) {
-    if (!r.building_id) return '';
-    return `<a class="qrt-bldg-link" title="Open the Building Console - all reports for this building"`
-        + ` onclick="event.stopPropagation(); window.openBuildingConsole && window.openBuildingConsole(decodeURIComponent('${encodeURIComponent(r.building_id)}'))">`
-        + `<i class="fa-solid fa-building"></i> Console</a>`;
+// Whether to surface a building AT ALL (breadcrumb segment / card link / Console
+// route): building_id is set AND it is NOT the "Other" free-text masquerade (a name
+// typed for "Other / what was hit" with infrastructure_name_from_osm === false). A
+// building_id with no name still surfaces (labeled "Building"); only the masquerade
+// is hidden. The display label is the genuine name when _taggedBuildingName, else
+// "Building".
+// Canonical hierarchy-crumb labels + placeholders so EVERY breadcrumb/spine renders
+// the uniform Global › Operation › Building › Incident with the SAME wording when a
+// level is genuinely absent (muted, non-link via .dp-bc-absent). A building name here
+// ALWAYS comes from the OSM record (_taggedBuildingName) - never the reporter's
+// free-text "what was hit".
+const _HIER_OP_ABSENT = 'No operation';
+const _HIER_BLDG_ABSENT = 'Unmapped building';
+function _opCrumbName(r) {
+    return (r && r.crisis_event_id) ? (r.crisis_event_name || 'Operation') : null;
 }
-window._cardBuildingLink = _cardBuildingLink;
+function _bldgCrumbName(r) {
+    if (_taggedBuildingName(r)) return r.infrastructure_name;   // genuine OSM building name
+    if (r && r.building_id) return 'Building';                  // tagged but unnamed
+    return null;                                                // no building at all
+}
+window._opCrumbName = _opCrumbName;
+window._bldgCrumbName = _bldgCrumbName;
+
+function _hasBuildingLink(r) {
+    return !!(r && r.building_id) && !(r.infrastructure_name && r.infrastructure_name_from_osm === false);
+}
+window._hasBuildingLink = _hasBuildingLink;
+
+// NOTE: the old `_cardTitle` helper was removed - it led with the building name
+// (infrastructure_name) for tagged reports, which violates the no-redundant-parent
+// principle now that incident cards always sit UNDER their building. The card title
+// is built inline in createIncidentCard (leads with "what was hit" / infra label;
+// see feedback_no_redundant_parent_context). Don't reintroduce a building-name-first
+// title helper.
 
 // "N more reports nearby" CTA -> a modal listing the nearby incidents, each
 // click-through to that incident. Sourced from `allReports`, which ALREADY
@@ -2525,7 +2789,7 @@ window._showNearbyModal = (reportId) => {
         const g = byBuilding.get(bid);
         g.items.push(item);
         if (item.dist < g.minDist) g.minDist = item.dist;
-        if (!g.name && item.rr.infrastructure_name) g.name = item.rr.infrastructure_name;
+        if (!g.name && _taggedBuildingName(item.rr)) g.name = item.rr.infrastructure_name;   // OSM name only, never free-text
     }
     const groupsHtml = [...byBuilding.values()].sort((a, b) => a.minDist - b.minDist).map(g => `
         <div class="nearby-group">
@@ -3984,8 +4248,8 @@ function createIncidentRow(r) {
         </span>
     `;
 
-    inc.onmouseenter = (e) => showIncidentPreview(r, e);
-    inc.onmouseleave = hideIncidentPreview;
+    inc.onmouseenter = () => _armIncidentPreview(r, inc);
+    inc.onmouseleave = _disarmIncidentPreview;
     return inc;
 }
 
@@ -4043,12 +4307,40 @@ function renderHotspots(parentEl, reports) {
     parentEl.appendChild(section);
 }
 
+// v116: feed density (Comfortable default ↔ Compact). Mirrors the Operations-registry
+// crisp_ops_density pattern. Compact is a CSS-driven dense variant of the SAME card
+// (#report-feed-list.feed-compact) - the renderer + actions are unchanged, so the
+// accordion/console wiring is untouched. Persisted per operator.
+let _feedDensity = 'comfortable';
+try { if (localStorage.getItem('crisp_feed_density') === 'compact') _feedDensity = 'compact'; } catch (_e) {}
+function _applyFeedDensity() {
+    const compact = _feedDensity === 'compact';
+    const list = document.getElementById('report-feed-list');
+    if (list) list.classList.toggle('feed-compact', compact);
+    const btn = document.getElementById('feed-density');
+    if (btn) {
+        btn.classList.toggle('on', compact);
+        btn.setAttribute('aria-pressed', compact ? 'true' : 'false');
+        const ic = btn.querySelector('i');
+        if (ic) ic.className = compact ? 'fa-solid fa-table-cells' : 'fa-solid fa-table-cells-large';
+        btn.title = compact ? window.t('density_comfortable', 'Comfortable view') : window.t('density_compact', 'Compact view');
+    }
+}
+window.setFeedDensity = function (mode) {
+    _feedDensity = (mode === 'compact') ? 'compact' : 'comfortable';
+    try { localStorage.setItem('crisp_feed_density', _feedDensity); } catch (_e) {}
+    _applyFeedDensity();
+};
+window.toggleFeedDensity = function () {
+    window.setFeedDensity(_feedDensity === 'compact' ? 'comfortable' : 'compact');
+};
+
 function renderFeed() {
     _renderContextBanner();   // context banner ALWAYS renders first - the scope is visible before any list
-    try { _renderDupReviewPanel(); } catch (_e) {}   // Potential Duplicates review panel (throttled fetch)
     try { _syncFilterActiveCount(); } catch (_e) {}   // collapsed Filters label shows the active-filter count
     const el = document.getElementById('report-feed-list');
     if (!el) return;
+    try { _applyFeedDensity(); } catch (_e) {}   // keep density class + toggle button in sync
     // The scoped/global LIST fetch is in flight → show a real "Loading Operation
     // Incidents…" placeholder instead of the (misleading) empty state, a stale
     // list, or the partial single incident that the by-id lazy fetch may have
@@ -4060,21 +4352,33 @@ function renderFeed() {
         updateCommandStats();
         return;
     }
-    if (viewMode === 'queue') {
-        renderTriageQueue(el);
-    } else if (viewMode === 'clusters') {
-        renderClusterFeed(el);
+    // P2 single-page consolidation: the OPERATIONS REGISTRY (the #/operations route) is
+    // now the top level of the tree, rendered here in the feed panel (no separate
+    // overlay) — operations → buildings → incidents, each op opening in the right panel.
+    if (_opsRegMode) {
+        renderOperationsRegistry(el);
+        return;
+    }
+    // Attention-card destination (GLOBAL feed + a category, no op/building/triage
+    // scope): group the matching incidents by Operation → Building so the operator
+    // sees the Global → Operation → Building → Incident hierarchy in-page (Jun 2026
+    // nav-clarity). Headers drill the scope. Cards stay createIncidentCard, so the
+    // flat-feed contracts (data-report-id, counts) hold.
+    if (_activeQueue && !_activeCrisisEventId && !_activeBuildingId && !_triageScope) {
+        renderOperationGroupedFeed(el);
     } else {
-        renderTreeFeed(el);
+        // The feed is ALWAYS building-grouped now (the Buildings/All-Incidents view
+        // toggle was retired); the active status TAB narrows it to a lifecycle bucket.
+        renderClusterFeed(el);
     }
     updateCommandStats();
-    // P3.3 - Progressive disclosure: once the feed is painted, hide any card
-    // past the first 50 and wire up a sentinel + IntersectionObserver that
-    // reveals the next 50 when the user scrolls near the bottom. Keeps the
-    // initial paint under 100 ms even with 1000+ reports in `allReports`.
-    // SKIP in clusters mode: the feed is collapsed cluster sections (cheap),
-    // and progressive-hiding cards across collapsed bodies would fight expansion.
-    if (viewMode !== 'clusters') _applyProgressiveReveal(el);
+    // Per-building dup-count badges: refresh AFTER the building rows render so the
+    // cache fast-path paints onto the fresh slots (the async fetch repaints on land).
+    try { _refreshDupReviewMap(); } catch (_e) {}
+    try { _syncStatusTabsEnabled(); } catch (_e) {}   // neutralize tabs when a queue owns the population
+    // No progressive-reveal pass: every path is a set of collapsed cluster sections
+    // (cheap), and progressive-hiding cards across collapsed bodies would fight
+    // expansion. (Was applied only to the now-retired flat queue.)
 }
 
 // ── Clusters Mode (opt-in) ────────────────────────────────────────────────────
@@ -4092,16 +4396,45 @@ function _ensureClusterStyles() {
     if (document.getElementById('cc-cluster-styles')) return;
     const s = document.createElement('style');
     s.id = 'cc-cluster-styles';
+    // The building feed is the Operation→Building→Incident tree MINUS the operation
+    // level: Building (teal, level B) → Incident (slate leaf, level C). Same connector
+    // rail + elbow + colours as the op tree so the two feeds read identically. (The
+    // .opg-toolbar / .opg-inc styles come from _ensureOpGroupStyles, also injected by
+    // renderClusterFeed.)
     s.textContent = `
-      .cc-cluster .qrt-section-header{display:flex;align-items:center;gap:10px;cursor:pointer}
+      .cc-cluster{margin:0 0 3px}
+      /* Building header ROW: scope the no-border override here (the base
+         .qrt-section-header border-bottom is shared by other feed renderers). */
+      .cc-cluster .qrt-section-header{display:flex;align-items:center;gap:6px;cursor:pointer;border-radius:6px;border-bottom:none;padding:3px 4px}
+      .cc-cluster .qrt-section-header:hover{background:rgba(255,255,255,.03)}
+      .cc-cluster .qrt-section-chevron{flex:none;width:11px;text-align:center;color:#5f9d92;font-size:10px}
       .cc-cluster-sev{width:9px;height:9px;border-radius:50%;flex:none}
       .cc-cluster-main{flex:1;min-width:0}
-      .cc-cluster-title{font-weight:600;font-size:13px;color:#e6eefb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      /* Building level = TEAL font (operator request). No bg/border on the row. */
+      .cc-cluster-title{font-weight:700;font-size:12.5px;color:#2dd4bf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .cc-cluster-name-link{cursor:pointer}
+      .cc-cluster-name-link:hover{color:#e6f6f2;text-decoration:underline}
       .cc-cluster-meta{font-size:11px;color:#9fb3d1;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .cc-cluster-meta b{color:#f87171}
+      /* merged-duplicate indicator (neutral): the count of corroborating reports
+         already collapsed under their primary — replaces the old "· M reports". */
+      .cc-cluster-mergedup{color:#93a3b8}
+      .cc-cluster-mergedup i{font-size:9px;margin-right:2px}
       .cc-cluster-single .cc-cluster-title{font-weight:500;color:#cbd9ef}
+      .cc-cluster .qrt-section-count{background:none;border:none;color:#2dd4bf;font-weight:800}
+      /* ONE connector method: building (teal) -> incidents, identical to .opg-bldg-body. */
+      .cc-cluster .qrt-section-body{margin:1px 0 6px 12px;padding-left:12px;border-left:1.5px solid rgba(45,212,191,.34);
+        display:flex;flex-direction:column;gap:7px}
+      .cc-cluster .qrt-section-body > .opg-inc > .qrt-card{margin:0}
       .cc-cluster-open{flex:none;background:none;border:none;color:#9fb3d1;cursor:pointer;padding:4px 6px;border-radius:6px;font-size:12px}
-      .cc-cluster-open:hover{background:rgba(148,163,184,.16);color:#e6eefb}`;
+      .cc-cluster-open:hover{background:rgba(148,163,184,.16);color:#e6eefb}
+      /* candidate-pair badge (possible duplicates still to review) — neutralised
+         off sky-blue so it isn't read as an incident/report count. */
+      .cc-cluster-dup{flex:none;display:inline-flex;align-items:center;gap:4px;background:rgba(148,163,184,.12);
+        border:none;color:#93a3b8;border-radius:999px;padding:2px 9px;
+        font-size:10.5px;font-weight:700;white-space:nowrap;cursor:pointer}
+      .cc-cluster-dup:hover{background:rgba(148,163,184,.2)}
+      .cc-cluster-dup i{font-size:9px}`;
     document.head.appendChild(s);
 }
 
@@ -4111,18 +4444,40 @@ function _clusterKey(r) {
     if (h) return 'h3:' + h;
     return 'r:' + r.id;   // singleton - ungroupable report still gets its own card
 }
-function _clusterName(rs) {
-    for (const r of rs) { if (r.infrastructure_name) return r.infrastructure_name; }
-    for (const r of rs) {
-        const ln = r.location && (r.location.user_location_name || r.location.device_location_name);
-        if (ln) return ln;
-    }
-    const r0 = rs[0] || {};
-    const t = String(r0.infrastructure_type || r0.crisis_type || 'Report');
-    return t.charAt(0) + t.slice(1).toLowerCase().replace(/_/g, ' ');
+function _reportAreaName(r) {
+    const l = r && r.location;
+    return ((l && (l.user_location_name || l.device_location_name)) || '').trim();
 }
+// A building's display name = the building TAG the reporter selected (the OSM
+// footprint, carried as infrastructure_name) disambiguated with the area, e.g.
+// "DoubleTree Hotel · Koramangala". NEVER the infrastructure_type ("what was hit")
+// - that is a category, not a building (the source of the "Commercial / Government /
+// Transport communication" mis-naming). Falls back to the area alone, then coords.
+function _buildingDisplayName(rs) {
+    const arr = Array.isArray(rs) ? rs : [rs];
+    let name = '';
+    // OSM building name ONLY (_taggedBuildingName) - a free-text "what was hit" answer
+    // (infrastructure_name_from_osm === false) must never become the building/cluster
+    // name; such rows fall through to the area / coords label below.
+    for (const r of arr) { if (_taggedBuildingName(r)) { const n = String(r.infrastructure_name).trim(); if (n) { name = n; break; } } }
+    let area = '';
+    for (const r of arr) { const a = _reportAreaName(r); if (a) { area = a; break; } }
+    if (name && area) {
+        const nl = name.toLowerCase(), al = area.toLowerCase();
+        return (nl !== al && !al.startsWith(nl)) ? (name + ' · ' + area) : name;
+    }
+    if (name) return name;
+    if (area) return area;
+    const r0 = arr.find((r) => r && r.location && r.location.latitude != null);
+    if (r0) return 'Building at ' + Number(r0.location.latitude).toFixed(3) + ', ' + Number(r0.location.longitude).toFixed(3);
+    return 'Unnamed building';
+}
+// The cluster name IS the building display name (building clusters only; the
+// ungrouped bucket sets its own label in _clusterSummary).
+function _clusterName(rs) { return _buildingDisplayName(rs); }
 function _clusterSummary(key, rs) {
-    let maxRank = 0, maxSev = 'UNKNOWN', critical = 0, newCount = 0, lastActivity = 0;
+    let maxRank = 0, maxSev = 'UNKNOWN', critical = 0, newCount = 0, lastActivity = 0, totalReports = 0;
+    let opId = null;
     const now = Date.now();
     for (const r of rs) {
         const sev = String(r.severity || 'UNKNOWN').toUpperCase();
@@ -4132,75 +4487,757 @@ function _clusterSummary(key, rs) {
         const t = Date.parse(r.server_created_at) || 0;
         if (t > lastActivity) lastActivity = t;
         if (t && now - t < 24 * 3600 * 1000) newCount++;
+        // total reports = each visible incident + its merged corroborating reports.
+        totalReports += 1 + (r.duplicate_count || 0);
+        // operation tag: the dominant (first non-null) crisis_event_id — used to group
+        // buildings under their Operation in the GLOBAL feed (Operation→Building→Incident).
+        if (!opId && r.crisis_event_id) opId = r.crisis_event_id;
     }
-    return { key, reports: rs, count: rs.length, maxRank, maxSev, critical, newCount,
-             lastActivity, name: _clusterName(rs), singleton: key.charAt(0) === 'r',
-             buildingId: key.charAt(0) === 'b' ? key.slice(2) : null };
+    const ungrouped = key === 'ungrouped';
+    // count = distinct INCIDENT units in this building (Building → Incident → Report);
+    // reportCount = the raw report volume (used by the ungrouped "to map" message).
+    return { key, reports: rs, count: _distinctIncidents(rs), reportCount: rs.length, totalReports,
+             maxRank, maxSev, critical, newCount,
+             lastActivity, opId,
+             name: ungrouped ? 'Needs mapping · Ungrouped reports' : _clusterName(rs),
+             singleton: !ungrouped && key.charAt(0) === 'r',
+             buildingId: key.charAt(0) === 'b' ? key.slice(2) : null,
+             ungrouped };
 }
-function _renderClusterCard(c) {
+function _renderClusterCard(c, forceOpen) {
     const sec = document.createElement('div');
-    const expanded = _expandedClusters.has(c.key);
-    sec.className = 'qrt-section cc-cluster' + (expanded ? '' : ' collapsed') + (c.singleton ? ' cc-cluster-single' : '');
+    // forceOpen (building/triage/queue scope) expands the card for THIS render only.
+    // It must NOT be written into the persistent _expandedClusters Set, or every
+    // building would stay expanded in every later view (the "clicking one incident
+    // expands everything" bug — a stale force-open leaked into the global/op feed).
+    const expanded = !!forceOpen || _expandedClusters.has(c.key);
+    // v116: the OPEN building card gets a teal "active" ring because it is mirrored in
+    // the Building Console on the right (single-open accordion ↔ one console).
+    const _active = expanded && !!c.buildingId;
+    sec.className = 'qrt-section cc-cluster' + (expanded ? '' : ' collapsed') + (c.singleton ? ' cc-cluster-single' : '') + (_active ? ' cc-cluster-active' : '');
     sec.dataset.clusterKey = c.key;
     const color = SEV_COLORS[c.maxSev] || SEV_COLORS.UNKNOWN;
-    const bits = [`${c.count} report${c.count !== 1 ? 's' : ''}`];
+    // Building count = distinct INCIDENT units (real incidents table, grouped by
+    // incident_id). The corroborating reports per incident now live under each
+    // incident card's "N reports" expander, so the building header is a single clean
+    // "N incidents" (the v132 "· M duplicates" chip is superseded by that model).
+    const _inc = c.count;
+    const bits = [ c.ungrouped
+        ? `${c.reportCount} report${c.reportCount !== 1 ? 's' : ''} to map`
+        : `${_inc} incident${_inc !== 1 ? 's' : ''}` ];
     if (c.critical) bits.push(`<b>${c.critical} critical</b>`);
     if (c.newCount) bits.push(`${c.newCount} new`);
     bits.push(timeAgo(new Date(c.lastActivity || Date.now()).toISOString()));
     const header = document.createElement('div');
     header.className = 'qrt-section-header';
+    // Tree-consistent gestures (matches the Operation→Building→Incident tree): the
+    // chevron / header row TOGGLES the building's incidents inline (multi-open, so
+    // Expand-all / Collapse-all work); the building NAME opens its Building Console on
+    // the right. h3 / singleton / ungrouped clusters have no console — name is plain.
+    const _nameLink = !!c.buildingId;
+    const _titleInner = `<div class="cc-cluster-title${_nameLink ? ' cc-cluster-name-link' : ''}"${_nameLink ? ' role="button" tabindex="0" title="Open the building console"' : ''}>${escapeHtml(c.name)}</div>`;
+    // Per-building duplicate-count badge (filled async by _paintDupBadges from
+    // /buildings-needing-review). Clicking it opens the building console where the
+    // Potential-Duplicates merge controls live.
+    const _dupSlot = c.buildingId
+        ? `<span class="cc-cluster-dup" data-dup-bld="${escapeHtml(c.buildingId)}" style="display:none"></span>`
+        : '';
     header.innerHTML =
+        `<i class="fa-solid fa-chevron-down qrt-section-chevron"></i>` +
         `<span class="cc-cluster-sev" style="background:${color}"></span>` +
-        `<div class="cc-cluster-main"><div class="cc-cluster-title">${escapeHtml(c.name)}</div>` +
+        `<div class="cc-cluster-main">${_titleInner}` +
         `<div class="cc-cluster-meta">${bits.join(' · ')}</div></div>` +
-        // Building-backed clusters open the full Cluster View (Building Console);
-        // h3/singleton clusters have no console (the report list IS the cluster).
-        (c.buildingId
-            ? `<button class="cc-cluster-open" title="Open Building Details" aria-label="Open Building Details" onclick="event.stopPropagation();window.openBuildingConsole&&window.openBuildingConsole(decodeURIComponent('${encodeURIComponent(c.buildingId)}'))"><i class="fa-solid fa-up-right-from-square"></i></button>`
-            : '') +
-        `<span class="qrt-section-count">${c.count}</span>` +
-        `<i class="fa-solid fa-chevron-down qrt-section-chevron"></i>`;
-    header.addEventListener('click', () => {
-        if (_expandedClusters.has(c.key)) _expandedClusters.delete(c.key);
-        else _expandedClusters.add(c.key);
-        sec.classList.toggle('collapsed');
+        _dupSlot +
+        `<span class="qrt-section-count">${c.count}</span>`;
+    header.setAttribute('role', 'button');
+    header.setAttribute('tabindex', '0');
+    header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    header.setAttribute('aria-label', (expanded ? 'Collapse ' : 'Expand ') + (c.name || 'building') + ' incidents');
+    // Toggle this building's incidents (multi-open — does NOT touch other buildings).
+    const _toggleCluster = () => {
+        // Read the VISUAL state (not just the Set) so a force-opened card (expanded for
+        // the render but not in _expandedClusters) still collapses on the first click.
+        const wasOpen = !sec.classList.contains('collapsed');
+        if (wasOpen) { _expandedClusters.delete(c.key); sec.classList.add('collapsed'); header.setAttribute('aria-expanded', 'false'); }
+        else { _expandedClusters.add(c.key); sec.classList.remove('collapsed'); header.setAttribute('aria-expanded', 'true'); }
+    };
+    // Open the building console (the drill-in action). Ensures the building is expanded
+    // and is the single "active" one mirrored by the console on the right.
+    const _openConsole = () => {
+        if (!c.buildingId) { _toggleCluster(); return; }
+        _expandedClusters.add(c.key);
+        sec.classList.remove('collapsed');
+        header.setAttribute('aria-expanded', 'true');
+        const list = sec.parentElement;
+        if (list) list.querySelectorAll('.cc-cluster.cc-cluster-active').forEach((o) => { if (o !== sec) o.classList.remove('cc-cluster-active'); });
+        sec.classList.add('cc-cluster-active');
+        if (window.openBuildingConsole) { try { window.openBuildingConsole(c.buildingId); } catch (_e) {} }
+    };
+    header.addEventListener('click', _toggleCluster);
+    header.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); _toggleCluster(); }
     });
     sec.appendChild(header);
+    if (_nameLink) {
+        const nameEl = header.querySelector('.cc-cluster-name-link');
+        if (nameEl) {
+            nameEl.addEventListener('click', (e) => { e.stopPropagation(); _openConsole(); });
+            nameEl.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); _openConsole(); } });
+        }
+    }
     const body = document.createElement('div');
     body.className = 'qrt-section-body';
-    c.reports.slice()
-        .sort((a, b) => (_CC_SEV_RANK[String(b.severity).toUpperCase()] || 0) - (_CC_SEV_RANK[String(a.severity).toUpperCase()] || 0)
-            || String(b.server_created_at || '').localeCompare(String(a.server_created_at || '')))
-        .forEach((r) => body.appendChild(createIncidentCard(r)));
+    // Cards within a building honour the active sort mode (the sort icon in the
+    // tabs row). Each is wrapped in .opg-inc — the SAME slate-elbow leaf component the
+    // operation tree uses — so the building->incident connector matches everywhere.
+    _groupByIncident(c.reports.slice().sort(getSortFunction())).forEach((members) => {
+        body.appendChild(_renderIncidentGroup(members));
+    });
     sec.appendChild(body);
     return sec;
 }
+
+// ── Incident grouping (Building → Incident → Report) ──────────────────────────
+// The feed stays REPORT-sourced (so map/search/filters/export/status are
+// untouched), but reports are grouped into the first-class INCIDENT entity by the
+// server-assigned r.incident_id (a report with incident_id NULL — the best-effort
+// auto-assign fallback — becomes its own singleton). First-seen order is preserved
+// so the active sort drives both the lead report and the group order.
+function _groupByIncident(reports) {
+    const order = [];
+    const groups = new Map();
+    for (const r of (reports || [])) {
+        const k = (r && r.incident_id) || ('r:' + (r && r.id));
+        if (!groups.has(k)) { groups.set(k, []); order.push(k); }
+        groups.get(k).push(r);
+    }
+    return order.map((k) => groups.get(k));
+}
+// Count of distinct incident UNITS among loaded reports (= what the feed renders):
+// distinct incident_id + each incident-less report as its own singleton. Matches the
+// server banner count (analytics counts.incidents) by construction.
+function _distinctIncidents(reports) {
+    const s = new Set();
+    for (const r of (reports || [])) s.add((r && r.incident_id) || ('r:' + (r && r.id)));
+    return s.size;
+}
+// Render ONE incident as a feed unit. A single-report incident renders exactly like
+// today (the ≈1:1 common case — no visual change). A multi-report incident renders
+// ONE card led by the first member, with an "N reports" expander that reveals the
+// member reports nested + dimmed (subsumes the v132 confirmed-duplicate expander —
+// incident_id ⊇ confirmed-dups). N = the authoritative report_count incl. the
+// confirmed-duplicate members collapsed under each visible member.
+function _renderIncidentGroup(members) {
+    const inc = document.createElement('div');
+    inc.className = 'opg-inc';
+    const lead = members[0];
+    const reportCount = members.reduce((n, m) => n + 1 + ((m && m.duplicate_count) || 0), 0);
+    if (reportCount <= 1) { inc.appendChild(createIncidentCard(lead)); return inc; }
+    inc.appendChild(createIncidentCard(lead, { incidentId: (lead && lead.incident_id) || null, reportCount, members }));
+    return inc;
+}
+// The neutral "N reports" expander chip the lead card of a multi-report incident
+// wears (replaces _dupMergedBadge for grouped cards). Opens the member reports
+// inline via toggleIncidentMembers.
+function _incidentExpander(r, ctx) {
+    const n = ctx.reportCount;
+    const incId = ctx.incidentId;
+    const idAttr = incId ? `data-inc="${escapeAttr(incId)}"` : `data-rep="${escapeAttr(r.id)}"`;
+    const args = incId
+        ? `decodeURIComponent('${encodeURIComponent(incId)}'),null`
+        : `null,decodeURIComponent('${encodeURIComponent(r.id)}')`;
+    const base = 'display:inline-flex;align-items:center;gap:4px;background:rgba(148,163,184,.12);color:#93a3b8;border:none;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600;cursor:pointer';
+    return `<span class="qrt-dup-merged" role="button" tabindex="0" aria-expanded="false" ${idAttr}`
+        + ` title="${n} reports corroborate this incident · click to show them"`
+        + ` onclick="event.stopPropagation();window.toggleIncidentMembers(${args},this)"`
+        + ` onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();window.toggleIncidentMembers(${args},this);}"`
+        + ` style="${base}"><i class="fa-solid fa-layer-group"></i> ${n} reports <i class="fa-solid fa-chevron-down qrt-dup-twist"></i></span>`;
+}
+// One dimmed nested member row (reuses the v132 .qrt-dup-child styles). Accepts both
+// a full Report object (rich: has r.location) and a server _member_dict (lean). The
+// card's lead is skipped (it IS the headline).
+function _incNestedRow(m, leadId) {
+    if (!m || m.id === leadId) return '';
+    const sev = String(m.severity || 'UNKNOWN').toUpperCase();
+    const col = SEV_COLORS[sev] || SEV_COLORS.UNKNOWN;
+    const what = infraDisplayLabel(m.infrastructure_type || 'OTHER') || (m.crisis_type || 'Report');
+    const when = m.server_created_at ? timeAgo(m.server_created_at) : '';
+    const where = m.location_name || (m.location && (m.location.user_location_name || m.location.device_location_name)) || '';
+    const tag = m.is_lead ? 'lead' : 'report';
+    const idJs = `decodeURIComponent('${encodeURIComponent(m.id)}')`;
+    return `<div class="qrt-dup-child" role="button" tabindex="0" title="Open this report"`
+        + ` onclick="event.stopPropagation();window.openIncident&&window.openIncident(${idJs})"`
+        + ` onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();window.openIncident&&window.openIncident(${idJs});}">`
+        + `<i class="fa-solid fa-angle-right qrt-dup-child-ic"></i>`
+        + `<span class="qrt-dup-child-sev" style="background:${col}"></span>`
+        + `<span class="qrt-dup-child-what">${escapeHtml(what)}</span>`
+        + (where ? `<span class="qrt-dup-child-where">${escapeHtml(where)}</span>` : '')
+        + `<span class="qrt-dup-child-tag">${tag}</span>`
+        + (when ? `<span class="qrt-dup-child-time">${escapeHtml(when)}</span>` : '')
+        + `</div>`;
+}
+// Expand/collapse an incident's member reports under its lead card. Authoritative
+// membership (incl. confirmed-duplicate members collapsed out of /reports) comes from
+// GET /incidents/{id}; falls back to the locally-grouped visible members on failure
+// or when the report has no incident_id (then GET /reports/{id}/duplicates). Lazy +
+// cached on the card element; survives idle polls (304 = no feed re-render).
+window.toggleIncidentMembers = async function (incidentId, reportId, badgeEl) {
+    const card = badgeEl && badgeEl.closest && badgeEl.closest('.qrt-card');
+    if (!card) return;
+    const leadId = card.dataset && card.dataset.reportId;
+    const host = card.closest('.opg-inc') || card.parentElement;
+    let box = card._incMembersBox;
+    if (box && box.isConnected) {
+        const hidden = box.style.display === 'none';
+        box.style.display = hidden ? '' : 'none';
+        badgeEl.classList.toggle('expanded', hidden);
+        badgeEl.setAttribute('aria-expanded', hidden ? 'true' : 'false');
+        return;
+    }
+    box = document.createElement('div');
+    box.className = 'qrt-dup-children';
+    box.innerHTML = '<div class="qrt-dup-empty">Loading reports…</div>';
+    if (card.nextSibling) host.insertBefore(box, card.nextSibling); else host.appendChild(box);
+    card._incMembersBox = box;
+    badgeEl.classList.add('expanded');
+    badgeEl.setAttribute('aria-expanded', 'true');
+    // local map (id → full Report) for location enrichment + the failure fallback.
+    const local = new Map();
+    for (const m of (card._incidentMembers || [])) if (m && m.id) local.set(m.id, m);
+    const _paint = (rows) => {
+        const html = rows.map((m) => _incNestedRow(local.get(m.id) || m, leadId)).join('');
+        box.innerHTML = html || '<div class="qrt-dup-empty">No other reports.</div>';
+    };
+    try {
+        let rows;
+        if (incidentId) {
+            const inc = await _incJSON(`${INCIDENTS_API}/${encodeURIComponent(incidentId)}`);
+            rows = (inc && inc.reports) || [];
+        } else {
+            const res = await fetch(`${API}/${encodeURIComponent(reportId)}/duplicates`,
+                { headers: { Authorization: 'Bearer ' + (localStorage.getItem('crisp_token') || '') } });
+            const data = res.ok ? await res.json() : { candidates: [] };
+            rows = ((data && data.candidates) || []).filter((c) => c && c.confirmed)
+                .map((c) => ({ ...c, id: c.report_id }));
+        }
+        _paint(rows);
+    } catch (_e) {
+        // fall back to the locally-grouped visible members (minus the lead)
+        _paint((card._incidentMembers || []).filter((m) => m && m.id !== leadId));
+    }
+};
 // Population matches the queue feed's narrowing (queue/status/time/search/chips)
 // so toggling view modes shows the SAME reports, just grouped.
-function _clusterFilteredReports() {
-    let reports = _activeQueue ? _applyQueueFilter(allReports)
-        : allReports.filter((r) => {
-            if (statusFilter === 'all') return true;
-            const s = r.status;
-            if (statusFilter === 'active') return s === 'PENDING' || s === 'VERIFIED';
-            return String(s).toLowerCase() === String(statusFilter).toLowerCase();
-        });
+// Post-scope/queue narrowing shared by BOTH feed render paths (the building-grouped
+// cluster feed AND the attention-queue op→building grouped feed) so a queue view
+// honours the Critical chip / time / crisis-drill / search / chips identically - the
+// tab badges then never disagree with the list. (The status TAB is applied
+// separately, only when no queue owns the population.)
+function _applyPostQueueNarrowing(reports) {
+    let out = _applyPillFilter(reports);
     if (!_activeQueue && timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
-        reports = reports.filter((r) => _priorityTime(r) > cutoff);
+        out = out.filter((r) => _priorityTime(r) > cutoff);
     }
+    if (_crisisDrillFilter != null) out = out.filter((r) => (r.crisis_type || 'UNKNOWN') === _crisisDrillFilter);
     if (treeSearchTerm) {
-        reports = reports.filter((r) => {
+        out = out.filter((r) => {
             const hay = [r.description, r.infrastructure_type, r.infrastructure_name, r.severity, r.status,
                 r.location?.user_location_name, r.location?.device_location_name].filter(Boolean).join(' ').toLowerCase();
             return hay.includes(treeSearchTerm);
         });
     }
-    if (_activeChipFilters && _activeChipFilters.size) reports = reports.filter(_passesChipFilters);
-    return reports;
+    if (_activeChipFilters && _activeChipFilters.size) out = out.filter(_passesChipFilters);
+    return out;
 }
+function _clusterFilteredReports() {
+    // The Rejected TAB is the only in-feed place rejected reports surface (every other
+    // view strips them via _applyQueueFilter). Show ONLY rejected — scope-filtered +
+    // post-queue narrowed — so the tab honours building/triage scope, search + chips.
+    if (!_activeQueue && _activeStatusTab === 'rejected') {
+        return _applyPostQueueNarrowing(
+            _applyScopeFilter(allReports).filter((r) => (r.reviewer_verdict || 'NOT_REVIEWED') === 'REJECTED'));
+    }
+    // scope (building/triage) → rejected-hidden + queue → status TAB (when no queue
+    // owns the population) → shared post-queue narrowing.
+    const base = _applyQueueFilter(_applyScopeFilter(allReports));
+    const reports = _activeQueue ? base : _applyStatusTabFilter(base);
+    return _applyPostQueueNarrowing(reports);
+}
+// Jun 2026 nav-clarity: the attention-card DESTINATION. Groups the category-filtered
+// incidents by Operation → Building (sections expanded; headers drill the scope), so
+// the Global → Operation → Building → Incident hierarchy is visible in-page. Cards are
+// the shared createIncidentCard (so #report-feed-list .qrt-card contracts still hold).
+function _ensureOpGroupStyles() {
+    if (document.getElementById('cc-opg-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'cc-opg-styles';
+    // Operation -> Building -> Incident TREE. Three muted, professional levels so the
+    // parent-child structure is obvious at a glance without clutter:
+    //   Operations = violet (A) · Buildings = teal (B) · Incidents = slate (C).
+    // Each level owns a thin connector rail to its children (violet rail under an
+    // operation, teal rail under a building) with a short elbow into each child; the
+    // tick into an incident is slate so the leaf level reads distinctly. A small
+    // indent per level keeps it compact; collapse hides a node's body.
+    s.textContent = `
+      .opg-toolbar{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:8px;
+        padding:7px 10px;margin:-4px 0 9px;background:#0b1322;border-bottom:1px solid #1d2942}
+      .opg-tb-sum{font-size:11px;color:#9fb2d4;font-weight:600;min-width:0;overflow:hidden;
+        text-overflow:ellipsis;white-space:nowrap}
+      .opg-tb-spacer{margin-left:auto;flex:1}
+      .opg-tb-btn{flex:none;font-size:11px;font-weight:700;color:#b7c6e0;background:#16223a;
+        border:1px solid #25344f;border-radius:6px;padding:3px 9px;cursor:pointer;
+        display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+      .opg-tb-btn:hover{background:#1d2c49;color:#e6edf7}
+      .opg-tb-btn i{font-size:10px}
+
+      .opg-twist{flex:none;width:13px;text-align:center;color:#7e93b5;font-size:10px;
+        transition:transform .12s ease}
+      .opg-op.opg-collapsed>.opg-op-head .opg-twist,
+      .opg-bldg.opg-collapsed>.opg-bldg-head .opg-twist{transform:rotate(-90deg)}
+
+      /* Operation — level A. Header ROW, NOT a card: no border, no background.
+         Hierarchy is shown by FONT COLOUR (purple) + a thin connector rail only
+         (operator request). The chevron sits tight so it adds no extra indent. */
+      .opg-op{margin:0 0 8px}
+      .opg-op-head{display:flex;align-items:center;gap:6px;padding:3px 4px;cursor:pointer;border-radius:6px}
+      .opg-op-head:hover{background:rgba(255,255,255,.03)}
+      .opg-op-ic{flex:none;color:#a78bfa;font-size:11px}
+      .opg-triage .opg-op-ic{color:#b3a4dd}
+      .opg-op-name{font-size:12.5px;font-weight:800;color:#a78bfa;letter-spacing:.01em;min-width:0;
+        overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .opg-triage .opg-op-name{color:#b3a4dd}
+      .opg-op-count{flex:none;font-size:11px;font-weight:800;color:#a78bfa;background:none;padding:0 2px;
+        font-variant-numeric:tabular-nums}
+      .opg-op-drill{margin-left:auto;flex:none;font-size:11px;font-weight:700;color:#9aa7c2;
+        cursor:pointer;white-space:nowrap}
+      .opg-op-drill:hover{color:#c7d2e6;text-decoration:underline}
+      /* Connector: thin purple rail from the operation to its buildings, starting just
+         BELOW the header (margin-top) so it never merges back into the parent row. */
+      .opg-op-body{margin:1px 0 6px 12px;padding-left:12px;border-left:1.5px solid rgba(167,139,250,.38)}
+
+      /* Building — level B. Header ROW: no bg, no border; distinguished by TEAL font. */
+      .opg-bldg{position:relative;margin-top:2px}
+      .opg-bldg-head{display:flex;align-items:center;gap:6px;padding:3px 4px;font-size:11.5px;
+        color:#2dd4bf;font-weight:700;cursor:pointer;border-radius:6px;position:relative}
+      .opg-bldg-head:hover{background:rgba(255,255,255,.03)}
+      .opg-bldg-head::before{content:'';position:absolute;left:-12px;top:13px;width:10px;height:1.5px;
+        background:rgba(167,139,250,.38)}
+      .opg-bldg-ic{flex:none;color:#2dd4bf;font-size:10px}
+      .opg-bldg-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .opg-bldg-name.opg-clickable{cursor:pointer}
+      .opg-bldg-name.opg-clickable:hover{color:#7defd9;text-decoration:underline}
+      .opg-bldg-count{flex:none;margin-left:auto;font-size:11px;font-weight:800;color:#2dd4bf;background:none;
+        padding:0 2px;font-variant-numeric:tabular-nums}
+      .opg-bldg-body{margin:1px 0 6px 11px;padding-left:12px;border-left:1.5px solid rgba(45,212,191,.34);
+        display:flex;flex-direction:column;gap:7px}
+
+      /* Incident — level C (the only card). Connector elbow inherits the parent
+         BUILDING colour (teal) so the rail palette stays at 3 colours. */
+      .opg-inc{position:relative}
+      .opg-inc::before{content:'';position:absolute;left:-12px;top:14px;width:10px;height:1.5px;
+        background:rgba(45,212,191,.34)}
+
+      /* op -> building elbow: a short purple tick from the operation rail into each
+         building card (the feed groups buildings as .cc-cluster under .opg-op-body),
+         so the hierarchy reads as clean connected lines, not a floating rail. */
+      .opg-op-body > .cc-cluster > .qrt-section-header{position:relative}
+      .opg-op-body > .cc-cluster > .qrt-section-header::before{content:'';position:absolute;
+        left:-12px;top:13px;width:10px;height:1.5px;background:rgba(167,139,250,.38)}
+
+      .opg-op.opg-collapsed>.opg-op-body{display:none}
+      .opg-bldg.opg-collapsed>.opg-bldg-body{display:none}
+    `;
+    document.head.appendChild(s);
+}
+
+// ── P2: Operations REGISTRY as the Console's left tree (#/operations) ──────────
+// The operations list is no longer a separate full-page overlay — it renders here as
+// the TOP level of the Operation → Building → Incident tree. Each operation is a
+// collapsible node: its NAME (or "Open →") opens the operation summary in the right
+// panel; its chevron expands to that operation's buildings → incidents (grouped from
+// the loaded working set — the full per-op worklist is in the panel). Controls: search
+// · sort · Expand/Collapse all · + New. Active only on the #/operations route, so the
+// building-first #/incidents default is unchanged.
+let _opsRegMode = false;
+let _opsRegExpanded = new Set();   // expanded operation ids
+let _opsRegSelectedOp = null;      // op whose panel is open (highlight; keeps the global tree)
+let _opsRegView = { q: '', sort: 'worst', status: 'live', health: '', shown: 30 };
+const OPS_REG_PAGE = 30;           // windowing page size (must-have #12 scale)
+function setOpsRegistryMode(on) {
+    const next = !!on;
+    if (next === _opsRegMode) return;
+    _opsRegMode = next;
+    if (!next) { _opsRegSelectedOp = null; return void (function () { try { renderFeed(); } catch (_e) {} })(); }
+    // Home summary-chip handoff (crisp_ops_filter): preset the health / status filter so a
+    // "N critical state" chip lands on the registry already filtered.
+    try {
+        const h = sessionStorage.getItem('crisp_ops_filter');
+        sessionStorage.removeItem('crisp_ops_filter');
+        if (h === 'red') { _opsRegView.health = 'RED'; _opsRegView.status = 'live'; }
+        else if (h === 'amber') { _opsRegView.health = 'AMBER'; _opsRegView.status = 'live'; }
+        else if (h === 'green') { _opsRegView.health = 'GREEN'; _opsRegView.status = 'live'; }
+        else if (h === 'unattended') { _opsRegView.health = 'UNATT'; _opsRegView.status = 'live'; }
+        else if (h === 'all') { _opsRegView.health = ''; _opsRegView.status = 'all'; }
+    } catch (_e) {}
+    _opsRegView.shown = OPS_REG_PAGE;
+    try { renderFeed(); } catch (_e) {}
+}
+window.setOpsRegistryMode = setOpsRegistryMode;
+window.getOpsRegistryMode = () => _opsRegMode;
+
+function _opsRegFiltered(ops) {
+    const v = _opsRegView;
+    const q = (v.q || '').trim().toLowerCase();
+    const isEnded = (o) => String(o && o.status || '').toUpperCase() === 'ENDED';
+    const unatt = (o) => String(o.status || '').toUpperCase() === 'LIVE' && Number(o.critical || 0) > 0 && !(Number(o.responders_active || 0) > 0);
+    return ops.filter((o) => {
+        if (v.status === 'live' && isEnded(o)) return false;
+        if (v.status === 'ended' && !isEnded(o)) return false;
+        const h = String(o.health || '').toUpperCase();
+        if ((v.health === 'RED' || v.health === 'AMBER' || v.health === 'GREEN') && h !== v.health) return false;
+        if (v.health === 'UNATT' && !unatt(o)) return false;
+        if (q && !String(o.name || '').toLowerCase().includes(q) && !String(o.place_name || '').toLowerCase().includes(q)) return false;
+        return true;
+    });
+}
+function _opsRegSorted(ops) {
+    const list = _opsRegFiltered(ops);
+    const rank = { RED: 0, AMBER: 1, GREEN: 2 };
+    if (_opsRegView.sort === 'name') list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    else list.sort((a, b) => ((rank[String(a.health || '').toUpperCase()] ?? 3) - (rank[String(b.health || '').toUpperCase()] ?? 3))
+        || (Number(b.critical || 0) - Number(a.critical || 0)) || (Number(b.total || 0) - Number(a.total || 0)));
+    return list;
+}
+
+function renderOperationsRegistry(el) {
+    _ensureClusterStyles();
+    _ensureOpGroupStyles();
+    _ensureOpsRegStyles();
+    if (!(_opsCache && _opsCache.length) && typeof _loadOpsForSwitcher === 'function') {
+        _loadOpsForSwitcher().then(() => { try { if (_opsRegMode) renderFeed(); } catch (_e) {} });
+    }
+    const ops = _opsRegSorted((_opsCache || []).filter((o) => o && o.id && !o.is_cluster));
+    // Group the loaded working set by operation (the per-op full worklist is in the panel).
+    const byOp = new Map();
+    (allReports || []).forEach((r) => {
+        const k = r.crisis_event_id; if (!k) return;
+        let g = byOp.get(k); if (!g) { g = []; byOp.set(k, g); } g.push(r);
+    });
+    el.innerHTML = '';
+    const tb = document.createElement('div');
+    tb.className = 'opg-toolbar opg-reg-toolbar';
+    tb.innerHTML =
+        '<input type="search" class="opg-reg-search" placeholder="Search operations…" aria-label="Search operations" value="' + escapeAttr(_opsRegView.q) + '">'
+        + '<span class="opg-reg-seg" role="tablist" aria-label="Operation status">'
+            + '<button type="button" class="opg-reg-segbtn' + (_opsRegView.status === 'live' ? ' on' : '') + '" data-status="live">Live</button>'
+            + '<button type="button" class="opg-reg-segbtn' + (_opsRegView.status === 'ended' ? ' on' : '') + '" data-status="ended">Ended</button>'
+            + '<button type="button" class="opg-reg-segbtn' + (_opsRegView.status === 'all' ? ' on' : '') + '" data-status="all">All</button>'
+        + '</span>'
+        + '<select class="opg-reg-sort" aria-label="Sort operations"><option value="worst"' + (_opsRegView.sort === 'worst' ? ' selected' : '') + '>Worst first</option><option value="name"' + (_opsRegView.sort === 'name' ? ' selected' : '') + '>Name A–Z</option></select>'
+        + '<span class="opg-reg-fchips" role="group" aria-label="Health filter">'
+            + '<button type="button" class="opg-reg-fchip red' + (_opsRegView.health === 'RED' ? ' on' : '') + '" data-health="RED" title="Critical-state operations">RED</button>'
+            + '<button type="button" class="opg-reg-fchip amber' + (_opsRegView.health === 'AMBER' ? ' on' : '') + '" data-health="AMBER" title="Rising operations">AMBER</button>'
+            + '<button type="button" class="opg-reg-fchip green' + (_opsRegView.health === 'GREEN' ? ' on' : '') + '" data-health="GREEN" title="Stable operations">GREEN</button>'
+        + '</span>'
+        + '<span class="opg-tb-sum">' + ops.length + ' operation' + (ops.length === 1 ? '' : 's') + '</span>'
+        + '<span class="opg-tb-spacer"></span>'
+        + '<button type="button" class="opg-tb-btn opg-reg-new" id="cco-newop" title="Start a new operation"><i class="fa-solid fa-plus"></i> New operation</button>'
+        + '<button type="button" class="opg-tb-btn" data-reg-all="expand" title="Expand all"><i class="fa-solid fa-angles-down"></i></button>'
+        + '<button type="button" class="opg-tb-btn" data-reg-all="collapse" title="Collapse all"><i class="fa-solid fa-angles-up"></i></button>';
+    el.appendChild(tb);
+    const _searchEl = tb.querySelector('.opg-reg-search');
+    if (_searchEl) _searchEl.addEventListener('input', (e) => {
+        _opsRegView.q = e.target.value || ''; _opsRegView.shown = OPS_REG_PAGE; renderOperationsRegistry(el);
+        const s = el.querySelector('.opg-reg-search'); if (s) { s.focus(); try { s.setSelectionRange(s.value.length, s.value.length); } catch (_e) {} }
+    });
+    tb.querySelector('.opg-reg-sort').addEventListener('change', (e) => { _opsRegView.sort = e.target.value; renderOperationsRegistry(el); });
+    tb.querySelectorAll('.opg-reg-segbtn').forEach((b) => b.addEventListener('click', () => { _opsRegView.status = b.getAttribute('data-status'); _opsRegView.shown = OPS_REG_PAGE; renderOperationsRegistry(el); }));
+    tb.querySelectorAll('.opg-reg-fchip').forEach((c) => c.addEventListener('click', () => { const h = c.getAttribute('data-health'); _opsRegView.health = (_opsRegView.health === h) ? '' : h; _opsRegView.shown = OPS_REG_PAGE; renderOperationsRegistry(el); }));
+    tb.querySelector('.opg-reg-new').addEventListener('click', () => { try { (window.openOperationWizard || function () {})(); } catch (_e) {} });
+    tb.querySelector('[data-reg-all="expand"]').addEventListener('click', () => { ops.forEach((o) => _opsRegExpanded.add(o.id)); renderOperationsRegistry(el); });
+    tb.querySelector('[data-reg-all="collapse"]').addEventListener('click', () => { _opsRegExpanded.clear(); renderOperationsRegistry(el); });
+
+    // Orphan-critical CTA: un-operationalised critical reports → the two-option chooser
+    // (View ungrouped reports · Create operation). Shown only in the unfiltered view.
+    const _cluster = (_opsCache || []).find((o) => o && o.is_cluster) || null;
+    if (_cluster && Number(_cluster.critical) > 0 && !(_opsRegView.q || '').trim()) {
+        const n = Number(_cluster.critical);
+        const cta = document.createElement('button');
+        cta.type = 'button';
+        cta.className = 'opg-reg-cluster-cta';
+        cta.setAttribute('data-cluster', '1');
+        cta.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + n + ' critical report' + (n === 1 ? '' : 's') + ' not yet in an operation — review or operationalise';
+        cta.addEventListener('click', () => { try { (window.openClusterChooser || function () {})({ critical: n }); } catch (_e) {} });
+        el.appendChild(cta);
+    }
+
+    const badge = document.getElementById('feed-count-badge');
+    if (badge) badge.textContent = ops.length + ' operation' + (ops.length === 1 ? '' : 's');
+
+    if (!ops.length) {
+        const empty = document.createElement('div');
+        empty.className = 'feed-empty-state';
+        empty.innerHTML = '<i class="fa-solid fa-bullseye"></i><div class="feed-empty-title">' + ((_opsCache && _opsCache.length) ? 'No operations match' : 'Loading operations…') + '</div>'
+            + '<div class="feed-empty-sub">' + ((_opsCache && _opsCache.length) ? 'Try a different search.' : 'Reading the portfolio…') + '</div>';
+        el.appendChild(empty);
+        return;
+    }
+
+    ops.slice(0, _opsRegView.shown).forEach((op) => {   // windowing (must-have #12 scale)
+        const expanded = _opsRegExpanded.has(op.id);
+        const reports = byOp.get(op.id) || [];
+        const opWrap = document.createElement('div');
+        opWrap.className = 'opg-op' + (expanded ? '' : ' opg-collapsed') + (op.id === _opsRegSelectedOp ? ' cc-cluster-active' : '');
+        opWrap.dataset.opgKey = 'op:' + op.id;
+        opWrap.dataset.op = op.id;
+        const crit = Number(op.critical || 0), tot = Number(op.total || 0);
+        const health = String(op.health || '').toUpperCase();
+        const opHead = document.createElement('div');
+        opHead.className = 'opg-op-head';
+        opHead.setAttribute('role', 'button');
+        opHead.setAttribute('aria-expanded', String(expanded));
+        opHead.innerHTML =
+            '<i class="fa-solid fa-chevron-down opg-twist" aria-hidden="true"></i>'
+            + '<span class="opg-reg-health hc-' + (health || 'NA') + '" title="' + escapeAttr(op.health_reason || health || '') + '"></span>'
+            + '<span class="opg-op-name"><span class="opg-reg-opname">' + escapeHtml(op.name || 'Operation') + '</span>' + (op.place_name ? '<span class="opg-reg-place"> · ' + escapeHtml(op.place_name) + '</span>' : '') + '</span>'
+            + (crit ? '<span class="opg-op-count opg-reg-crit" title="' + crit + ' critical">' + crit + '</span>' : '')
+            + '<span class="opg-op-count" title="' + tot + ' report' + (tot === 1 ? '' : 's') + '">' + tot + '</span>'
+            + '<a class="opg-op-drill">Open →</a>';
+        opHead.addEventListener('click', () => {
+            if (_opsRegExpanded.has(op.id)) _opsRegExpanded.delete(op.id); else _opsRegExpanded.add(op.id);
+            renderOperationsRegistry(el);
+        });
+        const _openOp = (e) => { e.stopPropagation(); if (window.openOperationSummary) window.openOperationSummary(op.id); };
+        opHead.querySelector('.opg-reg-opname').addEventListener('click', _openOp);
+        opHead.querySelector('.opg-op-drill').addEventListener('click', _openOp);
+        opWrap.appendChild(opHead);
+        const opBody = document.createElement('div');
+        opBody.className = 'opg-op-body';
+        if (expanded) {
+            if (!reports.length) {
+                opBody.innerHTML = '<div class="opg-reg-empty">No incidents in the loaded set — <a class="opg-reg-openlink">open the operation</a> for its full worklist.</div>';
+                const lk = opBody.querySelector('.opg-reg-openlink');
+                if (lk) lk.addEventListener('click', _openOp);
+            } else {
+                const groups = new Map();
+                reports.forEach((r) => { let k = _clusterKey(r); if (k.charAt(0) !== 'b') k = 'ungrouped'; let g = groups.get(k); if (!g) { g = []; groups.set(k, g); } g.push(r); });
+                const clusters = [];
+                groups.forEach((rs, key) => clusters.push(_clusterSummary(key, rs)));
+                clusters.sort((a, b) => ((a.ungrouped ? 1 : 0) - (b.ungrouped ? 1 : 0)) || (b.maxRank - a.maxRank) || (b.count - a.count));
+                clusters.forEach((c) => opBody.appendChild(_renderClusterCard(c)));   // buildings collapsed by default
+            }
+        }
+        opWrap.appendChild(opBody);
+        el.appendChild(opWrap);
+    });
+    if (ops.length > _opsRegView.shown) {
+        const more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'opg-reg-more';
+        more.textContent = 'Load more (' + (ops.length - _opsRegView.shown) + ')';
+        more.addEventListener('click', () => { _opsRegView.shown += OPS_REG_PAGE; renderOperationsRegistry(el); });
+        el.appendChild(more);
+    }
+    try { updateCommandStats(); } catch (_e) {}
+}
+
+function _ensureOpsRegStyles() {
+    if (document.getElementById('cc-opsreg-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'cc-opsreg-styles';
+    s.textContent = `
+      .opg-reg-toolbar{flex-wrap:wrap;gap:6px}
+      .opg-reg-search{flex:1 1 130px;min-width:90px;background:#0e1726;border:1px solid #25344f;border-radius:7px;
+        color:#dce8fb;font-size:11.5px;padding:4px 9px;outline:none}
+      .opg-reg-search:focus{border-color:#3a517a}
+      .opg-reg-sort{background:#0e1726;border:1px solid #25344f;border-radius:7px;color:#b7c6e0;font-size:11px;padding:4px 6px;cursor:pointer}
+      .opg-reg-seg{display:inline-flex;border:1px solid #25344f;border-radius:7px;overflow:hidden}
+      .opg-reg-segbtn{background:#0e1726;border:none;color:#8aa0bf;font-size:11px;font-weight:700;padding:4px 9px;cursor:pointer;font-family:inherit}
+      .opg-reg-segbtn.on{background:#1d2c49;color:#eaf2fc}
+      .opg-reg-fchips{display:inline-flex;gap:4px}
+      .opg-reg-fchip{font-size:10px;font-weight:800;letter-spacing:.3px;padding:3px 7px;border-radius:7px;cursor:pointer;font-family:inherit;
+        border:1px solid #25344f;background:#0e1726;color:#8aa0bf}
+      .opg-reg-fchip.red.on{background:rgba(239,68,68,.18);border-color:rgba(239,68,68,.5);color:#fca5a5}
+      .opg-reg-fchip.amber.on{background:rgba(245,158,11,.18);border-color:rgba(245,158,11,.5);color:#fcd34d}
+      .opg-reg-fchip.green.on{background:rgba(34,197,94,.18);border-color:rgba(34,197,94,.5);color:#86efac}
+      .opg-reg-more{display:block;width:calc(100% - 8px);margin:2px 4px 10px;padding:8px;border-radius:8px;
+        border:1px solid #25344f;background:#16223a;color:#b7c6e0;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit}
+      .opg-reg-more:hover{background:#1d2c49;color:#e6edf7}
+      .opg-reg-health{flex:none;width:8px;height:8px;border-radius:50%;background:#5b6b86}
+      .opg-reg-health.hc-RED{background:#ef4444}.opg-reg-health.hc-AMBER{background:#f59e0b}.opg-reg-health.hc-GREEN{background:#22c55e}
+      .opg-reg-place{color:#8aa0bf;font-weight:500}
+      .opg-reg-crit{background:rgba(239,68,68,.16);border:1px solid rgba(239,68,68,.3);color:#fca5a5}
+      .opg-reg-empty{font-size:11.5px;color:#9fb3d1;padding:6px 4px}
+      .opg-reg-openlink{color:#9db8ef;cursor:pointer;text-decoration:underline}
+      .opg-reg-cluster-cta{display:flex;align-items:center;gap:7px;width:calc(100% - 8px);margin:0 4px 8px;
+        padding:8px 11px;border-radius:9px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.10);
+        color:#fca5a5;font-size:11.5px;font-weight:700;cursor:pointer;text-align:left;font-family:inherit}
+      .opg-reg-cluster-cta:hover{background:rgba(239,68,68,.18)}
+      .opg-reg-cluster-cta i{flex:none}`;
+    document.head.appendChild(s);
+}
+
+// Tree-collapse state for the Operation -> Building -> Incident grouped feed. Holds the
+// keys (op:<id> / bld:<op>:<bldg>) the operator has explicitly collapsed; reset when the
+// attention category changes so each category opens fully expanded.
+let _opgCollapsed = new Set();
+let _opgScopeKey = null;
+
+function renderOperationGroupedFeed(el) {
+    _ensureClusterStyles();
+    _ensureOpGroupStyles();
+    // Section names come from _opsCache (the switcher's operations list). Load it
+    // lazily + re-render once it lands so sections show real operation names, not
+    // the generic "Operation" fallback. Guarded so it fires at most once.
+    if (typeof _loadOpsForSwitcher === 'function' && !(_opsCache && _opsCache.length)) {
+        _loadOpsForSwitcher().then(() => {
+            try { if (_activeQueue && !_activeCrisisEventId && !_activeBuildingId && !_triageScope) renderFeed(); } catch (_e) {}
+        });
+    }
+    const q = _activeQueue;
+    // A new attention category opens fully expanded (drop the prior collapse state).
+    const scopeKey = String(q || '');
+    if (scopeKey !== _opgScopeKey) { _opgCollapsed = new Set(); _opgScopeKey = scopeKey; }
+    // Same post-queue narrowing as the cluster feed so Critical / search / chips /
+    // crisis-drill actually filter this grouped view too (no badge-vs-list drift).
+    const reports = _applyPostQueueNarrowing(_applyQueueFilter(_applyScopeFilter(allReports)));
+    if (!reports.length) {
+        el.innerHTML = '<div class="cluster-empty">No incidents in this category.</div>';
+        try { updateCommandStats(); } catch (_e) {}
+        return;
+    }
+    const qSeg = q ? (';queue=' + encodeURIComponent(q)) : '';
+    // group by operation (crisis_event_id) → building (building_id)
+    const ops = new Map();
+    reports.forEach((r) => {
+        const k = r.crisis_event_id || '__triage__';
+        if (!ops.has(k)) ops.set(k, { opId: r.crisis_event_id || null, reports: [] });
+        ops.get(k).reports.push(r);
+    });
+    const opList = [...ops.values()].sort((a, b) => b.reports.length - a.reports.length);
+    // Summary counts the REAL hierarchy — a triage section ("no operation") and a
+    // "No building tagged" bucket are shown in the tree but are not counted as an
+    // operation / building.
+    const realOps = opList.filter((s) => s.opId).length;
+    const realBldgs = new Set(reports.filter((r) => r.building_id).map((r) => r.building_id)).size;
+    el.innerHTML = '';
+    // ── sticky toolbar: hierarchy summary + Expand all / Collapse all ──
+    const tb = document.createElement('div');
+    tb.className = 'opg-toolbar';
+    const _plur = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+    tb.innerHTML =
+        '<span class="opg-tb-sum">' + _plur(realOps, 'operation') + ' · '
+            + _plur(realBldgs, 'building') + ' · ' + _plur(reports.length, 'incident') + '</span>'
+        + '<span class="opg-tb-spacer"></span>'
+        + '<button type="button" class="opg-tb-btn" data-opg-all="expand" title="Expand all"><i class="fa-solid fa-angles-down"></i> Expand</button>'
+        + '<button type="button" class="opg-tb-btn" data-opg-all="collapse" title="Collapse all"><i class="fa-solid fa-angles-up"></i> Collapse</button>';
+    tb.querySelector('[data-opg-all="expand"]').addEventListener('click', () => _opgApplyAll(false));
+    tb.querySelector('[data-opg-all="collapse"]').addEventListener('click', () => _opgApplyAll(true));
+    el.appendChild(tb);
+
+    opList.forEach((sec) => {
+        const isTriage = !sec.opId;
+        const opKey = 'op:' + (sec.opId || '__triage__');
+        const opName = isTriage ? 'Triage — no operation' : ((_opMeta(sec.opId) || {}).name || 'Operation');
+        const opHash = (isTriage ? '#/incidents;op=none' : ('#/incidents;op=' + encodeURIComponent(sec.opId))) + qSeg;
+        const opWrap = document.createElement('div');
+        opWrap.className = 'opg-op' + (isTriage ? ' opg-triage' : '') + (_opgCollapsed.has(opKey) ? ' opg-collapsed' : '');
+        opWrap.dataset.opgKey = opKey;
+        const opHead = document.createElement('div');
+        opHead.className = 'opg-op-head';
+        opHead.setAttribute('role', 'button');
+        opHead.setAttribute('aria-expanded', String(!_opgCollapsed.has(opKey)));
+        opHead.innerHTML =
+            '<i class="fa-solid fa-chevron-down opg-twist" aria-hidden="true"></i>'
+            + '<i class="fa-solid ' + (isTriage ? 'fa-compass' : 'fa-bullseye') + ' opg-op-ic" aria-hidden="true"></i>'
+            + '<span class="opg-op-name">' + escapeHtml(opName) + '</span>'
+            + (function () { const _ic = _distinctIncidents(sec.reports); return '<span class="opg-op-count" title="' + _ic + ' incident' + (_ic === 1 ? '' : 's') + '">' + _ic + '</span>'; })()
+            + '<a class="opg-op-drill">View →</a>';
+        opHead.addEventListener('click', () => _opgToggle(opWrap));
+        opHead.querySelector('.opg-op-drill').addEventListener('click', (e) => {
+            e.stopPropagation();
+            // A real operation opens its summary in the right panel (single-page console);
+            // the triage pseudo-section has no summary, so it just scopes the feed.
+            if (sec.opId && window.openOperationSummary) window.openOperationSummary(sec.opId);
+            else location.hash = opHash;
+        });
+        opWrap.appendChild(opHead);
+        const opBody = document.createElement('div');
+        opBody.className = 'opg-op-body';
+        // building sub-groups
+        const blds = new Map();
+        sec.reports.forEach((r) => {
+            const bk = r.building_id || '__nobldg__';
+            if (!blds.has(bk)) blds.set(bk, { bid: r.building_id || null, reports: [] });
+            blds.get(bk).reports.push(r);
+        });
+        [...blds.values()].sort((a, b) => b.reports.length - a.reports.length).forEach((bg) => {
+            const noBldg = !bg.bid;
+            const bKey = 'bld:' + (sec.opId || '__triage__') + ':' + (bg.bid || '__nobldg__');
+            const bName = noBldg ? 'No building tagged' : _buildingDisplayName(bg.reports);
+            const bWrap = document.createElement('div');
+            bWrap.className = 'opg-bldg' + (_opgCollapsed.has(bKey) ? ' opg-collapsed' : '');
+            bWrap.dataset.opgKey = bKey;
+            const bHead = document.createElement('div');
+            bHead.className = 'opg-bldg-head';
+            bHead.setAttribute('role', 'button');
+            bHead.setAttribute('aria-expanded', String(!_opgCollapsed.has(bKey)));
+            bHead.innerHTML =
+                '<i class="fa-solid fa-chevron-down opg-twist" aria-hidden="true"></i>'
+                + '<i class="fa-solid fa-building opg-bldg-ic" aria-hidden="true"></i>'
+                + '<span class="opg-bldg-name' + (noBldg ? '' : ' opg-clickable') + '">' + escapeHtml(bName) + '</span>'
+                + '<span class="opg-bldg-count">' + _distinctIncidents(bg.reports) + '</span>';
+            bHead.addEventListener('click', () => _opgToggle(bWrap));
+            if (!noBldg) {
+                const bHash = (isTriage ? '#/incidents;op=none' : ('#/incidents;op=' + encodeURIComponent(sec.opId)))
+                    + ';bld=' + encodeURIComponent(bg.bid) + qSeg;
+                // The building NAME navigates to the building scope; the rest of the row toggles.
+                bHead.querySelector('.opg-bldg-name').addEventListener('click', (e) => { e.stopPropagation(); location.hash = bHash; });
+            }
+            bWrap.appendChild(bHead);
+            const cards = document.createElement('div');
+            cards.className = 'opg-bldg-body';
+            _groupByIncident(bg.reports).forEach((members) => cards.appendChild(_renderIncidentGroup(members)));
+            bWrap.appendChild(cards);
+            opBody.appendChild(bWrap);
+        });
+        opWrap.appendChild(opBody);
+        el.appendChild(opWrap);
+    });
+    try { updateCommandStats(); } catch (_e) {}
+}
+
+// Toggle a single op/building node (cheap show/hide, no re-render — keeps scroll pos).
+function _opgToggle(node) {
+    const k = node && node.dataset && node.dataset.opgKey;
+    if (!k) return;
+    const collapsed = _opgCollapsed.has(k);
+    if (collapsed) { _opgCollapsed.delete(k); node.classList.remove('opg-collapsed'); }
+    else { _opgCollapsed.add(k); node.classList.add('opg-collapsed'); }
+    const head = node.querySelector('.opg-op-head, .opg-bldg-head');
+    if (head) head.setAttribute('aria-expanded', String(collapsed));
+}
+
+// Expand all -> open every node. Collapse all -> collapse to the operation level
+// (operations closed; buildings reset to open so a later op-expand reads cleanly).
+function _opgApplyAll(collapse) {
+    const el = document.getElementById('report-feed-list');
+    if (!el) return;
+    el.querySelectorAll('.opg-bldg').forEach((n) => {
+        _opgCollapsed.delete(n.dataset.opgKey); n.classList.remove('opg-collapsed');
+        const h = n.querySelector('.opg-bldg-head'); if (h) h.setAttribute('aria-expanded', 'true');
+    });
+    el.querySelectorAll('.opg-op').forEach((n) => {
+        if (collapse) { _opgCollapsed.add(n.dataset.opgKey); n.classList.add('opg-collapsed'); }
+        else { _opgCollapsed.delete(n.dataset.opgKey); n.classList.remove('opg-collapsed'); }
+        const h = n.querySelector('.opg-op-head'); if (h) h.setAttribute('aria-expanded', String(!collapse));
+    });
+}
+
 function renderClusterFeed(el) {
     _ensureClusterStyles();
+    _ensureOpGroupStyles();   // shared tree chrome: .opg-toolbar + .opg-inc connector leaf
     const reports = _clusterFilteredReports();
     el.innerHTML = '';
     if (!reports.length) {
@@ -4215,21 +5252,199 @@ function renderClusterFeed(el) {
     }
     const groups = new Map();
     for (const r of reports) {
-        const k = _clusterKey(r);
+        let k = _clusterKey(r);
+        // Building-first: every report with no building_id (h3 cell or singleton)
+        // collapses into ONE "Needs mapping / Ungrouped" bucket so the feed reads as
+        // a list of buildings, and unmapped reports are surfaced (never hidden).
+        if (k.charAt(0) !== 'b') k = 'ungrouped';
         let g = groups.get(k);
         if (!g) { g = []; groups.set(k, g); }
         g.push(r);
     }
     const clusters = [];
     groups.forEach((rs, key) => clusters.push(_clusterSummary(key, rs)));
-    // Worst severity first, then most recent activity, then largest.
-    clusters.sort((a, b) => (b.maxRank - a.maxRank) || (b.lastActivity - a.lastActivity) || (b.count - a.count));
-    const frag = document.createDocumentFragment();
-    for (const c of clusters) frag.appendChild(_renderClusterCard(c));
-    el.appendChild(frag);
+    // Buildings worst-first; the Ungrouped bucket always sorts last (it's context).
+    clusters.sort((a, b) => ((a.ungrouped ? 1 : 0) - (b.ungrouped ? 1 : 0))
+        || (b.maxRank - a.maxRank) || (b.lastActivity - a.lastActivity) || (b.count - a.count));
+    // When the operator has drilled into the deepest scopes (a single building, or
+    // the triage bucket), or has switched to the flat "queue" escape hatch,
+    // auto-expand the cluster(s) so the reports show immediately instead of one
+    // collapsed card they'd have to click open.
+    const _forceOpen = !!(_activeBuildingId || _triageScope || viewMode === 'queue');
+    const nBld = clusters.filter(c => !c.ungrouped).length;
+    const nInc = clusters.reduce((n, c) => n + c.count, 0);
+    // GLOBAL view shows the full Operation → Building → Incident hierarchy: when real
+    // operations exist, the building cards are grouped under their Operation. Op/building-
+    // scoped views stay the flat building list (you're already inside an operation). When
+    // nothing is assigned to an operation (early data / all-triage), stay flat — there is
+    // nothing to group by.
+    const _isGlobal = !_activeCrisisEventId && !_activeBuildingId && !_triageScope;
+    const _opGrouped = _isGlobal && clusters.some((c) => c.opId);
+    const nOps = _opGrouped ? new Set(clusters.filter((c) => c.opId).map((c) => c.opId)).size : 0;
+    // op section names come from _opsCache; load lazily ONCE + re-render so headers show
+    // real operation names instead of the generic "Operation" fallback.
+    if (_opGrouped && !_opGroupNamesRequested && typeof _loadOpsForSwitcher === 'function' && !(_opsCache && _opsCache.length)) {
+        _opGroupNamesRequested = true;
+        _loadOpsForSwitcher().then(() => { try { if (!_activeCrisisEventId && !_activeBuildingId && !_triageScope) renderFeed(); } catch (_e) {} });
+    }
+    // Sticky Expand-all / Collapse-all toolbar — same control set as the operation tree.
+    // Skipped when there is only one cluster (nothing to manage).
+    if (clusters.length >= 2) {
+        const tb = document.createElement('div');
+        tb.className = 'opg-toolbar';
+        const _plur = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+        // Structure only (ops · buildings). The incident count is deliberately NOT
+        // repeated here: it counts only the ACTIVE status tab (e.g. Pending), which
+        // contradicted the header's all-status total. Total lives in the header; the
+        // active-tab number is on the status tab itself.
+        const _sum = _opGrouped
+            ? (_plur(nOps, 'operation') + ' · ' + _plur(nBld, 'building'))
+            : _plur(nBld, 'building');
+        tb.innerHTML =
+            '<span class="opg-tb-sum">' + _sum + '</span>'
+            + '<span class="opg-tb-spacer"></span>'
+            + '<button type="button" class="opg-tb-btn" data-cc-all="expand" title="Expand all"><i class="fa-solid fa-angles-down"></i> Expand</button>'
+            + '<button type="button" class="opg-tb-btn" data-cc-all="collapse" title="Collapse all"><i class="fa-solid fa-angles-up"></i> Collapse</button>';
+        tb.querySelector('[data-cc-all="expand"]').addEventListener('click', () => _clusterApplyAll(el, clusters, true));
+        tb.querySelector('[data-cc-all="collapse"]').addEventListener('click', () => _clusterApplyAll(el, clusters, false));
+        el.appendChild(tb);
+    }
+    if (_opGrouped) _mountOpGroupedClusters(el, clusters);
+    else _mountClusterWindow(el, clusters, _forceOpen);
     const badge = document.getElementById('feed-count-badge');
-    if (badge) badge.textContent =
-        `${clusters.length} cluster${clusters.length !== 1 ? 's' : ''} · ${reports.length} report${reports.length !== 1 ? 's' : ''}`;
+    if (badge) {
+        badge.textContent =
+            `${nBld} building${nBld !== 1 ? 's' : ''} · ${reports.length} report${reports.length !== 1 ? 's' : ''}`;
+    }
+}
+
+// Expand-all / Collapse-all for the building feed. Updates _expandedClusters for EVERY
+// cluster (so windowed cards that scroll in later render in the right state) and toggles
+// the classes on already-rendered cards — no full re-render, so scroll is preserved.
+// (Operation sections, when present at Global, stay expanded — the op level is the
+// always-visible spine; each op is collapsible via its own chevron.)
+function _clusterApplyAll(el, clusters, expand) {
+    clusters.forEach((c) => { if (expand) _expandedClusters.add(c.key); else _expandedClusters.delete(c.key); });
+    el.querySelectorAll('.cc-cluster').forEach((sec) => {
+        const on = _expandedClusters.has(sec.dataset.clusterKey);
+        sec.classList.toggle('collapsed', !on);
+        if (!on) sec.classList.remove('cc-cluster-active');
+        const h = sec.querySelector('.qrt-section-header');
+        if (h) h.setAttribute('aria-expanded', on ? 'true' : 'false');
+    });
+    // Op-grouped GLOBAL view: the building cards above are ALREADY collapsed rows, so
+    // Collapse-all must also close the OPERATION sections (.opg-op) - otherwise the
+    // button has no visible effect (the operator-reported "Collapse all not working").
+    // Collapse-all -> operations closed to their header spine; Expand-all -> operations
+    // open. State persists via _opgCollapsed so it survives the next re-render too.
+    el.querySelectorAll('.opg-op').forEach((op) => {
+        const k = op.dataset && op.dataset.opgKey; if (!k) return;
+        if (expand) { _opgCollapsed.delete(k); op.classList.remove('opg-collapsed'); }
+        else { _opgCollapsed.add(k); op.classList.add('opg-collapsed'); }
+        const h = op.querySelector('.opg-op-head');
+        if (h) h.setAttribute('aria-expanded', String(expand));
+    });
+}
+
+// GLOBAL hierarchy: group the rich building cards under their Operation so the feed
+// reads Operation → Building → Incident. Reuses the .opg-op header/rail chrome and the
+// EXISTING _renderClusterCard for buildings (so the cards keep their dup badges, console
+// links, v133 incident grouping). Unassigned buildings (no operation) fall into a single
+// "no operation" section, sorted last. Buildings stay collapsed by default; ops expanded.
+let _opGroupNamesRequested = false;
+function _mountOpGroupedClusters(el, clusters) {
+    const ops = new Map();
+    for (const c of clusters) {
+        const k = c.opId || '__unassigned__';
+        if (!ops.has(k)) ops.set(k, { opId: c.opId || null, clusters: [] });
+        ops.get(k).clusters.push(c);
+    }
+    const _rank = (sec) => Math.max(0, ...sec.clusters.map((c) => c.maxRank));
+    const _inc = (sec) => sec.clusters.reduce((n, c) => n + c.count, 0);
+    const opList = [...ops.values()].sort((a, b) => {
+        if (!!a.opId !== !!b.opId) return a.opId ? -1 : 1;   // real operations before "no operation"
+        return (_rank(b) - _rank(a)) || (_inc(b) - _inc(a));
+    });
+    opList.forEach((sec) => {
+        const isUnassigned = !sec.opId;
+        const opKey = 'op:' + (sec.opId || '__unassigned__');
+        const opName = isUnassigned ? 'Unassigned · no operation' : ((_opMeta(sec.opId) || {}).name || 'Operation');
+        const nBld = sec.clusters.filter((c) => !c.ungrouped).length;
+        const nInc = _inc(sec);
+        const opWrap = document.createElement('div');
+        opWrap.className = 'opg-op' + (isUnassigned ? ' opg-triage' : '') + (_opgCollapsed.has(opKey) ? ' opg-collapsed' : '');
+        opWrap.dataset.opgKey = opKey;
+        const opHead = document.createElement('div');
+        opHead.className = 'opg-op-head';
+        opHead.setAttribute('role', 'button');
+        opHead.setAttribute('aria-expanded', String(!_opgCollapsed.has(opKey)));
+        opHead.innerHTML =
+            '<i class="fa-solid fa-chevron-down opg-twist" aria-hidden="true"></i>'
+            + '<i class="fa-solid ' + (isUnassigned ? 'fa-compass' : 'fa-bullseye') + ' opg-op-ic" aria-hidden="true"></i>'
+            + '<span class="opg-op-name">' + escapeHtml(opName) + '</span>'
+            + '<span class="opg-op-count" title="' + nBld + ' building' + (nBld === 1 ? '' : 's') + ' · ' + nInc + ' incident' + (nInc === 1 ? '' : 's') + '">' + nInc + '</span>'
+            + (isUnassigned ? '' : '<a class="opg-op-drill">View →</a>');
+        opHead.addEventListener('click', () => _opgToggle(opWrap));
+        const drill = opHead.querySelector('.opg-op-drill');
+        if (drill) drill.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (sec.opId && window.openOperationSummary) window.openOperationSummary(sec.opId);
+        });
+        opWrap.appendChild(opHead);
+        const opBody = document.createElement('div');
+        opBody.className = 'opg-op-body';
+        sec.clusters.forEach((c) => opBody.appendChild(_renderClusterCard(c)));
+        opWrap.appendChild(opBody);
+        el.appendChild(opWrap);
+    });
+}
+
+// v116: building-level infinite scroll. Render the building cards a page (10) at a
+// time and append the rest as the operator scrolls - mirrors _applyProgressiveReveal
+// but at the cluster/section grain. This is DOM-perf windowing over the already-loaded
+// working set; it does NOT change the server fetch cap (must-have #12). Reset on every
+// renderClusterFeed call (scope/status-tab/filter/density change) so a new view starts
+// from the top.
+let _feedBuildingIO = null;
+const _FEED_BUILDING_PAGE = 10;
+function _mountClusterWindow(el, clusters, forceOpen) {
+    if (_feedBuildingIO) { try { _feedBuildingIO.disconnect(); } catch (_) {} _feedBuildingIO = null; }
+    const total = clusters.length;
+    let shown = 0;
+    const _renderUpTo = (target, before) => {
+        const frag = document.createDocumentFragment();
+        for (; shown < target; shown++) {
+            const c = clusters[shown];
+            frag.appendChild(_renderClusterCard(c, forceOpen));   // render-only force-open; no Set pollution
+        }
+        if (before) el.insertBefore(frag, before); else el.appendChild(frag);
+    };
+    // First page = 10, but extend it so the currently-open (expanded) building is never
+    // left below the fold after a re-render (its inline tree + linked console must show).
+    let firstPage = Math.min(_FEED_BUILDING_PAGE, total);
+    for (let i = firstPage; i < total; i++) {
+        if (_expandedClusters.has(clusters[i].key)) { firstPage = i + 1; break; }
+    }
+    _renderUpTo(firstPage, null);
+    if (shown >= total) return;
+    const sentinel = document.createElement('div');
+    sentinel.className = 'feed-bld-sentinel';
+    const _paint = () => {
+        sentinel.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i> ' +
+            escapeHtml(window.t('loading_more_buildings', 'Loading more buildings')) +
+            ` <span class="fbs-progress">${shown} / ${total}</span>`;
+    };
+    _paint();
+    el.appendChild(sentinel);
+    _feedBuildingIO = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+            if (!e.isIntersecting) continue;
+            _renderUpTo(Math.min(shown + _FEED_BUILDING_PAGE, total), sentinel);
+            if (shown >= total) { try { _feedBuildingIO.disconnect(); } catch (_) {} sentinel.remove(); return; }
+            _paint();
+        }
+    }, { root: null, rootMargin: '300px 0px', threshold: 0 });
+    _feedBuildingIO.observe(sentinel);
 }
 
 let _progressiveIO = null;
@@ -4313,11 +5528,14 @@ function _applyProgressiveReveal(container) {
 }
 
 // ── Queue Mode: three-bucket triage cards ─────────────────────────────────────
+// RETIRED (Jun 2026 feed simplification): no longer dispatched - the feed is always
+// building-grouped and the three buckets became the Pending/Responding/Resolved
+// TABS. Kept (with consistent labels) only as a fallback should a flat list return.
 function renderTriageQueue(el) {
     // Operational queue (attention-panel deep link) - the queue predicate
     // DEFINES the population (replaces status/time filters; search/chips
-    // still narrow below).
-    let reports = _applyQueueFilter(allReports);
+    // still narrow below). Building/Triage scope is applied FIRST.
+    let reports = _applyQueueFilter(_applyScopeFilter(allReports));
     if (!_activeQueue && timeFilterHours > 0) {
         const cutoff = Date.now() - timeFilterHours * 3600000;
         // K.5.b (May 2026, Phase K) - use _priorityTime so offline-
@@ -4401,14 +5619,14 @@ function renderTriageQueue(el) {
     if (criticals.length > 0) frag.appendChild(createAlertBanner(criticals.length));
 
     // Three collapsible sections
-    frag.appendChild(createQueueSection('needs',      '<i class="fa-solid fa-circle-exclamation"></i> NEEDS ACTION', needs,      'qrt-section-needs'));
-    frag.appendChild(createQueueSection('dispatched', '<i class="fa-solid fa-truck-medical"></i> RESPONDING', dispatched, 'qrt-section-dispatched'));
-    frag.appendChild(createQueueSection('resolved',   '<i class="fa-solid fa-circle-check"></i> CLOSED',     resolved,   'qrt-section-resolved'));
+    frag.appendChild(createQueueSection('needs',      '<i class="fa-solid fa-circle-exclamation"></i> PENDING',    needs,      'qrt-section-needs'));
+    frag.appendChild(createQueueSection('dispatched', '<i class="fa-solid fa-truck-medical"></i> RESPONDING',     dispatched, 'qrt-section-dispatched'));
+    frag.appendChild(createQueueSection('resolved',   '<i class="fa-solid fa-circle-check"></i> RESOLVED',        resolved,   'qrt-section-resolved'));
 
     el.appendChild(frag);
     const _fcb = document.getElementById('feed-count-badge');
     if (_fcb) _fcb.textContent =
-        needs.length > 0 ? `${needs.length} Need Response` : 'All Clear';
+        needs.length > 0 ? `${needs.length} Pending` : 'All Clear';
 }
 
 // Phase F.8.b (May 2026) - Offline-sync honest sort key.
@@ -4584,7 +5802,8 @@ function _incidentStatusChips(r) {
     if (hasPii('failed')) chips.push('<span class="k5a-chip k5a-chip-red" title="PII blur (face / text redaction) failed. Review manually before sharing."><i class="fa-solid fa-eye-low-vision"></i> Redaction failed</span>');
     if (hasPii('pending')) chips.push('<span class="k5a-chip k5a-chip-amber" title="Image is being scanned for PII; the public URL is gated until the scan completes."><i class="fa-solid fa-shield-halved"></i> Checking PII…</span>');
     if (hasPii('complete_with_redactions')) chips.push('<span class="k5a-chip k5a-chip-green" title="Faces / PII text were detected and automatically blurred. Safe to share."><i class="fa-solid fa-shield-check"></i> Auto-redacted</span>');
-    if (hasAbandon('bandwidth_tier_deferred')) chips.push('<span class="k5a-chip k5a-chip-amber" title="Higher-quality variant not delivered (slow network). SMALL preview is available."><i class="fa-solid fa-signal"></i> Original (slow network)</span>');
+    if (hasAbandon('bandwidth_tier_deferred')) chips.push('<span class="k5a-chip k5a-chip-amber" title="Higher-quality variant not delivered (slow network). SMALL preview is available; the original auto-retries when bandwidth allows."><i class="fa-solid fa-signal"></i> Original (slow network)</span>');
+    if (hasAbandon('storage_evicted')) chips.push('<span class="k5a-chip k5a-chip-amber" title="Full-resolution upload deferred to free device storage after the preview delivered. The SMALL preview is available; the original auto-retries when space + connectivity allow."><i class="fa-solid fa-database"></i> Original (deferred — storage)</span>');
     if (r.submitted_as_anonymous_due_to_expired_token) chips.push('<span class="k5a-chip k5a-chip-grey" title="Reporter token had expired at drain time; submission accepted anonymously."><i class="fa-solid fa-unlock"></i> Attribution lost</span>');
     if (r.sync_status === 'PARTIAL' && media.some(m => m && m.assembly_status === 'pending')) chips.push('<span class="k5a-chip k5a-chip-amber" title="Report still progressing - some chunks pending."><i class="fa-solid fa-hourglass-half"></i> Uploading…</span>');
     const groups = groupPhotos(media.filter(m => m.type === 'IMAGE'));
@@ -4607,25 +5826,99 @@ function _incidentStatusChips(r) {
 }
 window._incidentStatusChips = _incidentStatusChips;   // test hook + detail-panel reuse
 
-// Duplicate collapse: the "N duplicate reports merged" chip the PRIMARY card
-// wears once an analyst has merged corroborating reports beneath it. duplicate_count
-// is the number of merged-away duplicates (server-derived); the incident itself plus
-// its duplicates = N+1 corroborating reports. Consistent 🔗 treatment on feed + map +
-// detail. Returns '' for ordinary reports so the card stays scannable.
+// Duplicate collapse: the "N duplicates" chip the PRIMARY card wears once an analyst
+// has merged corroborating reports beneath it. duplicate_count is the number of
+// merged-away duplicates (server-derived); the incident itself plus its duplicates =
+// N+1 corroborating reports. The chip is now an EXPANDER (neutral, not a competing
+// metric): clicking it reveals the merged duplicate reports NESTED + dimmed under the
+// card, so "all incidents incl. duplicates" stay visible while the building roll-up
+// count stays merged. Returns '' for ordinary reports so the card stays scannable.
 function _dupMergedBadge(r) {
     const n = (r && r.duplicate_count) || 0;
     if (!n) return '';
     const corro = n + 1;
-    return `<span class="qrt-dup-merged" title="${n} duplicate report${n > 1 ? 's' : ''} merged under this incident · ${corro} corroborating reports total. Open the report to switch between them."` +
-        ` style="display:inline-flex;align-items:center;gap:4px;background:rgba(56,189,248,.14);color:#7dd3fc;border:1px solid rgba(56,189,248,.35);border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600">` +
-        `🔗 ${n} duplicate report${n > 1 ? 's' : ''}</span>`;
+    const bid = r && r.building_id;
+    const base = 'display:inline-flex;align-items:center;gap:4px;background:rgba(148,163,184,.12);color:#93a3b8;border:none;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600';
+    const label = `<i class="fa-solid fa-link"></i> ${n} duplicate${n > 1 ? 's' : ''}`;
+    // Building-less clusters (h3 / singleton) have no in-building duplicates to
+    // expand (duplicate review is building-scoped) → plain read-only chip.
+    if (!bid) {
+        return `<span class="qrt-dup-merged" title="${n} duplicate report${n > 1 ? 's' : ''} merged under this incident · ${corro} corroborating reports total."` +
+            ` style="${base};cursor:default">${label}</span>`;
+    }
+    const idJs = `decodeURIComponent('${encodeURIComponent(r.id)}')`;
+    return `<span class="qrt-dup-merged" role="button" tabindex="0" aria-expanded="false" data-dup-toggle="${escapeAttr(r.id)}"` +
+        ` title="${n} duplicate report${n > 1 ? 's' : ''} merged under this incident · ${corro} corroborating reports total. Click to show them."` +
+        ` onclick="event.stopPropagation();window.toggleDupChildren(${idJs},this)"` +
+        ` onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();window.toggleDupChildren(${idJs},this);}"` +
+        ` style="${base};cursor:pointer">${label} <i class="fa-solid fa-chevron-down qrt-dup-twist"></i></span>`;
 }
 window._dupMergedBadge = _dupMergedBadge;
 
-function createIncidentCard(r) {
+// Expand/collapse the merged duplicate reports under a primary incident card. The
+// duplicates are rendered as dimmed sub-rows nested inside the building rail (so the
+// list shows every incident incl. duplicates, while the building header keeps the
+// merged count). Lazy: fetched once from GET /{id}/duplicates (confirmed pairs only),
+// cached on the card element. Read-only here — merge/undo controls stay in the
+// building console (reached via the building name).
+window.toggleDupChildren = async function (reportId, badgeEl) {
+    const card = badgeEl && badgeEl.closest && badgeEl.closest('.qrt-card');
+    if (!card) return;
+    const host = card.closest('.opg-inc') || card.parentElement;   // sit under the card, inside the teal rail
+    let box = card._dupChildrenBox;
+    if (box && box.isConnected) {
+        const hidden = box.style.display === 'none';
+        box.style.display = hidden ? '' : 'none';
+        badgeEl.classList.toggle('expanded', hidden);
+        badgeEl.setAttribute('aria-expanded', hidden ? 'true' : 'false');
+        return;
+    }
+    box = document.createElement('div');
+    box.className = 'qrt-dup-children';
+    box.innerHTML = '<div class="qrt-dup-empty">Loading duplicates…</div>';
+    if (card.nextSibling) host.insertBefore(box, card.nextSibling); else host.appendChild(box);
+    card._dupChildrenBox = box;
+    badgeEl.classList.add('expanded');
+    badgeEl.setAttribute('aria-expanded', 'true');
+    try {
+        const res = await fetch(`${API}/${encodeURIComponent(reportId)}/duplicates`,
+            { headers: { Authorization: 'Bearer ' + (localStorage.getItem('crisp_token') || '') } });
+        const data = res.ok ? await res.json() : { candidates: [] };
+        const confirmed = ((data && data.candidates) || []).filter((c) => c && c.confirmed);
+        if (!confirmed.length) { box.innerHTML = '<div class="qrt-dup-empty">No merged duplicates to show.</div>'; return; }
+        box.innerHTML = confirmed.map((c) => {
+            const sev = String(c.severity || 'UNKNOWN').toUpperCase();
+            const col = SEV_COLORS[sev] || SEV_COLORS.UNKNOWN;
+            const what = infraDisplayLabel(c.infrastructure_type || 'OTHER') || (c.crisis_type || 'Incident');
+            const when = c.server_created_at ? timeAgo(c.server_created_at) : '';
+            const where = c.location_name || '';
+            const idJs = `decodeURIComponent('${encodeURIComponent(c.report_id)}')`;
+            return `<div class="qrt-dup-child" role="button" tabindex="0"` +
+                ` title="Duplicate of this incident — open it"` +
+                ` onclick="event.stopPropagation();window.openIncident&&window.openIncident(${idJs})"` +
+                ` onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();window.openIncident&&window.openIncident(${idJs});}">` +
+                `<i class="fa-solid fa-angle-right qrt-dup-child-ic"></i>` +
+                `<span class="qrt-dup-child-sev" style="background:${col}"></span>` +
+                `<span class="qrt-dup-child-what">${escapeHtml(what)}</span>` +
+                (where ? `<span class="qrt-dup-child-where">${escapeHtml(where)}</span>` : '') +
+                `<span class="qrt-dup-child-tag">duplicate</span>` +
+                (when ? `<span class="qrt-dup-child-time">${escapeHtml(when)}</span>` : '') +
+                `</div>`;
+        }).join('');
+    } catch (_e) {
+        box.innerHTML = '<div class="qrt-dup-empty">Could not load duplicates.</div>';
+    }
+};
+
+function createIncidentCard(r, incCtx) {
     const card = document.createElement('div');
     const isSelected = (typeof _bulkSelectedIds !== 'undefined') && _bulkSelectedIds.has(r.id);
     card.className = `qrt-card ${selectedId === r.id ? 'selected' : ''} ${isSelected ? 'bulk-checked' : ''}`;
+    // Multi-report incident context (set by _renderIncidentGroup): the card is the
+    // incident's LEAD; it wears an "N reports" expander (see meta row) + clicking it
+    // opens the Incident Detail (members/merge/split), not the single report.
+    const _isInc = !!(incCtx && incCtx.incidentId && incCtx.reportCount > 1);
+    if (incCtx) { card._incidentMembers = incCtx.members || []; card._incidentId = incCtx.incidentId || null; }
     // Phase F image-reliability (May 2026) - expose the report id on
     // the card element so e2e specs + operator devtools can scope to
     // a specific card without doing visibility heuristics or relying
@@ -4643,10 +5936,13 @@ function createIncidentCard(r) {
         // Phase G.5 - checkbox click is opt-in; clicking elsewhere on
         // the card still opens the detail panel via the existing path.
         if (ev.target && ev.target.classList && ev.target.classList.contains('qrt-bulk-check')) return;
+        // A multi-report incident drills into the Incident Detail (members/merge/split);
+        // a single-report incident opens the report directly.
+        if (_isInc && window.openIncidentDetail) { window.openIncidentDetail(incCtx.incidentId); return; }
         window.openIncident(r.id);   // unified: deep-link + op-aware
     };
-    card.onmouseenter = (e) => showIncidentPreview(r, e);
-    card.onmouseleave = hideIncidentPreview;
+    card.onmouseenter = () => _armIncidentPreview(r, card);
+    card.onmouseleave = _disarmIncidentPreview;
 
     const sev   = r.severity || 'UNKNOWN';
     const infra = r.infrastructure_type || 'OTHER';
@@ -4690,67 +5986,69 @@ function createIncidentCard(r) {
                   title="Select for bulk action" />`
         : '';
 
-    // Title prefers the BUILDING name when building-tagged (hierarchy: the
-    // building is the operational object); the infra TYPE then drops to a chip.
-    const _bldgTitle = !!(r.building_id && r.infrastructure_name);
-    const _titlePlain = _bldgTitle ? r.infrastructure_name : infraDisplayLabel(infra, r.infrastructure_sub_type);
-    const _infraChip = _bldgTitle ? `<span class="qrt-tag qrt-tag-infra">${infraDisplayLabel(infra, r.infrastructure_sub_type)}</span>` : '';
-    const _hasTags = !!(_infraChip || r.crisis_type || r.damage_classification);
+    // The card sits UNDER its building in the feed (building cluster / Console /
+    // op→building group), so it must NOT repeat the building name (the parent header
+    // already shows it) - see feedback_no_redundant_parent_context. A building-tagged
+    // card leads with WHAT WAS HIT (the infra display label); an untagged card keeps
+    // its own free-text name (or the infra label). The building summary is reached
+    // from the building header, not the card title - so the title is plain text and
+    // the card click opens the INCIDENT (single, unambiguous action).
+    const _titlePlain = _hasBuildingLink(r)
+        ? infraDisplayLabel(infra, r.infrastructure_sub_type)
+        : (r.infrastructure_name || infraDisplayLabel(infra, r.infrastructure_sub_type));
+    // No separate infra-type chip: the title now carries the infra label, so a chip
+    // would duplicate it (redundancy). crisis/damage chips still distinguish the card.
+    const _titleEl = `<span class="qrt-infra-name" title="${escapeAttr(_titlePlain)}">${escapeHtml(_titlePlain)}</span>`;
+    const _src = (r.source || 'APP');
+    const _srcTitle = { APP: 'Mobile App', ANDROID: 'Android App', WHATSAPP: 'WhatsApp', TELEGRAM: 'Telegram', SMS: 'SMS', IVR: 'Voice Call' }[_src] || 'Mobile App';
+    const _srcIcon = { APP: '<i class="fa-solid fa-mobile-screen-button"></i>', ANDROID: '<i class="fa-solid fa-robot"></i>', WHATSAPP: '<i class="fa-brands fa-whatsapp"></i>', TELEGRAM: '<i class="fa-brands fa-telegram"></i>', SMS: '<i class="fa-solid fa-comment-sms"></i>', IVR: '<i class="fa-solid fa-phone"></i>' }[_src] || '<i class="fa-solid fa-mobile-screen-button"></i>';
+    // Card declutter (v137): the severity TEXT badge, the status pill ("Needs review" —
+    // redundant inside a status tab), and the Notify CTA are NO LONGER on the card. The
+    // severity LEFT strip carries severity; the active status tab carries status; Notify
+    // + the full action set live in the hover preview + detail panel. _verdict is still
+    // used below for the rejected-tab reason chip.
+    const _verdict = r.reviewer_verdict || 'NOT_REVIEWED';
+    const _whenInner = _isStaleArrival(r)
+        ? `<span class="qrt-stale" title="Captured offline ${escapeAttr(timeAgo(r.client_created_at))}, received ${escapeAttr(timeAgo(r.server_created_at))}"><i class="fa-solid fa-cloud-arrow-up"></i> ${escapeHtml(timeAgo(r.client_created_at))}</span>`
+        : escapeHtml(timeAgo(r.server_created_at));
 
+    // Density-optimised two-row card (≈half the old height). Row 1 = the triage line
+    // (what · severity · source · status); row 2 = the meta line (where · when ·
+    // confidence · merged-dups · blocking · Notify). Compact view shows row 1 only.
+    // Everything not on the card (crisis/damage tags, media thumbnails, full location)
+    // appears in the hover preview — no loss of information.
     card.innerHTML = `
         ${bulkChk}
         <div class="qrt-sev-strip strip-${sev}"></div>
         <div class="qrt-card-body">
             <div class="qrt-what">
-                <span class="qrt-infra-name" title="${escapeHtml(_titlePlain)}">${_cardTitle(r)}</span>
-                <span class="qrt-sev-badge qrt-sev-${sev}">${sev}</span>
-                <span class="qrt-source-badge qrt-src-${(r.source || 'APP').toLowerCase()}" title="Source: ${{APP:'Mobile App',ANDROID:'Android App',WHATSAPP:'WhatsApp',TELEGRAM:'Telegram',SMS:'SMS',IVR:'Voice Call'}[r.source] || 'Mobile App'}">${{APP:'<i class="fa-solid fa-mobile-screen-button"></i>',ANDROID:'<i class="fa-solid fa-robot"></i>',WHATSAPP:'<i class="fa-brands fa-whatsapp"></i>',TELEGRAM:'<i class="fa-brands fa-telegram"></i>',SMS:'<i class="fa-solid fa-comment-sms"></i>',IVR:'<i class="fa-solid fa-phone"></i>'}[r.source] || '<i class="fa-solid fa-mobile-screen-button"></i>'}</span>
+                ${_titleEl}
+                <span class="qrt-source-badge qrt-src-${_src.toLowerCase()}" title="Source: ${_srcTitle}">${_srcIcon}</span>
             </div>
-            ${_hasTags ? `<div class="qrt-undp-tags">
-                ${_infraChip}
-                ${r.crisis_type ? `<span class="qrt-tag qrt-tag-crisis">${crisisLabel(r.crisis_type)}</span>` : ''}
-                ${r.damage_classification ? `<span class="qrt-tag qrt-tag-dmg-${r.damage_classification}">${r.damage_classification.replace(/_/g,' ')}</span>` : ''}
-            </div>` : ''}
-            <div class="qrt-where">
-                <i class="fa-solid fa-location-dot"></i>
-                <span class="qrt-where-text" title="${locText}">${locText}</span>
-                ${_cardBuildingLink(r)}
-            </div>
-            <div class="qrt-when">
-                <i class="fa-regular fa-clock"></i>
-                ${_isStaleArrival(r)
-                    ? `<span class="qrt-stale" title="Captured offline - drained on reconnect">
-                          <i class="fa-solid fa-cloud-arrow-up"></i> Captured ${timeAgo(r.client_created_at)} · Received ${timeAgo(r.server_created_at)}
-                       </span>`
-                    : timeAgo(r.server_created_at)}
-            </div>
-            <div class="qrt-card-footer">
-                <div class="qrt-footer-left">
-                    ${_confidenceChip(r)}
-                    <span class="qrt-media-ics">${_cardMediaIcons(r)}</span>
-                    ${_dupMergedBadge(r)}
-                    ${_blockingFlag}
-                </div>
-                <div class="qrt-footer-right">
-                    ${_cardActionEl(r)}
-                </div>
+            <div class="qrt-meta">
+                <span class="qrt-where"><i class="fa-solid fa-location-dot"></i><span class="qrt-where-text" title="${escapeAttr(locText)}">${escapeHtml(locText)}</span></span>
+                <span class="qrt-when"><i class="fa-regular fa-clock"></i>${_whenInner}</span>
+                ${_confidenceChip(r)}
+                ${_isInc ? _incidentExpander(r, incCtx) : _dupMergedBadge(r)}
+                ${_blockingFlag}
+                ${(_verdict === 'REJECTED' && r.action_taken) ? `<span class="qrt-reject-reason" title="Rejection reason: ${escapeAttr(r.action_taken)}"><i class="fa-solid fa-circle-xmark"></i> ${escapeHtml(r.action_taken)}</span>` : ''}
             </div>
         </div>
     `;
     return card;
 }
 
+// Compat stub. The Buildings/All-Incidents view toggle was retired in the Jun 2026
+// feed simplification - the feed is ALWAYS building-grouped now and status is the
+// 3-tab axis. Legacy callers (saved views, old deep-links, setBuildingScope, the
+// dup-review panel) still call this; it just re-renders.
 window.setViewMode = function(mode) {
-    viewMode = mode;
-    document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector(`.view-btn[data-mode="${mode}"]`)?.classList.add('active');
-    // Show/hide tree-specific controls
-    const tc = document.getElementById('tree-controls');
-    if (tc) tc.style.display = mode === 'tree' ? '' : 'none';
-    // Show/hide sort dropdown (queue mode only)
-    const sd = document.getElementById('sort-dropdown');
-    if (sd) sd.style.display = mode === 'queue' ? '' : 'none';
-    renderFeed();
+    // 'buildings' (default, building-grouped) | 'queue' = the flat "All Incidents"
+    // escape hatch — expands every cluster so all incident cards are directly
+    // visible as one list (used when the operator wants the raw feed, not the
+    // building roll-up). Unknown modes are ignored (keep the current view).
+    if (mode === 'buildings' || mode === 'queue') viewMode = mode;
+    try { renderFeed(); } catch (_e) {}
 };
 
 // ── Tree Mode: original hierarchical feed ─────────────────────────────────────
@@ -4873,17 +6171,21 @@ async function _fetchMapMarkers() {
 }
 
 function updateCommandStats() {
-    const reports = _getFilteredReports();
+    // Scope-aware (building/triage): the tab badges + Critical count reflect the
+    // CURRENT scope, not the whole op/global set.
+    const reports = _applyScopeFilter(_getFilteredReports());
     let critical = 0, responding = 0, resolved = 0, pending = 0;
 
     reports.forEach(r => {
-        // M2 (Phase-1 count contract): "Critical" = severity CRITICAL only, matching
-        // the server (summary.critical / op-rollup), the 'critical' queue predicate,
-        // exports, and the server-sourced strip at scale (C1-b). SEVERE is its own
-        // taxonomy level (surfaced under its severity), not folded into Critical -
-        // pre-fix the strip counted CRITICAL+SEVERE so the tile disagreed with the
-        // queue it opened and with every server "critical".
-        if (r.severity === 'CRITICAL') critical++;
+        // CONSISTENCY CONTRACT: a REJECTED report is set aside (its own tab/count) and
+        // is excluded from every open/active/critical tally — matching the backend
+        // `active` filter + the feed's _applyQueueFilter. Without this skip a rejected
+        // PENDING report inflated Pending/Critical so the strip disagreed with the feed.
+        if (r.reviewer_verdict === 'REJECTED') return;
+        // "Critical" = OPEN (not closed) severity-CRITICAL, matching the backend
+        // counts.critical (active CRITICAL) + the 'critical' queue. A resolved critical
+        // is closed, not an open critical, so the badge agrees with the home tile.
+        if (r.severity === 'CRITICAL' && r.status !== 'RESOLVED' && r.status !== 'FALSE_ALARM') critical++;
         if (r.status === 'RESPONDING') responding++;
         if (r.status === 'RESOLVED' || r.status === 'FALSE_ALARM') resolved++;
         if (r.status === 'PENDING' || r.status === 'VERIFIED') pending++;
@@ -4896,13 +6198,16 @@ function updateCommandStats() {
     // Any active filter makes the client tally the correct "what I see" number,
     // so we keep the client values then (and at small scale there is no summary).
     if (_scopeAggregatesActive() && _scopeSummary && _scopeSummary.counts) {
+        // Single source of truth: read the EXPLICIT backend counts (same ones the home
+        // Command Centre tiles use) rather than deriving from active/total, so the tabs
+        // and the home tiles always agree. All exclude rejected (backend `active`).
         const sc = _scopeSummary.counts;
-        const tot = Number(_scopeSummary.total_reports) || 0;
-        const active = Number(sc.active) || 0;          // all OPEN (not closed)
-        critical = Number(sc.critical) || 0;            // active CRITICAL
+        const tot = Number(_scopeSummary.total_reports) || Number(sc.reports) || 0;
+        critical = Number(sc.critical) || 0;            // active CRITICAL, rejected-excluded
         responding = Number(sc.active_ops) || 0;        // status == RESPONDING
-        pending = Math.max(0, active - responding);     // open-but-not-responding
-        resolved = Math.max(0, tot - active);           // closed (resolved/rejected/false-alarm)
+        resolved = Number(sc.resolved) || 0;            // status == RESOLVED (explicit)
+        pending = Number(sc.pending != null ? sc.pending
+                         : Math.max(0, (Number(sc.active) || 0) - responding));  // status PENDING, rejected-excluded
         total = tot;
     }
 
@@ -4911,7 +6216,19 @@ function updateCommandStats() {
     _set('count-pending', pending);
     _set('count-responding', responding);
     _set('count-resolved', resolved);
-    _set('count-total', total);
+    _set('count-total', total);   // #count-total was retired from the strip (Total is now in the breadcrumb); no-op if absent
+    // B3: re-paint the tab enabled/empty state now that the fresh counts are set
+    // (mutes any Pending/Responding/Resolved tab whose bucket is 0).
+    try { _syncStatusTabsEnabled(); } catch (_e) {}
+
+    // Rejected entry (Filters popover): count + show only when there are any and
+    // we're not already viewing them.
+    const rejectedCount = (allReports || []).filter((r) => r.reviewer_verdict === 'REJECTED').length;
+    _set('count-rejected', rejectedCount);   // the Rejected status TAB badge
+    const rejCnt = document.getElementById('cmd-rejected-count');
+    if (rejCnt) rejCnt.textContent = rejectedCount;
+    const rejBtn = document.getElementById('cmd-filter-rejected');
+    if (rejBtn) rejBtn.style.display = (rejectedCount > 0 && _activeQueue !== 'rejected') ? '' : 'none';
 
     // Phase C.2 - Originals-pending count. Show the pill only when > 0
     // so the command bar doesn't grow a permanent "0 ORIG PENDING" chip
@@ -4979,20 +6296,14 @@ function updateCommandStats() {
 let _activePillFilter = null;
 
 window.filterByPill = function (type) {
-    // Toggle: click same segment again to clear the filter
-    if (_activePillFilter === type) {
-        _activePillFilter = null;
-    } else {
-        _activePillFilter = type;
-    }
-    // Clear active state on every segment
-    document.querySelectorAll('.cmd-status-seg-item').forEach(p => p.classList.remove('active'));
-    if (_activePillFilter) {
-        // Map filter type → element id (the 'all' filter maps to #stat-total)
-        const targetId = _activePillFilter === 'all' ? 'stat-total' : `stat-${_activePillFilter}`;
-        const activeEl = document.getElementById(targetId);
-        if (activeEl) activeEl.classList.add('active');
-    }
+    // Toggle: click the same control again to clear. Lifecycle (pending/responding/
+    // resolved) are now TABS; the only interactive pill is the cross-cutting
+    // 'critical' chip (+ the command-bar originals-pending chip).
+    _activePillFilter = (_activePillFilter === type) ? null : type;
+    const crit = document.getElementById('stat-critical');
+    if (crit) crit.classList.toggle('on', _activePillFilter === 'critical');
+    const op = document.getElementById('stat-originals-pending');
+    if (op) op.classList.toggle('active', _activePillFilter === 'originals_pending');
     renderFeed();
 };
 
@@ -5151,10 +6462,22 @@ function _applyView(v) {
         // Reach into the global state directly - the existing pill-
         // setter wraps a renderFeed which is wasted work here.
         _activePillFilter = v.statusPill || null;
+        // v111: lifecycle is now the status TABS, not pills. Map a legacy saved
+        // lifecycle pill onto the tab so it doesn't collide with the active tab
+        // (which would empty the feed), and sync the Critical chip's .on state.
+        if (['pending', 'responding', 'resolved'].includes(_activePillFilter)) {
+            _activeStatusTab = _activePillFilter; _activePillFilter = null;
+        }
+        const _crit = document.getElementById('stat-critical');
+        if (_crit) _crit.classList.toggle('on', _activePillFilter === 'critical');
     }
     timeFilterHours = (typeof v.timeHours === 'number') ? v.timeHours : 0;
-    if (v.viewMode && (v.viewMode === 'queue' || v.viewMode === 'tree' || v.viewMode === 'clusters')) {
-        viewMode = v.viewMode;
+    if (v.viewMode) {
+        // Building-centric redesign: normalize legacy saved modes.
+        viewMode = v.viewMode === 'clusters' ? 'buildings'
+                 : v.viewMode === 'tree' ? 'queue'
+                 : (v.viewMode === 'buildings' || v.viewMode === 'queue') ? v.viewMode
+                 : 'buildings';
     }
     if (v.sortMode) cardSortMode = v.sortMode;
     if (typeof v.crisis !== 'undefined') _crisisDrillFilter = v.crisis || null;
@@ -5193,7 +6516,7 @@ function _renderSavedViewsMenu() {
     if (cur.statusPill) curBits.push(cur.statusPill);
     if (cur.timeHours > 0) curBits.push(`${cur.timeHours}h`);
     if (cur.crisis) curBits.push(cur.crisis);
-    if (cur.viewMode && cur.viewMode !== 'queue') curBits.push(cur.viewMode);
+    if (cur.viewMode && cur.viewMode !== 'buildings') curBits.push(cur.viewMode);
 
     menu.innerHTML = `
         <div class="cmd-views-section">
@@ -5976,6 +7299,8 @@ function showIncidentPreview(r, event) {
                     <span>${timeAgo(r.server_created_at)}</span>
                     <span><i class="${srcBrand} ${srcIcon}"></i> ${r.source}</span>
                     ${_confidenceChip(r)}
+                    ${r.crisis_type ? `<span class="qrt-tag qrt-tag-crisis">${escapeHtml(crisisLabel(r.crisis_type))}</span>` : ''}
+                    ${r.damage_classification ? `<span class="qrt-tag qrt-tag-dmg-${r.damage_classification}">${escapeHtml(r.damage_classification.replace(/_/g,' '))}</span>` : ''}
                 </div>
             </div>
         </div>
@@ -6023,6 +7348,7 @@ function showIncidentPreview(r, event) {
     const maxTop = window.innerHeight - p.offsetHeight - 20;
     p.style.left = `${Math.min(panelLeft, maxLeft)}px`;
     p.style.top = `${Math.max(Math.min(rect.top - 20, maxTop), 10)}px`;
+    clearTimeout(_hidePreviewTimer);   // re-entering cancels a pending hide
     p.style.display = 'flex';
 
     // Keep tooltip visible when hovering over it (for action buttons)
@@ -6033,10 +7359,26 @@ function showIncidentPreview(r, event) {
 let _hidePreviewTimer = null;
 function hideIncidentPreview() {
     clearTimeout(_hidePreviewTimer);
+    // Grace period so moving the cursor from the card across the gap onto the preview
+    // (to use its action buttons) does NOT hide it; the preview's own onmouseenter sets
+    // _hovered before this fires.
     _hidePreviewTimer = setTimeout(() => {
         const p = document.getElementById('fast-preview');
         if (p && !p._hovered) p.style.display = 'none';
-    }, 150);
+    }, 260);
+}
+// Hover-intent: open the rich preview only after the cursor DWELLS on a card (~220ms),
+// so a quick pass-over no longer flashes it open-and-shut. A mouseleave during the dwell
+// cancels the pending show. Shared by every incident card (feed cards + op-tree leaves).
+let _showPreviewTimer = null;
+function _armIncidentPreview(r, el) {
+    clearTimeout(_hidePreviewTimer);
+    clearTimeout(_showPreviewTimer);
+    _showPreviewTimer = setTimeout(() => { try { showIncidentPreview(r, { target: el }); } catch (_e) {} }, 220);
+}
+function _disarmIncidentPreview() {
+    clearTimeout(_showPreviewTimer);
+    hideIncidentPreview();
 }
 
 window.playPreviewAudio = function (url, btn) {
@@ -6075,10 +7417,27 @@ window._switchToReport = async (id) => {
 };
 
 window.selectReport = (id, skipFly = false) => {
+    const _prevSel = selectedId;
     selectedId = id;
     const r = allReports.find(x => x.id === id)
         || (_detailOnlyReport && _detailOnlyReport.id === id ? _detailOnlyReport : null);
     if (!r) return;
+
+    // v111 lifecycle tabs + v64 deep-link reveal: a newly-selected incident may
+    // live in a RESPONDING / RESOLVED tab while the feed shows another. The tab
+    // filter would hide its card so CrispNav can't scroll to it. On a genuine NEW
+    // selection (not a poll re-render), switch to its tab and re-render so the card
+    // enters the DOM. Skipped while a queue owns the population (tabs neutralized)
+    // and never fights a manual tab change for the already-open incident.
+    if (!skipFly && id !== _prevSel && !_activeQueue) {
+        // A rejected report lives in the Rejected tab (its status may still read
+        // PENDING — rejection is a verdict, not a status), so target that tab.
+        const wantTab = ((r.reviewer_verdict || 'NOT_REVIEWED') === 'REJECTED') ? 'rejected' : _statusTabFor(r.status);
+        if (wantTab !== _activeStatusTab) {
+            _activeStatusTab = wantTab;
+            try { _syncStatusTabsEnabled(); renderFeed(); } catch (_e) {}
+        }
+    }
 
     const panel = document.getElementById('detail-panel');
     // The detail is a GLOBAL overlay - reparent it to <body> so it renders over
@@ -6086,6 +7445,7 @@ window.selectReport = (id, skipFly = false) => {
     // on the operations route; a hidden ancestor would otherwise clip it).
     if (panel.parentElement !== document.body) document.body.appendChild(panel);
     panel.style.display = 'flex';
+    panel.classList.remove('detail-panel--building', 'detail-panel--operation');   // plain incident detail
     // D2: move focus into the panel so keyboard users can reach + Escape it.
     try { window.__dpPriorFocus = document.activeElement; panel.setAttribute('tabindex', '-1'); panel.focus({ preventScroll: true }); } catch (_e) {}
 
@@ -6350,20 +7710,24 @@ window.selectReport = (id, skipFly = false) => {
     // Incident". Segments are clickable to step back out to that scope.
     const _bcArrow = '<i class="fa-solid fa-angle-right dp-bc-sep" aria-hidden="true"></i>';
     const _gSeg = '<a class="dp-bc-seg" onclick="window.__crispRouter&&window.__crispRouter.navigate(\'/incidents\')">Global</a>';
-    // Full operational hierarchy: Global › [Operation] › [Building] › Incident.
-    // The Operation segment shows when the report is claimed by an operation
-    // (→ its dashboard); the Building segment shows when the report is tagged to
-    // a building (→ the Building Console). Both are optional, so an unassigned
-    // report with no building is just "Global › #id". (The building also still
-    // appears in the Location & Building section - the crumb is the nav spine.)
+    // Full operational hierarchy, ALWAYS uniform: Global › Operation › Building ›
+    // Incident › #id. The Operation/Building crumbs are real links when present and
+    // muted, non-clickable placeholders ("No operation" / "Unmapped building") when a
+    // level is genuinely absent - the spine never silently collapses to "Global › #id".
     const _idSeg = `<span class="dp-bc-cur" title="Incident report ${escapeHtml(r.id)}">#${escapeHtml(String(r.id).slice(0, 8))}</span>`;
     const _opSeg = r.crisis_event_id
-        ? `<a class="dp-bc-seg dp-bc-op" onclick="window.location.hash='#/operations/'+encodeURIComponent('${r.crisis_event_id}')">${escapeHtml(r.crisis_event_name || 'Operation')}</a>` + _bcArrow
+        ? `<a class="dp-bc-seg dp-bc-op" onclick="window.openOperationSummary&&window.openOperationSummary('${r.crisis_event_id}')">${escapeHtml(_opCrumbName(r))}</a>` + _bcArrow
+        : `<span class="dp-bc-seg dp-bc-absent" title="Not assigned to an operation">${_HIER_OP_ABSENT}</span>` + _bcArrow;
+    const _bldgSeg = _hasBuildingLink(r)
+        ? `<a class="dp-bc-seg dp-bc-bldg" title="Show this building's incidents in the feed" onclick="window.setBuildingScope&&window.setBuildingScope(decodeURIComponent('${encodeURIComponent(r.building_id)}'))">${escapeHtml(_bldgCrumbName(r))}</a>` + _bcArrow
+        : `<span class="dp-bc-seg dp-bc-absent" title="No building tagged">${_HIER_BLDG_ABSENT}</span>` + _bcArrow;
+    // Phase 2E: the report's parent INCIDENT is a clickable crumb → opens the
+    // Incident Detail (sibling reports + merge/split). Only when assigned (every
+    // report gets one at intake; legacy rows via the 0059 backfill).
+    const _incSeg = r.incident_id
+        ? `<a class="dp-bc-seg dp-bc-incident" title="View this incident — sibling reports, merge/split" onclick="window.openIncidentDetail&&window.openIncidentDetail(decodeURIComponent('${encodeURIComponent(r.incident_id)}'))">Incident</a>` + _bcArrow
         : '';
-    const _bldgSeg = r.building_id
-        ? `<a class="dp-bc-seg dp-bc-bldg" onclick="window.openBuildingConsole&&window.openBuildingConsole(decodeURIComponent('${encodeURIComponent(r.building_id)}'))">${escapeHtml(r.infrastructure_name || 'Building')}</a>` + _bcArrow
-        : '';
-    const _bc = _gSeg + _bcArrow + _opSeg + _bldgSeg + _idSeg;
+    const _bc = _gSeg + _bcArrow + _opSeg + _bldgSeg + _incSeg + _idSeg;
 
     document.getElementById('detail-body').innerHTML = `
         <!-- Phase J.2 - operator headline + 6-section restructure.
@@ -6408,24 +7772,46 @@ window.selectReport = (id, skipFly = false) => {
                     </div>
                 </div>
             </div>
-            <!-- Actions (Jun 2026 simplification): ONE state-aware primary
-                 (Notify Response Team = always dispatch + notify the reporter's
-                 PWA, a dummy responder set) + exactly two decision buttons,
-                 Reject and Delete. The verdict dropdown, Mark dispatched / on-site,
-                 lives counter, false-alarm and the overflow menu were dropped for
-                 least cognitive load. -->
+            <!-- Actions (Jun 2026 - state machine): the available actions depend on
+                 the report's CURRENT decision state, so a settled report only offers
+                 the reversal of that decision (not a fresh Reject/Delete).
+                 • REJECTED (verdict)   → "Rejected" banner + Revert decision.
+                 • RESPONDING (notified)→ "Response team notified" banner + Mark
+                                          Resolved / Mark as False Alarm / Revert.
+                                          (No Reject/Delete - the notice already went
+                                          out; a false alarm is the follow-up.)
+                 • RESOLVED / FALSE_ALARM → status banner + Reopen.
+                 • OPEN (PENDING/VERIFIED) → Notify Response Team + Reject + Delete. -->
             <div class="dp-actions">
-                ${r.status === 'PENDING' || r.status === 'VERIFIED'
-                    ? `<button class="dp-act-primary dp-act-respond" onclick="notifyResponseTeam('${r.id}')"><i class="fa-solid fa-tower-broadcast"></i> Notify Response Team</button>`
-                    : r.status === 'RESPONDING'
-                        ? `<button class="dp-act-primary dp-act-resolve" onclick="patchReport('${r.id}','resolve')"><i class="fa-solid fa-circle-check"></i> Mark Resolved</button>`
-                        : r.status === 'RESOLVED'
-                            ? `<div class="dp-act-done"><i class="fa-solid fa-circle-check"></i> Resolved</div>`
-                            : `<div class="dp-act-done dp-act-done-muted"><i class="fa-solid fa-ban"></i> ${escapeHtml(_displayStatus(r).label)}</div>`}
-                <div class="dp-actions-row2">
-                    <button class="dp-act-2 dp-act-reject" onclick="openRejectModal('${r.id}')"><i class="fa-solid fa-circle-xmark"></i> Reject</button>
-                    <button class="dp-act-2 dp-act-delete" onclick="openDeleteModal('${r.id}')"><i class="fa-solid fa-trash-can"></i> Delete</button>
-                </div>
+                ${(() => {
+                    const rid = r.id;
+                    if ((r.reviewer_verdict || 'NOT_REVIEWED') === 'REJECTED') {
+                        return `<div class="dp-act-banner dp-act-banner-rejected"><i class="fa-solid fa-circle-xmark"></i> <span>Rejected</span>${r.action_taken ? ' · <span class="dp-act-reason">' + escapeHtml(r.action_taken) + '</span>' : ''}</div>`
+                            + `<button class="dp-act-primary dp-act-revert" onclick="revertRejection('${rid}')"><i class="fa-solid fa-rotate-left"></i> Revert decision</button>`;
+                    }
+                    if (r.status === 'RESPONDING') {
+                        return `<div class="dp-act-banner dp-act-banner-responding"><i class="fa-solid fa-tower-broadcast"></i> <span>Response team notified</span></div>`
+                            + `<button class="dp-act-primary dp-act-resolve" onclick="patchReport('${rid}','resolve')"><i class="fa-solid fa-circle-check"></i> Mark Resolved</button>`
+                            + `<div class="dp-actions-row2">`
+                            + `<button class="dp-act-2 dp-act-false" onclick="patchReport('${rid}','false-alarm')"><i class="fa-solid fa-ban"></i> False Alarm</button>`
+                            + `<button class="dp-act-2 dp-act-revert" onclick="reopenReport('${rid}')"><i class="fa-solid fa-rotate-left"></i> Revert</button>`
+                            + `</div>`;
+                    }
+                    if (r.status === 'RESOLVED') {
+                        return `<div class="dp-act-banner dp-act-banner-resolved"><i class="fa-solid fa-circle-check"></i> <span>Resolved</span></div>`
+                            + `<button class="dp-act-2 dp-act-revert" onclick="reopenReport('${rid}')"><i class="fa-solid fa-rotate-left"></i> Reopen</button>`;
+                    }
+                    if (r.status === 'FALSE_ALARM') {
+                        return `<div class="dp-act-banner dp-act-banner-false"><i class="fa-solid fa-ban"></i> <span>False alarm</span></div>`
+                            + `<button class="dp-act-2 dp-act-revert" onclick="reopenReport('${rid}')"><i class="fa-solid fa-rotate-left"></i> Reopen</button>`;
+                    }
+                    // OPEN (PENDING / legacy VERIFIED, not rejected).
+                    return `<button class="dp-act-primary dp-act-respond" onclick="notifyResponseTeam('${rid}')"><i class="fa-solid fa-tower-broadcast"></i> Notify Response Team</button>`
+                        + `<div class="dp-actions-row2">`
+                        + `<button class="dp-act-2 dp-act-reject" onclick="openRejectModal('${rid}')"><i class="fa-solid fa-circle-xmark"></i> Reject</button>`
+                        + `<button class="dp-act-2 dp-act-delete" onclick="openDeleteModal('${rid}')"><i class="fa-solid fa-trash-can"></i> Delete</button>`
+                        + `</div>`;
+                })()}
             </div>
         </div>
 
@@ -6464,7 +7850,7 @@ window.selectReport = (id, skipFly = false) => {
              crisis-form). Building + location items (infrastructure_name, building
              history, version, needs-mapping) moved to the Location & Building
              section so each appears exactly once. -->
-        ${r.crisis_type || r.damage_classification || r.debris_clearing_needed || r.service_status || r.form_pack_id || r.reporter_badge ? `
+        ${r.crisis_type || r.damage_classification || r.debris_clearing_needed || r.service_status || r.form_pack_id || r.reporter_badge || r.reporter_tier ? `
         <!-- Wider panel: attributes are a calm, always-visible chip row in the Summary
              glance (no longer a collapsed accordion) - fewer clicks, less scroll. -->
         <div class="dp-attrs">
@@ -6474,9 +7860,17 @@ window.selectReport = (id, skipFly = false) => {
             ${r.crisis_type ? `<span class="dp-field-badge dp-attr"><i class="fa-solid fa-cloud-bolt"></i> ${crisisLabel(r.crisis_type)}</span>` : ''}
             ${r.damage_classification ? `<span class="dp-field-badge dp-attr"><i class="fa-solid fa-building-circle-xmark"></i> ${r.damage_classification.replace(/_/g,' ')}</span>` : ''}
             ${r.debris_clearing_needed ? `<span class="dp-field-badge dp-attr"><i class="fa-solid fa-truck-pickup"></i> Debris clearing</span>` : ''}
-            <!-- masked reporter identity badge (neutral). Reporter TRUST (tier/score) is
-                 NOT a chip here - it lives once in the Assessment "Reporter" segment (UX-C). -->
+            <!-- masked reporter identity badge (neutral) + reporter TIER chip. The
+                 reporter credibility SCORE stays in the Assessment "Reporter" segment;
+                 the V4 reporter_tier is surfaced here as a calm always-visible chip
+                 (a UNDP must-surface field) so it shows regardless of whether an
+                 assessment has run - the Assessment is gated on a server-computed
+                 credibility pass, the tier is known the moment the report arrives. -->
             ${r.reporter_badge ? `<span class="dp-field-badge dp-attr dp-reporter-badge" style="cursor:${r.user_id ? 'pointer' : 'default'};" ${r.user_id ? `onclick="openReporterProfile('${r.user_id}')"` : ''} title="${r.user_id ? 'Click to view reporter details (admin only)' : ''}"><i class="fa-solid fa-user-check"></i> ${escapeHtml(r.reporter_badge)}</span>` : ''}
+            ${(r.reporter_tier && (window.CRISP_TIERS_BY_ID || {})[r.reporter_tier]) ? (() => {
+                const _t = window.CRISP_TIERS_BY_ID[r.reporter_tier];
+                return `<span class="dp-field-badge dp-attr dp-reporter-tier" data-tier="${r.reporter_tier}" title="Reporter tier: ${escapeHtml(_t.label)} - ${escapeHtml(_t.criterion)}">${_t.emoji} ${escapeHtml(_t.label)}</span>`;
+            })() : ''}
             ${_isStaleArrival(r) ? `<span class="dp-field-badge dp-stale-arrival" title="Reporter captured this offline. The report was drained from the device's pending queue on reconnect ${timeAgo(r.server_created_at)}."><i class="fa-solid fa-cloud-arrow-up"></i> Offline-queued · Captured ${timeAgo(r.client_created_at)}</span>` : ''}
             <!-- Dedup: "Needs mapping" + the version ribbon moved to the
                  Location & Building section (the single home for building facts). -->
@@ -6724,6 +8118,7 @@ window.selectReport = (id, skipFly = false) => {
                 ${loc ? `
                 ${placeName ? `<div class="dp-loc-row">
                     <i class="fa-solid fa-map-pin" style="color:${sevColor};"></i>
+                    ${mismatch ? '<span class="dp-loc-tag" title="The reporter adjusted the pin; this is the location they submitted">Submitted incident location</span>' : ''}
                     <span class="dp-loc-name">${escapeHtml(placeName)}</span>
                     ${gcPct !== null ? `<span class="dp-geoconf ${gcCls}" title="Geocoded from voice/text via ${escapeHtml(gcSrc || 'unknown')} - ${gcPct}% confidence"><i class="fa-solid fa-wand-magic-sparkles"></i> ${gcPct}%${gcSrc ? ` · ${escapeHtml(gcSrc)}` : ''}</span>` : ''}
                 </div>` : ''}
@@ -6732,16 +8127,17 @@ window.selectReport = (id, skipFly = false) => {
                     <span class="dp-loc-coordval">${coordsStr}</span>
                     <button class="dp-copy-btn" onclick="navigator.clipboard.writeText('${coordsStr}'); showToast('Coords copied','success')"><i class="fa-solid fa-copy"></i></button>
                 </div>` : ''}
-                ${mismatch ? `<div class="dp-loc-row dp-loc-device">
+                ${mismatch ? `<div class="dp-loc-row dp-loc-device" title="The device's original GPS fix, before the reporter moved the pin. This is a review signal only - it does not change the Confidence Score.">
                     <i class="fa-solid fa-mobile-screen" style="color:#94a3b8;"></i>
+                    <span class="dp-loc-tag">Device location</span>
                     <span class="dp-loc-name" style="color:var(--text-sub);">${devName}</span>
-                    <span class="dp-loc-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${distKm}km mismatch</span>
+                    <span class="dp-loc-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${distKm} km from submitted</span>
                 </div>` : ''}
-                ${(r.building_id || r.infrastructure_name) ? `<div class="dp-loc-divider"></div>
+                ${(_hasBuildingLink(r) || r.needs_manual_mapping === true) ? `<div class="dp-loc-divider"></div>
                 <div class="dp-loc-row dp-loc-building">
                     <i class="fa-solid fa-building" style="color:#93c5fd;"></i>
-                    ${r.building_id
-                        ? `<button class="dp-loc-name dp-bldg-link" title="Open the Building Console - all reports for this building" onclick="window.openBuildingConsole&&window.openBuildingConsole(decodeURIComponent('${encodeURIComponent(r.building_id)}'))">${r.infrastructure_name ? escapeHtml(r.infrastructure_name) : 'Building'} <i class="fa-solid fa-arrow-up-right-from-square dp-bldg-link-ic"></i></button>`
+                    ${_hasBuildingLink(r)
+                        ? `<button class="dp-loc-name dp-bldg-link" title="Open the Building Console - all reports for this building" onclick="window.openBuildingConsole&&window.openBuildingConsole(decodeURIComponent('${encodeURIComponent(r.building_id)}'))">${_taggedBuildingName(r) ? escapeHtml(r.infrastructure_name) : 'Building'} <i class="fa-solid fa-arrow-up-right-from-square dp-bldg-link-ic"></i></button>`
                         : `<span class="dp-loc-name">${r.infrastructure_name ? escapeHtml(r.infrastructure_name) : 'Building'}</span>`}
                     ${r.needs_manual_mapping === true ? `<span class="dp-loc-needsmap" title="Reporter typed the building name; resolve it to an OSM footprint."><i class="fa-solid fa-map-location-dot"></i> Needs mapping</span>` : ''}
                 </div>` : ''}
@@ -6797,6 +8193,16 @@ window.selectReport = (id, skipFly = false) => {
             if (pack && pack.title) bits.push(escapeHtml(pack.title));
             if (ev && ev.name) bits.push('· ' + escapeHtml(ev.name));
             if (bits.length) fn.innerHTML = bits.join(' ');
+        }
+        // Re-render the crisis-pack answers with VERBATIM question + option labels
+        // (e.g. UNDP Appendix-1 wording) once the pack schema loads. Degrades to the
+        // already-painted humanized codes on any failure.
+        if (r.form_pack_id && r.form_data && typeof r.form_data === 'object' && !Array.isArray(r.form_data)) {
+            try {
+                const fmap = await ensurePackSchema(r.form_pack_id, r.form_pack_version);
+                const body = document.getElementById(`dp-cf-body-${r.id}`);
+                if (body && fmap) body.innerHTML = _fdRowsHtml(r.form_data, fmap);
+            } catch (_e) { /* keep the humanized fallback */ }
         }
     })();
 
@@ -6943,6 +8349,7 @@ window._dupDecision = (reportId, relatedId, decision) => {
             try { updateMapMarkers(); } catch (_e) {}
         }
         if (selectedId) _loadDuplicates({ id: selectedId, building_id: true });   // refresh against the open report
+        try { _dupSummaryCache = { ts: 0, scope: undefined, data: null }; } catch (_e) {}   // refresh the awareness card
         // Reconcile the feed with the server's hidden-set authoritatively. Forcing a
         // full refresh (reset the delta cursor + ETag) re-collapses confirmed dups and
         // brings back any report an UNDO/Set-primary just un-hid - a delta poll can't
@@ -7225,6 +8632,192 @@ window.switchSatSource = (reportId, which, btn, src) => {
     btn.classList.add('active');
 };
 
+// ── Building-centric Incident-Feed redesign Phase 2E - Incident Detail ──────
+// A first-class Incident view (info + member reports + analyst merge/move/split/
+// status). Deliberately SEPARATE from selectReport (the per-report detail) so the
+// tested report-detail flow (47/38 specs) is untouched - both share #detail-panel
+// (reparented to <body>) but render independently. Backed by the Phase-2D
+// /api/v1/incidents endpoints. The global fetch wrapper injects auth.
+const INCIDENTS_API = `${BACKEND_HOST}/api/v1/incidents`;
+const _INC_STATUSES = ['OPEN', 'RESPONDING', 'RESOLVED', 'FALSE_ALARM'];
+const _INC_SEVS = ['CRITICAL', 'SEVERE', 'MODERATE', 'MINOR', 'UNKNOWN'];
+
+function _ensureIncidentDetailStyles() {
+    if (document.getElementById('cc-incd-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'cc-incd-styles';
+    s.textContent = `
+      .incd-wrap{display:flex;flex-direction:column;gap:14px;padding:6px 2px}
+      .incd-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+      .incd-title{font-size:16px;font-weight:700;color:#e5e7eb;line-height:1.3}
+      .incd-pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700}
+      .incd-meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+      .incd-chip{background:rgba(148,163,184,.14);color:#cbd5e1;border-radius:6px;padding:3px 8px;font-size:11px}
+      .incd-chip b{color:#e5e7eb}
+      .incd-sec-h{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#94a3b8;margin:6px 0 4px}
+      .incd-mem{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid rgba(148,163,184,.18);border-radius:8px;cursor:pointer;background:rgba(15,23,42,.4)}
+      .incd-mem:hover{border-color:rgba(56,189,248,.5)}
+      .incd-mem-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+      .incd-mem-body{flex:1;min-width:0}
+      .incd-mem-t{font-size:12px;color:#e5e7eb;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .incd-mem-s{font-size:10px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .incd-mem-lead{font-size:9px;font-weight:700;color:#fbbf24;border:1px solid rgba(251,191,36,.4);border-radius:4px;padding:1px 4px;margin-left:4px}
+      .incd-btn{background:rgba(148,163,184,.14);color:#cbd5e1;border:1px solid rgba(148,163,184,.3);border-radius:6px;padding:4px 9px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
+      .incd-btn:hover{background:rgba(148,163,184,.24)}
+      .incd-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+      .incd-controls label{display:inline-flex;align-items:center;gap:5px}
+      .incd-controls select{background:#0f172a;color:#e5e7eb;border:1px solid rgba(148,163,184,.3);border-radius:6px;padding:3px 6px;font-size:11px}
+      .incd-merge-list{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+    `;
+    document.head.appendChild(s);
+}
+
+async function _incJSON(url, opts) {
+    const res = await fetch(url, opts);
+    if (!res.ok) throw new Error('incident api ' + res.status);
+    return res.json();
+}
+
+window.openIncidentDetail = async (incidentId) => {
+    if (!incidentId) return;
+    _ensureIncidentDetailStyles();
+    const panel = document.getElementById('detail-panel');
+    if (!panel) return;
+    if (panel.parentElement !== document.body) document.body.appendChild(panel);
+    panel.style.display = 'flex';
+    panel.classList.remove('detail-panel--building', 'detail-panel--operation');   // incident-group detail
+    panel.setAttribute('data-mode', 'incident');
+    const titleEl = document.getElementById('detail-title');
+    const bodyEl = document.getElementById('detail-body');
+    if (titleEl) titleEl.innerHTML = `<span class="incd-title">Incident</span>`;
+    if (bodyEl) bodyEl.innerHTML = `<div class="incd-wrap"><div class="incd-sec-h">Loading incident…</div></div>`;
+    let inc;
+    try {
+        inc = await _incJSON(`${INCIDENTS_API}/${encodeURIComponent(incidentId)}`);
+    } catch (_e) {
+        if (bodyEl) bodyEl.innerHTML = `<div class="incd-wrap"><div class="incd-sec-h">Could not load incident</div></div>`;
+        return;
+    }
+    _renderIncidentDetail(inc);
+};
+
+function _renderIncidentDetail(inc) {
+    const bodyEl = document.getElementById('detail-body');
+    const titleEl = document.getElementById('detail-title');
+    if (!bodyEl) return;
+    const sevC = SEV_COLORS[inc.severity] || '#64748b';
+    if (titleEl) titleEl.innerHTML = `<span class="incd-title">${escapeHtml(inc.title || 'Incident')}</span>`;
+    const members = (inc.reports || []).map((m) => {
+        const dot = SEV_COLORS[m.severity] || '#64748b';
+        const lead = m.is_lead ? `<span class="incd-mem-lead">LEAD</span>` : '';
+        const split = (inc.report_count > 1) ? `<button class="incd-btn" data-incd-split="${escapeHtml(m.id)}">Split</button>` : '';
+        return `<div class="incd-mem" data-incd-open="${escapeHtml(m.id)}">
+          <span class="incd-mem-dot" style="background:${dot}"></span>
+          <div class="incd-mem-body">
+            <div class="incd-mem-t">${escapeHtml(m.crisis_type || 'Report')} · ${escapeHtml(m.status || '')}${lead}</div>
+            <div class="incd-mem-s">${escapeHtml((m.description || '').slice(0, 90))}</div>
+          </div>${split}
+        </div>`;
+    }).join('');
+    const bldg = inc.building_id
+        ? `<span class="incd-chip" data-incd-bldg="${escapeHtml(inc.building_id)}" style="cursor:pointer"><b>🏢 Building</b></span>` : '';
+    bodyEl.innerHTML = `<div class="incd-wrap" data-incident-id="${escapeHtml(inc.id)}">
+      <div class="incd-head">
+        <div class="incd-meta">
+          <span class="incd-pill" style="background:${sevC}22;color:${sevC};border:1px solid ${sevC}55" data-incd-statuspill>${escapeHtml(inc.status)}</span>
+          <span class="incd-chip"><b>${escapeHtml(inc.severity)}</b></span>
+        </div>
+        <button class="incd-btn" data-incd-close aria-label="Close">✕</button>
+      </div>
+      <div class="incd-meta">
+        <span class="incd-chip"><b>${inc.report_count}</b> report${inc.report_count === 1 ? '' : 's'}</span>
+        ${inc.incident_type ? `<span class="incd-chip">${escapeHtml(inc.incident_type)}</span>` : ''}
+        ${bldg}
+      </div>
+      <div>
+        <div class="incd-sec-h">Lifecycle</div>
+        <div class="incd-controls">
+          <label>Status <select data-incd-set-status>${_INC_STATUSES.map((x) => `<option ${x === inc.status ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+          <label>Severity <select data-incd-set-sev>${_INC_SEVS.map((x) => `<option ${x === inc.severity ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+          <button class="incd-btn" data-incd-merge>Merge…</button>
+        </div>
+        <div class="incd-merge-list" data-incd-merge-list style="display:none"></div>
+      </div>
+      <div>
+        <div class="incd-sec-h">Reports (${inc.report_count})</div>
+        ${members || '<div class="incd-mem-s">No member reports.</div>'}
+      </div>
+    </div>`;
+
+    const $ = (sel) => bodyEl.querySelector(sel);
+    $('[data-incd-close]')?.addEventListener('click', () => { try { window.closeDetail && window.closeDetail(); } catch (_e) {} });
+    $('[data-incd-bldg]')?.addEventListener('click', (e) => {
+        const b = e.currentTarget.getAttribute('data-incd-bldg');
+        try { window.openBuildingConsole && window.openBuildingConsole(b); } catch (_e) {}
+    });
+    bodyEl.querySelectorAll('[data-incd-open]').forEach((el) => el.addEventListener('click', (e) => {
+        if (e.target.closest('[data-incd-split]')) return;   // the Split button has its own handler
+        const rid = el.getAttribute('data-incd-open');
+        try { (window.openIncident || window.selectReport)(rid); } catch (_e) {}
+    }));
+    bodyEl.querySelectorAll('[data-incd-split]').forEach((el) => el.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+            await _incJSON(`${INCIDENTS_API}/split-report`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ report_id: el.getAttribute('data-incd-split') }),
+            });
+            showToast('Report split into a new incident', 'success');
+            window.openIncidentDetail(inc.id);
+        } catch (_e) { showToast('Split failed', 'error'); }
+    }));
+    $('[data-incd-set-status]')?.addEventListener('change', async (e) => {
+        try { await _incidentPatch(inc.id, { status: e.target.value }); showToast('Incident status updated', 'success'); }
+        catch (_e) { showToast('Update failed', 'error'); }
+    });
+    $('[data-incd-set-sev]')?.addEventListener('change', async (e) => {
+        try { await _incidentPatch(inc.id, { severity: e.target.value }); showToast('Incident severity updated', 'success'); }
+        catch (_e) { showToast('Update failed', 'error'); }
+    });
+    $('[data-incd-merge]')?.addEventListener('click', () => _incidentShowMergeList(inc));
+}
+
+async function _incidentPatch(id, body) {
+    return _incJSON(`${INCIDENTS_API}/${encodeURIComponent(id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+}
+
+async function _incidentShowMergeList(inc) {
+    const box = document.querySelector('[data-incd-merge-list]');
+    if (!box) return;
+    if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+    box.style.display = 'flex';
+    box.innerHTML = '<div class="incd-mem-s">Loading other incidents…</div>';
+    let sibs = [];
+    try {
+        sibs = await _incJSON(`${INCIDENTS_API}?building_id=${encodeURIComponent(inc.building_id || '')}&limit=50`);
+    } catch (_e) { sibs = []; }
+    sibs = (sibs || []).filter((s) => s.id !== inc.id);
+    if (!sibs.length) { box.innerHTML = '<div class="incd-mem-s">No other incidents in this building to merge into.</div>'; return; }
+    box.innerHTML = sibs.map((s) => `<div class="incd-mem">
+        <div class="incd-mem-body"><div class="incd-mem-t">${escapeHtml(s.title || 'Incident')}</div>
+        <div class="incd-mem-s">${escapeHtml(s.severity)} · ${s.report_count} reports</div></div>
+        <button class="incd-btn" data-incd-merge-into="${escapeHtml(s.id)}">Merge into</button></div>`).join('');
+    box.querySelectorAll('[data-incd-merge-into]').forEach((el) => el.addEventListener('click', async () => {
+        const target = el.getAttribute('data-incd-merge-into');
+        try {
+            // target absorbs THIS incident's reports; this incident is then deleted.
+            await _incJSON(`${INCIDENTS_API}/${encodeURIComponent(target)}/merge`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source_incident_id: inc.id }),
+            });
+            showToast('Incidents merged', 'success');
+            window.openIncidentDetail(target);
+        } catch (_e) { showToast('Merge failed', 'error'); }
+    }));
+}
+
 window.closeDetail = () => {
     // Phase 2: clear tier override so the next time this report is opened
     // it defaults back to the best-complete variant.
@@ -7439,14 +9032,36 @@ async function _fetchBuildingDetail(buildingId) {
     if (_buildingConsoleCache[buildingId]) {
         return _buildingConsoleCache[buildingId];
     }
-    const res = await fetch(`${BUILDINGS_API}/${encodeURIComponent(buildingId)}`);
-    if (!res.ok) {
-        showToast(`Building ${buildingId.slice(0, 20)} not found`, 'error');
-        return null;
+    // Bounded fetch: a 500 / network drop / stalled backend must NOT leave the console
+    // spinning forever (the caller renders a recoverable error state on null). 15s cap.
+    const ctrl = new AbortController();
+    const _to = setTimeout(() => { try { ctrl.abort(); } catch (_e) {} }, 15000);
+    try {
+        const res = await fetch(`${BUILDINGS_API}/${encodeURIComponent(buildingId)}`, { signal: ctrl.signal });
+        if (!res.ok) return null;
+        const detail = await res.json();
+        _buildingConsoleCache[buildingId] = detail;
+        return detail;
+    } catch (_e) {
+        return null;   // network error, timeout, or abort
+    } finally {
+        clearTimeout(_to);
     }
-    const detail = await res.json();
-    _buildingConsoleCache[buildingId] = detail;
-    return detail;
+}
+
+// Recoverable error state for the Building Console - shown instead of a stuck spinner
+// when the fetch fails/times out or the render throws. Keeps the panel open + offers Retry.
+function _renderBuildingConsoleError(buildingId, msg) {
+    const title = document.getElementById('detail-title');
+    const body = document.getElementById('detail-body');
+    if (title) title.textContent = 'Building';
+    if (body) body.innerHTML =
+        '<div class="bc-error">' +
+        '<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>' +
+        '<div class="bc-error-msg">' + escapeHtml(msg || "Couldn't load this building.") + '</div>' +
+        '<button class="bc-retry" type="button" onclick="window.openBuildingConsole&&window.openBuildingConsole(decodeURIComponent(\'' +
+        encodeURIComponent(buildingId) + '\'))">Retry</button>' +
+        '</div>';
 }
 
 function _updateBuildingUrlHash(buildingId) {
@@ -7482,6 +9097,7 @@ window.openBuildingConsole = async (buildingId) => {
     // page silently did nothing (D1).
     if (panel.parentElement !== document.body) document.body.appendChild(panel);
     panel.style.display = 'flex';
+    panel.classList.remove('detail-panel--operation');
     panel.classList.add('detail-panel--building');
     // D2: move focus into the console so keyboard users can reach + Escape it.
     try { window.__dpPriorFocus = document.activeElement; panel.setAttribute('tabindex', '-1'); panel.focus({ preventScroll: true }); } catch (_e) {}
@@ -7492,8 +9108,11 @@ window.openBuildingConsole = async (buildingId) => {
         '<div class="bc-loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading…</div>';
 
     const b = await _fetchBuildingDetail(buildingId);
+    // Guard against a stale click: if another building/report was opened while this
+    // fetch was in flight, don't clobber the current panel.
+    if (_selectedBuildingId !== buildingId) return;
     if (!b) {
-        _closeBuildingConsole();
+        _renderBuildingConsoleError(buildingId, "Couldn't load this building. The server may be busy.");
         return;
     }
 
@@ -7510,15 +9129,78 @@ window.openBuildingConsole = async (buildingId) => {
         }
     } catch (_) {}
 
-    _renderBuildingConsole(b);
+    try {
+        _renderBuildingConsole(_opScopeBuilding(b));
+    } catch (e) {
+        try { console.error('[building console] render failed', e); } catch (_) {}
+        _renderBuildingConsoleError(buildingId, "Couldn't display this building.");
+    }
 };
+
+// Operation node → the RIGHT PANEL (single-page Operations Console). Mirrors
+// openBuildingConsole: reparent the global #detail-panel to <body>, scope the feed
+// behind it to this operation, and render the SAME operation dashboard
+// (cc-operations renderDetail) into the panel body — NO full-page #/operations/{id}
+// transition. This is the keystone that makes Operations behave like Buildings/Incidents.
+window.openOperationSummary = (opId) => {
+    if (!opId) return;
+    selectedId = null;                 // close any open report-detail
+    _selectedBuildingId = null;        // and any building selection
+    if (_opsRegMode) {
+        // Registry mode: the LEFT stays the operations tree (the global working set) with
+        // this op highlighted; only the RIGHT panel opens (it fetches its own per-op data).
+        // Do NOT scope the feed — that would replace the registry with one op's incidents.
+        _opsRegSelectedOp = opId;
+        try { renderFeed(); } catch (_e) {}
+    } else {
+        // Scope the feed behind the panel to this operation + reflect it in the URL
+        // (replaceState — no dispatch, the panel survives).
+        try { if (window.setOperationScope) window.setOperationScope(opId); } catch (_e) {}
+        try { _writeScopeHash(); } catch (_e) {}
+    }
+
+    const panel = document.getElementById('detail-panel');
+    if (!panel) return;
+    if (panel.parentElement !== document.body) document.body.appendChild(panel);
+    panel.style.display = 'flex';
+    panel.classList.remove('detail-panel--building');
+    panel.classList.add('detail-panel--operation');
+    try { window.__dpPriorFocus = document.activeElement; panel.setAttribute('tabindex', '-1'); panel.focus({ preventScroll: true }); } catch (_e) {}
+
+    document.getElementById('detail-title').textContent = 'Operation';
+    document.getElementById('detail-body').innerHTML =
+        '<div class="bc-loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading operation…</div>';
+    try {
+        if (window.__ccOperations && window.__ccOperations.renderInto) {
+            window.__ccOperations.renderInto(document.getElementById('detail-body'), opId);
+        } else {
+            document.getElementById('detail-body').innerHTML = '<div class="bc-error">Operations module not ready.</div>';
+        }
+    } catch (e) {
+        try { console.error('[op summary] render failed', e); } catch (_) {}
+        document.getElementById('detail-body').innerHTML = "<div class=\"bc-error\">Couldn't display this operation.</div>";
+    }
+};
+
+// Op-scope a building detail's incident LIST when the console was opened from inside
+// an operation feed: show only that operation's reports (global feed → all reports).
+// The building's roll-up header stays building-wide (its true overall state). MUST be
+// applied at EVERY _renderBuildingConsole call site (incl. post-action re-renders) -
+// otherwise an in-console action silently re-expands the list to all operations.
+function _opScopeBuilding(b) {
+    if (b && _activeCrisisEventId && Array.isArray(b.reports)) {
+        const scoped = b.reports.filter((r) => r.crisis_event_id === _activeCrisisEventId);
+        return Object.assign({}, b, { reports: scoped, _opScopedId: _activeCrisisEventId, _opScopedTotal: b.reports.length });
+    }
+    return b;
+}
 
 function _closeBuildingConsole(opts) {
     opts = opts || {};
     _selectedBuildingId = null;
     _updateBuildingUrlHash(null);
     const panel = document.getElementById('detail-panel');
-    panel.classList.remove('detail-panel--building');
+    panel.classList.remove('detail-panel--building', 'detail-panel--operation');
     try {
         if (typeof window._highlightBuildingPolygon === 'function') {
             window._highlightBuildingPolygon(null);  // clear highlight
@@ -7547,11 +9229,15 @@ window.closeBuildingConsole = _closeBuildingConsole;
 
 function _deriveBuildingHeaderInfo(b) {
     const reports = b.reports || [];
-    // Find a useful infrastructure name from constituent reports -
-    // first non-empty wins ("Holy Cross Hospital", "Powai Bridge", …).
+    // Find a useful building name from constituent reports — but ONLY from a report
+    // whose name is an OSM-tagged building (_taggedBuildingName), the SAME gate the
+    // Incident Feed / breadcrumb use. Without this gate the Console header used the
+    // first report's RAW infrastructure_name, so a free-text "what was hit" answer
+    // showed here as the building name while every gated surface showed "Unnamed
+    // building" — the exact per-surface inconsistency the operator hit. One rule now.
     let inferredName = null;
     for (const r of reports) {
-        if (r.infrastructure_name && r.infrastructure_name.trim()) {
+        if (_taggedBuildingName(r)) {
             inferredName = r.infrastructure_name.trim();
             break;
         }
@@ -7560,7 +9246,7 @@ function _deriveBuildingHeaderInfo(b) {
         (b.osm_name && b.osm_name.trim())
         || inferredName
         || (b.osm_addr_full && b.osm_addr_full.trim())
-        || 'Untitled building';
+        || 'Unmapped building';
 
     // City / locality - count location-name segments + pick the most
     // common one. The LAST segment of a comma-separated location name
@@ -7648,6 +9334,45 @@ async function _loadBuildingDuplicates(bid) {
         `<div style="margin-bottom:6px">${btn('HIGH', d.high || 0, 'Merge All High')}${btn('MEDIUM', d.medium || 0, 'Merge All Medium')}</div>` +
         `<div style="font-size:10.5px;color:#8aa0bf">Open a report below to review each pair (confidence + reasons) and Merge / Unmerge individually.</div>`;
 }
+// Phase 2E - list this building's first-class incidents in the Building Console.
+// Reuses the .bc-report row styling for visual consistency; each row opens the
+// Incident Detail overlay (window.openIncidentDetail). This is the visible
+// Building → Incidents → Reports navigation spine.
+async function _loadBuildingIncidents(bid) {
+    const body = document.getElementById('bc-inc-body-' + bid);
+    const countEl = document.getElementById('bc-inc-count-' + bid);
+    if (!body) return;
+    let list;
+    try {
+        const res = await fetch(`${INCIDENTS_API}?building_id=${encodeURIComponent(bid)}&limit=100`);
+        if (!res.ok) { body.innerHTML = '<div class="bc-empty">Could not load incidents.</div>'; if (countEl) countEl.textContent = '-'; return; }
+        list = await res.json();
+    } catch (_e) { body.innerHTML = '<div class="bc-empty">Could not load incidents.</div>'; if (countEl) countEl.textContent = '-'; return; }
+    list = Array.isArray(list) ? list : [];
+    if (countEl) countEl.textContent = list.length;
+    if (!list.length) { body.innerHTML = '<div class="bc-empty">No incidents in this building yet.</div>'; return; }
+    body.innerHTML = list.map((inc) => {
+        const sev = inc.severity || 'UNKNOWN';
+        const idJs = `decodeURIComponent('${encodeURIComponent(inc.id)}')`;
+        return `<div class="bc-report" onclick="window.openIncidentDetail&&window.openIncidentDetail(${idJs})" title="Open incident detail">
+            <span class="bc-r-strip" style="background:${SEV_COLORS[sev] || '#64748b'};"></span>
+            <div class="bc-r-body">
+                <div class="bc-r-line1">
+                    <span class="bc-r-sev bc-r-sev-${sev}">${sev}</span>
+                    <!-- Lead with the incident's OWN identity (crisis type), NOT inc.title:
+                         the server builds inc.title as "{Crisis} - {building name}", and this
+                         list sits under the Building Console header which already names the
+                         building (feedback_no_redundant_parent_context). -->
+                    <span class="bc-r-crisis">${escapeHtml(inc.incident_type ? crisisLabel(inc.incident_type) : 'Incident')}</span>
+                </div>
+                <div class="bc-r-line2">
+                    <span class="bc-r-source">${escapeHtml(inc.status || 'OPEN')}</span>
+                    <span class="bc-r-time">${inc.report_count} report${inc.report_count === 1 ? '' : 's'}</span>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
 window._dupMergeAllBuilding = async (bid, level) => {
     try {
         const res = await fetch(`${API}/duplicate-merge`, {
@@ -7660,10 +9385,45 @@ window._dupMergeAllBuilding = async (bid, level) => {
         const n = out.merged || 0;
         showToast('Merged ' + n + ' duplicate' + (n !== 1 ? 's' : ''), 'success');
         _loadBuildingDuplicates(bid);
+        try { _dupSummaryCache = { ts: 0, scope: undefined, data: null }; } catch (_e) {}   // refresh the awareness card
         try { _lastServerTime = null; _lastReportsEtag = null; } catch (_e) {}
         try { fetchReports(); } catch (_e) {}
     } catch (_e) { showToast('Could not merge', 'error'); }
 };
+
+// A2 (Jun 2026): the Building Console is a flat collapsible stack in the
+// incident-detail visual language (<details class="dp-section">) instead of
+// Overview/Intelligence tabs - one consistent layout, lower cognitive load. This
+// injects only the BC-specific tweaks; the dp-section base + the general .bc-*
+// styling (header, chips, scores, reports) live in styles.css.
+function _ensureBcStyles() {
+    if (document.getElementById('bc-console-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'bc-console-styles';
+    s.textContent = `
+      .bc-dps{margin:8px 0}
+      .bc-dps .dp-section-body{padding:8px 10px 12px}
+      .bc-tl-head{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;color:#9fb3d1;margin:8px 0 4px;text-transform:uppercase;letter-spacing:.05em}
+      .bc-timeline-wrap{margin-top:8px;border-top:1px solid rgba(148,163,184,.10);padding-top:4px}
+      .bc-dps .bc-responder-add-btn,.bc-dps .bc-note-add-btn{margin-bottom:8px}`;
+    document.head.appendChild(s);
+}
+// A2: a Building Console section in the incident-detail <details class="dp-section">
+// language. `countBadge` is raw badge HTML (static number or an id-bearing span the
+// async loaders update) or ''; `open` sets the default expanded state.
+function _bcSection(icon, label, countBadge, open, bodyHtml, extraCls) {
+    return `<details class="dp-section bc-dps ${extraCls || ''}"${open ? ' open' : ''}>
+        <summary class="dp-section-header">
+            <i class="fa-solid ${icon}"></i>
+            <span>${label}</span>
+            ${countBadge || ''}
+            <i class="fa-solid fa-chevron-down dp-section-caret"></i>
+        </summary>
+        <div class="dp-section-body">${bodyHtml}</div>
+    </details>`;
+}
+// _bcTab retired with the tabs (A2). Kept as a no-op so any stale onclick can't throw.
+window._bcTab = () => {};
 
 function _renderBuildingConsole(b) {
     // Helper formatters
@@ -7694,20 +9454,30 @@ function _renderBuildingConsole(b) {
     // with the OSM id as a small subtitle). Derive city/locality from
     // constituent report location names.
     const _bcInfo = _deriveBuildingHeaderInfo(b);
+    // When opened from inside an operation, the incident LIST below is scoped to
+    // that op; flag it so the operator knows the header roll-up is building-wide
+    // but the reports are the operation's subset.
+    let _opScopeNote = '';
+    if (b._opScopedId) {
+        const _opn = ((_opMeta(b._opScopedId) || {}).name) || 'this operation';
+        _opScopeNote = ` <span class="bc-opscope" title="Showing only ${escapeHtml(_opn)}'s reports for this building (the header stats stay building-wide)">· ${escapeHtml(_opn)} (${(b.reports || []).length}/${b._opScopedTotal})</span>`;
+    }
     document.getElementById('detail-title').innerHTML =
         `<i class="fa-solid fa-building" style="margin-right:6px;color:${sevColor};"></i>` +
-        escapeHtml(_bcInfo.name);
+        escapeHtml(_bcInfo.name) + _opScopeNote;
 
     // P2: the Building Console IS the Cluster View. Breadcrumb keeps the
     // Operation context visible (Global › [Operations › {op} ›] Cluster) + an
     // assigned-operation chip, both derived from the constituent reports.
     const _op = _buildingOperation(b);
     const _bcArrow = '<i class="fa-solid fa-angle-right dp-bc-sep" aria-hidden="true"></i>';
+    // Canonical spine Global › Operation › Building (matches the incident-detail
+    // breadcrumb - no extra static "Operations" crumb). Muted placeholder when the
+    // building is under no operation. Building leaf is the OSM name (never free-text).
     const _consoleBc = '<a class="dp-bc-seg" onclick="window.__crispRouter&&window.__crispRouter.navigate(\'/incidents\')">Global</a>'
-        + (_op
-            ? _bcArrow + '<a class="dp-bc-seg" onclick="window.__crispRouter&&window.__crispRouter.navigate(\'/operations\')">Operations</a>'
-              + _bcArrow + `<a class="dp-bc-seg dp-bc-op" onclick="window.location.hash='#/operations/'+encodeURIComponent('${_op.id}')">${escapeHtml(_op.name)}</a>`
-            : '')
+        + _bcArrow + (_op
+            ? `<a class="dp-bc-seg dp-bc-op" onclick="window.openOperationSummary&&window.openOperationSummary('${_op.id}')">${escapeHtml(_op.name)}</a>`
+            : `<span class="dp-bc-seg dp-bc-absent" title="Not under an operation">${_HIER_OP_ABSENT}</span>`)
         + _bcArrow + '<span class="dp-bc-cur">' + escapeHtml(b.osm_name || 'Building') + '</span>';
 
     // Crisis-type chips + damage distribution
@@ -7727,6 +9497,7 @@ function _renderBuildingConsole(b) {
     const dmgPct = (n) => (totalReports ? Math.round((n / totalReports) * 100) : 0);
 
     // Build the console HTML.
+    _ensureBcStyles();
     document.getElementById('detail-body').innerHTML = `
         <div class="bc">
             <nav class="dp-breadcrumb" aria-label="Breadcrumb">${_consoleBc}</nav>
@@ -7758,7 +9529,7 @@ function _renderBuildingConsole(b) {
                         <i class="fa-solid fa-truck-medical"></i> ${b.responding_report_count || 0}
                     </span>
                     ${_op
-                        ? `<span class="bc-count-chip" title="Assigned operation (${escapeHtml(String(_op.count))} report(s))" style="cursor:pointer" onclick="window.location.hash='#/operations/'+encodeURIComponent('${_op.id}')">
+                        ? `<span class="bc-count-chip" title="Assigned operation (${escapeHtml(String(_op.count))} report(s))" style="cursor:pointer" onclick="window.openOperationSummary&&window.openOperationSummary('${_op.id}')">
                                <i class="fa-solid fa-bullseye"></i> ${escapeHtml(_op.name)}
                            </span>`
                         : ''}
@@ -7786,100 +9557,56 @@ function _renderBuildingConsole(b) {
                     </button>
                 </div>
                 <div class="bc-actions">
+                    ${_renderBuildingActions(b)}
                     ${_renderBuildingMonitorToggle(b)}
                     ${_renderBuildingStateActions(b)}
                 </div>
             </div>
 
-            <!-- Horizontal lifecycle stepper - Report 1 → Report 2 →
-                 AI summary → CSV exported → Building safe (N lives saved).
-                 Async-loaded so the stepper paints once the timeline
-                 fetch resolves. -->
-            <div class="bc-lifecycle" id="bc-lifecycle-${escapeHtml(b.id)}">
-                <div class="bc-empty">Loading lifecycle…</div>
-            </div>
+            <!-- A2 (Jun 2026): flat collapsible stack in the incident-detail
+                 visual language (<details class="dp-section">) - no Overview/
+                 Intelligence tabs. Building Assessment + History + Incidents open
+                 by default; analytics/evidence/coordination collapse below. Every
+                 async-loader target id + cascade handler is preserved verbatim. -->
 
-            <!-- Phase H.6 - AI building summary -->
-            ${_renderBuildingAiCard(b)}
+            <!-- Building Assessment card (mirrors the incident Confidence Score
+                 card). Runs AI assessment across non-dup incidents; opens a modal. -->
+            ${_renderBuildingAssessmentCard(b)}
 
-            <!-- 5-score intelligence grid -->
-            <div class="bc-scores">
-                ${[
-                    ['Severity',  b.severity_score,        'fa-triangle-exclamation'],
-                    ['Confidence',b.confidence_score,      'fa-shield-check'],
-                    ['Activity',  b.activity_score,        'fa-chart-line'],
-                    ['Escalation',b.escalation_risk,       'fa-fire-flame-curved'],
-                    ['Priority',  b.humanitarian_priority, 'fa-bullseye'],
-                ].map(([label, v, icon]) => `
-                    <div class="bc-score">
-                        <div class="bc-score-label"><i class="fa-solid ${icon}"></i> ${label}</div>
-                        <div class="bc-score-value" style="color:${scoreColor(v)};">${scoreVal(v)}</div>
+            ${_bcSection('fa-timeline', 'History &amp; lifecycle', '', true, `
+                <div class="bc-lifecycle" id="bc-lifecycle-${escapeHtml(b.id)}"><div class="bc-empty">Loading lifecycle…</div></div>
+                <div class="bc-timeline-wrap">
+                    <div class="bc-tl-head"><span>Event timeline</span>
+                        <button class="bc-timeline-refresh" onclick="_refreshBuildingTimeline('${b.id}')" title="Refresh timeline"><i class="fa-solid fa-arrows-rotate"></i></button>
                     </div>
-                `).join('')}
-            </div>
+                    <div class="bc-timeline" id="bc-timeline-${escapeHtml(b.id)}"><div class="bc-empty">Loading timeline…</div></div>
+                </div>
+            `, 'bc-section-history')}
 
-            <!-- Health "why" - white-box: the priority number is humanitarian_priority,
-                 a published weighted blend. Show the formula + this building's component
-                 contributions so analysts see WHY it ranks high (no black box). -->
-            ${(() => {
-                const f = [
-                    ['Severity', b.severity_score, 0.40],
-                    ['Confidence', b.confidence_score, 0.25],
-                    ['Escalation', b.escalation_risk, 0.20],
-                    ['People affected', Math.min((b.estimated_people_affected || 0), 100), 0.10],
-                    ['Activity', b.activity_score, 0.05],
-                ];
-                const rows = f.map(([lbl, v, w]) =>
-                    `<li><span>${lbl}</span><span>${v != null ? Number(v).toFixed(0) : '0'} × ${w.toFixed(2)} = <b>${(((v || 0)) * w).toFixed(1)}</b></span></li>`).join('');
-                return `<details class="bc-health-why" style="margin:-4px 0 10px;font-size:11px">
-                    <summary style="cursor:pointer;color:#9fb3d1;user-select:none">ⓘ Why this priority?</summary>
-                    <div style="margin-top:6px;color:#8aa0bf;line-height:1.6">
-                        Priority = 0.40·Severity + 0.25·Confidence + 0.20·Escalation + 0.10·People + 0.05·Activity
-                        <ul style="list-style:none;padding:6px 0 0;margin:0">${rows
-                            .replace(/<li>/g, '<li style="display:flex;justify-content:space-between;gap:12px;padding:1px 0">')}</ul>
-                    </div>
-                </details>`;
-            })()}
-
-            <!-- Crisis breakdown + damage distribution -->
-            <div class="bc-section">
-                <div class="bc-section-title"><i class="fa-solid fa-layer-group"></i> Situation summary</div>
+            ${_bcSection('fa-layer-group', 'Situation summary', '', false, `
                 ${crisisChips
                     ? `<div class="bc-crisis-row">${crisisChips}</div>`
                     : '<div class="bc-empty">No crisis-type tagging yet</div>'}
                 <div class="bc-damage-row">
-                    <span class="bc-damage-cell bc-damage-COMPLETE">
-                        <strong>${dmgDistribution.COMPLETE}</strong> complete (${dmgPct(dmgDistribution.COMPLETE)}%)
-                    </span>
-                    <span class="bc-damage-cell bc-damage-PARTIAL">
-                        <strong>${dmgDistribution.PARTIAL}</strong> partial (${dmgPct(dmgDistribution.PARTIAL)}%)
-                    </span>
-                    <span class="bc-damage-cell bc-damage-MINIMAL">
-                        <strong>${dmgDistribution.MINIMAL}</strong> minimal (${dmgPct(dmgDistribution.MINIMAL)}%)
-                    </span>
+                    <span class="bc-damage-cell bc-damage-COMPLETE"><strong>${dmgDistribution.COMPLETE}</strong> complete (${dmgPct(dmgDistribution.COMPLETE)}%)</span>
+                    <span class="bc-damage-cell bc-damage-PARTIAL"><strong>${dmgDistribution.PARTIAL}</strong> partial (${dmgPct(dmgDistribution.PARTIAL)}%)</span>
+                    <span class="bc-damage-cell bc-damage-MINIMAL"><strong>${dmgDistribution.MINIMAL}</strong> minimal (${dmgPct(dmgDistribution.MINIMAL)}%)</span>
                 </div>
-            </div>
+            `, '')}
 
-            <!-- Satellite verification roll-up -->
-            <div class="bc-section">
-                <div class="bc-section-title"><i class="fa-solid fa-satellite"></i> Satellite verification</div>
-                ${b.satellite_summary && b.satellite_summary.count > 0
-                    ? `<div class="bc-sat-row">
-                           <span class="bc-sat-score" style="color:${scoreColor(b.satellite_summary.mean_total_score)};">
-                               ${(b.satellite_summary.mean_total_score || 0).toFixed(1)}/100
-                           </span>
-                           <span class="bc-sat-meta">mean across ${b.satellite_summary.count} report${b.satellite_summary.count === 1 ? '' : 's'}</span>
-                           <span class="bc-sat-meta">· Latest: ${escapeHtml((b.satellite_summary.latest_verdict || '').replace(/_/g, ' '))}</span>
-                       </div>`
-                    : '<div class="bc-empty">No satellite verdicts on this building yet. Run Verify on individual reports below.</div>'}
-            </div>
+            <!-- Jun 2026: the "Intelligence scores" 5-grid (severity/confidence/activity/
+                 escalation/humanitarian_priority + "Why this priority"), the separate
+                 "AI assessment" card, and the standalone "Satellite verification" score
+                 were REMOVED — they competed with each other + the assessment. The ONE
+                 Building Risk Score card above is now the single decision metric; its
+                 breakdown modal carries the contributing incidents, evidence and reasoning.
+                 (humanitarian_priority still drives the hot-list sort in the backend.) -->
 
-            <!-- Versioned report stack -->
-            <div class="bc-section">
-                <div class="bc-section-title">
-                    <i class="fa-solid fa-list"></i> Reports
-                    <span class="bc-section-count">${(b.reports || []).length}</span>
-                </div>
+            ${_bcSection('fa-triangle-exclamation', 'Incidents', `<span class="dp-cf-count" id="bc-inc-count-${escapeHtml(b.id)}">…</span>`, true, `
+                <div id="bc-inc-body-${escapeHtml(b.id)}" class="bc-inc-body"><div class="bc-empty">Loading incidents…</div></div>
+            `, '')}
+
+            ${_bcSection('fa-list', 'Reports', `<span class="dp-cf-count">${(b.reports || []).length}</span>`, false, `
                 <div class="bc-reports">
                     ${(b.reports || []).map(r => {
                         const sev = r.severity || 'UNKNOWN';
@@ -7909,79 +9636,27 @@ function _renderBuildingConsole(b) {
                         </div>`;
                     }).join('') || '<div class="bc-empty">No constituent reports</div>'}
                 </div>
-            </div>
+            `, '')}
 
-            <!-- Phase H.3 - Responder coordination -->
-            <!-- Per-building Duplicates (intelligence metadata on this building - NOT a
-                 cluster). Reuses the within-building duplicate engine scoped by building_id. -->
-            <div class="bc-section bc-section-duplicates">
-                <div class="bc-section-title">
-                    <i class="fa-solid fa-link"></i> Potential Duplicates
-                    <span class="bc-section-count" id="bc-dup-count-${escapeHtml(b.id)}">…</span>
-                </div>
+            ${_bcSection('fa-link', 'Potential duplicates', `<span class="dp-cf-count" id="bc-dup-count-${escapeHtml(b.id)}">…</span>`, false, `
                 <div id="bc-dup-body-${escapeHtml(b.id)}" class="bc-dup-body"><div class="bc-empty">Scanning for duplicates…</div></div>
-            </div>
+            `, 'bc-section-duplicates')}
 
-            <div class="bc-section bc-section-responders">
-                <div class="bc-section-title">
-                    <i class="fa-solid fa-truck-medical"></i> Responders
-                    <span class="bc-section-count">${(b.responders || []).length}</span>
-                    <button class="bc-responder-add-btn"
-                            onclick="_openResponderAssignForm('${b.id}')"
-                            title="Assign a responder to this building">
-                        <i class="fa-solid fa-plus"></i> Assign
-                    </button>
-                </div>
-                <div id="bc-responder-form-${escapeHtml(b.id)}"
-                     class="bc-responder-form" style="display:none;"></div>
-                <div class="bc-responders">
-                    ${_renderResponderList(b)}
-                </div>
-            </div>
+            ${_bcSection('fa-truck-medical', 'Responders', `<span class="dp-cf-count">${(b.responders || []).length}</span>`, false, `
+                <button class="bc-responder-add-btn" onclick="_openResponderAssignForm('${b.id}')" title="Assign a responder to this building"><i class="fa-solid fa-plus"></i> Assign</button>
+                <div id="bc-responder-form-${escapeHtml(b.id)}" class="bc-responder-form" style="display:none;"></div>
+                <div class="bc-responders">${_renderResponderList(b)}</div>
+            `, 'bc-section-responders')}
 
-            <!-- Phase H.4 - Operator notes thread -->
-            <div class="bc-section bc-section-notes">
-                <div class="bc-section-title">
-                    <i class="fa-regular fa-note-sticky"></i> Operator notes
-                    <span class="bc-section-count">${((b.notes || []).filter(n => !n.deleted_at)).length}</span>
-                    <button class="bc-note-add-btn"
-                            onclick="_openNoteForm('${b.id}')"
-                            title="Add a note">
-                        <i class="fa-solid fa-plus"></i> Add
-                    </button>
-                </div>
-                <div id="bc-note-form-${escapeHtml(b.id)}"
-                     class="bc-note-form" style="display:none;"></div>
-                <div class="bc-notes" id="bc-notes-${escapeHtml(b.id)}">
-                    ${_renderNoteList(b)}
-                </div>
-            </div>
+            ${_bcSection('fa-note-sticky', 'Operator notes', `<span class="dp-cf-count">${((b.notes || []).filter(n => !n.deleted_at)).length}</span>`, false, `
+                <button class="bc-note-add-btn" onclick="_openNoteForm('${b.id}')" title="Add a note"><i class="fa-solid fa-plus"></i> Add</button>
+                <div id="bc-note-form-${escapeHtml(b.id)}" class="bc-note-form" style="display:none;"></div>
+                <div class="bc-notes" id="bc-notes-${escapeHtml(b.id)}">${_renderNoteList(b)}</div>
+            `, 'bc-section-notes')}
 
-            <!-- Phase H.10 - Related buildings (spatial proximity) -->
-            <div class="bc-section bc-section-related">
-                <div class="bc-section-title">
-                    <i class="fa-solid fa-link-slash"></i> Related buildings
-                    <span class="bc-section-count" id="bc-related-count-${escapeHtml(b.id)}">-</span>
-                </div>
-                <div class="bc-related" id="bc-related-${escapeHtml(b.id)}">
-                    <div class="bc-empty">Loading nearby buildings…</div>
-                </div>
-            </div>
-
-            <!-- Phase H.2 - Building event timeline -->
-            <div class="bc-section">
-                <div class="bc-section-title">
-                    <i class="fa-solid fa-timeline"></i> Building timeline
-                    <button class="bc-timeline-refresh"
-                            onclick="_refreshBuildingTimeline('${b.id}')"
-                            title="Refresh timeline">
-                        <i class="fa-solid fa-arrows-rotate"></i>
-                    </button>
-                </div>
-                <div class="bc-timeline" id="bc-timeline-${escapeHtml(b.id)}">
-                    <div class="bc-empty">Loading timeline…</div>
-                </div>
-            </div>
+            ${_bcSection('fa-link-slash', 'Related buildings', `<span class="dp-cf-count" id="bc-related-count-${escapeHtml(b.id)}">-</span>`, false, `
+                <div class="bc-related" id="bc-related-${escapeHtml(b.id)}"><div class="bc-empty">Loading nearby buildings…</div></div>
+            `, 'bc-section-related')}
 
         </div>
     `;
@@ -7995,6 +9670,8 @@ function _renderBuildingConsole(b) {
     setTimeout(() => _refreshRelatedBuildings(b.id), 80);
     // Per-building duplicate scan (async; reuses the within-building engine).
     setTimeout(() => _loadBuildingDuplicates(b.id), 30);
+    // Phase 2E - the building's first-class incidents (async).
+    setTimeout(() => _loadBuildingIncidents(b.id), 30);
     // Clear the bottom action dock (the building console manages its own
     // actions inside .bc-header / .bc-actions).
     const dock = document.getElementById('dp-action-dock');
@@ -8238,11 +9915,302 @@ window._changeBuildingState = async (buildingId, toState) => {
         // we re-fetch the full detail.
         delete _buildingConsoleCache[buildingId];
         const detail = await _fetchBuildingDetail(buildingId);
-        if (detail) _renderBuildingConsole(detail);
+        if (detail) _renderBuildingConsole(_opScopeBuilding(detail));
     } catch (e) {
         showToast(`Network error: ${e.message}`, 'error');
     }
 };
+
+// ─── Building as a first-class operational entity (Jun 2026) ──────────────────
+// Assessment card + workspace + cascade Actions, mirroring the incident-level
+// Details/Assessment/Actions. Reuses _credBandMeta / withBusy / _authHeaders /
+// _opScopeBuilding / _fetchBuildingDetail / _crispActionModal. NO incident-level
+// function is modified - they are only called.
+window.__bldgAssessCache = window.__bldgAssessCache || {};
+window.__bldgAssessRunning = null;
+
+// Jun 2026 — the building console shows ONE consolidated Building RISK score using the
+// EXACT incident `.dp-assess` card + breakdown UX. The snapshot is the server `risk`
+// block (score/band/assessed/factors/coverage) + per-incident + recommendation.
+function _bldgAssessSnap(b) {
+    const a = (b && b.assessment) || null;
+    if (a && a.risk && (a.risk.score != null || a.risk.assessed)) {
+        const snap = Object.assign({}, a.risk, {
+            incidents: a.incidents || [], recommendation: a.recommendation,
+            assessed_at: a.assessed_at, counts: a.counts || {},
+        });
+        window.__bldgAssessCache[b.id] = snap;
+        return snap;
+    }
+    return (b && window.__bldgAssessCache[b.id]) || null;
+}
+// Risk bands — HIGH = URGENT (colours INVERT vs the incident confidence score, where
+// high = green/good). Reuses the same --cred-color card/modal mechanism.
+function _buildingRiskMeta(band) {
+    const M = {
+        CRITICAL:   { word: 'Critical priority', color: '#ef4444' },
+        HIGH:       { word: 'High priority',     color: '#f97316' },
+        MODERATE:   { word: 'Moderate',          color: '#eab308' },
+        LOW:        { word: 'Low priority',      color: '#22c55e' },
+        MINIMAL:    { word: 'Minimal',           color: '#64748b' },
+        UNASSESSED: { word: 'Not yet assessed',  color: '#64748b' },
+    };
+    const m = M[band] || M.UNASSESSED;
+    return { cls: (band || 'unassessed').toLowerCase(), word: m.word, color: m.color };
+}
+function _riskFactorChips(factors) {
+    const short = { severity: 'Severity', incidents: 'Incidents', corroboration: 'Corroboration',
+                    evidence: 'Evidence', recency: 'Recency' };
+    return (factors || []).map(f => {
+        const ok = f.ran && f.awarded > 0;
+        const cls = ok ? 'ok' : (f.ran ? 'neutral' : 'off');
+        const icon = ok ? 'fa-circle-check' : (f.ran ? 'fa-circle' : 'fa-circle-xmark');
+        return `<span class="dp-contrib dp-contrib-${cls}"><i class="fa-solid ${icon}"></i> ${escapeHtml(short[f.key] || f.label)}</span>`;
+    }).join('');
+}
+function _bldgAssessedAtLabel(snap) {
+    try { return snap && snap.assessed_at ? ('Last assessed ' + timeAgo(snap.assessed_at)) : ''; }
+    catch (_e) { return ''; }
+}
+
+function _renderBuildingAssessmentCard(b) {
+    const snap = _bldgAssessSnap(b);
+    // CTA state — mirrors the incident `.dp-assess-cta-state`.
+    if (!snap || !snap.assessed) {
+        return `<section class="dp-section dp-assess dp-assess-cta-state bc-risk-card">
+            <div class="dp-assess-cta-head">
+                <i class="fa-solid fa-gauge-high dp-assess-cta-icon"></i>
+                <div><div class="dp-assess-title">Building Risk Score</div>
+                <div class="dp-assess-cta-sub">Consolidate this building's incidents into ONE act-first risk score (0–100).</div></div>
+            </div>
+            <button class="dp-assess-cta" onclick="runBuildingAssessment('${b.id}')"><i class="fa-solid fa-wand-magic-sparkles"></i> Run Building Assessment</button>
+            <div class="dp-assess-cta-note">Fuses severity &amp; damage, the per-incident credibility, corroboration, evidence and recency. High score = urgent. Analyst decisions never change the number.</div>
+        </section>`;
+    }
+    // Scored state — mirrors the incident `.dp-assess-scored` (high = urgent / red).
+    const meta = _buildingRiskMeta(snap.band);
+    const sev = b && (b.severity_max || b.severity);
+    const sevChip = sev ? `<span class="dp-assess-sevchip sev-${String(sev).toLowerCase()}">${escapeHtml(String(sev))}</span>` : '';
+    const at = _bldgAssessedAtLabel(snap);
+    const rec = snap.recommendation ? escapeHtml(snap.recommendation) : '';
+    return `<section class="dp-section dp-assess dp-assess-scored bc-risk-${meta.cls}" style="--cred-color:${meta.color};">
+        <div class="dp-assess-scorerow" role="button" tabindex="0" aria-label="Open the Building Risk Score breakdown"
+             onclick="_showBuildingAssessmentModal('${b.id}')"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();_showBuildingAssessmentModal('${b.id}')}">
+            <div class="dp-assess-dial"><span class="dp-assess-num">${snap.score}</span><span class="dp-assess-den">/100</span></div>
+            <div class="dp-assess-meta">
+                <div class="dp-assess-title">Building Risk Score <span class="dp-assess-band">${meta.word}</span>${sevChip}</div>
+                <div class="dp-assess-contribs">${_riskFactorChips(snap.factors)}</div>
+                <div class="dp-assess-presence">${rec ? rec + ' · ' : ''}${at ? escapeHtml(at) : ((snap.coverage && snap.coverage.total || 0) + ' incident(s)')} <span class="dp-assess-link">View breakdown <i class="fa-solid fa-arrow-right"></i></span></div>
+            </div>
+        </div>
+        <div class="bc-risk-actions">
+          <button onclick="runBuildingAssessment('${b.id}', true)"><i class="fa-solid fa-rotate"></i> Re-run</button>
+          <button onclick="_downloadBuildingAssessmentPdf('${b.id}')"><i class="fa-regular fa-file-pdf"></i> Report</button>
+        </div>
+    </section>`;
+}
+
+window.runBuildingAssessment = async (buildingId, force) => {
+    if (window.__bldgAssessRunning === buildingId) return;
+    window.__bldgAssessRunning = buildingId;
+    const btn = document.querySelector('.bc-assess-cta, .bc-assess-rerun');
+    const run = async () => {
+        showToast('Assessing building incidents… this can take a few seconds', 'info');
+        try {
+            const res = await fetch(`${BUILDINGS_API}/${encodeURIComponent(buildingId)}/assess${force ? '?force=true' : ''}`,
+                { method: 'POST', headers: _authHeaders() });
+            if (res.status === 401 || res.status === 403) { showToast('Analyst permission required.', 'error'); return; }
+            if (res.status === 503) { showToast('AI assessment is not configured on this server.', 'error'); return; }
+            if (!res.ok) { showToast('Assessment failed: ' + (await res.text()).slice(0, 80), 'error'); return; }
+            const data = await res.json();
+            const rk = data.risk || {};
+            window.__bldgAssessCache[buildingId] = Object.assign({}, rk, {
+                incidents: data.incidents, counts: data.counts,
+                recommendation: data.recommendation, assessed_at: data.assessed_at,
+            });
+            showToast(`Building Risk ${rk.score == null ? '—' : rk.score + '/100 · ' + _buildingRiskMeta(rk.band).word} · ${data.counts.assessed} assessed, ${data.counts.cached} cached`, 'success');
+            delete _buildingConsoleCache[buildingId];
+            const detail = await _fetchBuildingDetail(buildingId);
+            if (detail) _renderBuildingConsole(_opScopeBuilding(detail));
+            if (document.getElementById('bldg-assess-modal')) _showBuildingAssessmentModal(buildingId);
+        } catch (e) { showToast('Network error: ' + e.message, 'error'); }
+    };
+    try { if (btn) { await withBusy(btn, run); } else { await run(); } }
+    finally { window.__bldgAssessRunning = null; }
+};
+
+window._showBuildingAssessmentModal = (buildingId) => {
+    const b = _buildingConsoleCache[buildingId];
+    const snap = (b && _bldgAssessSnap(b)) || window.__bldgAssessCache[buildingId];
+    if (!snap || !snap.assessed) { showToast('Run the building assessment first.', 'info'); return; }
+    const meta = _buildingRiskMeta(snap.band);
+    const factors = snap.factors || [];
+    const incs = snap.incidents || [];
+
+    // Section 1 — score composition (the 5 risk factors + the equation). Identical
+    // markup/states to the incident breakdown (`.assess-factor-*`).
+    const rowHtml = factors.map(f => {
+        const pct = (f.ran && f.max) ? Math.max(2, Math.round((f.awarded / f.max) * 100)) : 0;
+        const state = !f.ran ? 'skip' : (f.awarded >= f.max * 0.7 ? 'strong' : f.awarded > 0 ? 'partial' : 'none');
+        return `<div class="assess-factor assess-factor-${state}">
+            <div class="assess-factor-top">
+                <span class="assess-factor-label">${escapeHtml(f.label)}</span>
+                <span class="assess-factor-pts">${f.ran ? `+${f.awarded}` : '<i class="fa-solid fa-minus"></i>'}<span class="assess-factor-max"> / ${f.max}</span></span>
+            </div>
+            <div class="assess-factor-bar"><span style="width:${pct}%;"></span></div>
+            <div class="assess-factor-reason">${escapeHtml(f.reason || '')}</div>
+        </div>`;
+    }).join('');
+    const eqTerms = factors.filter(f => f.ran && f.awarded > 0).map(f => `<span class="assess-eq-term">+${f.awarded}</span>`).join('');
+    const eqHtml = `<div class="assess-eq"><div class="assess-eq-row">${eqTerms || '<span class="assess-eq-term">+0</span>'}<span class="assess-eq-eq">=</span><span class="assess-eq-total">${snap.score}</span><span class="assess-eq-den">/ 100</span></div></div>`;
+
+    // Section 2 — the CONTRIBUTING incidents (the key inputs), each opens its incident.
+    const incRows = incs.map(p => {
+        const m = _credBandMeta(p.band);
+        const sc = p.score == null ? 'Unrated' : `${p.score} <small>${m.word}</small>`;
+        const open = p.incident_id ? `window.openIncidentDetail&&window.openIncidentDetail('${p.incident_id}')`
+            : (p.report_id ? `window.selectReport&&window.selectReport('${p.report_id}')` : '');
+        return `<button class="bldg-inc-row" ${open ? `onclick="const o=document.getElementById('bldg-assess-modal');if(o)o.remove();${open}"` : ''} style="--cred-color:${m.color}">
+            <span class="bldg-inc-sev sev-${String(p.severity || '').toLowerCase()}"></span>
+            <span class="bldg-inc-title">${escapeHtml(p.title || 'Incident')}${p.cached ? ' <span class="bldg-inc-cached">cached</span>' : ''}</span>
+            <span class="bldg-inc-conf" style="color:${m.color}">${sc}</span>
+            <i class="fa-solid fa-chevron-right"></i></button>`;
+    }).join('') || '<div class="bc-empty">No non-duplicate incidents in this building.</div>';
+
+    const _f = (k) => factors.find(x => x.key === k) || {};
+    const cov = snap.coverage || {};
+    const at = _bldgAssessedAtLabel(snap);
+    const _section = (key, icon, title, body, sub) =>
+        `<details class="assess-sec" ${key === 'composition' || key === 'incidents' ? 'open' : ''}>
+            <summary class="assess-sec-head"><i class="fa-solid ${icon}"></i> <span>${title}</span>${sub ? `<span class="assess-sec-sub">${sub}</span>` : ''}<i class="fa-solid fa-chevron-down assess-sec-caret"></i></summary>
+            <div class="assess-sec-body">${body}</div>
+        </details>`;
+
+    const prev = document.getElementById('bldg-assess-modal');
+    if (prev) prev.remove();
+    const ov = document.createElement('div');
+    ov.id = 'bldg-assess-modal';
+    ov.className = 'assess-modal-overlay';
+    ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+    const onKey = (e) => { const o = document.getElementById('bldg-assess-modal'); if (!o) { document.removeEventListener('keydown', onKey); return; } if (e.key === 'Escape') { o.remove(); document.removeEventListener('keydown', onKey); } };
+    document.addEventListener('keydown', onKey);
+    ov.innerHTML = `<div class="assess-modal assess-workspace" role="dialog" aria-modal="true" aria-label="Building Risk Score breakdown" style="--cred-color:${meta.color};">
+        <div class="assess-head">
+            <div class="assess-head-dial"><span class="assess-head-num">${snap.score}</span><span class="assess-head-den">/100</span></div>
+            <div class="assess-head-meta">
+                <div class="assess-head-title">Building Risk Score</div>
+                <div class="assess-head-band">${meta.word} · ${cov.assessed || 0} of ${cov.total || 0} incidents assessed${at ? ' · ' + escapeHtml(at) : ''}</div>
+            </div>
+            <button class="assess-rerun-top" onclick="runBuildingAssessment('${buildingId}', true)" title="Re-run"><i class="fa-solid fa-rotate"></i> Re-run</button>
+            <button class="assess-close" aria-label="Close" onclick="const o=document.getElementById('bldg-assess-modal');if(o)o.remove();"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="assess-intro">How urgently to act on this building — its constituent incidents fused with severity, corroboration, evidence and recency. Automated only; an analyst's verdict never changes the number.</div>
+        <div class="assess-body">
+            ${_section('composition', 'fa-calculator', 'Score composition', `<div class="assess-factors">${rowHtml}</div>${eqHtml}`)}
+            ${_section('incidents', 'fa-triangle-exclamation', 'Contributing incidents', `<div class="bldg-inc-list">${incRows}</div>`, incs.length ? `${incs.length}` : '')}
+            ${_section('evidence', 'fa-clipboard-check', 'Evidence & corroboration', `<div class="assess-factor-reason">${escapeHtml(_f('corroboration').reason || '')}</div><div class="assess-factor-reason">${escapeHtml(_f('evidence').reason || '')}</div><div class="assess-factor-reason">${escapeHtml(_f('recency').reason || '')}</div>`)}
+            ${_section('reasoning', 'fa-lightbulb', 'Recommended action', `<div class="bldg-rec">${escapeHtml(snap.recommendation || '—')}</div><div class="assess-factor-reason">Strongest signals: ${(snap.reasons || []).map(escapeHtml).join(' · ') || '—'}</div>`)}
+        </div>
+        <div class="assess-method">
+            <div class="assess-method-h"><i class="fa-solid fa-circle-info"></i> How this is calculated</div>
+            <p>The Building Risk Score is the sum of independent weighted factors: <strong>Severity &amp; damage 30</strong> · <strong>Incident assessments 25</strong> · <strong>Corroboration &amp; volume 20</strong> · <strong>Evidence verification 15</strong> · <strong>Recency &amp; escalation 10</strong> = 100.</p>
+            <p>It fuses the constituent <strong>incident Confidence Scores</strong> (the key inputs) with the building's severity, corroboration, evidence and recency into ONE act-first priority. <strong>High = urgent</strong> (the inverse of the incident Confidence Score, where high = trustworthy). The breakdown shows every contribution — nothing is hidden.</p>
+        </div>
+    </div>`;
+    document.body.appendChild(ov);
+};
+
+window._downloadBuildingAssessmentPdf = async (buildingId) => {
+    try {
+        const res = await fetch(`${BUILDINGS_API}/${encodeURIComponent(buildingId)}/assessment.pdf`, { headers: _authHeaders() });
+        if (res.status === 404) { showToast('Run the building assessment first.', 'info'); return; }
+        if (!res.ok) { showToast('Report download failed.', 'error'); return; }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `building-assessment-${buildingId.replace(/[^a-z0-9]+/gi, '_').slice(0, 24)}.pdf`;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+    } catch (e) { showToast('Network error: ' + e.message, 'error'); }
+};
+
+// Cascade Actions group (state-machine, mirrors the incident .dp-actions).
+function _renderBuildingActions(b) {
+    const st = b.state;
+    const banner = (cls, txt) => `<div class="dp-act-banner dp-act-banner-${cls}">${txt}</div>`;
+    const reopen = `<button class="dp-act-2 dp-act-revert" onclick="buildingReopen('${b.id}')"><i class="fa-solid fa-rotate-left"></i> Reopen building</button>`;
+    if (st === 'RESOLVED') return `<div class="bc-act-group">${banner('resolved', 'Building resolved')}${reopen}</div>`;
+    if (st === 'FALSE_ALARM') return `<div class="bc-act-group">${banner('false', 'Marked false alarm')}${reopen}</div>`;
+    if (st === 'RESPONDING') return `<div class="bc-act-group">${banner('responding', 'Response team notified')}
+        <button class="dp-act-primary" onclick="buildingResolve('${b.id}')"><i class="fa-solid fa-circle-check"></i> Resolve building</button>
+        <div class="dp-act-row"><button class="dp-act-2 dp-act-false" onclick="buildingFalseAlarm('${b.id}')">False Alarm</button>${reopen}</div></div>`;
+    return `<div class="bc-act-group">
+        <button class="dp-act-primary" onclick="buildingNotify('${b.id}')"><i class="fa-solid fa-tower-broadcast"></i> Notify Response Team</button>
+        <div class="dp-act-row"><button class="dp-act-2 dp-act-reject" onclick="buildingReject('${b.id}')">Reject</button>
+        <button class="dp-act-2 dp-act-false" onclick="buildingFalseAlarm('${b.id}')">False Alarm</button></div></div>`;
+}
+
+async function _applyBuildingStatePatch(buildingId, action, body, okMsg) {
+    try {
+        const res = await fetch(`${BUILDINGS_API}/${encodeURIComponent(buildingId)}/cascade/${action}`,
+            { method: 'POST', headers: _authHeaders(), body: JSON.stringify(body || {}) });
+        if (res.status === 401 || res.status === 403) { showToast('Analyst permission required.', 'error'); return false; }
+        if (res.status === 400) { showToast(((await res.json().catch(() => ({}))).detail) || 'A reason is required.', 'error'); return false; }
+        if (!res.ok) { showToast('Action failed: ' + (await res.text()).slice(0, 80), 'error'); return false; }
+        const data = await res.json();
+        const cc = data.counts || {};
+        showToast(`${okMsg} · ${cc.incidents_changed || 0} incident(s), ${cc.reports_changed || 0} report(s)`, 'success');
+        delete _buildingConsoleCache[buildingId];
+        const detail = await _fetchBuildingDetail(buildingId);
+        if (detail) _renderBuildingConsole(_opScopeBuilding(detail));
+        try { renderFeed(); } catch (_e) {}   // cascaded incident statuses repaint in the feed
+        return true;
+    } catch (e) { showToast('Network error: ' + e.message, 'error'); return false; }
+}
+
+function _bldgOpenCount(buildingId) {
+    const b = _buildingConsoleCache[buildingId];
+    return b ? (b.reports || []).filter(r => ['PENDING', 'VERIFIED', 'RESPONDING'].includes(String(r.status))).length : 0;
+}
+
+window.buildingResolve = (id) => _crispActionModal({
+    title: 'Resolve building', icon: 'fa-circle-check', confirmLabel: 'Resolve building', confirmTone: 'primary',
+    bodyHtml: `<p class="crisp-action-msg">This marks the building <strong>Resolved</strong> and resolves all ${_bldgOpenCount(id)} open incident(s) in it. Reversible via Reopen.</p>`,
+    onConfirm: (ov, close) => { close(); _applyBuildingStatePatch(id, 'resolve', {}, 'Building resolved'); },
+});
+window.buildingNotify = (id) => _crispActionModal({
+    title: 'Notify response team', icon: 'fa-tower-broadcast', confirmLabel: 'Notify', confirmTone: 'primary',
+    bodyHtml: `<p class="crisp-action-msg">This notifies the response team and moves all ${_bldgOpenCount(id)} open incident(s) to <strong>Responding</strong>.</p>`,
+    onConfirm: (ov, close) => { close(); _applyBuildingStatePatch(id, 'notify', {}, 'Response team notified'); },
+});
+window.buildingFalseAlarm = (id) => _crispActionModal({
+    title: 'Mark building false alarm', icon: 'fa-flag', tone: 'warn', confirmLabel: 'Mark false alarm', confirmTone: 'warn',
+    bodyHtml: `<p class="crisp-action-msg">This marks the building + its ${_bldgOpenCount(id)} open incident(s) as a <strong>false alarm</strong>. Reversible via Reopen.</p>
+        <label class="crisp-action-label">Reason <span class="crisp-req">*</span></label>
+        <textarea class="crisp-action-reason" id="crisp-bldg-fa-reason" rows="3" placeholder="Why is this misinformation?"></textarea>`,
+    onConfirm: (ov, close) => {
+        const ta = ov.querySelector('#crisp-bldg-fa-reason'); const reason = (ta.value || '').trim();
+        if (!reason) { ta.classList.add('crisp-action-invalid'); ta.focus(); showToast('Reason required', 'error'); return; }
+        close(); _applyBuildingStatePatch(id, 'false-alarm', { reason }, 'Marked false alarm');
+    },
+});
+window.buildingReject = (id) => _crispActionModal({
+    title: 'Reject building', icon: 'fa-ban', tone: 'danger', confirmLabel: 'Reject all reports', confirmTone: 'danger',
+    bodyHtml: `<p class="crisp-action-msg crisp-action-msg-danger">This cascades verdict <strong>REJECTED</strong> to ALL reports in this building - they leave the active feed and exports. Reversible per report.</p>
+        <label class="crisp-action-label">Reason <span class="crisp-req">*</span></label>
+        <textarea class="crisp-action-reason" id="crisp-bldg-rej-reason" rows="3" placeholder="Why reject this building's reports?"></textarea>`,
+    onConfirm: (ov, close) => {
+        const ta = ov.querySelector('#crisp-bldg-rej-reason'); const reason = (ta.value || '').trim();
+        if (!reason) { ta.classList.add('crisp-action-invalid'); ta.focus(); showToast('Reason required', 'error'); return; }
+        close(); _applyBuildingStatePatch(id, 'reject', { reason }, 'Building rejected');
+    },
+});
+window.buildingReopen = (id) => _crispActionModal({
+    title: 'Reopen building', icon: 'fa-rotate-left', confirmLabel: 'Reopen', confirmTone: 'primary',
+    bodyHtml: `<p class="crisp-action-msg">This reopens the building and its incidents back to active/pending.</p>`,
+    onConfirm: (ov, close) => { close(); _applyBuildingStatePatch(id, 'reopen', {}, 'Building reopened'); },
+});
 
 window._refreshBuildingTimeline = async (buildingId) => {
     const el = document.getElementById(`bc-timeline-${buildingId}`);
@@ -8662,7 +10630,7 @@ window._refreshBuildingAiSummary = async (buildingId) => {
         showToast('AI summary ready', 'success');
         delete _buildingConsoleCache[buildingId];
         const detail = await _fetchBuildingDetail(buildingId);
-        if (detail) _renderBuildingConsole(detail);
+        if (detail) _renderBuildingConsole(_opScopeBuilding(detail));
     } catch (e) {
         showToast(`Network error: ${e.message}`, 'error');
     }
@@ -8906,7 +10874,7 @@ window._submitResponderAssign = async (buildingId) => {
         showToast(`Responder assigned: ${name}`, 'success');
         delete _buildingConsoleCache[buildingId];
         const detail = await _fetchBuildingDetail(buildingId);
-        if (detail) _renderBuildingConsole(detail);
+        if (detail) _renderBuildingConsole(_opScopeBuilding(detail));
     } catch (e) {
         showToast(`Network error: ${e.message}`, 'error');
     }
@@ -8940,7 +10908,7 @@ window._advanceResponder = async (buildingId, responderId, action) => {
         showToast(`Responder → ${label}`, 'success');
         delete _buildingConsoleCache[buildingId];
         const detail = await _fetchBuildingDetail(buildingId);
-        if (detail) _renderBuildingConsole(detail);
+        if (detail) _renderBuildingConsole(_opScopeBuilding(detail));
     } catch (e) {
         showToast(`Network error: ${e.message}`, 'error');
     }
@@ -9143,7 +11111,7 @@ window._submitNote = async (buildingId) => {
         showToast('Note posted', 'success');
         delete _buildingConsoleCache[buildingId];
         const detail = await _fetchBuildingDetail(buildingId);
-        if (detail) _renderBuildingConsole(detail);
+        if (detail) _renderBuildingConsole(_opScopeBuilding(detail));
     } catch (e) {
         showToast(`Network error: ${e.message}`, 'error');
     }
@@ -9178,7 +11146,7 @@ window._cancelNoteEdit = async (buildingId) => {
     // body comes back.
     const detail = _buildingConsoleCache[buildingId]
         || await _fetchBuildingDetail(buildingId);
-    if (detail) _renderBuildingConsole(detail);
+    if (detail) _renderBuildingConsole(_opScopeBuilding(detail));
 };
 
 window._submitNoteEdit = async (buildingId, noteId) => {
@@ -9198,7 +11166,7 @@ window._submitNoteEdit = async (buildingId, noteId) => {
         showToast('Note updated', 'success');
         delete _buildingConsoleCache[buildingId];
         const detail = await _fetchBuildingDetail(buildingId);
-        if (detail) _renderBuildingConsole(detail);
+        if (detail) _renderBuildingConsole(_opScopeBuilding(detail));
     } catch (e) {
         showToast(`Network error: ${e.message}`, 'error');
     }
@@ -9218,7 +11186,7 @@ window._pinNote = async (buildingId, noteId, pinned) => {
         showToast(pinned ? 'Note pinned' : 'Note unpinned', 'success');
         delete _buildingConsoleCache[buildingId];
         const detail = await _fetchBuildingDetail(buildingId);
-        if (detail) _renderBuildingConsole(detail);
+        if (detail) _renderBuildingConsole(_opScopeBuilding(detail));
     } catch (e) {
         showToast(`Network error: ${e.message}`, 'error');
     }
@@ -9239,7 +11207,7 @@ window._deleteNote = async (buildingId, noteId) => {
         showToast('Note deleted', 'success');
         delete _buildingConsoleCache[buildingId];
         const detail = await _fetchBuildingDetail(buildingId);
-        if (detail) _renderBuildingConsole(detail);
+        if (detail) _renderBuildingConsole(_opScopeBuilding(detail));
     } catch (e) {
         showToast(`Network error: ${e.message}`, 'error');
     }
@@ -9266,7 +11234,7 @@ window._toggleBuildingMonitor = async (buildingId, watching) => {
         showToast(watching ? 'Stopped watching this building' : 'Added to your watch list', 'success');
         delete _buildingConsoleCache[buildingId];
         const detail = await _fetchBuildingDetail(buildingId);
-        if (detail) _renderBuildingConsole(detail);
+        if (detail) _renderBuildingConsole(_opScopeBuilding(detail));
     } catch (e) {
         showToast(`Network error: ${e.message}`, 'error');
     }
@@ -10652,9 +12620,13 @@ window.exportPDF = async (id) => {
     const yn = (b) => b === true ? 'Yes' : (b === false ? 'No' : '');
     const ds = (typeof _displayStatus === 'function') ? _displayStatus(r) : { label: r.status };
 
-    // 1 · Overview
+    // 1 · Overview - lead with the hierarchy (Operation › Building) so the exported
+    // report never loses its parent context. Building name is OSM-only (placeholders
+    // when a level is absent), matching the on-screen breadcrumb.
     const overview =
-        row('Incident type', esc(infraDisplayLabel(r.infrastructure_type, r.infrastructure_sub_type)))
+        row('Operation', esc(_opCrumbName(r) || _HIER_OP_ABSENT))
+        + row('Building', esc(_bldgCrumbName(r) || _HIER_BLDG_ABSENT))
+        + row('Incident type', esc(infraDisplayLabel(r.infrastructure_type, r.infrastructure_sub_type)))
         + row('Severity', esc(r.severity || ''))
         + row('Status', esc(ds.label || r.status || ''))
         + (r.reviewer_verdict && r.reviewer_verdict !== 'NOT_REVIEWED' ? row('Review verdict', esc(r.reviewer_verdict)) : '')
@@ -10741,7 +12713,9 @@ window.exportPDF = async (id) => {
         + (loc && loc.is_user_corrected ? row('Pin adjusted by reporter', 'Yes') : '')
         + (loc && typeof loc.geocoding_confidence === 'number' ? row('Geocoding confidence', esc(Math.round(loc.geocoding_confidence * 100) + '%' + (loc.geocoding_source ? ' · ' + loc.geocoding_source : ''))) : '')
         + (loc && loc.h3_idx ? row('H3 cell', esc(loc.h3_idx)) : '')
-        + (r.infrastructure_name ? row('Building / structure', esc(r.infrastructure_name)) : '')
+        + (_taggedBuildingName(r)
+            ? row('Building / structure', esc(r.infrastructure_name))
+            : (r.infrastructure_name ? row('Reported structure (unverified)', esc(r.infrastructure_name)) : ''))
         + (r.building_id ? row('Building ID', esc(String(r.building_id).slice(0, 12))) : '')
         + (r.infrastructure_name_from_osm === false ? row('Building mapping', 'Needs mapping (free-text, not OSM)') : '');
 
@@ -10752,11 +12726,16 @@ window.exportPDF = async (id) => {
         + (ai && ai.ai_summary ? `<div class="sub-t">AI summary</div><div class="desc">${esc(ai.ai_summary)}</div>` : '');
     if (!descBody.trim()) descBody = '<div class="muted">No description provided.</div>';
 
-    // 7 · Crisis-pack answers (form_data)
+    // 7 · Crisis-pack answers (form_data) - rendered with VERBATIM question +
+    // option labels resolved from the pack schema (falls back to humanized codes).
     let cfHtml = '';
     if (r.form_data && typeof r.form_data === 'object' && !Array.isArray(r.form_data)) {
         const ks = Object.keys(r.form_data);
-        if (ks.length) cfHtml = ks.map(k => row(_humanizeFormKey(k), _formatFormValue(r.form_data[k]))).join('');
+        if (ks.length) {
+            let _fmap = null;
+            try { if (r.form_pack_id) _fmap = await ensurePackSchema(r.form_pack_id, r.form_pack_version); } catch (_e) {}
+            cfHtml = ks.map(k => row(_fdKeyLabel(k, _fmap), _fdValLabeled(r.form_data[k], k, _fmap))).join('');
+        }
     }
 
     // 8 · Service status (app-only)
@@ -10909,12 +12888,41 @@ window.patchReport = async (id, action) => {
             const updated = await res.json();
             const idx = allReports.findIndex(r => r.id === id);
             if (idx >= 0) allReports[idx] = { ...allReports[idx], ...updated };
+            // Merge into the out-of-feed detail cache too, so the detail panel of a
+            // report not in the active working set (e.g. a closed/rejected report
+            // opened from a queue) re-renders with the new state.
+            if (_detailOnlyReport && _detailOnlyReport.id === id) _detailOnlyReport = { ..._detailOnlyReport, ...updated };
             showToast(`Report ${action}ed successfully`, 'success');
-            if (selectedId === id) selectReport(id);
+            if (selectedId === id) selectReport(id, true);
             renderFeed();
         }
     } catch (e) { showToast('Action failed - check internet connection', 'error'); }
 };
+
+// Jun 2026 - state-machine reversals on the incident detail. revertRejection
+// clears the analyst's REJECTED verdict (back to NOT_REVIEWED → the report is OPEN
+// again with Reject/Delete). reopenReport reverts a RESPONDING/RESOLVED/FALSE_ALARM
+// status back to PENDING (the "undo notify" / "reopen" action). Both merge into the
+// working set + the out-of-feed detail cache and re-render the open detail.
+async function _applyReportStatePatch(id, path, body, okMsg) {
+    try {
+        const res = await fetch(`${API}/${id}/${path}`, {
+            method: 'PATCH',
+            headers: body ? { 'Content-Type': 'application/json' } : undefined,
+            body: body ? JSON.stringify(body) : undefined,
+        });
+        if (!res.ok) { showToast('Action failed', 'error'); return; }
+        const updated = await res.json();
+        const idx = allReports.findIndex(r => r.id === id);
+        if (idx >= 0) allReports[idx] = { ...allReports[idx], ...updated };
+        if (_detailOnlyReport && _detailOnlyReport.id === id) _detailOnlyReport = { ..._detailOnlyReport, ...updated };
+        showToast(okMsg, 'success');
+        if (selectedId === id) selectReport(id, true);
+        renderFeed();
+    } catch (e) { showToast('Action failed - check internet connection', 'error'); }
+}
+window.revertRejection = (id) => _applyReportStatePatch(id, 'review', { verdict: 'NOT_REVIEWED' }, 'Rejection reverted - report is open again');
+window.reopenReport = (id) => _applyReportStatePatch(id, 'reopen', null, 'Report reopened');
 
 // Notify Response Team - the one-click "responding" action (dummy responder set):
 // it always dispatches the response and notifies the reporter's PWA (the /dispatch
@@ -11318,7 +13326,9 @@ function _renderGeoOverlay(el, pswp) {
     const lat = Number(loc.latitude), lng = Number(loc.longitude);
     const coordTxt = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
     const acc = loc.accuracy_meters;
-    const building = (mode !== 'coords') ? (rep.infrastructure_name || '') : '';
+    // Building label on the photo overlay = OSM building name ONLY; the reporter's
+    // free-text "what was hit" (from_osm === false) is never shown as a building.
+    const building = (mode !== 'coords' && _taggedBuildingName(rep)) ? rep.infrastructure_name : '';
     let timeTxt = '';
     if (mode === 'coords_building_time') {
         const iso = rep.client_created_at || rep.server_created_at;
@@ -12306,11 +14316,10 @@ function _promptStepUp(errMsg) {
         ov.innerHTML =
             '<div class="stepup-card" role="dialog" aria-modal="true" aria-label="Confirm your identity">' +
             '<h3>Confirm it’s you</h3>' +
-            '<p>This permanently deletes report data and cannot be undone. Enter your ' +
-            'authenticator code to continue.<br><span class="stepup-hint">No authenticator set up? ' +
-            'Enter your account password.</span></p>' +
+            '<p>This permanently deletes report data and cannot be undone. Enter the ' +
+            '6-digit code from your authenticator app to continue.</p>' +
             '<input id="stepup-input" type="password" inputmode="numeric" autocomplete="one-time-code" ' +
-            'placeholder="6-digit code or password" />' +
+            'placeholder="6-digit authenticator code" />' +
             '<div class="stepup-err" id="stepup-err">' + (errMsg ? escapeHtml(errMsg) : '') + '</div>' +
             '<div class="stepup-actions"><button id="stepup-cancel">Cancel</button>' +
             '<button class="stepup-ok" id="stepup-ok">Confirm</button></div></div>';
@@ -12467,11 +14476,21 @@ const _origFetchReports = fetchReports;
 // fallback for CSV/GeoJSON, clearly labelled as degraded.
 function _exportFilterParams() {
     const params = new URLSearchParams();
-    if (statusFilter && statusFilter !== 'all') {
-        params.set('status', statusFilter === 'active'
-            ? 'PENDING,VERIFIED' : statusFilter.toUpperCase());
+    // Status from the LIVE feed: the active lifecycle tab (when no queue owns the
+    // population). `statusFilter` was retired with the flat queue (v111) - reading it
+    // forced every export to PENDING,VERIFIED regardless of the visible tab, silently
+    // dropping Responding/Resolved rows (must-have #11 export correctness).
+    const _TAB_EXPORT_STATUS = { pending: 'PENDING,VERIFIED', responding: 'RESPONDING', resolved: 'RESOLVED,FALSE_ALARM' };
+    if (!_activeQueue && _activeStatusTab === 'rejected') {
+        // The Rejected tab is verdict-based (any status); the backend excludes REJECTED
+        // by default, so an explicit reviewer_verdict is required to export them.
+        params.set('reviewer_verdict', 'REJECTED');
+    } else if (!_activeQueue && _TAB_EXPORT_STATUS[_activeStatusTab]) {
+        params.set('status', _TAB_EXPORT_STATUS[_activeStatusTab]);
     }
-    if (timeFilterHours > 0) {
+    if (!_activeQueue && timeFilterHours > 0) {
+        // Mirror the feed: a queue owns the population, so time is NOT applied under
+        // a queue (else the export drops queue-matching rows the operator sees).
         params.set('since', new Date(Date.now() - timeFilterHours * 3600000).toISOString());
     }
     // C2 (Phase-0): exports MUST respect the active operation scope. When the
@@ -12481,6 +14500,10 @@ function _exportFilterParams() {
     // path that goes through this helper inherits it.
     if (_activeCrisisEventId) params.set('crisis_event_id', _activeCrisisEventId);
     return params;
+}
+// Read-only debug hook: the live export query string (so tests can assert exports
+// follow the active status tab / scope - must-have #11).
+window.__crispExportParams = function () { try { return _exportFilterParams().toString(); } catch (_e) { return ''; }
 }
 window._exportFilterParams = _exportFilterParams;
 
@@ -12586,19 +14609,10 @@ window.exportNodeDataFromIncidents = function (ids) {
 };
 
 function getFilteredReports() {
-    let filtered = _activeQueue ? _applyQueueFilter(allReports)
-        : allReports.filter(r => {
-            if (statusFilter === 'all') return true;
-            const s = r.status;
-            if (statusFilter === 'active') return s === 'PENDING' || s === 'VERIFIED';
-            return s.toLowerCase() === statusFilter.toLowerCase();
-        });
-    if (!_activeQueue && timeFilterHours > 0) {
-        const cutoff = Date.now() - timeFilterHours * 3600000;
-        // K.5.b - use _priorityTime for offline-aware time filter.
-        filtered = filtered.filter(r => _priorityTime(r) > cutoff);
-    }
-    return filtered;
+    // Mirror the visible feed exactly (scope + queue + status tab + Critical/time/
+    // search/chips) so the offline CSV/GeoJSON fallback matches what's on screen.
+    // Was branching on the retired `statusFilter` (frozen at 'active').
+    return _clusterFilteredReports();
 }
 
 function exportCSV(reports, filename = 'crisp_export') {

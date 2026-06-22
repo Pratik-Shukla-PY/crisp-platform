@@ -99,7 +99,7 @@
     // Queue state segments are operations-view state (Jun 2026 attention
     // queues). Leaving /incidents drops them so the landing/settings URLs
     // stay clean and a stale queue can't silently re-apply later.
-    if (route !== '/incidents') stateSegs = stateSegs.filter((s) => !s.startsWith('queue=') && !s.startsWith('op='));
+    if (route !== '/incidents') stateSegs = stateSegs.filter((s) => !s.startsWith('queue=') && !s.startsWith('op=') && !s.startsWith('bld='));
     // navigate() builds with NO query → any ?incident= selection is cleared
     // when moving to a fresh route (the intuitive "leave the detail" behaviour).
     const next = buildHash(route, stateSegs);
@@ -111,7 +111,7 @@
   // + survives refresh / Back / Forward. queue= preserve policy matches navigate().
   function navigateWithIncident(route, incidentId) {
     let { stateSegs } = parseHash();
-    if (route !== '/incidents') stateSegs = stateSegs.filter((s) => !s.startsWith('queue=') && !s.startsWith('op='));
+    if (route !== '/incidents') stateSegs = stateSegs.filter((s) => !s.startsWith('queue=') && !s.startsWith('op=') && !s.startsWith('bld='));
     const next = buildHash(route, stateSegs, incidentId ? { incident: incidentId } : null);
     if (location.hash !== next) location.hash = next;   // → hashchange → dispatch → restore
     else dispatch();                                     // same hash → re-dispatch (re-open)
@@ -179,6 +179,10 @@
     }
 
     hideAll();
+    // P2: the operations-registry tree (the #/operations route) is a feed-panel mode;
+    // clear it on every other route so the building-first feed / op panel render. The
+    // bare #/operations branch below turns it back on. (Idempotent — no-op if unchanged.)
+    try { if (window.setOpsRegistryMode) window.setOpsRegistryMode(false); } catch (_e) {}
     if (route === '/incidents') {
       // Determine operation CONTEXT from the route BEFORE rendering, so the feed
       // never paints the global dataset first. setOperationScope() clears the
@@ -188,11 +192,27 @@
       // Operation scope is re-applied AFTER hideAll() cleared it.
       try {
         const opSeg = (parsed.stateSegs || []).find((s) => s.startsWith('op='));
-        const opId = opSeg ? decodeURIComponent(opSeg.slice(3)) : null;
+        const opRaw = opSeg ? decodeURIComponent(opSeg.slice(3)) : null;
+        const isTriage = opRaw === 'none';                       // op=none → the "not in any operation" bucket
+        const opId = isTriage ? null : opRaw;
+        const bldSeg = (parsed.stateSegs || []).find((s) => s.startsWith('bld='));
+        const bldId = bldSeg ? decodeURIComponent(bldSeg.slice(4)) : null;
         const incId = parsed && parsed.query && parsed.query.incident;
-        try { window.__crispRouteTrace && window.__crispRouteTrace('dispatch /incidents', { opId: opId || 'GLOBAL', incidentId: incId || null, stateSegs: parsed.stateSegs }); } catch (_e) {}
+        try { window.__crispRouteTrace && window.__crispRouteTrace('dispatch /incidents', { opId: opId || (isTriage ? 'TRIAGE' : 'GLOBAL'), building: bldId || null, incidentId: incId || null, stateSegs: parsed.stateSegs }); } catch (_e) {}
         if (window.setOperationScope) window.setOperationScope(opId);
         if (window.__crispOnIncidentOpScope) window.__crispOnIncidentOpScope(opId);
+        // Jun 2026 nav-clarity: Triage + Building are CLIENT-SIDE feed scopes
+        // layered on the op/global server boundary (no refetch). Apply AFTER the op
+        // scope so they narrow the freshly-scoped set.
+        if (window.setTriageScope) { try { window.setTriageScope(isTriage); } catch (_e) {} }
+        if (window.setBuildingScope) { try { window.setBuildingScope(bldId); } catch (_e) {} }
+        // A specific-incident deep-link (?incident=<id>), a ;queue= filter, OR a
+        // ;bld= building scope all read best in the FLAT queue view - the targeted/
+        // filtered cards must be revealable, not buried in a collapsed building
+        // section. Transient (setViewMode not persisted): a plain /incidents visit
+        // or refresh returns to the building-first default.
+        const queueSeg = (parsed.stateSegs || []).find((s) => s.startsWith('queue='));
+        if ((incId || queueSeg || bldId) && window.setViewMode) { try { window.setViewMode('queue'); } catch (_e) {} }
       } catch (_e) {}
       showIncidents();
       // ROUTE-08 (Phase-3): apply the ;queue= state seg HERE, inside the ordered
@@ -200,6 +220,13 @@
       // Runs synchronously right after the scope is set, so the queue is in effect
       // BEFORE the async scoped fetch resolves + renders.
       try { if (window._syncQueueFromHash) window._syncQueueFromHash(); } catch (_e) {}
+      // Building-centric Incident-Feed redesign Phase 2E: ?incidentDetail=<id>
+      // opens the first-class Incident Detail overlay (separate from ?incident=,
+      // which opens a single report). Deep-linkable + survives refresh/Back.
+      try {
+        const incDetailId = parsed && parsed.query && parsed.query.incidentDetail;
+        if (incDetailId && window.openIncidentDetail) window.openIncidentDetail(incDetailId);
+      } catch (_e) {}
     } else if (route === '/users') {
       try { (window.openAccountSettings || function () {})(); } catch (_e) {}
     } else if (route === '/org') {
@@ -213,8 +240,29 @@
       if (_currentRoute === '/incidents') showIncidents();
       try { (window.openExportCenter || function () {})(_currentRoute || '/'); } catch (_e) {}
     } else if (route === '/operations') {
-      // id present → one operation's worklist dashboard; null → operations list.
-      try { (window.openOperations || function () {})(parsed.params.id || null); } catch (_e) {}
+      const _opId = parsed.params.id || null;
+      if (_opId) {
+        // Single-page consolidation: a SPECIFIC operation opens in the CONSOLE's right
+        // #detail-panel — NOT the full-page detail overlay. Deep-links / bookmarks of
+        // #/operations/{id} keep working; the route canonicalises to /incidents.
+        try { if (window.setOperationScope) window.setOperationScope(_opId); } catch (_e) {}
+        try { if (window.__crispOnIncidentOpScope) window.__crispOnIncidentOpScope(_opId); } catch (_e) {}
+        showIncidents();
+        try { if (window._syncQueueFromHash) window._syncQueueFromHash(); } catch (_e) {}
+        // Open AFTER this dispatch (incl. restoreFromHash, which would otherwise close
+        // the panel as a "no ?incident" Back-contract teardown).
+        try { requestAnimationFrame(() => { try { window.openOperationSummary && window.openOperationSummary(_opId); } catch (_e) {} }); } catch (_e) {}
+        route = '/incidents';   // canonical: this IS the console
+      } else {
+        // P2: the operations REGISTRY is now the Console's left tree (no separate
+        // overlay) — operations → buildings → incidents, each opening in the right
+        // panel. Render it in the feed panel.
+        try { if (window.setOperationScope) window.setOperationScope(null); } catch (_e) {}
+        try { if (window.setTriageScope) window.setTriageScope(false); } catch (_e) {}
+        try { if (window.setBuildingScope) window.setBuildingScope(null); } catch (_e) {}
+        showIncidents();
+        try { if (window.setOpsRegistryMode) window.setOpsRegistryMode(true); } catch (_e) {}
+      }
     } else {
       try { (window.openControlCenter || function () {})(); } catch (_e) {}
       route = '/';

@@ -1341,7 +1341,10 @@ body[data-route="/incidents"] #command-actions { display: flex; align-items: cen
 .feed-panel {
     position: absolute;
     top: 16px; left: 16px; bottom: 16px;
-    width: 420px; z-index: 10;
+    /* Left incident-feed bar - scales with the viewport but stays bounded so it
+       never crowds out the map. Reduced ~20% (operator request) from
+       clamp(460px,31vw,580px). */
+    width: clamp(368px, 24.8vw, 464px); z-index: 10;
     display: flex; flex-direction: column;
     overflow: hidden;
 }
@@ -1424,6 +1427,7 @@ body[data-route="/incidents"] #command-actions { display: flex; align-items: cen
 /* ══ INCIDENT LIST / TREE CONTAINER ════════════════════════ */
 .incident-list {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 4px 0;
@@ -1431,6 +1435,11 @@ body[data-route="/incidents"] #command-actions { display: flex; align-items: cen
     flex-direction: column;
     gap: 0;
 }
+/* The list is a column flex box, so its children are flex items that would otherwise
+   SHRINK to fit the panel (compressing the tree into the visible area with no
+   scrollbar). Pin them to their natural height so tall content overflows and the
+   list's own overflow-y:auto scrolls — Operation→Building→Incident trees can be huge. */
+.incident-list > * { flex-shrink: 0; }
 .incident-list::-webkit-scrollbar { width: 4px; }
 .incident-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
@@ -1731,7 +1740,7 @@ body[data-route="/incidents"] #command-actions { display: flex; align-items: cen
 .fp-st-RESPONDING { background:rgba(167,139,250,0.15); color:#a78bfa; }
 .fp-st-RESOLVED { background:rgba(16,185,129,0.15); color:#10b981; }
 .fp-st-FALSE_ALARM { background:rgba(100,116,139,0.15); color:#94a3b8; }
-.fp-meta-row { display:flex; gap:8px; font-size:10px; color:var(--text-dim); }
+.fp-meta-row { display:flex; gap:8px; font-size:10px; color:var(--text-dim); flex-wrap:wrap; align-items:center; }
 
 /* Photo section */
 .fp-img-section { position:relative; max-height:160px; overflow:hidden; }
@@ -1803,12 +1812,23 @@ body[data-route="/incidents"] #command-actions { display: flex; align-items: cen
        top MUST clear the fixed global shell bar (--gnav-h) - otherwise the
        header + ✕ close sit behind the shell (z 100001) and can't be reached. */
     top: calc(var(--gnav-h, 52px) + 16px); right: 16px; bottom: 16px;
-    /* Wider panel so more fits with minimal scroll; scales with the viewport and
-       caps at 560px so it never dominates a small screen (the feed keeps room). */
-    width: clamp(420px, 40vw, 560px); z-index: 100000;
+    /* Scales with the viewport and stays bounded so it never dominates a small
+       screen (the feed keeps room). Reduced ~20% (operator request) from
+       clamp(420px,40vw,560px). */
+    width: clamp(336px, 32vw, 448px); z-index: 100000;
     display: flex; flex-direction: column;
     overflow: hidden;
 }
+/* Operation node rendered into the right panel (single-page Operations Console).
+   Wider than incident/building so the operation dashboard reads well; the 2-column
+   cco-grid (map | worklist) STACKS in the panel (its media query keys off viewport,
+   not container, so it would otherwise overflow). */
+.detail-panel--operation { width: clamp(384px, 41.6vw, 608px); }  /* -20% (operator request) from clamp(480px,52vw,760px) */
+.detail-panel--operation #detail-body { padding: 12px 14px; overflow-y: auto; }
+.detail-panel--operation .cco-grid { grid-template-columns: 1fr; gap: 12px; }
+.detail-panel--operation .cco-vitals { grid-template-columns: repeat(2, 1fr); }
+.detail-panel--operation #cco-map { height: 260px; }
+.detail-panel--operation .cco-actions { flex-wrap: wrap; }
 .detail-header {
     padding: 10px 14px;
     border-bottom: 1px solid var(--border);
@@ -1896,6 +1916,7 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 /* Source badges (App / Telegram / WhatsApp) */
 .qrt-source-badge { font-size:14px; padding:2px 6px; border-radius:8px; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; }
 .qrt-src-app       { background:rgba(124,58,237,0.15); color:#a78bfa; }
+.qrt-src-android    { background:rgba(61,220,132,0.15); color:#3ddc84; }
 .qrt-src-telegram   { background:rgba(38,165,224,0.15); color:#26a5e4; }
 .qrt-src-whatsapp   { background:rgba(37,211,102,0.15); color:#25d366; }
 .qrt-src-sms        { background:rgba(245,158,11,0.15); color:#f59e0b; }
@@ -2029,6 +2050,10 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 .dp-loc-card { margin-bottom:6px; padding:7px 10px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:8px; display:flex; flex-direction:column; gap:3px; }
 .dp-loc-card.dp-loc-mismatch { background:rgba(251,191,36,0.06); border-color:rgba(251,191,36,0.2); }
 .dp-loc-device { opacity:0.7; }
+/* A3: explicit Device / Submitted location labels when the reporter corrected the pin. */
+.dp-loc-tag { font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;
+  color:#94a3b8; background:rgba(148,163,184,0.14); border-radius:4px; padding:1px 6px; flex-shrink:0; }
+.dp-loc-device .dp-loc-tag { color:#cbd5e1; }
 
 /* Image match score line */
 .dp-img-match { font-size:11px; color:var(--text-sub); padding:4px 8px; margin-bottom:6px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:6px; display:flex; align-items:center; gap:5px; }
@@ -2483,6 +2508,18 @@ body.dp-fullscreen .dp-summary-text { font-size: 14px; line-height: 1.65; }
 .dp-assess-reasons { margin-top:3px; font-size:11px; color:#cbd5e1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dp-assess-presence { margin-top:3px; font-size:10px; color:#94a3b8; }
 .dp-assess-link { color:#5eead4; font-weight:700; margin-left:4px; }
+/* Building Risk Score card (reuses the incident .dp-assess card). The severity chip
+   is the separate "how bad" dimension shown ALONGSIDE the combined risk score. */
+.dp-assess-sevchip { font-size:9.5px; font-weight:800; letter-spacing:.03em; text-transform:uppercase;
+  padding:2px 7px; border-radius:999px; border:1px solid currentColor; opacity:.9; }
+.dp-assess-sevchip.sev-critical { color:#f87171; } .dp-assess-sevchip.sev-severe { color:#fb923c; }
+.dp-assess-sevchip.sev-moderate { color:#fbbf24; } .dp-assess-sevchip.sev-minor { color:#86efac; }
+.dp-assess-sevchip.sev-unknown { color:#94a3b8; }
+.bc-risk-actions { display:flex; gap:7px; padding:0 13px 11px; }
+.bc-risk-actions button { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  padding:7px 10px; font-size:11px; font-weight:700; cursor:pointer; color:#9fb2d4;
+  background:#0e1726; border:1px solid #2b3b56; border-radius:8px; }
+.bc-risk-actions button:hover { border-color:#418FDE; color:#cfe3f8; }
 .dp-assess-scorerow:hover .dp-assess-link { text-decoration:underline; }
 .dp-assess-rerun { display:flex; align-items:center; justify-content:center; gap:6px; width:calc(100% - 26px); margin:0 13px 11px;
   padding:7px 10px; border:1px solid rgba(148,163,184,0.25); background:rgba(148,163,184,0.06); color:#cbd5e1;
@@ -3872,14 +3909,14 @@ body.burst-mode .notif-glow {
     .brand-sub { display: none; }
 }
 @media (max-width: 1200px) {
-    .feed-panel { width: 360px; }
+    .feed-panel { width: 352px; }   /* -20% from 440px */
     /* detail-panel width handled by the clamp() on the base rule */
     .user-name { display: none; }
 }
 @media (max-width: 900px) {
-    .feed-panel { width: 320px; }
+    .feed-panel { width: 304px; }   /* -20% from 380px */
     .command-stats { display: none; }
-    .detail-panel { width: min(420px, 92vw); }
+    .detail-panel { width: min(336px, 92vw); }   /* -20% from 420px */
     .command-bar { flex-wrap: wrap; gap: 6px; padding: 6px 10px; }
 }
 
@@ -4162,14 +4199,20 @@ body.burst-mode .notif-glow {
 .strip-MINOR    { background: var(--minor); }
 .strip-UNKNOWN  { background: var(--muted); }
 
-/* Card content area */
+/* Card content area — density-optimised two rows (≈half the old height) */
 .qrt-card-body {
-    flex: 1; padding: 10px 12px;
-    display: flex; flex-direction: column; gap: 5px; min-width: 0;
+    flex: 1; padding: 6px 10px;
+    display: flex; flex-direction: column; gap: 3px; min-width: 0;
 }
 
-/* WHAT - infrastructure type + severity badge */
-.qrt-what { display: flex; align-items: center; gap: 7px; }
+/* Row 1 (triage line): what · severity · source · status.
+   Row 2 (.qrt-meta): where · when · confidence · merged-dups · blocking · Notify. */
+.qrt-what { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.qrt-what .qrt-source-badge { flex: none; font-size: 11px; color: var(--text-dim); }
+.qrt-what .qrt-status-pill { flex: none; }
+.qrt-meta { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 11px; flex-wrap: wrap; row-gap: 3px; }
+.qrt-meta > .qrt-dispatch-btn { margin-left: auto; }
+.qrt-meta .qrt-confidence, .qrt-meta .qrt-dup-merged, .qrt-meta .k5a-chip { flex: none; }
 .qrt-infra-icon {
     font-size: 13px; flex-shrink: 0;
     width: 26px; height: 26px; border-radius: 7px;
@@ -4183,8 +4226,8 @@ body.burst-mode .notif-glow {
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .qrt-sev-badge {
-    font-size: 13px; font-weight: 700; padding: 2px 7px;
-    border-radius: 10px; flex-shrink: 0; letter-spacing: 0.3px;
+    font-size: 10.5px; font-weight: 700; padding: 1px 6px;
+    border-radius: 8px; flex-shrink: 0; letter-spacing: 0.3px;
 }
 .qrt-sev-CRITICAL { background: rgba(239,68,68,0.2);    color: var(--critical); }
 .qrt-sev-SEVERE   { background: rgba(249,115,22,0.2);   color: var(--severe);   }
@@ -4192,13 +4235,14 @@ body.burst-mode .notif-glow {
 .qrt-sev-MINOR    { background: rgba(34,197,94,0.12);   color: var(--minor);    }
 .qrt-sev-UNKNOWN  { background: rgba(100,116,139,0.15); color: var(--text-sub); }
 
-/* WHERE - location name */
+/* WHERE - location name (row-2 meta). Operator brief: show the location FULLY -
+   it grows to fill the row and wraps instead of clipping with an ellipsis. */
 .qrt-where {
-    display: flex; align-items: center; gap: 5px;
-    font-size: 13px; color: var(--info);
+    display: inline-flex; align-items: flex-start; gap: 4px;
+    color: var(--info); min-width: 0; flex: 1 1 auto;
 }
-.qrt-where i { font-size: 14px; flex-shrink: 0; }
-.qrt-where-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qrt-where i { font-size: 12px; flex-shrink: 0; margin-top: 2px; }
+.qrt-where-text { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
 
 /* UNDP tags - crisis type + damage class on triage cards */
 .qrt-undp-tags { display: flex; gap: 4px; flex-wrap: wrap; padding: 0 2px; }
@@ -4212,13 +4256,12 @@ body.burst-mode .notif-glow {
 .qrt-tag-dmg-PARTIAL { background: rgba(249,115,22,0.15); color: #fb923c; }
 .qrt-tag-dmg-COMPLETE { background: rgba(239,68,68,0.15); color: #f87171; }
 
-/* WHEN - relative time */
+/* WHEN - relative time (row-2 meta) */
 .qrt-when {
-    display: flex; align-items: center; gap: 5px;
-    font-size: 13px; color: var(--text-dim);
-    font-family: var(--font-mono);
+    display: inline-flex; align-items: center; gap: 4px;
+    color: var(--text-dim); font-family: var(--font-mono); flex: none; white-space: nowrap;
 }
-.qrt-when i { font-size: 12px; flex-shrink: 0; }
+.qrt-when i { font-size: 11px; flex-shrink: 0; }
 
 /* Data indicators - icon-only with color states */
 .qrt-data-progress {
@@ -4275,6 +4318,11 @@ body.burst-mode .notif-glow {
 .dp-breadcrumb .dp-bc-op { color: #a78bfa; font-weight: 600; }
 .dp-breadcrumb .dp-bc-sep { font-size: 9px; opacity: .5; }
 .dp-breadcrumb .dp-bc-cur { color: #e6edf7; font-weight: 700; }
+/* Muted, non-clickable placeholder for a genuinely-absent hierarchy level
+   ("No operation" / "Unmapped building") so the Global › Operation › Building ›
+   Incident spine is always 4-level and never silently collapses. */
+.dp-breadcrumb .dp-bc-absent { color: #6b7a96; cursor: default; font-style: italic; }
+.dp-breadcrumb .dp-bc-absent:hover { text-decoration: none; color: #6b7a96; }
 /* ── Composite Confidence Score chip (parity with the detail page) ──────────
    ONE number on the card: the system Confidence Score + band. Colour is driven
    by --cf (set inline from _credBandMeta) so VERIFIED/LIKELY/MIXED/WEAK each get
@@ -4311,8 +4359,12 @@ body.burst-mode .notif-glow {
 
 /* Building Console deep-link + "needs mapping" flag + infra-type chip on the card */
 .qrt-where-text { flex: 1 1 auto; min-width: 0; }
-.qrt-bldg-link { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: #7dd3fc; cursor: pointer; flex-shrink: 0; white-space: nowrap; }
-.qrt-bldg-link:hover { color: #bae6fd; text-decoration: underline; }
+/* Building-tagged title is itself the Building Console link (the building name IS
+   the clickable affordance - no separate generic "Console" link). Keeps the bold
+   ellipsised title look; adds a calm building icon + hover link cue. */
+.qrt-infra-name.qrt-bldg-link { cursor: pointer; text-decoration: none; color: var(--text); }
+.qrt-infra-name.qrt-bldg-link:hover { color: #7dd3fc; text-decoration: underline; }
+.qrt-bldg-ic { font-size: 11px; color: #7dd3fc; opacity: 0.85; margin-right: 1px; flex-shrink: 0; }
 .qrt-needsmap { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #fbbf24; background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.3); padding: 0 5px; border-radius: 5px; margin-left: 4px; }
 .qrt-tag-infra { background: rgba(148,163,184,0.15); color: #cbd5e1; }
 
@@ -4337,11 +4389,11 @@ body.burst-mode .notif-glow {
 
 /* One-click dispatch button on the card */
 .qrt-dispatch-btn {
-    padding: 4px 10px; border-radius: 6px;
+    padding: 2px 8px; border-radius: 6px;
     border: 1px solid rgba(167,139,250,0.4);
     background: rgba(167,139,250,0.12); color: var(--responding);
-    font-size: 13px; font-weight: 700; cursor: pointer;
-    transition: all 0.18s; display: flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 700; cursor: pointer;
+    transition: all 0.18s; display: inline-flex; align-items: center; gap: 4px;
     white-space: nowrap; flex-shrink: 0;
 }
 .qrt-dispatch-btn:hover { background: rgba(167,139,250,0.28); border-color: rgba(167,139,250,0.65); }
@@ -6342,7 +6394,7 @@ body.burst-mode .notif-glow {
 /* Incident Context Banner - the page's "you are here" cue. Always visible; the
    left-border colour + tint encode the scope at a glance (WHERE), the label/sub
    give WHAT + WHY, and the count + clear/exit give WHAT-NEXT. */
-#queue-banner {
+#feed-scope-bar {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -6354,23 +6406,31 @@ body.burst-mode .notif-glow {
     border-radius: 10px;
     font-size: 12px;
 }
-#queue-banner.ctx-global { border-left-color: #418FDE; border-color: rgba(65,143,222,0.40); background: rgba(65,143,222,0.08); }
-#queue-banner.ctx-search { border-left-color: #94a3b8; border-color: rgba(148,163,184,0.45); background: rgba(148,163,184,0.10); }
-#queue-banner.ctx-op     { border-left-color: #7c3aed; border-color: rgba(124,58,237,0.50); background: rgba(124,58,237,0.12); }
-#queue-banner.ctx-queue  { border-left-color: #f87171; border-color: rgba(248,113,113,0.45); background: rgba(248,113,113,0.10); }
-#queue-banner.ctx-queue-needs-review,
-#queue-banner.ctx-queue-verification { border-left-color: #fbbf24; border-color: rgba(251,191,36,0.40); background: rgba(251,191,36,0.08); }
-#queue-banner.ctx-queue-active-ops { border-left-color: #34D399; border-color: rgba(52,211,153,0.40); background: rgba(52,211,153,0.08); }
-#queue-banner .qb-icon { font-size: 16px; flex: none; }
-#queue-banner .qb-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-#queue-banner .qb-label { color: #eaf2fc; font-size: 12.5px; font-weight: 800; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#queue-banner .qb-sub {
+#feed-scope-bar.ctx-global { border-left-color: #418FDE; border-color: rgba(65,143,222,0.40); background: rgba(65,143,222,0.08); }
+#feed-scope-bar.ctx-search { border-left-color: #94a3b8; border-color: rgba(148,163,184,0.45); background: rgba(148,163,184,0.10); }
+#feed-scope-bar.ctx-op     { border-left-color: #7c3aed; border-color: rgba(124,58,237,0.50); background: rgba(124,58,237,0.12); }
+#feed-scope-bar.ctx-queue  { border-left-color: #f87171; border-color: rgba(248,113,113,0.45); background: rgba(248,113,113,0.10); }
+#feed-scope-bar.ctx-queue-needs-review,
+#feed-scope-bar.ctx-queue-verification { border-left-color: #fbbf24; border-color: rgba(251,191,36,0.40); background: rgba(251,191,36,0.08); }
+#feed-scope-bar.ctx-queue-active-ops { border-left-color: #34D399; border-color: rgba(52,211,153,0.40); background: rgba(52,211,153,0.08); }
+#feed-scope-bar .qb-icon { font-size: 16px; flex: none; }
+#feed-scope-bar .qb-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+/* Jun 2026 nav-clarity: the clickable scope SPINE above the leaf label. */
+#feed-scope-bar .qb-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-bottom: 1px; font-size: 10.5px; }
+#feed-scope-bar .qb-crumb { color: #8aa0bf; text-decoration: none; }
+#feed-scope-bar a.qb-crumb { cursor: pointer; color: #7db8ef; }
+#feed-scope-bar a.qb-crumb:hover { color: #a9d2fb; text-decoration: underline; }
+#feed-scope-bar .qb-crumb-cur { color: #cfe3f8; font-weight: 700; }
+#feed-scope-bar .qb-bc-sep { color: #4a5a78; }
+#feed-scope-bar .ctx-qchip { background: rgba(56,189,248,.14); color: #7dd3fc; border-color: rgba(56,189,248,.4); }
+#feed-scope-bar .qb-label { color: #eaf2fc; font-size: 12.5px; font-weight: 800; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#feed-scope-bar .qb-sub {
     color: #9fb2d4; font-size: 11px; line-height: 1.35;
     overflow: hidden; text-overflow: ellipsis;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
-#queue-banner .qb-sub b { color: #cfe3f8; font-weight: 700; }
-#queue-banner .qb-clear {
+#feed-scope-bar .qb-sub b { color: #cfe3f8; font-weight: 700; }
+#feed-scope-bar .qb-clear {
     margin-left: auto;
     flex: none;
     background: transparent;
@@ -6383,17 +6443,17 @@ body.burst-mode .notif-glow {
     font-family: inherit;
     white-space: nowrap;
 }
-#queue-banner .qb-clear:hover { border-color: #418FDE; color: #fff; }
+#feed-scope-bar .qb-clear:hover { border-color: #418FDE; color: #fff; }
 /* Right-aligned actions cluster (operation switcher + clear/exit). */
-#queue-banner .qb-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; flex: none; }
-#queue-banner .qb-actions .qb-clear { margin-left: 0; }
-#queue-banner .ctx-switch {
+#feed-scope-bar .qb-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; flex: none; }
+#feed-scope-bar .qb-actions .qb-clear { margin-left: 0; }
+#feed-scope-bar .ctx-switch {
     display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
     background: rgba(124,58,237,0.14); border: 1px solid rgba(124,58,237,0.45);
     color: #c4b5fd; border-radius: 8px; padding: 5px 9px; font-size: 11px;
     cursor: pointer; font-family: inherit;
 }
-#queue-banner .ctx-switch:hover { border-color: #a78bfa; color: #ddd6fe; }
+#feed-scope-bar .ctx-switch:hover { border-color: #a78bfa; color: #ddd6fe; }
 /* Operation switcher dropdown - appended to <body>, positioned under the button.
    z above the detail panel (100000), below the notification stack (100050). */
 #op-switcher-menu {
@@ -6437,6 +6497,159 @@ body.burst-mode .notif-glow {
 .feed-kpi .k-total .cmd-status-seg-count { color: #cfe3f8; }
 .feed-kpi .cmd-status-seg-item.active-pulse { border-color: #f87171; animation: fk-pulse 1.6s ease-in-out infinite; }
 @keyframes fk-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0); } 50% { box-shadow: 0 0 0 3px rgba(248,113,113,.22); } }
+
+/* ── Jun 2026 Incident-Feed simplification ─────────────────────────────────────
+   Banner = ONE breadcrumb row (count folded inline). Row 2 = status TABS (Pending/
+   Responding/Resolved) + Critical quick-filter + filter/sort icon tools. Filters
+   are a popover off the filter icon. Replaces the .feed-kpi strip + .view-toggle +
+   the always-inline .cmd-filter-row. */
+
+/* Banner: crumbs + count on one line. */
+#feed-scope-bar .qb-text { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 3px 8px; }
+#feed-scope-bar .qb-crumbs { font-size: 12px; margin-bottom: 0; }
+#feed-scope-bar .qb-sub { font-size: 11px; -webkit-line-clamp: 1; display: inline; white-space: nowrap; }
+#feed-scope-bar .qb-sub::before { content: '·'; color: #4a5a78; margin-right: 5px; }
+
+/* Header total incidents (operator request): sits next to the scope crumb. */
+#feed-scope-bar .qb-total { font-size: 11px; font-weight: 700; color: #9fb2d4; white-space: nowrap; }
+#feed-scope-bar .qb-total::before { content: '·'; color: #4a5a78; margin: 0 6px 0 2px; }
+
+/* Row 2: status tabs. Heading on top + the metric BELOW it (operator request) so
+   all four fit a single row in the narrower feed panel. No count pills - a plain
+   stacked number reads as a stat tile. */
+.feed-tabs { display: flex; align-items: center; gap: 6px; margin: 0 10px 8px; flex-wrap: wrap; }
+.feed-tablist { display: flex; flex-wrap: nowrap; gap: 2px; min-width: 0; }
+.feed-tab {
+    display: inline-flex; flex-direction: column; align-items: center; gap: 0;
+    flex: 0 0 auto;   /* never stretch — the tabs stay a compact group, not edge-to-edge */
+    padding: 3px 9px; border: 1px solid transparent; border-radius: 9px;
+    background: transparent; color: #8aa0bf; cursor: pointer; font-family: inherit;
+    line-height: 1.2; transition: background .12s, border-color .12s, color .12s;
+}
+.feed-tab:hover { background: #13203a; color: #cfe3f8; }
+.feed-tab .ft-label { font-size: 10.5px; font-weight: 600; letter-spacing: .01em; }
+.feed-tab .ft-count {
+    font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums;
+    background: transparent; color: #cfe3f8; padding: 0; min-width: 0;
+}
+.feed-tab.on { background: #13203a; border-color: #2b3b56; color: #eaf2fc; }
+.feed-tab.on .ft-count { color: #6fb1f0; }
+.feed-tab:focus-visible { outline: 2px solid #418FDE; outline-offset: 2px; }
+/* B3: a status tab whose bucket is empty (0) is muted + non-interactive. */
+.feed-tab.tab-empty { opacity: .45; pointer-events: none; cursor: default; }
+.feed-tab.tab-empty .ft-count { color: #5b6677; }
+/* Rejected tab: a subtle red tint so it reads as the "set aside / audit" bucket,
+   distinct from the live Pending/Responding/Resolved lifecycle tabs. */
+.feed-tab-rejected:not(.tab-empty) .ft-label { color: #c98b8b; }
+.feed-tab-rejected:not(.tab-empty) .ft-count { color: #d3928f; }
+.feed-tab-rejected.on { background: rgba(239,68,68,.10); border-color: rgba(239,68,68,.38); color: #fca5a5; }
+.feed-tab-rejected.on .ft-count { color: #fca5a5; }
+/* Per-card rejection reason (shown on rejected cards + on the meta row) */
+.qrt-reject-reason { display: inline-flex; align-items: center; gap: 4px; color: #f87171;
+    min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qrt-reject-reason i { font-size: 10px; flex: none; }
+
+/* Critical = cross-cutting quick-filter chip (not a tab). */
+.crit-filter {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 9px; border-radius: 9px; cursor: pointer; font-family: inherit;
+    font-size: 11px; font-weight: 700;
+    border: 1px solid rgba(248,113,113,.45); background: rgba(248,113,113,.10); color: #f8a3a3;
+}
+.crit-filter i { font-size: 11px; }
+.crit-filter span { font-variant-numeric: tabular-nums; }
+.crit-filter:hover { border-color: #f87171; color: #fecaca; }
+.crit-filter.on { background: #e24b4a; border-color: #c0392b; color: #fff; }
+.crit-filter:focus-visible { outline: 2px solid #f87171; outline-offset: 2px; }
+
+/* Tools cluster: filter + sort icons, pushed to the right. */
+.feed-tools { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+.feed-tool-btn {
+    position: relative;
+    width: 32px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid #2b3b56; border-radius: 8px; background: #0e1726; color: #9fb2d4;
+    cursor: pointer; font-family: inherit; font-size: 14px;
+}
+.feed-tool-btn:hover { border-color: #418FDE; color: #cfe3f8; }
+/* The filter toggle must stack ABOVE its own popover (.cmd-filter-pop, z-index 60)
+   so the close-click always lands on the button — otherwise, when no spacer sits
+   above the tabs row, the open popover can overlap and intercept the toggle. */
+#feed-filter-btn { z-index: 61; }
+.feed-tool-btn .fft-badge {
+    position: absolute; top: -5px; right: -5px; min-width: 15px; height: 15px; padding: 0 3px;
+    display: none; align-items: center; justify-content: center;
+    background: #418FDE; color: #fff; font-size: 9px; font-weight: 800; border-radius: 8px;
+}
+.sort-dropdown.open .sort-btn.feed-tool-btn { border-color: var(--accent); color: var(--accent); }
+
+/* Filters POPOVER: opens from the filter icon (was an always-inline strip). */
+.cmd-filter-pop {
+    position: absolute; z-index: 60; right: 10px; margin-top: 2px;
+    width: 280px; max-width: calc(100% - 20px);
+    overflow: visible;
+    display: none; flex-wrap: wrap; gap: 6px;
+    background: #101a2e; border: 1px solid #2a3a55; border-radius: 12px;
+    box-shadow: 0 18px 48px rgba(0,0,0,.5); padding: 10px;
+}
+.cmd-filter-pop.open { display: flex; }
+.cmd-filter-pop .cmd-filter-label { flex: 0 0 100%; }
+.cmd-filter-rejected { border-color: rgba(248,113,113,.45) !important; color: #f8a3a3 !important; }
+.cmd-filter-rejected b { color: #fecaca; }
+
+/* v112: ARIA tablist wrapper holds ONLY the 3 status tabs (Critical + tools are
+   siblings in .feed-tabs). */
+/* The 4 status tabs take their own full row and WRAP, so the Rejected tab is never
+   clipped off the right edge of a narrow feed panel (it used to be inline-flex / nowrap
+   and overflowed). The Critical filter + tools wrap to the line below as before.
+   justify-content:flex-start + the tabs' flex:0 0 auto keep them a TIGHT left-aligned
+   group (a compact segmented control), not stretched edge-to-edge across the narrow
+   feed header (operator: "Pending/Responding/Resolved/Rejected fill end to end"). */
+.feed-tablist { display: flex; align-items: center; justify-content: flex-start; gap: 3px; flex: 1 1 100%; flex-wrap: wrap; min-width: 0; }
+/* Tabs neutralized when a queue owns the population (attention destination / rejected
+   view) - they don't filter there, so don't claim they do. */
+.feed-tabs.tabs-queue-disabled .feed-tablist { opacity: .45; pointer-events: none; }
+/* The building NAME in a cluster header is a <button> (keyboard-/SR-accessible) that
+   opens the building summary; reset button chrome so it reads as the title text. */
+.cc-cluster-title.cc-bldg-link { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; color: #dbe7fb; text-decoration: none; }
+.cc-cluster-title.cc-bldg-link:hover { color: #a9d2fb; text-decoration: underline; }
+.cc-cluster-title.cc-bldg-link:focus-visible { outline: 2px solid #418FDE; outline-offset: 2px; border-radius: 4px; }
+/* Op-scope note appended to the building-console title. */
+.bc-opscope { font-size: 12px; font-weight: 500; color: #9fb2d4; }
+
+/* ── Building as a first-class operational entity (Jun 2026): assessment card +
+   workspace + cascade actions. Reuses .dp-act-*/.assess-* from the incident UI. */
+.dp-act-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.assess-head-actions { display: inline-flex; gap: 6px; align-items: center; margin-left: auto; }
+.bc-act-group { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.bc-assess-explain { font-size: 12px; color: #9fb2d4; margin: 4px 0 10px; line-height: 1.5; }
+.bc-assess-cta { display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: 9px; border: 1px solid #2b3b56; background: #173a6b; color: #dbe7fb; font-size: 13px; font-weight: 600; cursor: pointer; }
+.bc-assess-cta:hover { background: #1d4a85; }
+.bc-assess-scored { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #2b3b56; border-left: 3px solid var(--cred-color, #64748b); border-radius: 9px; background: #0e1726; cursor: pointer; width: 100%; text-align: left; }
+.bc-assess-scored:hover { background: #13203a; }
+.bc-assess-scored:focus-visible { outline: 2px solid #418FDE; outline-offset: 2px; }
+.bc-assess-dial { font-size: 22px; font-weight: 800; color: var(--cred-color, #cfe3f8); font-variant-numeric: tabular-nums; flex: none; }
+.bc-assess-dial small { font-size: 11px; color: #8aa0bf; font-weight: 600; }
+.bc-assess-metacol { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bc-assess-sub { font-size: 11px; color: #8aa0bf; }
+.bc-assess-go { margin-left: auto; color: #8aa0bf; }
+.bc-assess-actions { display: flex; gap: 8px; margin-top: 8px; }
+.bc-assess-rerun, .bc-assess-report { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; border: 1px solid #2b3b56; background: #0e1726; color: #9fb2d4; font-size: 12px; cursor: pointer; }
+.bc-assess-rerun:hover, .bc-assess-report:hover { border-color: #418FDE; color: #cfe3f8; }
+.bldg-rec { font-size: 13px; color: #e6eefb; padding: 4px 0 8px; }
+.bldg-dist { display: flex; gap: 6px; flex-wrap: wrap; }
+.bldg-dist-chip { font-size: 10.5px; padding: 2px 7px; border-radius: 9px; background: #16233c; color: #9fb2d4; }
+.bldg-inc-list { display: flex; flex-direction: column; gap: 6px; }
+.bldg-inc-row { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 8px 10px; border: 1px solid #233149; border-left: 3px solid var(--cred-color, #64748b); border-radius: 8px; background: #0e1726; color: #cfe3f8; cursor: pointer; font-size: 12px; }
+.bldg-inc-row:hover { background: #13203a; }
+.bldg-inc-sev { width: 8px; height: 8px; border-radius: 50%; background: #64748b; flex: none; }
+.bldg-inc-sev.sev-critical { background: #f87171; }
+.bldg-inc-sev.sev-severe { background: #fb923c; }
+.bldg-inc-sev.sev-moderate { background: #fbbf24; }
+.bldg-inc-sev.sev-minor { background: #34d399; }
+.bldg-inc-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bldg-inc-cached { font-size: 9.5px; color: #8aa0bf; border: 1px solid #2b3b56; border-radius: 6px; padding: 0 4px; }
+.bldg-inc-conf { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bldg-inc-conf small { font-weight: 500; font-size: 10px; opacity: .8; }
 
 /* D6: shared busy/double-submit spinner used by withBusy() in app.js. Inherits the
    button's text color so it works on dark + accent buttons alike. */
@@ -6525,6 +6738,91 @@ button[aria-busy="true"], .cc-wiz-btn[disabled], button[disabled].cc-busy-host {
 .dp-act-reject:hover { background:rgba(251,191,36,0.13); }
 .dp-act-delete { color:#f87171; border-color:rgba(248,113,113,0.32); }
 .dp-act-delete:hover { background:rgba(248,113,113,0.13); }
+/* Jun 2026 state machine: a settled report shows a status BANNER + the reversal. */
+.dp-act-false { color:#fbbf24; border-color:rgba(251,191,36,0.32); }
+.dp-act-false:hover { background:rgba(251,191,36,0.13); }
+.dp-act-revert { color:#cbd5e1; border-color:rgba(148,163,184,0.32); }
+.dp-act-revert:hover { background:rgba(148,163,184,0.12); }
+.dp-actions .dp-act-primary.dp-act-revert { background:rgba(148,163,184,0.1); color:#e2e8f0; box-shadow:none; border:1px solid rgba(148,163,184,0.28); }
+.dp-act-banner { display:flex; align-items:center; gap:8px; width:100%; padding:11px 12px; border-radius:11px;
+  font-size:13px; font-weight:800; border:1px solid; }
+.dp-act-banner .dp-act-reason { font-weight:600; font-size:11.5px; opacity:.85; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dp-act-banner-rejected { color:#fbbf24; background:rgba(251,191,36,0.1); border-color:rgba(251,191,36,0.24); }
+.dp-act-banner-responding { color:#818cf8; background:rgba(99,102,241,0.12); border-color:rgba(99,102,241,0.26); }
+.dp-act-banner-resolved { color:#34d399; background:rgba(52,211,153,0.1); border-color:rgba(52,211,153,0.22); }
+.dp-act-banner-false { color:#94a3b8; background:rgba(148,163,184,0.08); border-color:rgba(148,163,184,0.18); }
 /* Export: quieter + neutral (a utility, not a decision action) */
 .dp-export-btn { border-color:rgba(148,163,184,0.25) !important; color:#94a3b8 !important; }
 .dp-export-btn:hover { background:rgba(148,163,184,0.1) !important; color:#cbd5e1 !important; }
+
+
+/* ── v116 Incident Feed redesign ─────────────────────────────────────────────
+   The scope breadcrumb now lives IN the feed header (#feed-scope-bar), the count
+   moved to the status-tab row (#count-dual), buildings are an accordion linked to
+   the console, the list infinite-scrolls, and Compact is an opt-in density. */
+
+/* Scope bar reads as a clean header row - strip the old standalone-card chrome
+   (margin / border / scope tint); keep the crumb + switch styles re-homed above. */
+#feed-scope-bar { flex: 1; min-width: 0; margin: 0; padding: 0; border: none; background: none; border-radius: 0; gap: 8px; font-size: 12px; }
+#feed-scope-bar.ctx-global, #feed-scope-bar.ctx-search, #feed-scope-bar.ctx-op,
+#feed-scope-bar.ctx-queue, #feed-scope-bar.ctx-queue-needs-review,
+#feed-scope-bar.ctx-queue-verification, #feed-scope-bar.ctx-queue-active-ops { background: none; border: none; }
+#feed-scope-bar .qb-icon { font-size: 15px; }
+#feed-scope-bar .qb-crumbs { font-size: 12.5px; }
+.feed-header { padding: 9px 12px; }
+
+/* Dual total (N incidents · M reports) in the status-tab row. */
+.feed-dual { font-size: 11px; color: #9fb2d4; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.feed-dual:empty { display: none; }
+
+/* Density toggle active (Compact) state - teal, mirroring the linked-console accent. */
+#feed-density.on { background: rgba(52,211,153,.14); border-color: rgba(52,211,153,.5); color: #6ee7b7; }
+
+/* The OPEN building (mirrored in the console on the right) gets a subtle teal
+   left-accent on its header row - in the building palette, no emerald ring/box. */
+/* Selected building: a clean teal left-accent only (no fill) + a brighter title,
+   so the selection reads without re-adding a node background (operator request). */
+#report-feed-list .cc-cluster.cc-cluster-active > .qrt-section-header { border-left: 2px solid #2dd4bf; padding-left: 6px; }
+#report-feed-list .cc-cluster.cc-cluster-active > .qrt-section-header .cc-cluster-title { color: #7defd9; }
+
+/* Merged-duplicate sub-rows: the corroborating reports collapsed under a primary
+   incident, revealed (dimmed, nested in the building rail) by the card's "N
+   duplicates" expander. Read-only here; merge controls live in the building console. */
+.qrt-dup-children { margin: 4px 0 2px 14px; padding-left: 10px; border-left: 1.5px dashed rgba(148,163,184,.22); display: flex; flex-direction: column; gap: 4px; }
+.qrt-dup-empty { font-size: 10.5px; color: #64748b; padding: 3px 6px; }
+.qrt-dup-child { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: #64748b; padding: 3px 6px; border-radius: 6px; cursor: pointer; }
+.qrt-dup-child:hover { background: rgba(255,255,255,.03); color: #93a3b8; }
+.qrt-dup-child-ic { font-size: 11px; color: #5b6b85; flex: none; }
+.qrt-dup-child-sev { width: 7px; height: 7px; border-radius: 50%; flex: none; opacity: .7; }
+.qrt-dup-child-what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qrt-dup-child-where { color: #5b6b85; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qrt-dup-child-tag { font-size: 9.5px; color: #94a3b8; background: rgba(148,163,184,.10); border-radius: 9px; padding: 0 6px; flex: none; }
+.qrt-dup-child-time { color: #5b6b85; flex: none; }
+.qrt-dup-twist { font-size: 8px; transition: transform .12s ease; }
+.qrt-dup-merged.expanded .qrt-dup-twist { transform: rotate(180deg); }
+
+/* Infinite-scroll sentinel ("Loading more buildings… X / N"). */
+.feed-bld-sentinel { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 11px; margin: 4px 10px; font-size: 11.5px; color: #7e8aa0; }
+.feed-bld-sentinel .fbs-progress { color: #5b6b85; }
+
+/* Building Console recoverable error state (replaces a stuck "Loading…" spinner when
+   the building fetch fails/times out or the render throws). */
+.bc-error { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 48px 22px; text-align: center; color: #9fb2d4; }
+.bc-error > .fa-triangle-exclamation { font-size: 26px; color: #f59e0b; }
+.bc-error-msg { font-size: 13px; max-width: 280px; }
+.bc-retry { background: rgba(124,99,221,.18); border: 1px solid rgba(124,99,221,.5); color: #c4b5fd; border-radius: 8px; padding: 7px 16px; font-size: 12px; cursor: pointer; font-family: inherit; }
+.bc-retry:hover { border-color: #a78bfa; color: #ddd6fe; }
+
+/* Compact density: same cards, denser. Drop the verbose per-incident rows (the
+   building header already names location/time) and tighten spacing. */
+/* Compact view ≈ one dense line per incident (≈80% shorter than the old card):
+   row 1 ONLY — severity · what · source · status. The whole meta row (where · when ·
+   confidence · Notify) is hidden; full details are one hover away. */
+#report-feed-list.feed-compact .cc-cluster .qrt-section-header { padding-top: 5px; padding-bottom: 5px; }
+#report-feed-list.feed-compact .qrt-card-body { padding: 2px 10px; gap: 0; }
+#report-feed-list.feed-compact .qrt-what { line-height: 1.1; }
+#report-feed-list.feed-compact .qrt-meta { display: none; }
+#report-feed-list.feed-compact .qrt-source-badge { display: none; }   /* low value when scanning */
+#report-feed-list.feed-compact .qrt-card { box-shadow: none; }
+#report-feed-list.feed-compact .opg-bldg-body,
+#report-feed-list.feed-compact .cc-cluster .qrt-section-body { gap: 4px; }

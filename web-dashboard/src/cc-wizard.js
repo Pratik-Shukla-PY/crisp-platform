@@ -56,7 +56,7 @@
   }
 
   // ── form kit (shared with cc-crisis.js) ──────────────────────────────────────
-  const KIT = () => window.CrispFormKit || { CORE_BLOCKS: [], STOCK_PACKS: {}, CRISIS_TO_STOCK: {}, EVENT_CRISIS_TYPES: [] };
+  const KIT = () => window.CrispFormKit || { CORE_BLOCKS: [], STOCK_PACKS: {}, UNDP_BLOCKS: [], CRISIS_TO_STOCK: {}, EVENT_CRISIS_TYPES: [] };
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const CRISIS_ICON = {
     WILDFIRE: '🔥', FLOOD: '🌊', EARTHQUAKE: '🏚', CYCLONE: '🌀', TSUNAMI: '🌊',
@@ -67,6 +67,9 @@
   function freshBlocks(stockKey) {
     const k = KIT();
     return {
+      // UNDP Appendix-1 mandatory questions ship default-ON in every new operation
+      // pack (individually toggleable - the analyst picks-and-chooses by judgment).
+      undp: (k.UNDP_BLOCKS || []).map((b) => Object.assign({}, b, { field: clone(b.field) })),
       core: (k.CORE_BLOCKS || []).map((b) => Object.assign({}, b, { field: clone(b.field) })),
       stock: (k.STOCK_PACKS[stockKey] || []).map((b) => Object.assign({}, b, { field: clone(b.field) })),
     };
@@ -76,6 +79,7 @@
     (schema.sections || []).forEach((sec) => (sec.fields || []).forEach((f) => { if (f && f.key) byKey[f.key] = { field: f, stage: sec.stage }; }));
     const keys = new Set(Object.keys(byKey));
     const known = new Set();
+    (wiz.blocks.undp || []).forEach((b) => { known.add(b.field.key); b.on = keys.has(b.field.key); });
     wiz.blocks.core.forEach((b) => { known.add(b.field.key); if (!b.locked) b.on = keys.has(b.field.key); });
     wiz.blocks.stock.forEach((b) => { known.add(b.field.key); b.on = keys.has(b.field.key); });
     // hand-authored fields the curated kit doesn't manage - carried through verbatim
@@ -83,11 +87,21 @@
   }
   function selectedBlocks() {
     if (!wiz.blocks) return [];
-    return wiz.blocks.core.filter((b) => b.on).concat(wiz.blocks.stock.filter((b) => b.on));
+    const undp = (wiz.blocks.undp || []).filter((b) => b.on);
+    const needsOn = undp.some((b) => b.field.key === 'pressing_needs');
+    const undpSel = undp.filter((b) => b.field.key !== 'pressing_needs_other' || needsOn);
+    return undpSel.concat(wiz.blocks.core.filter((b) => b.on)).concat(wiz.blocks.stock.filter((b) => b.on));
+  }
+  // Stamp an explicit channel scope: UNDP-core fields carry [APP,ANDROID,WHATSAPP,
+  // TELEGRAM]; everything else defaults App-only so the chat bots get only the 3.
+  function withChannelDefault(field) {
+    const f = clone(field);
+    if (!Array.isArray(f.channels) || !f.channels.length) f.channels = ['APP', 'ANDROID'];
+    return f;
   }
   function buildSchema() {
-    const sel = selectedBlocks().map((b) => ({ field: clone(b.field), stage: b.stage }))
-      .concat((wiz.extraFields || []).map((e) => ({ field: clone(e.field), stage: e.stage })));
+    const sel = selectedBlocks().map((b) => ({ field: withChannelDefault(b.field), stage: b.stage }))
+      .concat((wiz.extraFields || []).map((e) => ({ field: withChannelDefault(e.field), stage: e.stage })));
     const stage2 = sel.filter((x) => x.stage === 2).map((x) => x.field);
     const stage3 = sel.filter((x) => x.stage !== 2).map((x) => x.field);
     const sections = [];
@@ -166,6 +180,9 @@
     .cc-wiz-sw{width:34px;height:19px;border-radius:999px;background:#33476a;position:relative;flex:0 0 auto;transition:background .12s}
     .cc-wiz-sw::after{content:'';position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#cdd8ec;transition:transform .12s}
     .cc-wiz-blk.on .cc-wiz-sw{background:#16a34a}.cc-wiz-blk.on .cc-wiz-sw::after{transform:translateX(15px)}
+    .cc-wiz-blk.undp{border-color:#2f6f48}
+    .cc-wiz-undp-tag{display:inline-block;font-size:9px;font-weight:700;color:#0b3b2e;background:#34d399;border-radius:4px;padding:0 5px;margin-left:5px;vertical-align:middle}
+    .cc-wiz-warn{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);color:#fbd38d;border-radius:8px;padding:8px 11px;font-size:11.5px;margin-bottom:9px}
     .cc-wiz-h4{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#6b7d99;margin:12px 0 7px}
     .cc-wiz-errs{background:rgba(248,113,113,.1);border:1px solid #7f1d1d;border-radius:8px;padding:9px 12px;color:#fca5a5;font-size:12px;margin-bottom:10px}
     .cc-wiz-errs ul{margin:5px 0 0;padding-left:18px}
@@ -349,6 +366,8 @@
           <p class="cc-wiz-sub">Toggle the questions reporters answer inside this operation's zone. Stage 1 (photo · audio · location) is always captured.</p>
           <div class="cc-wiz-fld"><label class="cc-wiz-lbl">Crisis-specific question set</label>
             <select class="cc-wiz-sel" id="cc-wiz-stock">${stockSel}</select></div>
+          <div class="cc-wiz-h4">Impact assessment questions</div>
+          <div id="cc-wiz-undp-blocks"></div>
           <div class="cc-wiz-h4">Crisis-specific questions</div><div id="cc-wiz-stock-blocks"></div>
           <div class="cc-wiz-h4">Reusable question blocks</div><div id="cc-wiz-core-blocks"></div>
           ${(wiz.extraFields || []).length ? `<div class="cc-wiz-h4">Carried from the template</div><div class="cc-wiz-sub">${wiz.extraFields.map((e) => esc(e.field.label || e.field.key)).join(', ')}</div>` : ''}
@@ -359,6 +378,7 @@
           <button class="cc-wiz-btn ghost" id="cc-wiz-validate" style="margin-top:10px;width:100%">Validate schema</button>
         </div>
       </div>`;
+    renderBlockList('cc-wiz-undp-blocks', wiz.blocks.undp);
     renderBlockList('cc-wiz-stock-blocks', wiz.blocks.stock);
     renderBlockList('cc-wiz-core-blocks', wiz.blocks.core);
     renderPreview('cc-wiz-prev2');

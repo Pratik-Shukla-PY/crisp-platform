@@ -83,6 +83,72 @@
     try { if (window.__crispRouter) { window.__crispRouter.navigate(route); return; } } catch (_e) {}
     go('#' + route);
   }
+  const _esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const _toast = (m, t) => { try { (window.showToast || function () {})(m, t); } catch (_e) {} };
+
+  // A5: download the multi-section Operation Summary PDF (mirrors the building
+  // assessment-PDF download). Disables the button during the request.
+  async function _downloadOperationReportPdf(opId, btn) {
+    if (!opId) return;
+    if (btn) { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); }
+    try {
+      const res = await fetch(`${API}/operations/${encodeURIComponent(opId)}/report.pdf`,
+        { headers: { Authorization: `Bearer ${token() || ''}` } });
+      if (!res.ok) { _toast('Operation report download failed.', 'err'); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `operation-report-${String(opId).slice(0, 8)}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      _toast('Operation Summary PDF downloaded', 'ok');
+    } catch (e) {
+      _toast('Download failed: ' + (e && e.message || e), 'err');
+    } finally {
+      if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); }
+    }
+  }
+
+  // A5: read-only view of the operation's active crisis-form configuration.
+  async function _showFormConfig(packId, packName) {
+    if (!packId) { _toast('No crisis-form pack is bound to this operation.', 'err'); return; }
+    let schema = null;
+    try {
+      const res = await fetch(`${API}/admin/crisis-forms/packs/${encodeURIComponent(packId)}/versions`,
+        { headers: { Authorization: `Bearer ${token() || ''}` } });
+      if (res.ok) {
+        const vers = await res.json();
+        const list = Array.isArray(vers) ? vers : [];
+        const active = list.find((v) => v.status === 'published') || list[0];
+        schema = active && active.schema_json;
+      }
+    } catch (_e) { /* fall through to error state */ }
+    const ov = document.createElement('div');
+    ov.className = 'cco-cfg-overlay';
+    let body;
+    if (schema && Array.isArray(schema.sections) && schema.sections.length) {
+      body = schema.sections.map((sec) => {
+        const fields = (sec.fields || []).map((f) => {
+          const opts = (f.options || []).map((o) => _esc((o.label_i18n && o.label_i18n.en) || o.label || o.value)).join(' · ');
+          return `<tr><td>${_esc((f.label_i18n && f.label_i18n.en) || f.label || f.key)}</td><td>${_esc(f.type)}</td><td>${f.required ? 'yes' : 'no'}</td><td>${_esc((f.channels || []).join(', ') || 'all')}</td></tr>${opts ? `<tr class="cco-cfg-opts"><td colspan="4">${opts}</td></tr>` : ''}`;
+        }).join('');
+        return `<div class="cco-cfg-sec"><div class="cco-cfg-sec-t">${_esc(sec.title || sec.id)} <span class="cco-cfg-stage">stage ${_esc(sec.stage)}</span></div>
+          <table class="cco-cfg-tbl"><thead><tr><th>Field</th><th>Type</th><th>Req</th><th>Channels</th></tr></thead><tbody>${fields || '<tr><td colspan="4">No fields</td></tr>'}</tbody></table></div>`;
+      }).join('');
+    } else {
+      body = '<div class="cco-cfg-empty">Could not load the form configuration, or no published version exists.</div>';
+    }
+    ov.innerHTML = `<div class="cco-cfg-card" role="dialog" aria-modal="true" aria-label="Form configuration">
+      <div class="cco-cfg-head"><b>Form configuration</b>${packName ? ` · <span class="cco-cfg-name">${_esc(packName)}</span>` : ''}
+        <span class="cco-cfg-ro">read-only</span><button class="cco-cfg-x" aria-label="Close">✕</button></div>
+      <div class="cco-cfg-body">${body}</div></div>`;
+    const close = () => { try { ov.remove(); } catch (_e) {} document.removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+    ov.querySelector('.cco-cfg-x').addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(ov);
+  }
 
   // ── shared operation card ──────────────────────────────────────────────────
   // ONE card used by BOTH the home Active-Operations rail (cc-home.js) and the
@@ -136,7 +202,7 @@
       .opc-flag.flag-att{color:#f87171}
       .opc-flag.flag-idle{color:#fb923c}
       /* CENTER - equal-width KPI chip strip that grows to fill the row */
-      .opc-kpis{display:flex;gap:7px;min-width:0;flex-wrap:nowrap}
+      .opc-kpis{display:flex;gap:7px;min-width:0;flex-wrap:wrap}
       .opc-kpis-empty{visibility:hidden}
       .opc-chip{flex:1 1 0;min-width:46px;display:flex;flex-direction:column;align-items:center;
         padding:5px 4px;background:#0d1626;border:1px solid #1f2c44;border-radius:9px;font-variant-numeric:tabular-nums}
@@ -149,6 +215,8 @@
       .opc-chip.new b{color:#fbbf24}
       .opc-chip.ver b{color:#34D399}
       .opc-chip.resp b{color:#7db8ef}
+      .opc-chip.bld b{color:#7db8ef}
+      .opc-chip.rej b{color:#9aa8bf}
       .opc-chip.resp.unattended{background:#1d1113;border-color:#7f1d1d}
       .opc-chip.resp.unattended b{color:#f87171}
       /* RIGHT - situation: health pill · trend · mini-map(desktop) · arrow */
@@ -340,7 +408,6 @@
       const ageBadge = age ? `<span class="opc-age" style="color:${ageCol};border-color:${ageCol}40;background:${ageCol}14">${esc(age)}</span>` : '';
       const chip = (cls, val, label) => `<span class="opc-chip ${cls}"><b>${fmtNum(val)}</b><span>${label}</span></span>`;
       const critChip = `<span class="opc-chip crit${(Number(o.critical) || 0) === 0 ? ' zero' : ''}"><b>${fmtNum(o.critical)}</b><span>Critical</span></span>`;
-      const respChip = `<span class="opc-chip resp${unatt ? ' unattended' : ''}"><b>${fmtNum(o.responders_active)}</b><span>Resp</span></span>`;
       return `<div class="opc${attn ? ' opc-attn' : ''}${unatt ? ' opc-unatt' : (inactive ? ' opc-inact' : '')}"
           data-op="${esc(o.id)}" role="link" tabindex="0"
           aria-label="${esc(o.name)} - ${esc(o.health || '')} health, ${fmtNum(o.critical)} critical, ${fmtNum(o.responders_active)} responders${unatt ? ', unattended critical' : ''} - open operation">
@@ -352,11 +419,10 @@
         </div>
         <div class="opc-kpis" role="group" aria-label="report metrics">
           ${critChip}
-          ${chip('new', o.new_24h, 'New 24h')}
           ${chip('', total, 'Total')}
-          ${chip('ver', ver, 'Verified')}
-          ${chip('', unver, 'Unver')}
-          ${respChip}
+          ${chip('bld', Number(o.affected_buildings) || 0, 'Buildings')}
+          ${chip('ver', Number(o.resolved) || 0, 'Resolved')}
+          ${chip('rej', Number(o.rejected) || 0, 'Rejected')}
         </div>
         <div class="opc-sit">
           <span class="opc-pill" style="--hc:${hc}" title="${esc(o.health_reason || o.health || '')}"><span class="opc-pill-dot" style="background:${hc}"></span><span class="opc-pill-l">${esc(o.health || 'GREEN')}</span></span>
@@ -544,6 +610,11 @@
     .cco-exit:hover{border-color:#418FDE;color:#fff}
     .cco-status{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:#1b2942;color:#9fb3d1}
     .cco-health{width:11px;height:11px;border-radius:50%;flex:none;box-shadow:0 0 0 3px rgba(255,255,255,.06)}
+    /* A4: merged health+status pill + unattended flag on the operation banner */
+    .cco-hs-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.03em;
+      padding:3px 10px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid var(--hc);color:#e6edf7;flex:none}
+    .cco-hs-dot{width:9px;height:9px;border-radius:50%;background:var(--hc);box-shadow:0 0 0 3px color-mix(in srgb, var(--hc) 18%, transparent)}
+    .cco-unatt-flag{font-size:10.5px;font-weight:700;letter-spacing:.03em;color:#fca5a5;background:#1d1113;border:1px solid #7f1d1d;border-radius:999px;padding:2px 9px;flex:none}
     .cco-resp{font-size:11.5px;color:#9fb3d1;white-space:nowrap}
     .cco-undo{margin-left:auto;border-color:#7f1d1d !important;color:#fca5a5 !important}
     .cco-undo:hover{border-color:#f87171 !important;color:#fff !important}
@@ -554,6 +625,13 @@
     .cco-vital .n{font-size:26px;font-weight:800}
     .cco-vital .l{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#8aa0bf;margin-top:2px}
     .cco-vital.crit .n{color:#f87171}
+    /* operation roll-up: incidents · reports · duplicate-review · unreviewed */
+    .cco-rollup{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:-4px 0 14px;font-size:12px;color:#cbd9ef}
+    .cco-rollup .cco-ru b{color:#e6eefb}
+    .cco-ru-sep{color:#3a4a66}
+    .cco-ru-mut{color:#8aa0bf}
+    .cco-ru-dup{background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.3);color:#7dd3fc;border-radius:7px;padding:3px 10px;font-size:12px;cursor:pointer}
+    .cco-ru-dup:hover{background:rgba(56,189,248,.16)}
     /* detail grid: map | worklist */
     .cco-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
     @media(max-width:1000px){.cco-grid{grid-template-columns:1fr}.cco-vitals{grid-template-columns:repeat(2,1fr)}}
@@ -582,7 +660,27 @@
       font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
     .cco-btn:hover{border-color:#418FDE;color:#fff}
     .cco-btn.primary{background:#1d4ed8;border-color:#2563eb;color:#fff}
+    .cco-btn:disabled{opacity:.55;cursor:default}
     .cco-empty{padding:26px;text-align:center;color:#8aa0bf;font-size:13px}
+    /* A5: read-only form-configuration modal */
+    .cco-cfg-overlay{position:fixed;inset:0;z-index:100050;background:rgba(6,11,20,.72);backdrop-filter:blur(3px);
+      display:flex;align-items:center;justify-content:center;padding:24px}
+    .cco-cfg-card{width:min(720px,94vw);max-height:88vh;display:flex;flex-direction:column;background:#0e1726;
+      border:1px solid #233149;border-radius:14px;color:#e6edf7;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+    .cco-cfg-head{display:flex;align-items:center;gap:8px;padding:13px 16px;border-bottom:1px solid #1c2740;background:#101a2e;font-size:14px}
+    .cco-cfg-name{color:#9fb3d1;font-weight:600}
+    .cco-cfg-ro{margin-left:auto;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;background:rgba(148,163,184,.16);border-radius:4px;padding:1px 7px}
+    .cco-cfg-x{background:transparent;border:0;color:#8aa0bf;font-size:18px;cursor:pointer;padding:2px 6px;border-radius:8px}
+    .cco-cfg-x:hover{background:#1b2942;color:#fff}
+    .cco-cfg-body{padding:14px 16px;overflow:auto}
+    .cco-cfg-sec{margin-bottom:16px}
+    .cco-cfg-sec-t{font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#cbd5e1;margin-bottom:7px}
+    .cco-cfg-stage{font-size:10px;font-weight:600;color:#64748b;text-transform:none;letter-spacing:0;margin-left:6px}
+    .cco-cfg-tbl{width:100%;border-collapse:collapse;font-size:12px}
+    .cco-cfg-tbl th{text-align:left;color:#8aa0bf;font-weight:700;padding:4px 8px;border-bottom:1px solid #233149}
+    .cco-cfg-tbl td{padding:4px 8px;border-bottom:1px solid rgba(35,49,73,.5);color:#dce6f5}
+    .cco-cfg-opts td{color:#8aa0bf;font-size:11px;padding-top:0}
+    .cco-cfg-empty{padding:24px;text-align:center;color:#8aa0bf;font-size:13px}
     /* local conditions - weather + hazard alerts */
     .cco-src{font-size:10px;font-weight:600;color:#5b6b86;text-transform:none;letter-spacing:0;margin-left:6px}
     #cco-weather{padding:14px 16px}
@@ -751,18 +849,24 @@
   }
 
   // ── DETAIL view ──────────────────────────────────────────────────────────────
-  async function renderDetail(id) {
+  async function renderDetail(id, mount, inPanel) {
     _detailOpId = id;   // every incident click in this worklist/map deep-links inside this op
-    const wrap = el('cco-wrap');
+    // `mount` lets the SAME operation dashboard render into the global #detail-panel
+    // (the right-panel Operations Console) instead of the full-page overlay — the
+    // single-page consolidation. inPanel rewires the exit/feed buttons to close the
+    // panel (the scoped feed is already behind it) rather than navigate full-page.
+    const wrap = mount || el('cco-wrap');
     if (!wrap) return;
     wrap.innerHTML = '<div class="cco-empty">Loading operation…</div>';
 
-    let ops = [], summary = null, reports = [];
+    let ops = [], summary = null, reports = [], dupRev = null;
     try {
-      [ops, summary, reports] = await Promise.all([
+      [ops, summary, reports, dupRev] = await Promise.all([
         jget('/operations').catch(() => []),
         jget('/analytics/summary?crisis_event_id=' + encodeURIComponent(id)).catch(() => null),
         jget('/reports/?limit=200&crisis_event_id=' + encodeURIComponent(id)).catch(() => []),
+        // Building-scoped duplicate-review backlog for THIS operation (never global).
+        jget('/reports/buildings-needing-review?crisis_event_id=' + encodeURIComponent(id)).catch(() => null),
       ]);
     } catch (_e) { /* fall through to whatever resolved */ }
 
@@ -798,16 +902,29 @@
     ];
 
     wrap.innerHTML = `
+      <div id="cco-command"></div>
       <div class="cco-banner" style="--op-accent:${accent}">
-        <span class="cco-health" style="background:${healthColor(op)}" title="${esc(op.health_reason || op.health || '')}"></span>
-        <div class="cco-bc">CRISP / Operations / <b>${esc(op.name)}</b>${op.place_name ? ' · <span class="cco-bc-region">' + esc(op.place_name) + '</span>' : ''}</div>
-        <span class="cco-status">${esc(op.status || (op.is_active ? 'ACTIVE' : '-'))}</span>${isEnded ? '<span class="cco-ended-note" style="font-size:10px;font-weight:700;color:#fbbf24;margin-left:6px;letter-spacing:.05em" title="This operation has ended - shown for historical reference">READ-ONLY</span>' : ''}
+        <span class="cco-hs-pill" style="--hc:${healthColor(op)}" title="${esc(op.health_reason || op.health || '')}"><span class="cco-hs-dot"></span>${esc(op.status || (op.is_active ? 'LIVE' : 'ENDED'))}</span>
+        <div class="cco-bc"><a class="cco-bc-global" style="cursor:pointer;text-decoration:none" onclick="window.__crispRouter&&window.__crispRouter.navigate('/incidents')">Global</a> › <b>${esc(op.name)}</b>${op.place_name ? ' · <span class="cco-bc-region">' + esc(op.place_name) + '</span>' : ''}</div>
+        ${isEnded ? '<span class="cco-ended-note" style="font-size:10px;font-weight:700;color:#fbbf24;letter-spacing:.05em" title="This operation has ended - shown for historical reference">READ-ONLY</span>' : ''}
+        ${_unattended(op) ? '<span class="cco-unatt-flag" title="This operation has unattended critical reports">🚨 Unattended</span>' : ''}
         <span class="cco-resp">🚑 ${fmtNum(op.responders_active || 0)} responder${(op.responders_active || 0) === 1 ? '' : 's'}</span>
         <button class="cco-exit" id="cco-exit">← Exit to global</button>
       </div>
       <div class="cco-vitals" id="cco-vitals">
         ${vitals.map((v) => `<div class="cco-vital ${v.crit ? 'crit' : ''}" data-q="${v.q}">
             <div class="n cco-num">${fmtNum(v.n)}</div><div class="l">${esc(v.l)}</div></div>`).join('')}
+      </div>
+      <div class="cco-rollup" id="cco-rollup">
+        <span class="cco-ru"><b>${fmtNum(op.incident_count || 0)}</b> incident${(op.incident_count || 0) === 1 ? '' : 's'}</span>
+        <span class="cco-ru-sep">·</span>
+        <span class="cco-ru"><b>${fmtNum(op.total || 0)}</b> report${(op.total || 0) === 1 ? '' : 's'}</span>
+        <span class="cco-ru-sep">·</span>
+        <span class="cco-ru"><b>${fmtNum(op.verified || 0)}</b> verified</span>
+        <span class="cco-ru-sep">·</span>
+        <span class="cco-ru cco-ru-mut"><b>${fmtNum(op.new_24h || 0)}</b> new&nbsp;24h</span>
+        ${(dupRev && dupRev.total_buildings) ? `<span class="cco-ru-sep">·</span><button type="button" class="cco-ru-dup" id="cco-ru-dup" title="Review &amp; merge duplicates building-by-building for this operation">🔗 ${fmtNum(dupRev.total_buildings)} building${dupRev.total_buildings === 1 ? '' : 's'} need duplicate review</button>` : ''}
+        ${(op.unreviewed_count || 0) ? `<span class="cco-ru-sep">·</span><span class="cco-ru cco-ru-mut">${fmtNum(op.unreviewed_count)} unreviewed</span>` : ''}
       </div>
       <div class="cco-grid">
         <div>
@@ -824,29 +941,77 @@
       <div class="cco-card" id="cco-weather"><div class="cco-empty">Loading local conditions…</div></div>
       <div class="cco-actions">
         <button class="cco-btn primary" id="cco-act-feed">Open Incident Feed</button>
-        <button class="cco-btn" id="cco-act-export">Export</button>
-        <button class="cco-btn" id="cco-act-forms">Deploy form pack</button>
+        <button class="cco-btn" id="cco-act-oprep" title="Download a multi-section Operation Summary PDF">📄 Download Summary PDF</button>
+        <button class="cco-btn" id="cco-act-export" title="Export this operation's reports (CSV / GeoJSON / Shapefile / KML / PDF)">Export Reports</button>
+        ${op.form_pack_id ? `<button class="cco-btn" id="cco-act-editform" title="Edit this operation's crisis-form questions">Edit Operation Form</button>
+        <button class="cco-btn" id="cco-act-viewcfg" title="View the active form configuration (read-only)">View Form Configuration</button>` : ''}
+        <button class="cco-btn" id="cco-act-forms" title="Activate / deploy a crisis-form pack for a zone">Deploy form pack</button>
         <button class="cco-btn cco-undo" id="cco-act-undo" title="Reverse the most recent cluster claim on this operation">↩ Undo claim</button>
       </div>`;
 
-    const exit = () => navTo('/');
+    // Command Center: the shared Analyze + scoped cascade-action panel at the top
+    // of the operation (percolates to every incident + report in scope).
+    try {
+      if (window.CrispCommandPanel && el('cco-command')) {
+        window.CrispCommandPanel.render({ level: 'operation', id, data: op, mountEl: el('cco-command') });
+      }
+    } catch (_e) {}
+
+    // In the panel the scoped feed is already behind the console, so "Exit to global"
+    // closes the panel + drops the op scope; full-page keeps the old home nav.
+    const exit = inPanel
+      ? () => {
+          try { window.setOperationScope && window.setOperationScope(null); } catch (_e) {}
+          try { window._writeScopeHash && window._writeScopeHash(); } catch (_e) {}   // drop ;op= from the URL
+          try { window.closeDetail && window.closeDetail(); } catch (_e) {}
+        }
+      : () => navTo('/');
     el('cco-exit').addEventListener('click', exit);
     el('cco-vitals').querySelectorAll('[data-q]').forEach((v) => {
       // Drill into THIS operation's incidents, filtered by the vital's queue -
       // the op scope is carried so the analyst keeps context on the feed.
       v.addEventListener('click', () => go('#/incidents;op=' + encodeURIComponent(_detailOpId) + ';queue=' + v.getAttribute('data-q')));
     });
-    // Open the Incident Feed SCOPED to this operation (context persists).
-    el('cco-act-feed').addEventListener('click', () => go('#/incidents;op=' + encodeURIComponent(_detailOpId)));
+    // Building-scoped duplicate-review entry: jump to the Buildings worklist (the
+    // per-building review surface) - merge happens IN each building's workspace,
+    // never globally. The worst-first building cards are already shown there.
+    const ruDup = el('cco-ru-dup');
+    if (ruDup) ruDup.addEventListener('click', () => {
+      const tabs = el('cco-wl-tabs');
+      const bTab = tabs && tabs.querySelector('[data-wl="buildings"]');
+      if (bTab) bTab.click();
+      const bld = el('cco-bld');
+      if (bld && bld.scrollIntoView) bld.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    // Open the Incident Feed SCOPED to this operation (context persists). In the panel
+    // the scoped feed is already showing behind the console, so this just closes the panel.
+    el('cco-act-feed').addEventListener('click', inPanel
+      ? () => { try { window.closeDetail && window.closeDetail(); } catch (_e) {} }
+      : () => go('#/incidents;op=' + encodeURIComponent(_detailOpId)));
     el('cco-act-export').addEventListener('click', () => {
       // Stash THIS operation's id so the Export Center scopes the download to it.
       // The router's global hideAll() clears the live op scope (setOperationScope
       // null) BEFORE /exports opens, so getOperationScope() is already null there -
       // capture it at click time instead.
       try { window.__crispExportCtx = { crisis_event_id: id }; } catch (_e) {}
+      // In the panel, close the console first so the route overlay (z 99992) isn't
+      // hidden behind the detail-panel (z 100000).
+      if (inPanel) { try { window.closeDetail && window.closeDetail(); } catch (_e) {} }
       navTo('/exports');
     });
-    el('cco-act-forms').addEventListener('click', () => navTo('/reporting'));
+    el('cco-act-forms').addEventListener('click', () => { if (inPanel) { try { window.closeDetail && window.closeDetail(); } catch (_e) {} } navTo('/reporting'); });
+    // Download the multi-section Operation Summary PDF.
+    const opRep = el('cco-act-oprep');
+    if (opRep) opRep.addEventListener('click', () => _downloadOperationReportPdf(id, opRep));
+    // Edit this operation's crisis-form pack (opens the builder for op.form_pack_id).
+    const editForm = el('cco-act-editform');
+    if (editForm) editForm.addEventListener('click', () => {
+      if (op.form_pack_id && typeof window.openCrisisFormBuilder === 'function') window.openCrisisFormBuilder(op.form_pack_id);
+      else navTo('/reporting');
+    });
+    // View the active form configuration read-only.
+    const viewCfg = el('cco-act-viewcfg');
+    if (viewCfg) viewCfg.addEventListener('click', () => _showFormConfig(op.form_pack_id, op.form_name));
     el('cco-act-undo').addEventListener('click', (ev) => {
       // D4: confirm the (claim-reversing) action + pass the button so the handler
       // disables it during the request (no spam-click) and defers the redirect.
@@ -1045,5 +1210,12 @@
   }
 
   window.openOperations = openOperations;
-  window.__ccOperations = { openOperations, closeOverlay };
+  // renderInto: render the operation dashboard into an arbitrary element (the global
+  // #detail-panel) for the single-page Operations Console. Ensures the cco-* styles
+  // are present (injectStyles is idempotent); the hidden #cco-wrap overlay stays empty
+  // so there is no duplicate-id collision with the panel-mounted cco-* nodes.
+  window.__ccOperations = {
+    openOperations, closeOverlay,
+    renderInto(mount, id) { try { injectStyles(); } catch (_e) {} return renderDetail(id, mount, true); },
+  };
 })();

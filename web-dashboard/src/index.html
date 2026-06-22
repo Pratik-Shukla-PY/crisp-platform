@@ -11,7 +11,7 @@
          empty in source; deploy pipeline patches with the real DSN
          (public-safe write-only key). -->
     <meta name="crisp-sentry-dsn" content="">
-    <meta name="crisp-release" content="crisp-dashboard@v101">
+    <meta name="crisp-release" content="crisp-dashboard@v146">
     <meta name="description" content="United Nations Crisis Response Intelligence System - hierarchical incident monitoring and strategic command center.">
     <meta name="theme-color" content="#7c3aed">
     <!-- May 2026 - favicon. SVG works in modern browsers (Chrome 80+,
@@ -354,6 +354,15 @@
             <i class="fa-solid fa-xmark"></i> <span data-i18n="chip_clear_all">Clear filters</span>
         </button>
 
+        <!-- Rejected reports live here (kept for audit; hidden from every active
+             queue). Replaces the old standalone banner button - count + visibility
+             updated by updateCommandStats. -->
+        <button class="cmd-filter-chip cmd-filter-rejected" id="cmd-filter-rejected"
+                onclick="setActiveQueue('rejected')" title="View rejected reports (kept for audit)"
+                style="display:none;">
+            <i class="fa-solid fa-ban"></i><span>Rejected</span> <b id="cmd-rejected-count">0</b>
+        </button>
+
         <!-- Phase G.6 (May 2026) - Saved view presets. localStorage-
              only (no backend); presets capture the current filter
              chip set, status pill, time filter, view mode, and sort
@@ -544,13 +553,45 @@
 
     <!-- QRT Response Queue Sidebar -->
     <aside class="feed-panel glass-panel">
+        <!-- Scope breadcrumb header (v116): Global › Operation + the operation Switch.
+             Replaces BOTH the static "Incident Feed" title AND the old standalone
+             #queue-banner context card (now redundant). Painted by _renderContextBanner()
+             into #feed-scope-bar. -->
         <div class="feed-header">
-            <div class="feed-title">
-                <h2><i class="fa-solid fa-satellite-dish" style="color:var(--accent);margin-right:6px;font-size:14px;"></i>Incident Feed</h2>
+            <div id="feed-scope-bar" role="status" aria-live="polite"></div>
+        </div>
+
+        <!-- Status TABS + tools (row 2). The three lifecycle tabs are the primary
+             status navigation; clicking one shows that status's incidents grouped
+             by building. Critical is a cross-cutting quick-filter (not a tab); the
+             dual Total (N incidents · M reports) sits here via #count-dual. Density,
+             Filter + Sort are the small icons on the right. Count ids (#count-*) are
+             preserved so updateCommandStats keeps writing the badges. -->
+        <div class="feed-tabs" aria-label="Incident filters">
+            <div class="feed-tablist" role="tablist" aria-label="Incident status">
+                <button class="feed-tab on" data-tab="pending" role="tab" aria-selected="true" aria-controls="report-feed-list" onclick="setStatusTab('pending')">
+                    <span class="ft-label" data-i18n="status_pending">Pending</span><span class="ft-count" id="count-pending">0</span></button>
+                <button class="feed-tab" data-tab="responding" role="tab" aria-selected="false" aria-controls="report-feed-list" onclick="setStatusTab('responding')">
+                    <span class="ft-label" data-i18n="status_responding">Responding</span><span class="ft-count" id="count-responding">0</span></button>
+                <button class="feed-tab" data-tab="resolved" role="tab" aria-selected="false" aria-controls="report-feed-list" onclick="setStatusTab('resolved')">
+                    <span class="ft-label" data-i18n="status_resolved">Resolved</span><span class="ft-count" id="count-resolved">0</span></button>
+                <button class="feed-tab feed-tab-rejected" data-tab="rejected" role="tab" aria-selected="false" aria-controls="report-feed-list" onclick="setStatusTab('rejected')" title="Reports an analyst rejected as invalid / spam / not actionable — kept for audit. Open one to see the rejection reason.">
+                    <span class="ft-label" data-i18n="status_rejected">Rejected</span><span class="ft-count" id="count-rejected">0</span></button>
             </div>
-            <div class="feed-actions">
+            <button class="crit-filter" id="stat-critical" onclick="filterByPill('critical')" data-i18n-title="status_critical" title="Critical">
+                <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> <span data-i18n="status_critical">Critical</span> <span id="count-critical">0</span></button>
+            <!-- Dual total (v116): N incidents · M reports for the active scope, written
+                 by updateCommandStats via _dualCount(). Moved here from the breadcrumb. -->
+            <span class="feed-dual" id="count-dual" aria-live="polite"></span>
+            <span class="feed-tools" role="toolbar" aria-label="Feed tools">
+                <!-- Density toggle (v116): Comfortable (default) ↔ Compact. Persisted as
+                     crisp_feed_density; toggles .feed-compact on #report-feed-list. -->
+                <button class="feed-tool-btn" id="feed-density" data-i18n-aria-label="density_toggle" data-i18n-title="density_toggle" aria-label="Toggle density" title="Compact / comfortable" onclick="window.toggleFeedDensity&&window.toggleFeedDensity()">
+                    <i class="fa-solid fa-table-cells-large" aria-hidden="true"></i></button>
+                <button class="feed-tool-btn" id="feed-filter-btn" data-i18n-aria-label="filter_label" data-i18n-title="filter_label" aria-label="Filters" title="Filters" onclick="window.__crispToggleFilters(event)">
+                    <i class="fa-solid fa-filter" aria-hidden="true"></i><span class="fft-badge" id="cmd-filter-active-count"></span></button>
                 <div class="sort-dropdown" id="sort-dropdown">
-                    <button class="sort-btn" onclick="this.parentElement.classList.toggle('open')" title="Sort incidents">
+                    <button class="sort-btn feed-tool-btn" onclick="event.stopPropagation();this.parentElement.classList.toggle('open')" data-i18n-aria-label="sort_label" data-i18n-title="sort_label" title="Sort" aria-label="Sort">
                         <i class="fa-solid fa-arrow-down-short-wide"></i>
                     </button>
                     <div class="sort-menu">
@@ -567,31 +608,7 @@
                         <button class="sort-opt" data-sort="source" onclick="setCardSortMode('source')"><i class="fa-solid fa-tower-cell"></i> Source Channel</button>
                     </div>
                 </div>
-                <div class="view-toggle">
-                    <button class="view-btn active" data-mode="queue" onclick="setViewMode('queue')" title="Queue (triage)"><i class="fa-solid fa-layer-group"></i></button>
-                    <button class="view-btn" data-mode="clusters" onclick="setViewMode('clusters')" title="Buildings (group reports by building)"><i class="fa-solid fa-building"></i></button>
-                    <button class="view-btn" data-mode="tree" onclick="setViewMode('tree')" title="Tree (region hierarchy)"><i class="fa-solid fa-sitemap"></i></button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Incident Context Banner: ALWAYS shows WHERE / WHAT / WHY (global ·
-             queue · search · operation) so the analyst orients in seconds. -->
-        <div id="queue-banner" role="status" aria-live="polite"></div>
-
-        <!-- Feed KPI strip (relocated from the top command bar): the counts now
-             sit beside the feed. Each is a click-to-filter control. Classes
-             (.cmd-status-seg-item) + ids (#stat-* / #count-*) are preserved so
-             filterByPill + updateCommandStats wiring is unchanged. -->
-        <div class="feed-kpi" role="tablist" aria-label="Filter incidents by status">
-            <button class="cmd-status-seg-item k-crit" id="stat-critical" role="tab" onclick="filterByPill('critical')" title="Critical incidents">
-                <span class="cmd-status-seg-count" id="count-critical">0</span><span class="cmd-status-seg-label">Critical</span></button>
-            <button class="cmd-status-seg-item k-pend" id="stat-pending" role="tab" onclick="filterByPill('pending')" title="Pending incidents">
-                <span class="cmd-status-seg-count" id="count-pending">0</span><span class="cmd-status-seg-label">Pending</span></button>
-            <button class="cmd-status-seg-item k-help" id="stat-responding" role="tab" onclick="filterByPill('responding')" title="Responding - responders dispatched, response in progress">
-                <span class="cmd-status-seg-count" id="count-responding">0</span><span class="cmd-status-seg-label">Responding</span></button>
-            <button class="cmd-status-seg-item k-total" id="stat-total" role="tab" onclick="filterByPill('all')" title="Show all incidents">
-                <span class="cmd-status-seg-count" id="count-total">0</span><span class="cmd-status-seg-label">Total</span></button>
+            </span>
         </div>
 
         <!-- Tree-mode controls (hidden in queue mode) -->
@@ -691,6 +708,9 @@
 <script src="tier-config.js?v=1"></script>
 <script src="app.js?v=822"></script>
 <script src="predictions.js?v=112"></script>
+<!-- Command Center shared panel: CrispCommandPanel.render({level,id,data,mountEl}).
+     Loaded after app.js (reuses its globals); rendered by cc-home + cc-operations. -->
+<script src="cc-command.js?v=1"></script>
 <!-- Dynamic Crisis Forms admin panel (geo-scoped Stage 2/3 question packs).
      Self-contained + additive: injects an admin-only "Crisis Forms" item into
      the user-menu and opens its own overlay. Does not touch app.js / styles.css. -->

@@ -267,7 +267,10 @@
     // time (the global teardown clears the live op scope before we get here).
     S.crisisEventId = null;
     try {
-      if (S.from === '/operations' && window.__crispExportCtx && window.__crispExportCtx.crisis_event_id) {
+      if (window.__crispExportCtx && window.__crispExportCtx.crisis_event_id) {
+        // Explicit op-scoped export (set at click time by the operation panel /
+        // dashboard) wins regardless of the previous route — the console canonicalises
+        // the operation route to /incidents, so the route no longer signals the scope.
         S.crisisEventId = window.__crispExportCtx.crisis_event_id;
       } else if (S.from === '/incidents' && typeof window.getOperationScope === 'function') {
         // C2 (Phase-0): the op-scoped global feed (#/incidents;op={id}) must

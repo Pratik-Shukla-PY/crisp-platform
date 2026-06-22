@@ -161,6 +161,143 @@
       ynStage('road_blocked', 'Road access blocked?', 3, '🚧'),
     ],
   };
+
+  // ── UNDP Appendix-1 mandatory questions ─────────────────────────────────────
+  //   The three "core multi-select questions a user is required to answer to
+  //   submit their damage-assessment images" (UNDP Appendix-1). Delivered through
+  //   the pack engine - the adjustable-forms capability UNDP rewards - NOT
+  //   hardcoded into the default flow. Each is an INDIVIDUAL, independently-
+  //   toggleable catalog item (default-ON) so an analyst picks-and-chooses per
+  //   operation by judgment; the option SETS are verbatim + options-locked (UNDP:
+  //   "do not modify, simplify, or dilute"). Tagged for PWA / RN + Telegram /
+  //   WhatsApp (the channels that can render multi-selects); SMS / IVR stay out.
+  //   label_i18n carries the 6 UN languages (must-have #2). Answers land in
+  //   form_data (NO maps_to): UNDP's electricity scale is a DAMAGE scale,
+  //   incompatible with the operational ServiceStatusEnum, so it is never coerced
+  //   into service_status. `pressing_needs` carries an OTHER option whose `other`
+  //   flag drives a conditional `pressing_needs_other` free-text sibling.
+  const _UNDP_CH = ['APP', 'ANDROID', 'WHATSAPP', 'TELEGRAM'];
+  // option carrying 6-UN-language labels: o6(value, en, {ar,zh,fr,ru,es}, extra)
+  const o6 = (value, en, tr, extra) =>
+    Object.assign({ value, label: en, label_i18n: Object.assign({ en }, tr || {}) }, extra || {});
+  const UNDP_ELECTRICITY = [
+    o6('NO_DAMAGE', 'No damage observed',
+      { ar: 'لا يوجد ضرر ملحوظ', zh: '未观察到损坏', fr: 'Aucun dommage observé', ru: 'Повреждений не обнаружено', es: 'No se observan daños' }),
+    o6('MINOR', 'Minor damage (service disruptions but quickly repairable)',
+      { ar: 'ضرر طفيف (انقطاعات في الخدمة لكن يمكن إصلاحها بسرعة)', zh: '轻微损坏（服务中断但可快速修复）', fr: 'Dommages mineurs (interruptions de service mais réparables rapidement)', ru: 'Незначительные повреждения (перебои, но быстро устранимы)', es: 'Daños menores (interrupciones del servicio pero reparables rápidamente)' }),
+    o6('MODERATE', 'Moderate damage (partial outages requiring repairs)',
+      { ar: 'ضرر متوسط (انقطاعات جزئية تتطلب إصلاحات)', zh: '中度损坏（部分停电，需要维修）', fr: 'Dommages modérés (pannes partielles nécessitant des réparations)', ru: 'Умеренные повреждения (частичные отключения, требующие ремонта)', es: 'Daños moderados (cortes parciales que requieren reparación)' }),
+    o6('SEVERE', 'Severe damage (major infrastructure damaged, prolonged outages)',
+      { ar: 'ضرر شديد (تضرر بنية تحتية رئيسية، انقطاعات طويلة)', zh: '严重损坏（主要基础设施受损，长时间停电）', fr: 'Dommages graves (infrastructures majeures endommagées, pannes prolongées)', ru: 'Серьёзные повреждения (повреждена основная инфраструктура, длительные отключения)', es: 'Daños graves (infraestructura principal dañada, cortes prolongados)' }),
+    o6('DESTROYED', 'Completely destroyed (no electricity infrastructure functioning)',
+      { ar: 'مدمّر بالكامل (لا تعمل أي بنية تحتية للكهرباء)', zh: '完全损毁（电力基础设施全部瘫痪）', fr: 'Entièrement détruit (aucune infrastructure électrique fonctionnelle)', ru: 'Полностью разрушено (электроинфраструктура не функционирует)', es: 'Completamente destruida (ninguna infraestructura eléctrica en funcionamiento)' }),
+    o6('UNKNOWN', 'Unknown/cannot be assessed',
+      { ar: 'غير معروف/لا يمكن تقييمه', zh: '未知/无法评估', fr: 'Inconnu / impossible à évaluer', ru: 'Неизвестно / невозможно оценить', es: 'Desconocido / no se puede evaluar' }),
+  ];
+  const UNDP_HEALTH = [
+    o6('FULLY_FUNCTIONAL', 'Fully functional',
+      { ar: 'يعمل بالكامل', zh: '完全正常运作', fr: 'Pleinement fonctionnel', ru: 'Полностью функционирует', es: 'Plenamente funcional' }),
+    o6('PARTIALLY_FUNCTIONAL', 'Partially functional',
+      { ar: 'يعمل جزئيًا', zh: '部分运作', fr: 'Partiellement fonctionnel', ru: 'Частично функционирует', es: 'Parcialmente funcional' }),
+    o6('LARGELY_DISRUPTED', 'Largely disrupted',
+      { ar: 'متعطّل إلى حد كبير', zh: '大面积中断', fr: 'Largement perturbé', ru: 'В значительной степени нарушено', es: 'Mayormente interrumpido' }),
+    o6('NOT_FUNCTIONING', 'Not functioning at all',
+      { ar: 'لا يعمل على الإطلاق', zh: '完全无法运作', fr: 'Ne fonctionne pas du tout', ru: 'Совсем не функционирует', es: 'No funciona en absoluto' }),
+    o6('UNKNOWN', 'Unknown',
+      { ar: 'غير معروف', zh: '未知', fr: 'Inconnu', ru: 'Неизвестно', es: 'Desconocido' }),
+  ];
+  const UNDP_NEEDS = [
+    o6('FOOD_WATER', 'Food assistance and safe drinking water',
+      { ar: 'المساعدة الغذائية ومياه الشرب الآمنة', zh: '食物援助和安全饮用水', fr: 'Aide alimentaire et eau potable', ru: 'Продовольственная помощь и безопасная питьевая вода', es: 'Asistencia alimentaria y agua potable segura' }),
+    o6('CASH', 'Cash or financial assistance',
+      { ar: 'المساعدة النقدية أو المالية', zh: '现金或财务援助', fr: 'Aide en espèces ou financière', ru: 'Денежная или финансовая помощь', es: 'Asistencia en efectivo o financiera' }),
+    o6('HEALTHCARE', 'Access to healthcare and essential medicines',
+      { ar: 'الوصول إلى الرعاية الصحية والأدوية الأساسية', zh: '获得医疗保健和基本药品', fr: 'Accès aux soins de santé et aux médicaments essentiels', ru: 'Доступ к медицинской помощи и основным лекарствам', es: 'Acceso a atención médica y medicamentos esenciales' }),
+    o6('SHELTER', 'Shelter, housing repair, or temporary accommodation',
+      { ar: 'المأوى أو إصلاح المساكن أو الإقامة المؤقتة', zh: '住所、房屋修缮或临时住宿', fr: 'Abri, réparation de logement ou hébergement temporaire', ru: 'Жильё, ремонт жилья или временное размещение', es: 'Refugio, reparación de viviendas o alojamiento temporal' }),
+    o6('LIVELIHOODS', 'Restoration of livelihoods or income sources',
+      { ar: 'استعادة سبل العيش أو مصادر الدخل', zh: '恢复生计或收入来源', fr: 'Rétablissement des moyens de subsistance ou des sources de revenus', ru: 'Восстановление средств к существованию или источников дохода', es: 'Restauración de medios de vida o fuentes de ingresos' }),
+    o6('WASH', 'Water, sanitation, and hygiene (toilets, washing facilities)',
+      { ar: 'المياه والصرف الصحي والنظافة (المراحيض ومرافق الاغتسال)', zh: '水、环境卫生和个人卫生（厕所、洗浴设施）', fr: 'Eau, assainissement et hygiène (toilettes, installations de lavage)', ru: 'Вода, санитария и гигиена (туалеты, места для мытья)', es: 'Agua, saneamiento e higiene (baños, instalaciones de lavado)' }),
+    o6('BASIC_SERVICES', 'Restoration of basic services and infrastructure (electricity, roads, schools)',
+      { ar: 'استعادة الخدمات الأساسية والبنية التحتية (الكهرباء، الطرق، المدارس)', zh: '恢复基本服务和基础设施（电力、道路、学校）', fr: 'Rétablissement des services de base et des infrastructures (électricité, routes, écoles)', ru: 'Восстановление базовых услуг и инфраструктуры (электричество, дороги, школы)', es: 'Restauración de servicios básicos e infraestructura (electricidad, carreteras, escuelas)' }),
+    o6('PROTECTION', 'Protection services and psychosocial support',
+      { ar: 'خدمات الحماية والدعم النفسي والاجتماعي', zh: '保护服务和心理社会支持', fr: 'Services de protection et soutien psychosocial', ru: 'Услуги защиты и психосоциальная поддержка', es: 'Servicios de protección y apoyo psicosocial' }),
+    o6('LOCAL_AUTHORITIES', 'Support from local authorities and community organizations',
+      { ar: 'الدعم من السلطات المحلية والمنظمات المجتمعية', zh: '来自地方当局和社区组织的支持', fr: 'Soutien des autorités locales et des organisations communautaires', ru: 'Поддержка со стороны местных властей и общественных организаций', es: 'Apoyo de autoridades locales y organizaciones comunitarias' }),
+    o6('OTHER', 'Other, please specify',
+      { ar: 'أخرى، يُرجى التحديد', zh: '其他，请说明', fr: 'Autre, veuillez préciser', ru: 'Другое, укажите', es: 'Otro, especifique' }, { other: true }),
+  ];
+  // Each impact-assessment question is an individual catalog block the analyst can
+  // freely include or exclude (default-ON). The option SETS carry the 6 UN
+  // languages; the questions are generic - no builder-side conditions or warnings.
+  const UNDP_BLOCKS = [
+    mkBlock('undp_electricity', '🔌', 'Electricity condition', 'multi', 3,
+      {
+        key: 'electricity_condition', type: 'multi_select', required: true, channels: _UNDP_CH.slice(),
+        label: 'What is the current condition of electricity infrastructure in your community following the crisis?',
+        label_i18n: {
+          en: 'What is the current condition of electricity infrastructure in your community following the crisis?',
+          ar: 'ما هي الحالة الحالية للبنية التحتية للكهرباء في مجتمعك بعد الأزمة؟',
+          zh: '危机发生后，您所在社区的电力基础设施目前处于什么状况？',
+          fr: 'Quel est l’état actuel des infrastructures électriques dans votre communauté à la suite de la crise ?',
+          ru: 'Каково текущее состояние электроэнергетической инфраструктуры в вашем районе после кризиса?',
+          es: '¿Cuál es el estado actual de la infraestructura eléctrica en su comunidad tras la crisis?',
+        },
+        options: UNDP_ELECTRICITY,
+      },
+      { desc: '6 options · multi-select', on: true }),
+    mkBlock('undp_health', '🏥', 'Health services', 'multi', 3,
+      {
+        key: 'health_services_status', type: 'multi_select', required: true, channels: _UNDP_CH.slice(),
+        label: 'How would you rate the overall functioning of health services in your community since the event?',
+        label_i18n: {
+          en: 'How would you rate the overall functioning of health services in your community since the event?',
+          ar: 'كيف تقيّم الأداء العام للخدمات الصحية في مجتمعك منذ وقوع الحدث؟',
+          zh: '自事件发生以来，您如何评价社区医疗服务的整体运作情况？',
+          fr: 'Comment évalueriez-vous le fonctionnement global des services de santé dans votre communauté depuis l’événement ?',
+          ru: 'Как бы вы оценили общее функционирование медицинских служб в вашем районе после события?',
+          es: '¿Cómo calificaría el funcionamiento general de los servicios de salud en su comunidad desde el evento?',
+        },
+        options: UNDP_HEALTH,
+      },
+      { desc: '5 options · multi-select', on: true }),
+    mkBlock('undp_needs', '🆘', 'Most pressing needs', 'multi', 3,
+      {
+        key: 'pressing_needs', type: 'multi_select', required: true, channels: _UNDP_CH.slice(),
+        label: 'What are the most pressing needs?',
+        label_i18n: {
+          en: 'What are the most pressing needs?',
+          ar: 'ما هي أكثر الاحتياجات إلحاحًا؟',
+          zh: '最迫切的需求是什么？',
+          fr: 'Quels sont les besoins les plus urgents ?',
+          ru: 'Каковы самые насущные потребности?',
+          es: '¿Cuáles son las necesidades más urgentes?',
+        },
+        options: UNDP_NEEDS,
+      },
+      { desc: '10 options · multi-select', on: true }),
+    // Conditional free-text sibling for the "Other, please specify" pressing-need.
+    // Optional server-side (no conditional-required), shown only when OTHER is
+    // picked (show_if). Stays App/RN/Telegram/WhatsApp aligned with its parent.
+    mkBlock('undp_needs_other', '✏️', 'Pressing need — “Other” detail', 'text', 3,
+      {
+        key: 'pressing_needs_other', type: 'short_text', required: false, channels: _UNDP_CH.slice(),
+        label: 'Please specify the other pressing need',
+        label_i18n: {
+          en: 'Please specify the other pressing need',
+          ar: 'يُرجى تحديد الحاجة الملحّة الأخرى',
+          zh: '请说明其他迫切需求',
+          fr: 'Veuillez préciser l’autre besoin urgent',
+          ru: 'Укажите другую насущную потребность',
+          es: 'Especifique la otra necesidad urgente',
+        },
+        validation: { max_length: 200 },
+        show_if: { field: 'pressing_needs', includes: 'OTHER' },
+      },
+      { desc: 'Free-text · shown only when “Other” is selected', on: true }),
+  ];
+
   const CRISIS_TO_STOCK = {
     WILDFIRE: 'WILDFIRE', FLOOD: 'FLOOD', EARTHQUAKE: 'EARTHQUAKE',
     CYCLONE: 'CYCLONE', TSUNAMI: 'CYCLONE', LANDSLIDE: 'LANDSLIDE',
@@ -171,7 +308,7 @@
   // mutating) so the Start-New-Operation wizard (cc-wizard.js) reuses the SAME
   // block library + stock packs instead of duplicating them. Pure data - no
   // behaviour change to this module.
-  window.CrispFormKit = { ENUM, CORE_BLOCKS, STOCK_PACKS, CRISIS_TO_STOCK, EVENT_CRISIS_TYPES };
+  window.CrispFormKit = { ENUM, CORE_BLOCKS, STOCK_PACKS, UNDP_BLOCKS, CRISIS_TO_STOCK, EVENT_CRISIS_TYPES };
 
   // ── tiny DOM + format helpers ──────────────────────────────────────────────
   function esc(s) {
@@ -375,6 +512,11 @@
     .cc-cf-blk.on .cc-cf-sw{background:var(--accent,#7c5cff)}
     .cc-cf-blk.on .cc-cf-sw::after{left:18px;background:#fff}
     .cc-cf-blk.locked .cc-cf-sw{opacity:.6}
+    .cc-cf-blk.undp{border-color:rgba(16,185,129,.32)}
+    .cc-cf-blk.undp.on{border-color:rgba(16,185,129,.6);background:rgba(16,185,129,.08)}
+    .cc-cf-blk.undp.on .cc-cf-sw{background:#10b981}
+    .cc-cf-undp-tag{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.04em;color:#0b3b2e;
+      background:#34d399;border-radius:4px;padding:0 5px;margin-left:6px;vertical-align:middle}
     .cc-cf-blocks h4{font-size:11.5px;color:var(--text-dim,#6b7689);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px;font-weight:700}
     .cc-cf-phone{border:1px solid var(--border-2,rgba(255,255,255,.14));border-radius:18px;background:#0a0f18;padding:12px 11px;min-height:380px}
     .cc-cf-pv-head{font-size:11px;color:var(--text-dim,#6b7689);text-align:center;margin-bottom:9px}
@@ -791,6 +933,7 @@
     S.builderStockKey = CRISIS_TO_STOCK[ct] || 'WILDFIRE';
     // fresh working copy of the block library
     S.builderBlocks = {
+      undp: UNDP_BLOCKS.map((b) => Object.assign({}, b, { field: clone(b.field) })),
       core: CORE_BLOCKS.map((b) => Object.assign({}, b, { field: clone(b.field) })),
       stock: stockCopy(S.builderStockKey),
     };
@@ -812,6 +955,7 @@
     const keys = new Set();
     (schema.sections || []).forEach((sec) => (sec.fields || []).forEach((f) => f && f.key && keys.add(f.key)));
     const known = new Set();
+    (S.builderBlocks.undp || []).forEach((b) => { known.add(b.field.key); b.on = keys.has(b.field.key); });
     S.builderBlocks.core.forEach((b) => { known.add(b.field.key); if (!b.locked) b.on = keys.has(b.field.key); });
     S.builderBlocks.stock.forEach((b) => { known.add(b.field.key); b.on = keys.has(b.field.key); });
     // any field key the curated UI doesn't recognise (hand-authored) - flag, don't clobber
@@ -819,13 +963,30 @@
   }
 
   function selectedBlocks() {
-    return S.builderBlocks.core.filter((b) => b.on).concat(S.builderBlocks.stock.filter((b) => b.on));
+    const undp = (S.builderBlocks.undp || []).filter((b) => b.on);
+    // The "Other" free-text sibling is meaningless without its pressing-needs
+    // parent - drop it when the parent question is excluded.
+    const needsOn = undp.some((b) => b.field.key === 'pressing_needs');
+    const undpSel = undp.filter((b) => b.field.key !== 'pressing_needs_other' || needsOn);
+    return undpSel
+      .concat(S.builderBlocks.core.filter((b) => b.on))
+      .concat(S.builderBlocks.stock.filter((b) => b.on));
+  }
+  // Default per-field channel scope so a freshly authored pack is explicit: the
+  // UNDP-core fields carry their own [APP,ANDROID,WHATSAPP,TELEGRAM]; everything
+  // else is App-only [APP,ANDROID] so the Telegram / WhatsApp bots are only ever
+  // asked the 3 UNDP questions (SMS / IVR never render packs). No-op for any field
+  // that already declares `channels`.
+  function _withChannelDefault(field) {
+    const f = clone(field);
+    if (!Array.isArray(f.channels) || !f.channels.length) f.channels = ['APP', 'ANDROID'];
+    return f;
   }
   function buildSchema() {
     const pack = S.builderPack || {};
     const sel = selectedBlocks();
-    const stage2 = sel.filter((b) => b.stage === 2).map((b) => clone(b.field));
-    const stage3 = sel.filter((b) => b.stage === 3).map((b) => clone(b.field));
+    const stage2 = sel.filter((b) => b.stage === 2).map((b) => _withChannelDefault(b.field));
+    const stage3 = sel.filter((b) => b.stage === 3).map((b) => _withChannelDefault(b.field));
     const sections = [];
     if (stage2.length) sections.push({ id: 'classify', stage: 2, title: 'Assessment', fields: stage2 });
     if (stage3.length) sections.push({ id: 'details', stage: 3, title: 'Details', fields: stage3 });
@@ -866,6 +1027,8 @@
             <div class="cc-cf-fld"><label class="cc-cf-lbl">Crisis stock questions</label>
               <select class="cc-cf-select" id="cc-cf-stock">${stockSel}</select></div>
             <div class="cc-cf-blocks">
+              <h4>Impact assessment questions</h4>
+              <div id="cc-cf-undp-blocks"></div>
               <h4>Crisis-specific questions (stock)</h4><div id="cc-cf-stock-blocks"></div>
               <h4>Reusable question blocks (always available)</h4><div id="cc-cf-core-blocks"></div>
             </div>
@@ -893,6 +1056,7 @@
         <table class="cc-cf-table"><thead><tr><th>Version</th><th>Status</th><th>Date</th><th></th></tr></thead><tbody>${versionsHTML}</tbody></table>
       </div>`;
 
+    renderBlockList('cc-cf-undp-blocks', S.builderBlocks.undp);
     renderBlockList('cc-cf-stock-blocks', S.builderBlocks.stock);
     renderBlockList('cc-cf-core-blocks', S.builderBlocks.core);
     renderPreview();
@@ -935,7 +1099,14 @@
     if (!mount) return;
     const schema = buildSchema();
     const ch = S.previewCh;
-    const allFields = (schema.sections || []).reduce((acc, sec) => acc.concat(sec.fields.map((f) => ({ f, stage: sec.stage }))), []);
+    // Honour per-field channels so the preview is truthful: the chat channels
+    // (Telegram) only ever render the UNDP-core questions; the App tabs show the
+    // full pack. _withChannelDefault has already stamped channels on every field.
+    const _CH_OF = { pwa: 'APP', rn: 'ANDROID', tg: 'TELEGRAM' };
+    const chConst = _CH_OF[ch] || 'APP';
+    const allFields = (schema.sections || [])
+      .reduce((acc, sec) => acc.concat(sec.fields.map((f) => ({ f, stage: sec.stage }))), [])
+      .filter(({ f }) => !Array.isArray(f.channels) || f.channels.includes(chConst));
     if (!allFields.length) { mount.innerHTML = `<div class="cc-cf-pv-head">▾ inside the active crisis zone ▾</div><div class="cc-cf-empty" style="padding:30px">No questions selected.</div>`; return; }
     let html = `<div class="cc-cf-pv-head">▾ inside the active crisis zone ▾</div>`;
     if (ch === 'tg') {
@@ -1046,6 +1217,18 @@
   // the nav entry and bypassed the router, so it never set the #/reporting URL).
   // The route is the single, deep-linkable entry point.
   window.openCrisisForms = openOverlay;
+
+  // Open the pack BUILDER directly for a given pack id (used by the operation
+  // dashboard's "Edit Operation Form" action). Opens the overlay, loads the pack
+  // list so the builder can resolve the title, then renders the builder.
+  async function openBuilderForPack(packId) {
+    if (!packId) return;
+    try { openOverlay(); } catch (_e) {}
+    S.tab = 'packs';
+    try { await refreshAll(); } catch (_e) {}
+    try { await openBuilder(packId); } catch (_e) {}
+  }
+  window.openCrisisFormBuilder = openBuilderForPack;
 
   // Debug/test hook (mirrors the app.js window.__crisp* convention) - lets the
   // schema contract be verified headlessly without a browser session. Pure: it
