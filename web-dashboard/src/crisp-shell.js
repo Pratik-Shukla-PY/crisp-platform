@@ -444,8 +444,8 @@
   function notifSummary() {
     try {
       const s = window.__crispNotifSummary && window.__crispNotifSummary();
-      return s && typeof s.count === 'number' ? s : { count: 0, critical: false };
-    } catch (_e) { return { count: 0, critical: false }; }
+      return s && typeof s.count === 'number' ? s : { count: 0, critical: false, criticalCount: 0 };
+    } catch (_e) { return { count: 0, critical: false, criticalCount: 0 }; }
   }
   function ensureHomeAlert() {
     let a = el('cgn-home-alert');
@@ -461,9 +461,15 @@
     a.querySelector('.cgn-ha-review').addEventListener('click', () => {
       const s = notifSummary();
       closeMobileNav();
-      // Critical arrivals jump straight to the Critical queue; otherwise the feed.
+      // Land on the QUEUE of the new reports awaiting review — never a single
+      // arbitrary incident. Critical arrivals → the Critical queue; otherwise the
+      // Pending (awaiting-review) status tab, which is exactly where un-actioned
+      // new reports live.
       if (s.critical) { try { window.location.hash = '#/incidents;queue=critical'; } catch (_e) { go('/incidents'); } }
-      else go('/incidents');
+      else { go('/incidents'); try { setTimeout(() => { if (window.setStatusTab) window.setStatusTab('pending'); }, 350); } catch (_e) {} }
+      // Acknowledge: advance the "last here" watermark so the alert clears and these
+      // arrivals don't re-ping on the next render.
+      try { if (window.__crispMarkNotifsSeen) window.__crispMarkNotifsSeen(); } catch (_e) {}
       hideHomeAlert(true);
     });
     a.querySelector('.cgn-ha-x').addEventListener('click', () => hideHomeAlert(true));
@@ -483,9 +489,14 @@
     const a = ensureHomeAlert();
     const msg = a.querySelector('.cgn-ha-msg');
     if (s.critical) {
-      msg.innerHTML = '⚠ <strong>Critical incident received</strong>' + (s.count > 1 ? ' · ' + s.count + ' new awaiting review' : '');
+      // Honest about HOW MANY are actually critical (vs just "new"). When every new
+      // arrival is critical, don't say it twice.
+      const c = s.criticalCount || 1;
+      msg.innerHTML = (c >= s.count)
+        ? '⚠ <strong>' + s.count + ' critical</strong> awaiting review'
+        : '⚠ <strong>' + c + ' critical</strong> · ' + s.count + ' new awaiting review';
     } else {
-      msg.innerHTML = '🔔 <strong>' + s.count + '</strong> new incident' + (s.count > 1 ? 's' : '') + ' - awaiting review';
+      msg.innerHTML = '🔔 <strong>' + s.count + '</strong> new incident' + (s.count > 1 ? 's' : '') + ' · awaiting review';
     }
     a.classList.toggle('crit', !!s.critical);
     a.classList.add('show');
