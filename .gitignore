@@ -108,3 +108,6 @@ backend/scripts/seed_nearby_dummy.py
 .crisp.pids
 nohup.out
 !.env.example
+
+# stray editor/temp files
+*.tmp
