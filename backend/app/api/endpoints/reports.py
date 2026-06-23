@@ -4671,6 +4671,17 @@ async def attach_media_chunk_bin(
         )
         raise HTTPException(status_code=422, detail=f"invalid resolution_tier: {resolution_tier!r}")
 
+    # Path-traversal hardening: media_id / report_id are interpolated into
+    # storage filenames downstream (e.g. f"{media_id}_assembled.{ext}"), so a
+    # value like "../../etc/x" would escape the upload dir. media_id is a
+    # client-chosen string (not necessarily a UUID), so we don't constrain the
+    # charset - we only reject the characters that enable traversal. The
+    # storage layer (_within) is a second, authoritative guard.
+    for _ident in (report_id, media_id):
+        _s = str(_ident)
+        if "/" in _s or "\\" in _s or ".." in _s or "\x00" in _s:
+            raise HTTPException(status_code=422, detail="invalid id format")
+
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")

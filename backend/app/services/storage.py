@@ -162,15 +162,26 @@ class LocalStorage:
         self.pre_blur_dir = os.path.join(upload_dir, _PRE_BLUR_PREFIX)
         os.makedirs(self.pre_blur_dir, exist_ok=True)
 
+    def _within(self, name: str) -> str:
+        """Join `name` under upload_dir and guarantee the resolved path cannot
+        escape it. Path-traversal guard for any caller-supplied filename/url
+        (a value like "../../etc/x" or one with a leading "/" would otherwise
+        break out of the upload root)."""
+        base = os.path.realpath(self.upload_dir)
+        path = os.path.realpath(os.path.join(base, name))
+        if path != base and not path.startswith(base + os.sep):
+            raise FileNotFoundError("path escapes upload directory")
+        return path
+
     def save(self, filename: str, data: bytes, content_type: str = "application/octet-stream") -> str:
-        path = os.path.join(self.upload_dir, filename)
+        path = self._within(filename)
         with open(path, "wb") as f:
             f.write(data)
         return f"/static/{filename}"
 
     def read(self, db_url: str) -> bytes:
         if db_url.startswith("/static/"):
-            path = os.path.join(self.upload_dir, db_url.replace("/static/", "", 1))
+            path = self._within(db_url.replace("/static/", "", 1))
             with open(path, "rb") as f:
                 return f.read()
         if db_url.startswith("s3://"):
@@ -183,30 +194,31 @@ class LocalStorage:
                 "reverse migration script."
             )
         # Bare filename or legacy oddity - try as a relative path.
-        path = os.path.join(self.upload_dir, db_url.lstrip("/"))
+        path = self._within(db_url.lstrip("/"))
         with open(path, "rb") as f:
             return f.read()
 
     def delete(self, db_url: str) -> bool:
         if not db_url.startswith("/static/"):
             return False
-        path = os.path.join(self.upload_dir, db_url.replace("/static/", "", 1))
         try:
+            path = self._within(db_url.replace("/static/", "", 1))
             os.remove(path)
             return True
         except FileNotFoundError:
             return False
 
     def exists(self, db_url: str) -> bool:
-        if db_url.startswith("/static/"):
-            return os.path.isfile(
-                os.path.join(self.upload_dir, db_url.replace("/static/", "", 1))
-            )
-        if not db_url or db_url.startswith("s3://"):
-            # Empty, or a cross-backend s3:// row we can't confirm locally.
+        try:
+            if db_url.startswith("/static/"):
+                return os.path.isfile(self._within(db_url.replace("/static/", "", 1)))
+            if not db_url or db_url.startswith("s3://"):
+                # Empty, or a cross-backend s3:// row we can't confirm locally.
+                return False
+            # Bare/relative filename (legacy oddity) - try under upload_dir.
+            return os.path.isfile(self._within(db_url.lstrip("/")))
+        except FileNotFoundError:
             return False
-        # Bare/relative filename (legacy oddity) - try under upload_dir.
-        return os.path.isfile(os.path.join(self.upload_dir, db_url.lstrip("/")))
 
     def public_url(self, db_url: str) -> str:
         # Pass through - dashboard's getMediaUrl() prepends BACKEND_HOST

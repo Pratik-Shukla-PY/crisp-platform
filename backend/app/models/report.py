@@ -419,7 +419,7 @@ class Report(Base):
     # building row isn't mirrored yet (must-have #1 parity), and the Building
     # roll-up is a cache rebuilt from reports, not enforced by the FK. Promoting
     # this to a real FK (+ widening to Building.id's String(64)) is a Building
-    # decision; see ~/.claude/plans/incident-level-audit.md P3-1. Current values
+    # decision, deferred to the building-audit follow-up. Current values
     # (UUIDs + osm:<type>:<id>) fit comfortably in 36 chars (no truncation today).
     building_id = Column(String(36), nullable=True, index=True) # Links multiple reports about same structure
     # UNDP must-have #8 (Phase F.5.c, May 2026) - building versioning.
