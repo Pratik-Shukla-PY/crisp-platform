@@ -19,6 +19,13 @@ logger = logging.getLogger(__name__)
 
 BACKEND_URL = os.getenv("CRISP_BACKEND_URL", "http://localhost:8000")
 
+
+def _bot_headers():
+    """Server-to-server auth (X-Bot-Key == backend CRISP_BOT_KEY) for the
+    report-mutation endpoints once enforcement is on. Empty when unset."""
+    key = os.getenv("CRISP_BOT_KEY", "").strip()
+    return {"X-Bot-Key": key} if key else {}
+
 SEVERITY_MAP = {
     "sev_severe": "SEVERE", "sev_moderate": "MODERATE", "sev_minor": "MINOR",
     "1": "SEVERE", "2": "MODERATE", "3": "MINOR",
@@ -853,6 +860,7 @@ async def update_report_metadata(session: TelegramSession):
                 r = await c.patch(
                     f"{BACKEND_URL}/api/v1/reports/{session.report_id}/classify",
                     json=payload,
+                    headers=_bot_headers(),
                 )
                 if r.status_code == 200:
                     logger.info(f"Report {session.report_id} classified: {payload}")
@@ -891,6 +899,7 @@ async def update_report_location(session: TelegramSession) -> bool:
             r = await c.patch(
                 f"{BACKEND_URL}/api/v1/reports/{session.report_id}/location",
                 json=loc_data,
+                headers=_bot_headers(),
             )
             if r.status_code == 200:
                 logger.info(f"Report {session.report_id} location updated")

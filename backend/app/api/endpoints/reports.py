@@ -2019,6 +2019,64 @@ def _resolve_device_id(device_hash: str, db: Session) -> Optional[str]:
     return device_hash if existing else None
 
 
+def _authorize_report_mutation(report, request, db, user=None, device_hash=None):
+    """Authorize a mutation of an EXISTING report. A bare report_id is NOT
+    sufficient authorization - report ids leak via /evidence share links, so
+    anyone holding one could otherwise edit/relocate the report. Three
+    legitimate caller classes are allowed:
+
+      1. channel bot   - sends the shared ``X-Bot-Key`` header (== CRISP_BOT_KEY),
+                         server-to-server (the SMS/IVR/WhatsApp/Telegram pipeline).
+      2. operator      - an authenticated ANALYST / ADMIN / SUPER_ADMIN session.
+      3. owning device - ``device_hash`` resolves to ``report.device_id`` (citizen
+                         self-service; mirrors the undo-delete ownership check).
+
+    Rollout safety: enforcement is gated by the env flag
+    ``CRISP_ENFORCE_REPORT_MUTATION_AUTH``. While OFF (the default) an
+    unauthorized call is still ALLOWED but logged as a 'would-reject' warning,
+    so the clients (PWA/RN send device_hash, bots send X-Bot-Key) can be rolled
+    out first and the warning logs confirmed clean. Flip the flag ON to start
+    returning 403. Returns the authorized actor label.
+    """
+    from app.models.auth import RoleEnum
+    import hmac as _hmac
+    actor = None
+    bot_key = (os.environ.get("CRISP_BOT_KEY") or "").strip()
+    if bot_key:
+        sent = (request.headers.get("X-Bot-Key") or "").strip()
+        if sent and _hmac.compare_digest(sent, bot_key):
+            actor = "bot"
+    if actor is None and user is not None and getattr(user, "role", None) in (
+            RoleEnum.ANALYST.value, RoleEnum.ADMIN.value, RoleEnum.SUPER_ADMIN.value):
+        actor = "operator"
+    if actor is None and device_hash:
+        resolved = _resolve_device_id(device_hash, db)
+        if resolved and report.device_id and resolved == report.device_id:
+            actor = "owner"
+    if actor:
+        return actor
+    enforce = (os.environ.get("CRISP_ENFORCE_REPORT_MUTATION_AUTH", "").strip().lower()
+               in ("1", "true", "yes", "on"))
+    if enforce:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this report")
+    logger.warning(
+        "[authz] report mutation ALLOWED with no valid actor (enforcement off) "
+        "report=%s ip=%s path=%s - set CRISP_ENFORCE_REPORT_MUTATION_AUTH=1 to block",
+        getattr(report, "id", "?"),
+        request.client.host if request and request.client else "?",
+        request.url.path if request else "?",
+    )
+    return "unauthorized-allowed"
+
+
+def _report_mutate_rate_limit(request) -> None:
+    """Per-IP rate limit shared by the unauthenticated report-mutation routes."""
+    from app.main import check_rate_limit
+    client_ip = request.client.host if request and request.client else "unknown"
+    if not check_rate_limit(f"report-mutate:{client_ip}", max_requests=120, window=60):
+        raise HTTPException(status_code=429, detail="Too many requests; slow down and retry.")
+
+
 def _attach_reporter_tier(db: Session, reports: list) -> None:
     """Phase 1.6 (May 2026) - Dashboard V4 field parity helper.
 
@@ -2139,9 +2197,15 @@ def get_device_reports(device_hash: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/device/{device_hash}", status_code=status.HTTP_200_OK)
-def delete_device_data(device_hash: str, db: Session = Depends(get_db)):
+def delete_device_data(device_hash: str, request: Request, db: Session = Depends(get_db)):
     """Delete ALL reports and media files submitted by a specific device.
-    Used by the mobile app's 'Delete My Data' privacy feature."""
+    Used by the mobile app's 'Delete My Data' privacy feature.
+
+    Authorization is capability-based: device_hash is a high-entropy
+    client secret (SHA-256), so knowing it proves ownership (same model as a
+    report UUID). A per-IP rate limit blocks brute-force enumeration of the
+    bulk-delete across devices."""
+    _report_mutate_rate_limit(request)
     device_id = _resolve_device_id(device_hash, db)
     if not device_id:
         return {"deleted": 0}
@@ -3026,14 +3090,16 @@ def create_report_meta(meta_in: ReportMetaCreate, request: Request, db: Session 
 
 
 @router.patch("/{report_id}/description", response_model=ReportResponse)
-def update_report_description(report_id: str, desc_in: ReportDescriptionUpdate, db: Session = Depends(get_db)):
+def update_report_description(report_id: str, desc_in: ReportDescriptionUpdate, request: Request, user=Depends(get_optional_user), db: Session = Depends(get_db)):
     """
     Stage 2 of progressive upload: Update the text description/transcript.
     This is split from Stage 1 (meta) to keep the initial packet under 1KB.
     """
+    _report_mutate_rate_limit(request)
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
+    _authorize_report_mutation(report, request, db, user, getattr(desc_in, "device_hash", None))
 
     report.description = desc_in.description
     db.commit()
@@ -3043,13 +3109,15 @@ def update_report_description(report_id: str, desc_in: ReportDescriptionUpdate, 
 
 
 @router.patch("/{report_id}/classify", response_model=ReportResponse)
-def update_report_classification(report_id: str, request: dict, db: Session = Depends(get_db)):
+def update_report_classification(report_id: str, request: dict, http_request: Request, user=Depends(get_optional_user), db: Session = Depends(get_db)):
     """Update severity and/or infrastructure_type on an existing report.
     Used by Telegram/WhatsApp bots to update classification after initial creation."""
     from app.models.report import SeverityEnum, InfraTypeEnum
+    _report_mutate_rate_limit(http_request)
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
+    _authorize_report_mutation(report, http_request, db, user, request.get("device_hash"))
     if "severity" in request:
         try:
             report.severity = SeverityEnum(request["severity"])
@@ -3237,7 +3305,7 @@ async def reverse_geocode(payload: dict, db: Session = Depends(get_db)):
 
 
 @router.patch("/{report_id}/location", response_model=ReportResponse)
-def update_report_location(report_id: str, loc_data: dict, db: Session = Depends(get_db)):
+def update_report_location(report_id: str, loc_data: dict, request: Request, user=Depends(get_optional_user), db: Session = Depends(get_db)):
     """Add or update location on an existing report.
 
     Used by the AI extractor to backfill coords from IVR/SMS traffic (no
@@ -3256,9 +3324,11 @@ def update_report_location(report_id: str, loc_data: dict, db: Session = Depends
     the flag, so ``crisis_event_id`` is untouched - coarse text/audio geocoding
     stays GLOBAL by design (no fake-matching).
     """
+    _report_mutate_rate_limit(request)
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
+    _authorize_report_mutation(report, request, db, user, loc_data.get("device_hash"))
     if report.location:
         # Update existing
         report.location.latitude = loc_data.get("latitude", report.location.latitude)

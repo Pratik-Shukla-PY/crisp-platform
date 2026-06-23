@@ -10842,7 +10842,10 @@ async function trySendQueuedReport(item) {
                 const textBytes = 2048 + ((item.text || '').length * 2); // UTF-8 worst-case 2 B/char
                 const textTimeout = computeChunkTimeout(textBytes, measuredBps || null);
                 await sendWithRetry(`${API_BASE}/reports/${reportId}/description`, {
-                    description: item.text || ''
+                    description: item.text || '',
+                    // ownership proof so this device can edit its own report once
+                    // mutation-auth enforcement is enabled server-side
+                    device_hash: item.device_hash || localStorage.getItem('crisp_device_id_v2') || undefined
                 }, 5, textTimeout);
                 item.stages.text = true;
                 try { await enqueueReport(item); } catch (_) {}
@@ -14277,7 +14280,11 @@ async function _syncDetailsQueue() {
             const res = await fetch(`${API_BASE}/reports/${encodeURIComponent(entry.reportId)}/classify`, {
                 method: 'PATCH',
                 headers,
-                body: JSON.stringify(entry.payload || {}),
+                body: JSON.stringify({
+                    ...(entry.payload || {}),
+                    // ownership proof for mutation-auth enforcement (server-side)
+                    device_hash: entry.device_hash || localStorage.getItem('crisp_device_id_v2') || undefined,
+                }),
             });
             if (res.ok) {
                 _dequeueDetails(entry.reportId);
@@ -15156,7 +15163,11 @@ function setupUndpDetailsStage() {
                 const res = await fetch(`${API_BASE}/reports/${encodeURIComponent(reportId)}/classify`, {
                     method: 'PATCH',
                     headers,
-                    body: JSON.stringify(payload),
+                    body: JSON.stringify({
+                        ...payload,
+                        // ownership proof for mutation-auth enforcement (server-side)
+                        device_hash: localStorage.getItem('crisp_device_id_v2') || undefined,
+                    }),
                 });
                 if (res.ok) {
                     immediateOk = true;

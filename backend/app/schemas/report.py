@@ -243,6 +243,10 @@ class MediaUpload(BaseModel):
 # Single text update (Stage 2 - description/transcript)
 class ReportDescriptionUpdate(BaseModel):
     description: str
+    # Optional ownership proof so the reporter's own device can edit its
+    # report once mutation-auth enforcement is enabled (see
+    # _authorize_report_mutation). Ignored by the backend otherwise.
+    device_hash: Optional[str] = None
 
 # API Response Payloads
 class LocationResponse(LocationBase):

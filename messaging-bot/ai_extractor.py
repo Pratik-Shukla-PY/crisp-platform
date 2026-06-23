@@ -16,6 +16,15 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 BACKEND_URL = os.getenv("CRISP_BACKEND_URL", "http://localhost:8000")
 
 
+def _bot_headers():
+    """Server-to-server auth for the report-mutation endpoints: X-Bot-Key must
+    equal the backend's CRISP_BOT_KEY once mutation-auth enforcement is on.
+    Returns an empty dict when unset (dev / enforcement off) so behaviour is
+    unchanged until both sides are configured."""
+    key = os.getenv("CRISP_BOT_KEY", "").strip()
+    return {"X-Bot-Key": key} if key else {}
+
+
 async def extract_and_update_report(report_id: str, text: str):
     """
     Use Claude to extract location, type, severity from transcription/description,
@@ -172,7 +181,7 @@ async def _apply_extraction(report_id: str, extracted: dict, original_text: str)
 
     try:
         async with httpx.AsyncClient(timeout=15) as c:
-            await c.patch(f"{BACKEND_URL}/api/v1/reports/{report_id}/classify", json=update_payload)
+            await c.patch(f"{BACKEND_URL}/api/v1/reports/{report_id}/classify", json=update_payload, headers=_bot_headers())
             logger.info(f"Report {report_id} classified by AI: type={infra_type} sev={severity}")
     except Exception as e:
         logger.warning(f"Classification update error: {e}")
@@ -215,6 +224,7 @@ async def _apply_extraction(report_id: str, extracted: dict, original_text: str)
                     await c.patch(
                         f"{BACKEND_URL}/api/v1/reports/{report_id}/location",
                         json=loc_data,
+                        headers=_bot_headers(),
                     )
                     logger.info(f"Report {report_id} location updated: {geo.get('location_name', location_name)}")
             except Exception as e:
@@ -242,7 +252,7 @@ async def _keyword_extract_and_update(report_id: str, text: str):
     if update_payload:
         try:
             async with httpx.AsyncClient(timeout=15) as c:
-                await c.patch(f"{BACKEND_URL}/api/v1/reports/{report_id}/classify", json=update_payload)
+                await c.patch(f"{BACKEND_URL}/api/v1/reports/{report_id}/classify", json=update_payload, headers=_bot_headers())
         except:
             pass
 
@@ -254,7 +264,7 @@ async def _keyword_extract_and_update(report_id: str, text: str):
                     "device_latitude": geo["latitude"], "device_longitude": geo["longitude"],
                     "accuracy_meters": 5000.0,
                     "device_location_name": geo.get("location_name", ""),
-                })
+                }, headers=_bot_headers())
         except:
             pass
 
