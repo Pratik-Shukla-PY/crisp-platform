@@ -1,0 +1,28 @@
+{
+  "sha": "38fa354",
+  "sha_full": "38fa3543b9dd2da6e24f221a41fe26d83da8409c",
+  "ts": "2026-08-03T21:12:42.172Z",
+  "ref": "refs/pull/61/merge",
+  "actor": "dependabot[bot]",
+  "pages": {
+    "pwa-home": {
+      "url": "http://localhost:41879/mobile-app/src/",
+      "scores": {
+        "performance": 73,
+        "accessibility": 98,
+        "best-practices": 93,
+        "pwa": 100,
+        "seo": 90
+      },
+      "metrics": {
+        "lcp": 6091.886125,
+        "cls": 0.05872911744539197,
+        "tbt": 24,
+        "fcp": 2643.7505,
+        "si": 3100.332179453343
+      },
+      "run_count": 1,
+      "median_file": "lhr-1785791561662.json"
+    }
+  }
+}
