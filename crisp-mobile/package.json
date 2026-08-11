@@ -60,7 +60,7 @@
     "@sentry/react-native": "6.7.0",
     "@tensorflow-models/blazeface": "^0.1.0",
     "@tensorflow/tfjs": "^4.22.0",
-    "expo": "~54.0.33",
+    "expo": "~57.0.12",
     "expo-audio": "~1.1.1",
     "expo-background-fetch": "~14.0.9",
     "expo-camera": "~17.0.10",
