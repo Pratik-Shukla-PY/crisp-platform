@@ -14,7 +14,7 @@ Pillow>=10.0.0
 # Perceptual-hash duplicate detection (Apr 2026 UI v2.1 / W3).
 # Computes a 64-bit pHash per uploaded photo; near-duplicates within the
 # same building_id + 24h window land on the dashboard as candidates.
-ImageHash>=4.3.0
+ImageHash>=4.3.2
 mediapipe>=0.10.0
 easyocr>=1.7.0
 pyshp>=2.3.0
